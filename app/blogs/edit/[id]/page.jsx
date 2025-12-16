@@ -1,7 +1,8 @@
-// app/blogs/create/page.jsx
+// app/blogs/edit/[id]/page.jsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import {
   Save,
   Sparkles,
@@ -10,6 +11,7 @@ import {
   X,
   RefreshCw,
   Search,
+  ArrowLeft,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
@@ -23,10 +25,15 @@ const slugify = (s = "") =>
     .replace(/(^-|-$)/g, "")
     .replace(/--+/g, "-");
 
-export default function BlogCreatePage() {
+export default function BlogEditPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params?.id;
+
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Media picker state
+  // Media picker state (same as create)
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaItems, setMediaItems] = useState([]);
@@ -41,8 +48,8 @@ export default function BlogCreatePage() {
     excerpt: "",
     date: "", // yyyy-mm-dd
     category: "Fashion",
-    tags: [], // ["tag1","tag2"]
-    image: "", // URL
+    tags: [],
+    image: "",
     content: "",
     isPublished: true,
   });
@@ -71,6 +78,50 @@ export default function BlogCreatePage() {
 
   const useAutoSlug = () => set("slug", previewSlug);
 
+  const toDateInput = (d) => {
+    if (!d) return "";
+    const dt = new Date(d);
+    if (Number.isNaN(dt.getTime())) return "";
+    // yyyy-mm-dd for <input type="date">
+    return dt.toISOString().slice(0, 10);
+  };
+
+  /* ---------------------------------------------------------
+     LOAD BLOG BY ID
+  --------------------------------------------------------- */
+  const loadBlog = async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/api/blogs/${id}`, { cache: "no-store" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.message || "Failed to load blog");
+
+      setForm({
+        title: d.title || "",
+        slug: d.slug || "",
+        excerpt: d.excerpt || "",
+        date: toDateInput(d.date || d.createdAt || ""),
+        category: d.category || "Fashion",
+        tags: Array.isArray(d.tags) ? d.tags : [],
+        image: d.image || "",
+        content: d.content || "",
+        isPublished: d.isPublished ?? true,
+      });
+      setTagsInput("");
+    } catch (e) {
+      console.error("❌ load blog:", e);
+      alert(e.message || "Failed to load blog");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBlog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   /* ---------------------------------------------------------
      MEDIA: FETCH (GET /api/media)
   --------------------------------------------------------- */
@@ -81,7 +132,7 @@ export default function BlogCreatePage() {
       const params = new URLSearchParams();
       params.set("page", String(page));
       params.set("limit", "36");
-      params.set("type", "image"); // for blog cover
+      params.set("type", "image");
       if (q) params.set("q", q);
 
       const res = await fetch(`${API}/api/media?${params.toString()}`, {
@@ -154,7 +205,6 @@ export default function BlogCreatePage() {
       const first = data?.media?.[0];
       if (first?.url) set("image", first.url);
 
-      // refresh grid
       await fetchMedia(1, mediaQ);
     } catch (err) {
       console.error("❌ handleUploadImage error:", err);
@@ -165,7 +215,7 @@ export default function BlogCreatePage() {
   };
 
   /* ---------------------------------------------------------
-     SAVE BLOG
+     UPDATE BLOG
   --------------------------------------------------------- */
   const save = async () => {
     if (!form.title.trim()) return alert("Title required");
@@ -178,61 +228,75 @@ export default function BlogCreatePage() {
         ...form,
         slug: previewSlug,
         tags: form.tags || [],
-        // keep date optional; backend can fall back to createdAt
+        // date is optional; keep it if provided
       };
 
-      const r = await fetch(`${API}/api/blogs`, {
-        method: "POST",
+      const r = await fetch(`${API}/api/blogs/${id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       const d = await r.json();
-      if (!r.ok) throw new Error(d.message || "Create failed");
+      if (!r.ok) throw new Error(d.message || "Update failed");
 
-      alert("Blog created ✅");
-      // reset (keep category)
-      setForm((p) => ({
-        title: "",
-        slug: "",
-        excerpt: "",
-        date: "",
-        category: p.category || "Fashion",
-        tags: [],
-        image: "",
-        content: "",
-        isPublished: true,
-      }));
-      setTagsInput("");
+      alert("Blog updated ✅");
+      router.push("/blogs/all");
     } catch (e) {
-      console.error("❌ create blog:", e);
-      alert(e.message || "Create failed");
+      console.error("❌ update blog:", e);
+      alert(e.message || "Update failed");
     } finally {
       setSaving(false);
     }
   };
 
+  if (loading) {
+    return (
+      <section className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-4xl mx-auto text-gray-600">Loading...</div>
+      </section>
+    );
+  }
+
   return (
     <section className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto space-y-4">
         <div className="flex items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Create Blog</h1>
-            <p className="text-xs text-gray-500">
-              Same structure as your frontend store: title, excerpt, date, category, tags, image, content.
-            </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/blogs/all")}
+              className="inline-flex items-center gap-2 px-3 py-2 border bg-white hover:bg-gray-50"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Edit Blog</h1>
+              <p className="text-xs text-gray-500">Update fields and click Save.</p>
+            </div>
           </div>
 
-          <button
-            onClick={save}
-            disabled={saving}
-            className={`inline-flex items-center gap-2 px-4 py-2 text-white ${
-              saving ? "bg-gray-400" : "bg-black hover:bg-gray-900"
-            }`}
-          >
-            <Save size={18} />
-            {saving ? "Saving..." : "Publish"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={loadBlog}
+              className="inline-flex items-center gap-2 px-3 py-2 border bg-white hover:bg-gray-50"
+              title="Reload"
+            >
+              <RefreshCw size={18} />
+              Reload
+            </button>
+
+            <button
+              onClick={save}
+              disabled={saving}
+              className={`inline-flex items-center gap-2 px-4 py-2 text-white ${
+                saving ? "bg-gray-400" : "bg-black hover:bg-gray-900"
+              }`}
+            >
+              <Save size={18} />
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
         </div>
 
         {/* Main */}
@@ -432,11 +496,8 @@ export default function BlogCreatePage() {
               onChange={(e) => set("content", e.target.value)}
               className="w-full bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
               rows={12}
-              placeholder={`Supports markdown-like text (same as your store).\n\nExample:\n✨ **What’s Trending?**\n• Oversized jackets...`}
+              placeholder={`Supports markdown-like text.\n\nExample:\n✨ **What’s Trending?**\n• Oversized jackets...`}
             />
-            <div className="text-[11px] text-gray-500 mt-1">
-              Tip: This string can include markdown-style formatting exactly like your existing BLOGS content.
-            </div>
           </div>
         </div>
       </div>
