@@ -182,7 +182,7 @@ export default async function AnalyticsFunnelPage() {
   const cartsRes = await safeJson(`${API}/api/customers/carts`);
   const abandonedRes = await safeJson(`${API}/api/customers/abandoned-carts`);
 
-  const newslettersRes = await safeJson(`${API}/api/newsletters`);
+  const newslettersRes = await safeJson(`${API}/api/newsletters/subscribers`);
 
   const warnings = [];
   if (!ordersRes.ok) warnings.push(`Orders failed (${ordersRes.status || "no status"})`);

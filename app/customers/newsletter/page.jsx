@@ -10,92 +10,72 @@ import {
   flexRender,
   createColumnHelper,
 } from "@tanstack/react-table";
-
 import { motion } from "framer-motion";
-import {
-  Search,
-  Download,
-  Plus,
-  Trash2,
-  CheckCircle,
-  EyeOff,
-  Eye,
-} from "lucide-react";
+import { Search, Download, Plus, CheckCircle, EyeOff } from "lucide-react";
 import * as XLSX from "xlsx";
+
+import { useNewsletterAdminStore } from "@/stores/newsletterStore";
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_URL + "/api/newsletters/subscribers";
 
 // simple email regex
 const validEmail = (email) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 export default function NewsletterAdminPage() {
-  const API = process.env.NEXT_PUBLIC_API_URL + "/api/newsletters";
+  /* ---------------- STORE ---------------- */
+  const {
+    subscribers,
+    fetchSubscribers,
+    loading,
+    error,
+  } = useNewsletterAdminStore();
 
-  const [data, setData] = useState([]);
+  /* ---------------- LOCAL UI STATE ---------------- */
   const [globalFilter, setGlobalFilter] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [loadingAdd, setLoadingAdd] = useState(false);
-  const [loadingTable, setLoadingTable] = useState(true);
+  const [adding, setAdding] = useState(false);
 
-  // Fetch subscribers
+  /* ---------------- FETCH DATA ---------------- */
   useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch(API);
-        const json = await res.json();
-        setData(json || []);
-      } catch (e) {
-        console.error("Newsletter fetch error:", e);
-      }
-      setLoadingTable(false);
-    }
-    load();
-  }, [API]);
+    fetchSubscribers();
+  }, [fetchSubscribers]);
 
-  // Add subscriber manually
+  /* ---------------- ADD SUBSCRIBER ---------------- */
   const addSubscriber = async () => {
-    if (!validEmail(newEmail)) return alert("Invalid email format");
+    if (!validEmail(newEmail)) {
+      alert("Invalid email format");
+      return;
+    }
 
-    setLoadingAdd(true);
-
+    setAdding(true);
     try {
-      const res = await fetch(API, {
+      const res = await fetch(`${API_BASE}/subscribe`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify({ email: newEmail }),
       });
 
       const json = await res.json();
 
-      if (res.ok) {
-        setData((prev) => [json.subscription, ...prev]);
-        setNewEmail("");
-      } else {
-        alert(json.message);
+      if (!res.ok) {
+        throw new Error(json?.message || "Failed to add subscriber");
       }
+
+      await fetchSubscribers(); // refresh list
+      setNewEmail("");
     } catch (e) {
-      alert("Network error");
+      alert(e.message || "Network error");
+    } finally {
+      setAdding(false);
     }
-
-    setLoadingAdd(false);
   };
 
-  // Delete subscriber
-  const deleteSubscriber = (email) => {
-    setData((prev) => prev.filter((user) => user.email !== email));
-  };
-
-  // Toggle Verification
-  const toggleVerify = (email) => {
-    setData((prev) =>
-      prev.map((user) =>
-        user.email === email
-          ? { ...user, isVerified: !user.isVerified }
-          : user
-      )
-    );
-  };
-
-  // Table Columns
+  /* ---------------- TABLE CONFIG ---------------- */
   const columnHelper = createColumnHelper();
 
   const columns = useMemo(
@@ -141,20 +121,17 @@ export default function NewsletterAdminPage() {
         header: "Subscribed On",
         cell: (info) =>
           new Date(info.getValue()).toLocaleDateString("en-IN", {
-            month: "short",
             day: "numeric",
+            month: "short",
             year: "numeric",
           }),
       }),
-
-    
     ],
     []
   );
 
-  // Setup TanStack Table
   const table = useReactTable({
-    data,
+    data: subscribers,
     columns,
     state: { globalFilter },
     onGlobalFilterChange: setGlobalFilter,
@@ -164,18 +141,17 @@ export default function NewsletterAdminPage() {
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  // Export to Excel
+  /* ---------------- EXPORT ---------------- */
   const exportExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(data);
+    const ws = XLSX.utils.json_to_sheet(subscribers);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Subscribers");
     XLSX.writeFile(wb, "newsletter_subscribers.xlsx");
   };
 
+  /* ---------------- UI ---------------- */
   return (
     <div className="p-6 w-full max-w-7xl mx-auto">
-
-      {/* PAGE HEADER */}
       <motion.h1
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -186,7 +162,6 @@ export default function NewsletterAdminPage() {
 
       {/* SEARCH + EXPORT */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
-        {/* Search */}
         <div className="flex items-center border px-3 py-2 rounded-lg bg-white shadow-sm w-full md:w-1/3">
           <Search className="w-4 h-4 text-gray-500" />
           <input
@@ -197,7 +172,6 @@ export default function NewsletterAdminPage() {
           />
         </div>
 
-        {/* Export */}
         <button
           onClick={exportExcel}
           className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-lg shadow hover:bg-blue-700 text-sm"
@@ -206,7 +180,7 @@ export default function NewsletterAdminPage() {
         </button>
       </div>
 
-      {/* MANUAL ADD */}
+      {/* ADD EMAIL */}
       <div className="flex gap-3 mb-6">
         <input
           value={newEmail}
@@ -217,32 +191,30 @@ export default function NewsletterAdminPage() {
 
         <button
           onClick={addSubscriber}
-          disabled={loadingAdd}
+          disabled={adding}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 text-sm disabled:opacity-50"
         >
           <Plus size={16} />
-          {loadingAdd ? "Adding..." : "Add"}
+          {adding ? "Adding..." : "Add"}
         </button>
       </div>
 
       {/* TABLE */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="overflow-x-auto border rounded-xl shadow bg-white"
-      >
-        {loadingTable ? (
+      <motion.div className="overflow-x-auto border rounded-xl shadow bg-white">
+        {loading ? (
           <div className="p-6 text-center text-gray-500">Loading...</div>
+        ) : error ? (
+          <div className="p-6 text-center text-red-500">{error}</div>
         ) : (
           <table className="w-full text-sm text-gray-800">
-            <thead className="bg-blue-50 sticky top-0 z-10 border-b">
+            <thead className="bg-blue-50 border-b">
               {table.getHeaderGroups().map((group) => (
                 <tr key={group.id}>
                   {group.headers.map((header) => (
                     <th
                       key={header.id}
                       onClick={header.column.getToggleSortingHandler()}
-                      className="p-3 cursor-pointer select-none text-left"
+                      className="p-3 cursor-pointer text-left"
                     >
                       {flexRender(
                         header.column.columnDef.header,
@@ -260,12 +232,7 @@ export default function NewsletterAdminPage() {
 
             <tbody>
               {table.getRowModel().rows.map((row) => (
-                <motion.tr
-                  key={row.id}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="border-b hover:bg-gray-50 transition"
-                >
+                <tr key={row.id} className="border-b hover:bg-gray-50">
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="p-3">
                       {flexRender(
@@ -274,12 +241,12 @@ export default function NewsletterAdminPage() {
                       )}
                     </td>
                   ))}
-                </motion.tr>
+                </tr>
               ))}
 
               {table.getRowModel().rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-4 text-center text-gray-500">
+                  <td colSpan={4} className="p-4 text-center text-gray-500">
                     No subscribers found.
                   </td>
                 </tr>

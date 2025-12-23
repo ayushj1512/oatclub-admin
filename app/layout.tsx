@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import LayoutWrapper from "../components/common/LayoutWrapper";
 import { Poppins } from "next/font/google";
+import { Toaster } from "react-hot-toast"; // ✅ ADD THIS
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -19,6 +20,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={poppins.className}>
       <body className="antialiased bg-gray-50 text-gray-900">
+        {/* ✅ TOASTER */}
+        <Toaster position="top-right" />
+
         <LayoutWrapper>{children}</LayoutWrapper>
       </body>
     </html>

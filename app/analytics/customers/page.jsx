@@ -197,7 +197,7 @@ export default async function AnalyticsCustomersPage() {
   const [customersRes, ordersRes, newslettersRes] = await Promise.all([
     safeJson(`${API}/api/customers?limit=200&page=1`),
     safeJson(`${API}/api/orders?limit=200`),
-    safeJson(`${API}/api/newsletters`),
+    safeJson(`${API}/api/newsletters/subscribers`),
   ]);
 
   const warnings = [];

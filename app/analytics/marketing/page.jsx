@@ -196,7 +196,7 @@ export default async function AnalyticsMarketingPage() {
   const now = new Date();
 
   const [newsRes, couponsRes, ordersRes, queriesRes] = await Promise.all([
-    safeJson(`${API}/api/newsletters`),
+    safeJson(`${API}/api/newsletters/subscribers`),
     safeJson(`${API}/api/coupons?limit=200`),
     safeJson(`${API}/api/orders?limit=200`),
     safeJson(`${API}/api/queries?limit=200`),

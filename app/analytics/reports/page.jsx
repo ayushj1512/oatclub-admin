@@ -161,7 +161,8 @@ function jsonDownloadResponse(obj, filename = "analytics_report.json") {
 }
 
 export default async function AnalyticsReportsPage({ searchParams }) {
-  const download = searchParams?.download === "1";
+  const params = searchParams || {};
+  const download = params.download === "1";
 
   if (!API) {
     const msg = {
@@ -192,7 +193,7 @@ export default async function AnalyticsReportsPage({ searchParams }) {
       safeJson(`${API}/api/orders?limit=200`),
       safeJson(`${API}/api/products?limit=200&page=1`),
       safeJson(`${API}/api/customers?limit=200&page=1`),
-      safeJson(`${API}/api/newsletters`),
+      safeJson(`${API}/api/newsletters/subscribers`),
       safeJson(`${API}/api/coupons?limit=200`),
       safeJson(`${API}/api/queries?limit=200`),
     ]);
@@ -360,7 +361,7 @@ export default async function AnalyticsReportsPage({ searchParams }) {
           icon={Mail}
           label="Newsletter"
           value={newsletterCount != null ? formatInt(newsletterCount) : "—"}
-          hint="From /api/newsletters"
+          hint="From /api/newsletters/subscribers"
           href="/marketing/email"
         />
 

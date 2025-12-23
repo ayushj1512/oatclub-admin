@@ -107,7 +107,7 @@ export default async function AnalyticsPage() {
   ] = await Promise.all([
     safeJson(`${API}/api/products?limit=1`),
     safeJson(`${API}/api/orders?limit=1`),
-    safeJson(`${API}/api/newsletters`),
+    safeJson(`${API}/api/newsletters/subscribers`),
     safeJson(`${API}/api/customers?limit=1`),
     safeJson(`${API}/api/coupons?limit=1`),
     safeJson(`${API}/api/collections?limit=1`),

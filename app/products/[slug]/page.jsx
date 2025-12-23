@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { Pencil, Trash2, Save, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
+import CategoryMultiSelect from "@/components/product/CategoryMultiSelect";
+import AttributeSelector from "@/components/product/AttributeSelector";
+import ProductContentEditor from "@/components/product/ProductContentEditor";
+import ProductVariantsEditor from "@/components/product/ProductVariantsEditor";
+import ProductImagesEditor from "@/components/product/ProductImagesEditor";
+import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
+import CrossSellSelector from "@/components/product/CrossSellSelector";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -13,8 +20,6 @@ const toNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 const safeImages = (p) => (Array.isArray(p?.images) ? p.images.filter(Boolean) : []);
-const getCatId = (c) => (c && typeof c === "object" ? toStr(c?._id) : toStr(c));
-const getCatName = (c) => (c && typeof c === "object" ? toStr(c?.name) : toStr(c));
 
 export default function ProductDetailsPage({ params }) {
   const router = useRouter();
@@ -26,71 +31,205 @@ export default function ProductDetailsPage({ params }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-
+const [allAttributes, setAllAttributes] = useState([]);
   // form state (keep only editable fields cleanly)
   const [form, setForm] = useState({
-    title: "",
-    price: 0,
-    compareAtPrice: "",
-    categoryId: "",
-    subcategoryId: "",
-    stock: 0,
-    isInStock: true,
-    isActive: true,
-    shortDescription: "",
-    description: "",
-    tagsText: "", // comma separated
-    variants: [],
-    images: [],
-    thumbnail: "",
-  });
+  title: "",
+  price: 0,
+  compareAtPrice: "",
+  categories: [],
+  stock: 0,
+  isInStock: true,
+  isActive: true,
+crossSellProducts: [],
 
-  /* ---------------- LOAD PRODUCT ---------------- */
-  const loadProduct = async () => {
-    if (!slug) return;
-    try {
-      setLoading(true);
+  shortDescription: "",
+  description: "",
+  tagsText: "",
 
-      const res = await fetch(`${BACKEND}/api/products/details/${encodeURIComponent(slug)}`, {
-        cache: "no-store",
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.message || "Failed to load product");
+  attributes: [],
+  variants: [],
 
-      setProduct(data);
+  images: [],
+  thumbnail: "",
 
-      const imgs = safeImages(data);
-      const thumb = toStr(data?.thumbnail) || imgs[0] || "";
+  /* 🔥 ADVANCED FIELDS */
+  highlights: [],
+  collections: [],
+  weight: 0,
+  dimensions: { length: 0, width: 0, height: 0 },
+  metaTitle: "",
+  metaDescription: "",
+  keywords: [],
+  isFeatured: false,
+  isDraft: false,
+});
 
-      setForm({
-        title: toStr(data?.title),
-        price: toNum(data?.price),
-        compareAtPrice: data?.compareAtPrice ?? "",
-        categoryId: getCatId(data?.category),
-        subcategoryId: getCatId(data?.subcategory),
-        stock: toNum(data?.stock),
-        isInStock: Boolean(data?.isInStock ?? true),
-        isActive: Boolean(data?.isActive ?? true),
-        shortDescription: toStr(data?.shortDescription),
-        description: toStr(data?.description),
-        tagsText: Array.isArray(data?.tags) ? data.tags.join(", ") : "",
-        variants: Array.isArray(data?.variants) ? data.variants : [],
-        images: imgs,
-        thumbnail: thumb,
-      });
-    } catch (err) {
-      console.error("Fetch Error:", err);
-      setProduct(null);
-      alert(err?.message || "Failed to load product");
-    } finally {
-      setLoading(false);
-    }
-  };
+
+/* ---------------- LOAD PRODUCT ---------------- */
+const loadProduct = async () => {
+  if (!slug) return;
+
+  try {
+    setLoading(true);
+
+    const res = await fetch(
+      `${BACKEND}/api/products/details/${encodeURIComponent(slug)}`,
+      { cache: "no-store" }
+    );
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.message || "Failed to load product");
+
+    setProduct(data);
+
+    /* ---------------- IMAGES ---------------- */
+    const imgs = safeImages(data);
+    const thumb =
+      data?.thumbnail && imgs.includes(data.thumbnail)
+        ? data.thumbnail
+        : imgs[0] || "";
+
+    /* ---------------- FORM HYDRATION ---------------- */
+    setForm({
+      /* BASIC */
+      title: toStr(data?.title),
+      price: toNum(data?.price),
+      compareAtPrice: data?.compareAtPrice ?? "",
+
+      /* CATEGORIES */
+      categories: Array.isArray(data?.categories)
+        ? data.categories
+        : [],
+
+      /* INVENTORY */
+      stock: toNum(data?.stock),
+      isInStock: Boolean(data?.isInStock ?? true),
+      isActive: Boolean(data?.isActive ?? true),
+
+      /* CONTENT */
+      shortDescription: toStr(data?.shortDescription),
+      description: toStr(data?.description),
+      tagsText: Array.isArray(data?.tags)
+        ? data.tags.join(", ")
+        : "",
+
+      /* ATTRIBUTES */
+      attributes: Array.isArray(data?.attributes)
+        ? data.attributes.map((a) => ({
+            attribute: a.attribute || null,
+            key: a.key || "",
+            values: Array.isArray(a.values) ? a.values : [],
+            mode: a.attribute ? "select" : "custom",
+          }))
+        : [],
+
+      /* VARIANTS */
+      variants: Array.isArray(data?.variants)
+        ? data.variants.map((v) => ({
+            _id: v?._id,
+            sku: v?.sku || "",
+            price: toNum(v?.price),
+            stock: toNum(v?.stock),
+            isInStock: Boolean(v?.isInStock ?? true),
+            attributes: Array.isArray(v?.attributes)
+              ? v.attributes
+              : [],
+            weight: toNum(v?.weight),
+            barcode: v?.barcode || "",
+          }))
+        : [],
+
+      /* MEDIA */
+      images: imgs,
+      thumbnail: thumb,
+
+      /* 🔥 CROSS SELL PRODUCTS (NEW) */
+      crossSellProducts: Array.isArray(data?.crossSellProducts)
+        ? data.crossSellProducts.map((p) =>
+            typeof p === "string" ? p : p?._id
+          )
+        : [],
+
+      /* ADVANCED */
+      highlights: Array.isArray(data?.highlights)
+        ? data.highlights
+        : [],
+
+      collections: Array.isArray(data?.collections)
+        ? data.collections
+        : [],
+
+      weight: toNum(data?.weight),
+
+      dimensions: data?.dimensions || {
+        length: 0,
+        width: 0,
+        height: 0,
+        unit: "cm",
+      },
+
+      metaTitle: toStr(data?.metaTitle),
+      metaDescription: toStr(data?.metaDescription),
+
+      keywords: Array.isArray(data?.keywords)
+        ? data.keywords
+        : [],
+
+      isFeatured: Boolean(data?.isFeatured ?? false),
+      isDraft: Boolean(data?.isDraft ?? false),
+    });
+  } catch (err) {
+    console.error("❌ Fetch Error:", err);
+    setProduct(null);
+    alert(err?.message || "Failed to load product");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+  const fetchAllAttributes = async () => {
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/attributes`,
+      { cache: "no-store" }
+    );
+    const data = await res.json();
+    setAllAttributes(Array.isArray(data) ? data : []);
+  } catch (e) {
+    console.error("Failed to fetch attributes", e);
+    setAllAttributes([]);
+  }
+};
 
   useEffect(() => {
-    loadProduct();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+  if (!slug) return;
+
+  loadProduct();
+  fetchAllAttributes(); 
+}, [slug]);
+
+const fetchAllCategories = async () => {
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/categories`,
+      { cache: "no-store" }
+    );
+    const data = await res.json();
+   
+  } catch (e) {
+    console.error("Failed to fetch categories", e);
+   
+  }
+};
+
+useEffect(() => {
+  fetchAllCategories();
+}, []);
+
+
 
   /* ---------------- HANDLERS ---------------- */
   const handleChange = (e) => {
@@ -98,74 +237,128 @@ export default function ProductDetailsPage({ params }) {
     setForm((p) => ({ ...p, [name]: type === "checkbox" ? checked : value }));
   };
 
-  const updateVariantField = (idx, key, value) => {
-    setForm((p) => {
-      const variants = Array.isArray(p.variants) ? [...p.variants] : [];
-      const v = { ...(variants[idx] || {}) };
-      v[key] = key === "stock" || key === "price" ? toNum(value) : value;
-      variants[idx] = v;
-      return { ...p, variants };
+
+
+/* ---------------- SAVE PRODUCT ---------------- */
+const saveProduct = async () => {
+  if (!product?._id) return;
+
+  try {
+    setSaving(true);
+
+    /* ================= CLEAN ATTRIBUTES ================= */
+    const cleanedAttributes = (form.attributes || [])
+      .filter((a) => a.key && Array.isArray(a.values) && a.values.length > 0)
+      .map((a) => ({
+        attribute: a.attribute || null,
+        key: a.key,
+        values: a.values,
+      }));
+
+    /* ================= CLEAN VARIANTS ================= */
+    const cleanedVariants = Array.isArray(form.variants)
+      ? form.variants.map((v) => ({
+          _id: v?._id,
+          sku: v?.sku || "",
+          price: toNum(v?.price),
+          compareAtPrice:
+            v?.compareAtPrice === "" ? null : toNum(v?.compareAtPrice),
+          stock: toNum(v?.stock),
+          isInStock: Boolean(v?.isInStock ?? true),
+          weight: toNum(v?.weight),
+          barcode: v?.barcode || "",
+          attributes: Array.isArray(v?.attributes) ? v.attributes : [],
+        }))
+      : [];
+
+    /* ================= BUILD PAYLOAD ================= */
+    const payload = {
+      /* BASIC */
+      title: form.title,
+      price: toNum(form.price),
+      compareAtPrice:
+        form.compareAtPrice === "" ? null : toNum(form.compareAtPrice),
+
+      /* CATEGORIES */
+      categories: Array.isArray(form.categories)
+        ? form.categories.filter(Boolean)
+        : [],
+
+      /* INVENTORY */
+      stock: toNum(form.stock),
+      isInStock: Boolean(form.isInStock),
+      isActive: Boolean(form.isActive),
+
+      /* CONTENT */
+      shortDescription: form.shortDescription || "",
+      description: form.description || "",
+
+      /* MEDIA */
+      images: Array.isArray(form.images) ? form.images : [],
+      thumbnail: form.thumbnail || "",
+
+      /* TAGS */
+      tags: toStr(form.tagsText)
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean),
+
+      /* ATTRIBUTES + VARIANTS */
+      attributes: cleanedAttributes,
+      variants: cleanedVariants,
+
+      /* 🔥 CROSS SELL PRODUCTS (NEW) */
+      crossSellProducts: Array.isArray(form.crossSellProducts)
+        ? form.crossSellProducts.filter(Boolean)
+        : [],
+
+      /* ADVANCED */
+      highlights: Array.isArray(form.highlights) ? form.highlights : [],
+      collections: Array.isArray(form.collections) ? form.collections : [],
+
+      /* SHIPPING */
+      weight: toNum(form.weight),
+      dimensions: form.dimensions || {
+        length: 0,
+        width: 0,
+        height: 0,
+        unit: "cm",
+      },
+
+      /* SEO */
+      metaTitle: form.metaTitle || "",
+      metaDescription: form.metaDescription || "",
+      keywords: Array.isArray(form.keywords) ? form.keywords : [],
+
+      /* PUBLISHING */
+      isFeatured: Boolean(form.isFeatured),
+      isDraft: Boolean(form.isDraft),
+    };
+
+    /* ================= API CALL ================= */
+    const res = await fetch(`${BACKEND}/api/products/${product._id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
-  };
 
-  /* ---------------- SAVE PRODUCT ---------------- */
-  const saveProduct = async () => {
-    if (!product?._id) return;
-    try {
-      setSaving(true);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.message || "Update failed");
 
-      // ✅ backend expects ObjectIds for category/subcategory
-      // ✅ tags in new schema are string array
-      const payload = {
-        title: form.title,
-        price: toNum(form.price),
-        compareAtPrice: form.compareAtPrice === "" ? null : toNum(form.compareAtPrice),
-        category: form.categoryId || null,
-        subcategory: form.subcategoryId || null,
-        stock: toNum(form.stock),
-        isInStock: Boolean(form.isInStock),
-        isActive: Boolean(form.isActive),
-        shortDescription: form.shortDescription || "",
-        description: form.description || "",
-        thumbnail: form.thumbnail || "",
-        images: Array.isArray(form.images) ? form.images : [],
-        tags: toStr(form.tagsText)
-          .split(",")
-          .map((t) => t.trim().toLowerCase())
-          .filter(Boolean),
-        variants: Array.isArray(form.variants)
-          ? form.variants.map((v) => ({
-              _id: v?._id, // keep variant id
-              sku: v?.sku || "",
-              price: toNum(v?.price),
-              stock: toNum(v?.stock),
-              isInStock: Boolean(v?.isInStock ?? true),
-              image: v?.image || "",
-              weight: toNum(v?.weight),
-              barcode: v?.barcode || "",
-              attributes: Array.isArray(v?.attributes) ? v.attributes : [],
-            }))
-          : [],
-      };
+    alert("Product updated successfully ✅");
+    setEditing(false);
+    await loadProduct(); // refresh with clean DB state
+  } catch (e) {
+    console.error("❌ Save error:", e);
+    alert(e?.message || "Failed to update product");
+  } finally {
+    setSaving(false);
+  }
+};
 
-      const res = await fetch(`${BACKEND}/api/products/${product._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
 
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.message || "Update failed");
 
-      alert("Product updated!");
-      setEditing(false);
-      await loadProduct();
-    } catch (e) {
-      alert(e?.message || "Failed to update product");
-    } finally {
-      setSaving(false);
-    }
-  };
+
 
   /* ---------------- DELETE PRODUCT ---------------- */
   const deleteProduct = async () => {
@@ -202,72 +395,85 @@ export default function ProductDetailsPage({ params }) {
 
   return (
     <section className="p-6 md:p-10 bg-gray-50 min-h-screen">
-      <div className="max-w-5xl mx-auto space-y-8 md:space-y-10">
+      <div className="w-full px-4 md:px-8 lg:px-10 space-y-8 md:space-y-10">
+
         <button onClick={() => router.push("/products")} className="flex items-center gap-2 text-gray-600 hover:text-black">
           <ArrowLeft size={20} /> Back to Products
         </button>
 
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="text-2xl md:text-3xl font-bold w-full">{titleNode}</h1>
+        <div className="flex items-center justify-between gap-3">
+  {/* LEFT: PAGE HEADING */}
+  <div className="flex flex-col gap-0.5">
+    <h1 className="text-lg md:text-xl font-semibold text-gray-900">
+      {editing ? "Edit Product" : "Product Details"}
+    </h1>
 
-          <div className="flex gap-3 shrink-0">
-            {!editing ? (
-              <button onClick={() => setEditing(true)} className="p-2 bg-blue-600 text-white rounded-lg">
-                <Pencil size={18} />
-              </button>
-            ) : (
-              <button onClick={saveProduct} disabled={saving} className="p-2 bg-green-600 text-white rounded-lg disabled:opacity-60">
-                {saving ? "Saving..." : <Save size={18} />}
-              </button>
-            )}
+    <p className="text-sm text-gray-600 truncate max-w-[60vw]">
+      {product?.title || "—"}
+    </p>
+  </div>
 
-            <button onClick={deleteProduct} className="p-2 bg-red-600 text-white rounded-lg">
-              <Trash2 size={18} />
-            </button>
-          </div>
-        </div>
+  {/* RIGHT: ACTIONS */}
+  <div className="flex items-center gap-2 shrink-0">
+    {!editing ? (
+      <button
+        onClick={() => setEditing(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+      >
+        <Pencil size={14} />
+        Edit
+      </button>
+    ) : (
+      <>
+        {/* CANCEL */}
+        <button
+          type="button"
+          onClick={async () => {
+            setEditing(false);
+            await loadProduct(); // 🔥 revert unsaved changes
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg text-gray-700 hover:bg-gray-50"
+        >
+          Cancel
+        </button>
 
-        {/* IMAGES */}
-        <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <h2 className="text-lg md:text-xl font-semibold">Images</h2>
-            {editing ? (
-              <input
-                name="thumbnail"
-                value={form.thumbnail}
-                onChange={handleChange}
-                placeholder="Thumbnail URL (optional)"
-                className="w-full md:w-[420px] rounded-xl bg-gray-100 px-3 py-2 outline-none"
-              />
-            ) : null}
-          </div>
+        {/* SAVE */}
+        <button
+          onClick={saveProduct}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60"
+        >
+          <Save size={14} />
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </>
+    )}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-            {(form.images?.length ? form.images : safeImages(product)).map((img, i) => (
-              <img key={i} src={img} alt={`product-${i}`} className="w-full h-32 md:h-40 rounded-lg object-cover border" />
-            ))}
-          </div>
+    {/* DELETE */}
+    <button
+      onClick={deleteProduct}
+      className="p-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+      title="Delete product"
+    >
+      <Trash2 size={16} />
+    </button>
+  </div>
+</div>
 
-          {editing ? (
-            <div className="space-y-2">
-              <p className="text-sm text-gray-600">Edit images (comma-separated URLs)</p>
-              <textarea
-                value={(form.images || []).join(", ")}
-                onChange={(e) =>
-                  setForm((p) => ({
-                    ...p,
-                    images: toStr(e.target.value)
-                      .split(",")
-                      .map((x) => x.trim())
-                      .filter(Boolean),
-                  }))
-                }
-                className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none min-h-[90px]"
-                placeholder="https://... , https://..."
-              />
-            </div>
-          ) : null}
-        </div>
+
+      <ProductImagesEditor
+  images={form.images}
+  thumbnail={form.thumbnail}
+  onChange={({ images, thumbnail }) =>
+    setForm((p) => ({
+      ...p,
+      images,
+      thumbnail,
+    }))
+  }
+/>
+
+
 
         {/* PRICING */}
         <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
@@ -309,95 +515,153 @@ export default function ProductDetailsPage({ params }) {
           ) : null}
         </div>
 
-        {/* CATEGORY */}
-        <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
-          <h2 className="text-lg md:text-xl font-semibold">Category</h2>
+{/* CATEGORIES (DROPDOWN + MULTI SELECT) */}
+<div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
+  <h2 className="text-lg md:text-xl font-semibold">Categories</h2>
 
-          {editing ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input name="categoryId" value={form.categoryId} onChange={handleChange} className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none" placeholder="Category ObjectId" />
-              <input name="subcategoryId" value={form.subcategoryId} onChange={handleChange} className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none" placeholder="Subcategory ObjectId (optional)" />
-            </div>
-          ) : (
-            <div className="space-y-1 text-sm">
-              <p><b>Main Category:</b> {getCatName(product.category) || "-"}</p>
-              {product.subcategory ? <p><b>Subcategory:</b> {getCatName(product.subcategory)}</p> : null}
-            </div>
-          )}
-        </div>
+  {/* VIEW MODE */}
+  {!editing && (
+    <div className="flex flex-wrap gap-2">
+      {Array.isArray(product.categories) && product.categories.length > 0 ? (
+  product.categories.map((c) => (
+    <span
+      key={c}
+      className="px-3 py-1 bg-gray-200 rounded-full text-xs"
+    >
+      {c}
+    </span>
+  ))
+) : (
+  <p className="text-sm text-gray-600">No categories assigned</p>
+)}
+
+    </div>
+  )}
+
+  {/* EDIT MODE */}
+  {editing && (
+  <CategoryMultiSelect
+    value={form.categories}
+    onChange={(next) =>
+      setForm((p) => ({ ...p, categories: next }))
+    }
+  />
+)}
+
+</div>
+
+
+
 
         {/* CONTENT + TAGS */}
-        <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
-          <h2 className="text-lg md:text-xl font-semibold">Content</h2>
+<ProductContentEditor
+  editable={editing}
+  value={{
+    shortDescription: editing
+      ? form.shortDescription
+      : product.shortDescription,
+    description: editing
+      ? form.description
+      : product.description,
+    tagsText: editing
+      ? form.tagsText
+      : (Array.isArray(product.tags)
+          ? product.tags.join(", ")
+          : ""),
+  }}
+  onChange={(next) =>
+    setForm((p) => ({
+      ...p,
+      shortDescription: next.shortDescription,
+      description: next.description,
+      tagsText: next.tagsText,
+    }))
+  }
+/>
 
-          {editing ? (
-            <div className="space-y-3">
-              <textarea name="shortDescription" value={form.shortDescription} onChange={handleChange} className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none min-h-[90px]" placeholder="Short description" />
-              <textarea name="description" value={form.description} onChange={handleChange} className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none min-h-[120px]" placeholder="Full description" />
-              <input name="tagsText" value={form.tagsText} onChange={handleChange} className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none" placeholder="Tags (comma separated)" />
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-sm text-gray-700"><b>Short:</b> {product.shortDescription || "-"}</p>
-              <p className="text-sm text-gray-700"><b>Description:</b> {product.description ? "✅" : "-"}</p>
-              <div className="flex gap-2 flex-wrap">
-                {(Array.isArray(product.tags) ? product.tags : []).map((t) => (
-                  <span key={t} className="px-3 py-1 bg-gray-200 rounded-full text-xs">{t}</span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
 
-        {/* ATTRIBUTES (read-only) */}
-        <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
-          <h2 className="text-lg md:text-xl font-semibold">Attributes</h2>
 
-          {!product.attributes?.length ? (
-            <p className="text-sm text-gray-600">No attributes assigned.</p>
-          ) : (
-            <div className="space-y-2">
-              {product.attributes.map((attr, i) => (
-                <div key={i} className="bg-gray-100 p-3 rounded-lg">
-                  <p className="font-semibold text-sm">{attr.key}</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {(attr.values || []).map((v, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-gray-300 rounded-full text-xs">{v}</span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+   <AttributeSelector
+  value={editing ? form.attributes : product.attributes}
+  onChange={(next) =>
+    setForm((p) => ({ ...p, attributes: next }))
+  }
+  allAttributes={allAttributes}
+  editable={editing}
+/>
 
-        {/* VARIANTS */}
-        {Array.isArray(product.variants) && product.variants.length > 0 ? (
-          <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
-            <h2 className="text-lg md:text-xl font-semibold">Variants</h2>
+<ProductAdvancedFields
+  editable={editing}
+  value={{
+    highlights: editing ? form.highlights : product.highlights,
+    collections: editing ? form.collections : product.collections,
+    weight: editing ? form.weight : product.weight,
+    dimensions: editing
+      ? form.dimensions
+      : product.dimensions,
+    metaTitle: editing ? form.metaTitle : product.metaTitle,
+    metaDescription: editing
+      ? form.metaDescription
+      : product.metaDescription,
+    keywords: editing ? form.keywords : product.keywords,
+    isActive: editing ? form.isActive : product.isActive,
+    isFeatured: editing ? form.isFeatured : product.isFeatured,
+    isDraft: editing ? form.isDraft : product.isDraft,
+  }}
+  onChange={(next) =>
+    setForm((p) => ({
+      ...p,
+      ...next,
+    }))
+  }
+/>
 
-            {(editing ? form.variants : product.variants).map((v, i) => (
-              <div key={toStr(v?._id) || i} className="p-4 rounded-lg bg-gray-100 space-y-2">
-                <p className="font-semibold text-sm">
-                  {(v.attributes || []).map((a) => `${a.key}: ${a.value}`).join(" • ") || "Variant"}
-                </p>
 
-                {editing ? (
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <input value={toStr(v?.sku)} onChange={(e) => updateVariantField(i, "sku", e.target.value)} className="w-full rounded-xl bg-white px-3 py-2 outline-none" placeholder="SKU" />
-                    <input value={toStr(v?.stock)} onChange={(e) => updateVariantField(i, "stock", e.target.value)} className="w-full rounded-xl bg-white px-3 py-2 outline-none" placeholder="Stock" />
-                    <input value={toStr(v?.price)} onChange={(e) => updateVariantField(i, "price", e.target.value)} className="w-full rounded-xl bg-white px-3 py-2 outline-none" placeholder="Price" />
-                    <input value={toStr(v?.image)} onChange={(e) => updateVariantField(i, "image", e.target.value)} className="w-full rounded-xl bg-white px-3 py-2 outline-none" placeholder="Image URL" />
-                  </div>
-                ) : (
-                  <div className="text-xs text-gray-700">
-                    SKU: {v.sku || "N/A"} • Stock: {v.stock ?? 0} • Price: ₹{v.price ?? 0}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : null}
+
+
+       <ProductVariantsEditor
+  value={editing ? form.variants : product.variants}
+  editable={editing}
+  onChange={(next) =>
+    setForm((p) => ({ ...p, variants: next }))
+  }
+/>
+
+{/* CROSS SELL PRODUCTS */}
+<div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
+  <h2 className="text-lg md:text-xl font-semibold">
+    Cross-sell Products
+  </h2>
+
+  {!editing ? (
+    <div className="flex flex-wrap gap-2">
+      {Array.isArray(product.crossSellProducts) &&
+      product.crossSellProducts.length > 0 ? (
+        product.crossSellProducts.map((p) => (
+          <span
+            key={p._id}
+            className="px-3 py-1 bg-gray-200 rounded-full text-xs"
+          >
+            {p.title}
+          </span>
+        ))
+      ) : (
+        <p className="text-sm text-gray-600">
+          No cross-sell products
+        </p>
+      )}
+    </div>
+  ) : (
+    <CrossSellSelector
+      value={form.crossSellProducts}
+      onChange={(next) =>
+        setForm((p) => ({ ...p, crossSellProducts: next }))
+      }
+    />
+  )}
+</div>
+
+
       </div>
     </section>
   );

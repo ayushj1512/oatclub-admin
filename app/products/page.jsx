@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   RefreshCw,
   Search,
@@ -8,7 +8,6 @@ import {
   Trash2,
   ArrowLeft,
   ArrowRight,
-  X,
   ArrowUpDown,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -18,705 +17,391 @@ const API = process.env.NEXT_PUBLIC_API_URL;
 export default function ProductsPage() {
   const router = useRouter();
 
-  /* ---------------------------------------------
-     STATE
-  --------------------------------------------- */
+  /* ---------------- state ---------------- */
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState(""); // debounced value used for API calls
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState(""); // string category
 
-  const [sortKey, setSortKey] = useState("relevance"); // relevance | title | price | newest
-  const [sortDir, setSortDir] = useState("asc"); // asc | desc
+  const [sortKey, setSortKey] = useState("createdAt");
+  const [sortDir, setSortDir] = useState("desc");
 
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [pages, setPages] = useState(1);
 
-  /* ---------------------------------------------
-     DEBOUNCE SEARCH
-  --------------------------------------------- */
-  useEffect(() => {
-    const t = setTimeout(() => setSearch(searchInput.trim()), 250);
-    return () => clearTimeout(t);
-  }, [searchInput]);
-
-  /* ---------------------------------------------
-     FETCH PRODUCT LIST
-  --------------------------------------------- */
+  /* ---------------- fetch products ---------------- */
   const loadProducts = async () => {
     try {
       setLoading(true);
 
-      const res = await fetch(
-        `${API}/api/products?page=${page}&search=${encodeURIComponent(
-          search
-        )}&category=${encodeURIComponent(categoryFilter)}`,
-        { cache: "no-store" }
-      );
+      const qs = new URLSearchParams({
+        page,
+        search,
+        sort: `${sortKey}_${sortDir}`,
+      });
+
+      if (category) qs.set("category", category);
+
+      const res = await fetch(`${API}/api/products?${qs.toString()}`, {
+        cache: "no-store",
+      });
 
       const data = await res.json();
-
-      setProducts(Array.isArray(data.products) ? data.products : []);
-      setTotalPages(Number.isFinite(data.pages) ? data.pages : 1);
-    } catch (err) {
-      console.error("Load Products Error:", err);
-      setProducts([]);
-      setTotalPages(1);
+      setProducts(data.products || []);
+      setPages(data.pages || 1);
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  /* ---------------------------------------------
-     FETCH CATEGORIES
-  --------------------------------------------- */
+  /* ---------------- fetch categories ---------------- */
   const loadCategories = async () => {
     try {
       const res = await fetch(`${API}/api/categories`, { cache: "no-store" });
       const data = await res.json();
+
+      /**
+       * Expecting categories like:
+       * [{ name: "dresses", slug: "dresses" }]
+       */
       setCategories(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error("Load Categories Error:", e);
-      setCategories([]);
+      console.error(e);
     }
   };
 
-  /* ---------------------------------------------
-     INITIAL LOAD
-  --------------------------------------------- */
   useEffect(() => {
     loadCategories();
   }, []);
 
   useEffect(() => {
     loadProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search, categoryFilter]);
+  }, [page, search, category, sortKey, sortDir]);
 
-  /* ---------------------------------------------
-     DELETE PRODUCT
-  --------------------------------------------- */
+  /* ---------------- actions ---------------- */
+  const toggleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
   const deleteProduct = async (id) => {
     if (!confirm("Delete this product?")) return;
-
-    const res = await fetch(`${API}/api/products/${id}`, { method: "DELETE" });
-    const data = await res.json();
-
-    if (!res.ok) return alert(data.message || "Failed to delete");
-
-    alert("Product deleted");
+    await fetch(`${API}/api/products/${id}`, { method: "DELETE" });
     loadProducts();
   };
 
-  /* ---------------------------------------------
-     SUBSTRING SEARCH (CLIENT-SIDE) + SORTING
-  --------------------------------------------- */
-  const visibleProducts = useMemo(() => {
-    const q = searchInput.trim().toLowerCase();
-
-    let list = products.filter((p) => {
-      if (!q) return true;
-      const title = String(p?.title ?? "").toLowerCase();
-      const cat = String(p?.category?.name ?? "").toLowerCase();
-      return title.includes(q) || cat.includes(q);
-    });
-
-    const dir = sortDir === "asc" ? 1 : -1;
-
-    const getCreatedAt = (p) => {
-      const t = p?.createdAt ? new Date(p.createdAt).getTime() : 0;
-      return Number.isFinite(t) ? t : 0;
-    };
-    const getPrice = (p) => {
-      const n = Number(p?.price);
-      return Number.isFinite(n) ? n : 0;
-    };
-    const getTitle = (p) => String(p?.title ?? "").toLowerCase();
-
-    if (sortKey === "title") {
-      list = [...list].sort(
-        (a, b) => (getTitle(a) > getTitle(b) ? 1 : -1) * dir
-      );
-    } else if (sortKey === "price") {
-      list = [...list].sort((a, b) => (getPrice(a) - getPrice(b)) * dir);
-    } else if (sortKey === "newest") {
-      list = [...list].sort(
-        (a, b) => (getCreatedAt(a) - getCreatedAt(b)) * dir
-      );
-    }
-
-    return list;
-  }, [products, searchInput, sortKey, sortDir]);
-
-  const clearFilters = () => {
-    setSearchInput("");
-    setSearch("");
-    setCategoryFilter("");
-    setSortKey("relevance");
-    setSortDir("asc");
-    setPage(1);
-  };
-
+  /* ---------------- render ---------------- */
   return (
-    <section className="min-h-screen bg-gray-50 p-4 sm:p-6">
-      {/* tighter vertical rhythm */}
-      <div className="w-full flex flex-col gap-6">
-        {/* HEADER */}
-        <div className="w-full flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-              Products
-            </h1>
-            <p className="text-sm text-gray-600">
-              Search, filter, sort & manage products quickly.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button onClick={loadProducts} className="btn btn-dark" title="Refresh list">
-              <RefreshCw size={18} />
-            </button>
-
-            <button
-              onClick={() => router.push("/products/add")}
-              className="btn btn-primary"
-            >
-              + Add Product
-            </button>
-          </div>
+    <section className="p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Products</h1>
+          <p className="text-sm text-gray-600">
+            Manage, search, filter & sort products
+          </p>
         </div>
 
-        {/* TOP BAR: Search + Clear (proper spacing) */}
-        <div className="toolbar">
-          <div className="searchbar">
-            <Search size={18} className="text-gray-500" />
-            <input
-              className="searchinput"
-              placeholder='Search products (substring)… e.g. "shi"'
-              value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value);
-                setPage(1);
-              }}
-            />
-            {searchInput.trim().length > 0 && (
-              <button
-                className="iconbtn"
-                onClick={() => {
-                  setSearchInput("");
-                  setSearch("");
-                  setPage(1);
-                }}
-                aria-label="Clear search"
-                title="Clear"
-              >
-                <X size={16} />
-              </button>
-            )}
-          </div>
-
-          <button onClick={clearFilters} className="btn btn-ghost shrink-0">
-            Clear
+        <div className="flex gap-2">
+          <button onClick={loadProducts} className="btn btn-dark">
+            <RefreshCw size={18} />
           </button>
-        </div>
-
-        {/* CONTROLS + META (wraps cleanly, aligned) */}
-        <div className="controlsRow">
-          <div className="controlsLeft">
-            <select
-              className="control"
-              value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All Categories</option>
-              {categories
-                .filter((c) => !c.parent)
-                .map((cat) => (
-                  <option key={cat._id} value={cat._id}>
-                    {cat.name}
-                  </option>
-                ))}
-            </select>
-
-            <div className="sortWrap">
-              <div className="sortSelect">
-                <ArrowUpDown size={18} className="text-gray-500" />
-                <select
-                  className="sortNative"
-                  value={sortKey}
-                  onChange={(e) => setSortKey(e.target.value)}
-                >
-                  <option value="relevance">Sort: Relevance</option>
-                  <option value="title">Sort: Title</option>
-                  <option value="price">Sort: Price</option>
-                  <option value="newest">Sort: Newest</option>
-                </select>
-              </div>
-
-              <button
-                onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-                className="btn btn-soft"
-                title="Toggle asc/desc"
-              >
-                {sortDir === "asc" ? "Asc" : "Desc"}
-              </button>
-            </div>
-          </div>
-
-          <div className="metaRight">
-            <span className="metaChip">
-              Showing{" "}
-              <span className="font-semibold text-gray-900">
-                {visibleProducts.length}
-              </span>
-              {searchInput.trim() ? (
-                <>
-                  {" "}
-                  • for{" "}
-                  <span className="font-semibold text-gray-900">
-                    “{searchInput.trim()}”
-                  </span>
-                </>
-              ) : null}
-            </span>
-
-            {totalPages > 1 && (
-              <span className="metaChip">
-                Page <span className="font-semibold text-gray-900">{page}</span> /{" "}
-                <span className="font-semibold text-gray-900">{totalPages}</span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* LIST */}
-        <div className="w-full flex flex-col gap-3">
-          <div className="w-full flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">Product List</h2>
-          </div>
-
-          {loading ? (
-            <div className="w-full flex flex-col gap-3">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="row skeleton">
-                  <div className="flex items-center gap-3">
-                    <div className="skImg" />
-                    <div className="flex flex-col gap-2">
-                      <div className="skLine w-56" />
-                      <div className="skLine w-36" />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="skBtn" />
-                    <div className="skBtn" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : visibleProducts.length === 0 ? (
-            <div className="empty">
-              <p className="text-lg font-semibold text-gray-900">No products found</p>
-              <p className="text-sm text-gray-600 mt-1">
-                Try a different search or clear filters.
-              </p>
-              <div className="mt-4 flex gap-2 justify-center flex-wrap">
-                <button onClick={clearFilters} className="btn btn-ghost">
-                  Clear filters
-                </button>
-                <button
-                  onClick={() => router.push("/products/add")}
-                  className="btn btn-primary"
-                >
-                  + Add Product
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="w-full flex flex-col gap-3">
-              {visibleProducts.map((p) => (
-                <div key={p._id} className="row">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <img
-                      src={p.images?.[0] || "/no-image.png"}
-                      alt={p.title || "Product image"}
-                      className="prodImg"
-                      loading="lazy"
-                    />
-
-                    <div className="min-w-0 flex flex-col">
-                      <p className="font-semibold text-gray-900 truncate">{p.title}</p>
-                      <p className="text-sm text-gray-600 truncate">
-                        ₹{p.price} • {p.category?.name || "Uncategorized"}
-                      </p>
-                      {p.variants?.length > 0 && (
-                        <p className="text-xs text-purple-700 mt-1">
-                          {p.variants.length} variants
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => router.push(`/products/${p._id}`)}
-                      className="iconAction iconBlue"
-                      aria-label="Edit product"
-                      title="Edit"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(p._id)}
-                      className="iconAction iconRed"
-                      aria-label="Delete product"
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* PAGINATION */}
-          {totalPages > 1 && (
-            <div className="w-full flex items-center justify-center gap-3 mt-4">
-              <button
-                disabled={page === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="pager"
-                title="Previous"
-              >
-                <ArrowLeft size={18} />
-              </button>
-
-              <div className="pagePill">
-                <span className="font-semibold text-gray-800">
-                  Page {page} / {totalPages}
-                </span>
-              </div>
-
-              <button
-                disabled={page === totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="pager"
-                title="Next"
-              >
-                <ArrowRight size={18} />
-              </button>
-            </div>
-          )}
+          <button
+            onClick={() => router.push("/products/add")}
+            className="btn btn-primary"
+          >
+            + Add Product
+          </button>
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        <div className="search">
+          <Search size={16} />
+          <input
+            placeholder="Search products…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+
+        <select
+          value={category}
+          onChange={(e) => {
+            setCategory(e.target.value);
+            setPage(1);
+          }}
+          className="select"
+        >
+          <option value="">All Categories</option>
+          {categories.map((c) => (
+            <option key={c.slug || c.name} value={c.slug || c.name}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Table */}
+      <div className="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <Th onClick={() => toggleSort("title")} label="Title" />
+              <Th onClick={() => toggleSort("price")} label="Price" />
+              <Th label="Categories" />
+              <Th onClick={() => toggleSort("stock")} label="Stock" />
+              <Th onClick={() => toggleSort("createdAt")} label="Created" />
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="py-10 text-center text-gray-500">
+                  Loading products…
+                </td>
+              </tr>
+            ) : products.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-10 text-center text-gray-500">
+                  No products found
+                </td>
+              </tr>
+            ) : (
+              products.map((p) => (
+                <tr key={p._id}>
+                  <td>
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={p.images?.[0] || "/no-image.png"}
+                        className="thumb"
+                        alt=""
+                      />
+                      <span className="font-medium">{p.title}</span>
+                    </div>
+                  </td>
+
+                  <td>₹{p.price}</td>
+
+                  <td>
+                    <div className="flex flex-wrap gap-1">
+                      {Array.isArray(p.categories) && p.categories.length ? (
+                        p.categories.map((c) => (
+                          <span key={c} className="badge gray">
+                            {c}
+                          </span>
+                        ))
+                      ) : (
+                        "-"
+                      )}
+                    </div>
+                  </td>
+
+                  <td>
+                    {p.stock > 0 ? (
+                      <span className="badge green">
+                        In Stock ({p.stock})
+                      </span>
+                    ) : (
+                      <span className="badge red">Out of Stock</span>
+                    )}
+                  </td>
+
+                  <td>
+                    {p.createdAt
+                      ? new Date(p.createdAt).toLocaleDateString()
+                      : "-"}
+                  </td>
+
+                  <td>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => router.push(`/products/${p._id}`)}
+                        className="icon blue"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(p._id)}
+                        className="icon red"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {pages > 1 && (
+        <div className="flex justify-center items-center gap-3 mt-6">
+          <button
+            disabled={page === 1}
+            onClick={() => setPage((p) => p - 1)}
+            className="pager"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <span className="text-sm font-medium">
+            Page {page} / {pages}
+          </span>
+          <button
+            disabled={page === pages}
+            onClick={() => setPage((p) => p + 1)}
+            className="pager"
+          >
+            <ArrowRight size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Styles */}
       <style jsx>{`
-        /* Buttons */
         .btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
           padding: 10px 14px;
-          border-radius: 14px;
+          border-radius: 12px;
           font-weight: 600;
-          user-select: none;
-          transition: transform 0.05s ease, opacity 0.15s ease, background 0.15s ease;
-          white-space: nowrap;
-        }
-        .btn:active {
-          transform: translateY(1px);
         }
         .btn-dark {
           background: #111827;
           color: white;
-          width: 44px;
-          height: 44px;
-          padding: 0;
-        }
-        .btn-dark:hover {
-          opacity: 0.92;
         }
         .btn-primary {
           background: #2563eb;
           color: white;
         }
-        .btn-primary:hover {
-          background: #1d4ed8;
-        }
-        .btn-ghost {
-          background: rgba(17, 24, 39, 0.06);
-          color: #111827;
-        }
-        .btn-ghost:hover {
-          background: rgba(17, 24, 39, 0.1);
-        }
-        .btn-soft {
-          background: rgba(17, 24, 39, 0.06);
-          color: #111827;
-          padding: 12px 14px;
-          border-radius: 16px;
-        }
-        .btn-soft:hover {
-          background: rgba(17, 24, 39, 0.1);
-        }
 
-        /* Toolbar layout fixes */
-        .toolbar {
-          width: 100%;
+        .search {
           display: flex;
           align-items: center;
-          gap: 12px; /* fixes spacing issue */
-        }
-
-        /* Searchbar */
-        .searchbar {
-          flex: 1;
-          min-width: 220px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 12px 14px;
-          border-radius: 16px;
+          gap: 8px;
           background: white;
-          box-shadow: 0 6px 18px rgba(17, 24, 39, 0.06);
-        }
-        .searchinput {
-          width: 100%;
-          outline: none;
-          background: transparent;
-          font-size: 14px;
-          color: #111827;
-        }
-        .iconbtn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 34px;
-          height: 34px;
-          border-radius: 12px;
-          background: rgba(17, 24, 39, 0.06);
-          color: #111827;
-          flex: 0 0 auto;
-        }
-        .iconbtn:hover {
-          background: rgba(17, 24, 39, 0.1);
-        }
-
-        /* Controls row */
-        .controlsRow {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          flex-wrap: wrap; /* key fix */
-        }
-        .controlsLeft {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex-wrap: wrap;
-          min-width: 280px;
-          flex: 1;
-        }
-        .metaRight {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 10px;
-          flex-wrap: wrap;
-          flex: 0 0 auto;
-        }
-        .metaChip {
-          display: inline-flex;
-          align-items: center;
           padding: 10px 12px;
-          border-radius: 16px;
-          background: white;
-          box-shadow: 0 6px 18px rgba(17, 24, 39, 0.06);
-          font-size: 14px;
-          color: #4b5563;
-          white-space: nowrap;
+          border-radius: 12px;
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
         }
-
-        /* Select controls */
-        .control {
-          width: 280px;
-          max-width: 100%;
-          background: white;
-          padding: 12px 14px;
-          border-radius: 16px;
+        .search input {
           outline: none;
-          box-shadow: 0 6px 18px rgba(17, 24, 39, 0.06);
+          border: none;
         }
 
-        .sortWrap {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
+        .select {
+          background: white;
+          padding: 10px 12px;
+          border-radius: 12px;
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
         }
-        .sortSelect {
-          width: 280px;
-          max-width: 100%;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 12px 14px;
+
+        .tableWrap {
+          overflow-x: auto;
+          background: white;
           border-radius: 16px;
-          background: white;
-          box-shadow: 0 6px 18px rgba(17, 24, 39, 0.06);
+          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.06);
         }
-        .sortNative {
+
+        table {
           width: 100%;
-          outline: none;
-          background: transparent;
+          border-collapse: collapse;
         }
 
-        @media (max-width: 640px) {
-          .toolbar {
-            flex-direction: column;
-            align-items: stretch;
-          }
-          .btn-ghost {
-            width: 100%;
-            justify-content: center;
-          }
-          .controlsLeft {
-            min-width: 0;
-          }
-          .metaRight {
-            justify-content: flex-start;
-          }
+        th,
+        td {
+          padding: 14px;
+          text-align: left;
+          border-bottom: 1px solid #e5e7eb;
         }
 
-        /* Rows */
-        .row {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 14px;
-          padding: 14px 14px;
-          border-radius: 18px;
-          background: white;
-          box-shadow: 0 8px 22px rgba(17, 24, 39, 0.06);
-        }
-        .row:hover {
-          box-shadow: 0 10px 28px rgba(17, 24, 39, 0.08);
+        th {
+          font-size: 13px;
+          text-transform: uppercase;
+          color: #6b7280;
+          cursor: pointer;
         }
 
-        .prodImg {
-          width: 64px;
-          height: 64px;
-          border-radius: 18px;
-          object-fit: cover;
-          flex: 0 0 auto;
-        }
-
-        .iconAction {
-          width: 42px;
-          height: 42px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 16px;
-          color: white;
-          box-shadow: 0 10px 20px rgba(17, 24, 39, 0.1);
-          flex: 0 0 auto;
-        }
-        .iconBlue {
-          background: #2563eb;
-        }
-        .iconBlue:hover {
-          background: #1d4ed8;
-        }
-        .iconRed {
-          background: #dc2626;
-        }
-        .iconRed:hover {
-          background: #b91c1c;
-        }
-
-        /* Empty */
-        .empty {
-          width: 100%;
-          padding: 42px 18px;
-          border-radius: 22px;
-          background: white;
-          box-shadow: 0 10px 28px rgba(17, 24, 39, 0.06);
-          text-align: center;
-        }
-
-        /* Skeleton */
-        .skeleton {
-          background: white;
-        }
-        .skImg {
-          width: 64px;
-          height: 64px;
-          border-radius: 18px;
-          background: rgba(17, 24, 39, 0.08);
-          animation: pulse 1.2s infinite ease-in-out;
-        }
-        .skLine {
-          height: 12px;
-          border-radius: 999px;
-          background: rgba(17, 24, 39, 0.08);
-          animation: pulse 1.2s infinite ease-in-out;
-        }
-        .skBtn {
-          width: 42px;
-          height: 42px;
-          border-radius: 16px;
-          background: rgba(17, 24, 39, 0.08);
-          animation: pulse 1.2s infinite ease-in-out;
-        }
-        @keyframes pulse {
-          0% {
-            opacity: 0.45;
-          }
-          50% {
-            opacity: 0.8;
-          }
-          100% {
-            opacity: 0.45;
-          }
-        }
-
-        /* Pagination */
-        .pager {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
+        .thumb {
           width: 44px;
           height: 44px;
-          border-radius: 16px;
+          border-radius: 10px;
+          object-fit: cover;
+        }
+
+        .badge {
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .badge.green {
+          background: #dcfce7;
+          color: #166534;
+        }
+
+        .badge.red {
+          background: #fee2e2;
+          color: #991b1b;
+        }
+
+        .badge.gray {
+          background: #e5e7eb;
+          color: #374151;
+        }
+
+        .icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+        }
+
+        .icon.blue {
+          background: #2563eb;
+        }
+
+        .icon.red {
+          background: #dc2626;
+        }
+
+        .pager {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
           background: white;
-          box-shadow: 0 8px 22px rgba(17, 24, 39, 0.06);
-          transition: opacity 0.15s ease, transform 0.05s ease;
-        }
-        .pager:active {
-          transform: translateY(1px);
-        }
-        .pager:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-        .pagePill {
-          padding: 10px 14px;
-          border-radius: 16px;
-          background: white;
-          box-shadow: 0 8px 22px rgba(17, 24, 39, 0.06);
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
         }
       `}</style>
     </section>
+  );
+}
+
+function Th({ label, onClick }) {
+  return (
+    <th onClick={onClick}>
+      <div className="flex items-center gap-1">
+        {label}
+        {onClick && <ArrowUpDown size={14} />}
+      </div>
+    </th>
   );
 }

@@ -48,35 +48,36 @@ const formatINR = (n) => {
 
 const pickOrderAmount = (o) => {
   if (!o || typeof o !== "object") return null;
-  // common keys across systems
-  const keys = [
+
+  const directKeys = [
+    "total",
     "totalAmount",
     "total_amount",
+    "totalPrice",
+    "total_price",
     "grandTotal",
     "grand_total",
-    "total",
-    "amount",
-    "payableAmount",
-    "payable_amount",
-    "orderTotal",
-    "order_total",
     "finalAmount",
     "final_amount",
+    "amount",
   ];
-  for (const k of keys) {
-    const v = safeNum(o[k]);
-    if (v != null) return v;
+
+  for (const k of directKeys) {
+    const v = Number(o[k]);
+    if (Number.isFinite(v)) return v;
   }
 
-  // sometimes nested
+  // nested (very common)
   const nested =
-    safeNum(o?.pricing?.total) ??
-    safeNum(o?.pricing?.grandTotal) ??
-    safeNum(o?.payment?.amount) ??
+    Number(o?.pricing?.total) ||
+    Number(o?.pricing?.grandTotal) ||
+    Number(o?.payment?.amount) ||
+    Number(o?.payment?.total) ||
     null;
 
-  return nested;
+  return Number.isFinite(nested) ? nested : null;
 };
+
 
 const pickStatus = (o) => {
   const s =
@@ -176,7 +177,17 @@ export default async function AnalyticsSalesPage() {
       ? recentRes.json
       : [];
 
-  const ordersTotal = safeNum(totalRes?.json?.total) ?? null;
+  const getTotal = (res, arrayKey) => {
+  if (!res?.ok) return null;
+  if (Number.isFinite(Number(res?.json?.total))) return Number(res.json.total);
+  if (Number.isFinite(Number(res?.json?.count))) return Number(res.json.count);
+  if (Array.isArray(res?.json?.[arrayKey])) return res.json[arrayKey].length;
+  if (Array.isArray(res?.json)) return res.json.length;
+  return null;
+};
+
+const ordersTotal = getTotal(totalRes, "orders");
+
 
   // compute revenue + AOV from fetched list
   const amounts = list
@@ -189,7 +200,8 @@ export default async function AnalyticsSalesPage() {
   // status breakdown
   const statusCounts = {};
   for (const o of list) {
-    const st = pickStatus(o).toLowerCase();
+    const rawStatus = pickStatus(o);
+const st = rawStatus ? rawStatus.toLowerCase() : "unknown";
     statusCounts[st] = (statusCounts[st] || 0) + 1;
   }
 
@@ -242,7 +254,7 @@ export default async function AnalyticsSalesPage() {
       )}
 
       {/* Stats (flex) */}
-      <div className="flex flex-wrap gap-4">
+       <div className="flex flex-wrap gap-4">
         <Stat
           icon={ShoppingBag}
           label="Total Orders"

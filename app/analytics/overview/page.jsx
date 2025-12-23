@@ -88,10 +88,14 @@ export default async function AnalyticsOverviewPage() {
     return (
       <div className="p-6 w-full">
         <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-6">
-          <h1 className="text-2xl font-bold text-gray-900">Analytics Overview</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Analytics Overview
+          </h1>
           <p className="text-sm text-gray-600 mt-2">
             Missing API base URL. Set{" "}
-            <code className="px-2 py-1 bg-gray-50 rounded">NEXT_PUBLIC_API_URL</code>{" "}
+            <code className="px-2 py-1 bg-gray-50 rounded">
+              NEXT_PUBLIC_API_URL
+            </code>{" "}
             (or{" "}
             <code className="px-2 py-1 bg-gray-50 rounded">API_URL</code>)
           </p>
@@ -103,6 +107,7 @@ export default async function AnalyticsOverviewPage() {
   const AUTO_REFRESH_SECONDS = 10;
   const now = new Date();
 
+  /* ---------------- FETCH ALL ---------------- */
   const [
     productsRes,
     ordersRes,
@@ -115,7 +120,7 @@ export default async function AnalyticsOverviewPage() {
   ] = await Promise.all([
     safeJson(`${API}/api/products?limit=1`),
     safeJson(`${API}/api/orders?limit=1`),
-    safeJson(`${API}/api/newsletters`),
+    safeJson(`${API}/api/newsletters/subscribers`),
     safeJson(`${API}/api/customers?limit=1`),
     safeJson(`${API}/api/coupons?limit=1`),
     safeJson(`${API}/api/collections?limit=1`),
@@ -123,26 +128,41 @@ export default async function AnalyticsOverviewPage() {
     safeJson(`${API}/api/tickets?limit=1`),
   ]);
 
-  const productsTotal = safeNum(productsRes?.json?.total);
-  const ordersTotal = safeNum(ordersRes?.json?.total);
+  /* ---------------- SAFE TOTAL EXTRACTOR ---------------- */
+  const getTotal = (res, arrayKey) => {
+    if (!res?.ok) return null;
+    if (Number.isFinite(Number(res?.json?.total)))
+      return Number(res.json.total);
+    if (Array.isArray(res?.json?.[arrayKey]))
+      return res.json[arrayKey].length;
+    if (Array.isArray(res?.json)) return res.json.length;
+    return null;
+  };
 
-  const newsletterList = Array.isArray(newslettersRes?.json)
-    ? newslettersRes.json
-    : Array.isArray(newslettersRes?.json?.subscribers)
-    ? newslettersRes.json.subscribers
-    : [];
-  const subscribersTotal = safeNum(newsletterList.length);
+  /* ---------------- TOTALS ---------------- */
+  const productsTotal = getTotal(productsRes, "products");
+  const ordersTotal = getTotal(ordersRes, "orders");
+  const customersTotal = getTotal(customersRes, "customers");
+  const couponsTotal = getTotal(couponsRes, "coupons");
+  const collectionsTotal = getTotal(collectionsRes, "collections");
+  const categoriesTotal = getTotal(categoriesRes, "categories");
+  const ticketsTotal = getTotal(ticketsRes, "tickets");
 
-  const customersTotal = safeNum(customersRes?.json?.total);
-  const couponsTotal = safeNum(couponsRes?.json?.total);
-  const collectionsTotal = safeNum(collectionsRes?.json?.total);
-  const categoriesTotal = safeNum(categoriesRes?.json?.total);
-  const ticketsTotal = safeNum(ticketsRes?.json?.total);
+  const subscribersTotal = Array.isArray(
+    newslettersRes?.json?.subscribers
+  )
+    ? newslettersRes.json.subscribers.length
+    : Array.isArray(newslettersRes?.json)
+    ? newslettersRes.json.length
+    : null;
 
+  /* ---------------- WARNINGS ---------------- */
   const warnings = [];
   const warn = (label, r) => {
-    if (!r?.ok) warnings.push(`${label} failed (${r?.status || "no status"})`);
+    if (!r?.ok)
+      warnings.push(`${label} failed (${r?.status || "no status"})`);
   };
+
   warn("Products", productsRes);
   warn("Orders", ordersRes);
   warn("Newsletters", newslettersRes);
@@ -152,13 +172,17 @@ export default async function AnalyticsOverviewPage() {
   warn("Categories", categoriesRes);
   warn("Tickets", ticketsRes);
 
+  /* ---------------- RENDER ---------------- */
   return (
     <div className="p-6 w-full">
       <meta httpEquiv="refresh" content={`${AUTO_REFRESH_SECONDS}`} />
 
+      {/* HEADER */}
       <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-blue-700">Analytics Overview</h1>
+          <h1 className="text-3xl font-bold text-blue-700">
+            Analytics Overview
+          </h1>
           <p className="text-sm text-gray-500 mt-1">
             Real-time overview · Auto refresh every {AUTO_REFRESH_SECONDS}s
           </p>
@@ -171,11 +195,15 @@ export default async function AnalyticsOverviewPage() {
           </Chip>
           <Chip>
             <RefreshCw className="w-4 h-4 text-gray-600" />
-            Updated: <span className="font-semibold">{now.toLocaleString("en-IN")}</span>
+            Updated:{" "}
+            <span className="font-semibold">
+              {now.toLocaleString("en-IN")}
+            </span>
           </Chip>
         </div>
       </div>
 
+      {/* WARNINGS */}
       {warnings.length > 0 && (
         <div className="mb-6 rounded-2xl bg-amber-50 ring-1 ring-amber-200 p-4">
           <p className="text-sm font-semibold text-amber-900">
@@ -189,22 +217,59 @@ export default async function AnalyticsOverviewPage() {
         </div>
       )}
 
+      {/* METRICS */}
       <div className="flex flex-wrap gap-4">
-        <MetricCard icon={Package} label="Products" value={formatInt(productsTotal)} href="/analytics/products" />
-        <MetricCard icon={ShoppingBag} label="Orders" value={formatInt(ordersTotal)} href="/analytics/sales" />
-        <MetricCard icon={Users} label="Customers" value={formatInt(customersTotal)} href="/analytics/customers" />
+        <MetricCard
+          icon={Package}
+          label="Products"
+          value={formatInt(productsTotal)}
+          href="/analytics/products"
+        />
+        <MetricCard
+          icon={ShoppingBag}
+          label="Orders"
+          value={formatInt(ordersTotal)}
+          href="/analytics/sales"
+        />
+        <MetricCard
+          icon={Users}
+          label="Customers"
+          value={formatInt(customersTotal)}
+          href="/analytics/customers"
+        />
         <MetricCard
           icon={Mail}
           label="Newsletter Subscribers"
           value={formatInt(subscribersTotal)}
           href="/analytics/marketing"
         />
-        <MetricCard icon={Tag} label="Coupons" value={formatInt(couponsTotal)} href="/coupons/manage" />
-        <MetricCard icon={Layers} label="Collections" value={formatInt(collectionsTotal)} href="/products/collections" />
-        <MetricCard icon={TrendingUp} label="Categories" value={formatInt(categoriesTotal)} href="/products/category" />
-        <MetricCard icon={Ticket} label="Support Tickets" value={formatInt(ticketsTotal)} href="/support-tickets/all" />
+        <MetricCard
+          icon={Tag}
+          label="Coupons"
+          value={formatInt(couponsTotal)}
+          href="/coupons/manage"
+        />
+        <MetricCard
+          icon={Layers}
+          label="Collections"
+          value={formatInt(collectionsTotal)}
+          href="/products/collections"
+        />
+        <MetricCard
+          icon={TrendingUp}
+          label="Categories"
+          value={formatInt(categoriesTotal)}
+          href="/products/category"
+        />
+        <MetricCard
+          icon={Ticket}
+          label="Support Tickets"
+          value={formatInt(ticketsTotal)}
+          href="/support-tickets/all"
+        />
       </div>
 
+      {/* QUICK LINKS */}
       <div className="mt-6 flex flex-wrap gap-3">
         {[
           { label: "Sales Analytics", href: "/analytics/sales" },
@@ -226,3 +291,4 @@ export default async function AnalyticsOverviewPage() {
     </div>
   );
 }
+

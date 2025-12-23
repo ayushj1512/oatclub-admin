@@ -68,7 +68,7 @@ const safeDateLabel = (iso) => {
 
 export default function EmailMarketingClient() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
-  const NEWSLETTER_API = `${API_BASE}/api/newsletters`;
+  const NEWSLETTER_API = `${API_BASE}/api/newsletters/subscribers`;
   const SEND_API = `${API_BASE}/api/marketing/email/send`;
 
   const [subscribers, setSubscribers] = useState([]);
