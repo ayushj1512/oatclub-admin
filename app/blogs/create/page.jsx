@@ -1,19 +1,13 @@
-// app/blogs/create/page.jsx
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  Save,
-  Sparkles,
-  Image as ImageIcon,
-  Upload,
-  X,
-  RefreshCw,
-  Search,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Save, Sparkles, ArrowLeft } from "lucide-react";
+import { useAdminBlogStore } from "@/store/adminBlogStore";
+import { useAdminProductStore } from "@/store/adminProductStore";
+import MediaPickerModal from "@/components/media/MediaPickerModal";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
-
+/* ---------------- utils ---------------- */
 const slugify = (s = "") =>
   String(s)
     .toLowerCase()
@@ -24,561 +18,440 @@ const slugify = (s = "") =>
     .replace(/--+/g, "-");
 
 export default function BlogCreatePage() {
-  const [saving, setSaving] = useState(false);
+  const { createBlog, saving } = useAdminBlogStore();
 
-  // Media picker state
-  const [mediaOpen, setMediaOpen] = useState(false);
-  const [mediaLoading, setMediaLoading] = useState(false);
-  const [mediaItems, setMediaItems] = useState([]);
-  const [mediaPages, setMediaPages] = useState(1);
-  const [mediaPage, setMediaPage] = useState(1);
-  const [mediaQ, setMediaQ] = useState("");
-  const [uploading, setUploading] = useState(false);
-
+  /* ---------------- form state ---------------- */
   const [form, setForm] = useState({
     title: "",
     slug: "",
     excerpt: "",
-    date: "", // yyyy-mm-dd
     category: "Fashion",
-    tags: [], // ["tag1","tag2"]
-    image: "", // URL
+    tags: [],
+      products: [], // ✅ NEW
+
+    image: "",
     content: "",
     isPublished: true,
   });
+const [productSearch, setProductSearch] = useState("");
 
   const [tagsInput, setTagsInput] = useState("");
+const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
   const previewSlug = useMemo(
     () => (form.slug ? slugify(form.slug) : slugify(form.title)),
     [form.slug, form.title]
   );
 
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  
 
+  const toggleProduct = (id) => {
+  set("products",
+    form.products.includes(id)
+      ? form.products.filter((p) => p !== id)
+      : [...form.products, id]
+  );
+};
+
+  const {
+  products,
+  fetchProducts,
+  loading: productsLoading,
+} = useAdminProductStore();
+
+useEffect(() => {
+  fetchProducts({ limit: 50, page: 1 });
+}, [fetchProducts]);
+
+ 
+
+  /* ---------------- tags ---------------- */
   const addTags = () => {
     const parts = tagsInput
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
+
     if (!parts.length) return;
 
     set("tags", Array.from(new Set([...(form.tags || []), ...parts])));
     setTagsInput("");
   };
 
-  const removeTag = (t) => set("tags", (form.tags || []).filter((x) => x !== t));
+  const removeTag = (t) =>
+    set("tags", (form.tags || []).filter((x) => x !== t));
 
-  const useAutoSlug = () => set("slug", previewSlug);
+  /* ---------------- submit ---------------- */
+  const handleSubmit = async () => {
+    if (!form.title.trim()) return alert("Title is required");
+    if (!form.excerpt.trim()) return alert("Excerpt is required");
 
-  /* ---------------------------------------------------------
-     MEDIA: FETCH (GET /api/media)
-  --------------------------------------------------------- */
-  const fetchMedia = async (page = 1, q = mediaQ) => {
-    try {
-      setMediaLoading(true);
+    await createBlog({
+      ...form,
+      slug: previewSlug,
+      tags: form.tags || [],
+        products: form.products, // ✅ IMPORTANT
 
-      const params = new URLSearchParams();
-      params.set("page", String(page));
-      params.set("limit", "36");
-      params.set("type", "image"); // for blog cover
-      if (q) params.set("q", q);
-
-      const res = await fetch(`${API}/api/media?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        console.error("❌ getMedia failed:", data);
-        setMediaItems([]);
-        setMediaPages(1);
-        setMediaPage(1);
-        return;
-      }
-
-      setMediaItems(Array.isArray(data.items) ? data.items : []);
-      setMediaPages(Number(data.pages) || 1);
-      setMediaPage(Number(data.page) || page);
-    } catch (err) {
-      console.error("❌ fetchMedia error:", err);
-      setMediaItems([]);
-      setMediaPages(1);
-      setMediaPage(1);
-    } finally {
-      setMediaLoading(false);
-    }
-  };
-
-  const openMediaPicker = async () => {
-    setMediaOpen(true);
-    setMediaQ("");
-    setMediaPage(1);
-    await fetchMedia(1, "");
-  };
-
-  const selectMedia = (url) => {
-    set("image", url || "");
-    setMediaOpen(false);
-  };
-
-  const clearSelectedImage = () => set("image", "");
-
-  /* ---------------------------------------------------------
-     MEDIA: UPLOAD (POST /api/media/upload)
-     field name: files
-  --------------------------------------------------------- */
-  const handleUploadImage = async (file) => {
-    if (!file) return;
-
-    try {
-      setUploading(true);
-
-      const fd = new FormData();
-      fd.append("files", file);
-      fd.append("folder", "miray/blogs");
-
-      const res = await fetch(`${API}/api/media/upload`, {
-        method: "POST",
-        body: fd,
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        console.error("❌ upload failed:", data);
-        alert(data?.message || "Upload failed");
-        return;
-      }
-
-      const first = data?.media?.[0];
-      if (first?.url) set("image", first.url);
-
-      // refresh grid
-      await fetchMedia(1, mediaQ);
-    } catch (err) {
-      console.error("❌ handleUploadImage error:", err);
-      alert("Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  /* ---------------------------------------------------------
-     SAVE BLOG
-  --------------------------------------------------------- */
-  const save = async () => {
-    if (!form.title.trim()) return alert("Title required");
-    if (!form.excerpt.trim()) return alert("Excerpt required");
-    if (!form.category.trim()) return alert("Category required");
-
-    setSaving(true);
-    try {
-      const payload = {
-        ...form,
-        slug: previewSlug,
-        tags: form.tags || [],
-        // keep date optional; backend can fall back to createdAt
-      };
-
-      const r = await fetch(`${API}/api/blogs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.message || "Create failed");
-
-      alert("Blog created ✅");
-      // reset (keep category)
-      setForm((p) => ({
-        title: "",
-        slug: "",
-        excerpt: "",
-        date: "",
-        category: p.category || "Fashion",
-        tags: [],
-        image: "",
-        content: "",
-        isPublished: true,
-      }));
-      setTagsInput("");
-    } catch (e) {
-      console.error("❌ create blog:", e);
-      alert(e.message || "Create failed");
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   return (
-    <section className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto space-y-4">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Create Blog</h1>
-            <p className="text-xs text-gray-500">
-              Same structure as your frontend store: title, excerpt, date, category, tags, image, content.
-            </p>
-          </div>
+    <section className="min-h-screen bg-[#f6f7f9]">
+  <div className="max-w-5xl mx-auto px-6 py-12 space-y-10">
 
-          <button
-            onClick={save}
-            disabled={saving}
-            className={`inline-flex items-center gap-2 px-4 py-2 text-white ${
-              saving ? "bg-gray-400" : "bg-black hover:bg-gray-900"
-            }`}
-          >
-            <Save size={18} />
-            {saving ? "Saving..." : "Publish"}
-          </button>
+    {/* ================= HEADER ================= */}
+    <div className="flex items-center justify-between">
+      <div>
+        <Link
+          href="/blogs/all"
+          className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-black"
+        >
+          <ArrowLeft size={16} />
+          Back to blogs
+        </Link>
+
+        <h1 className="text-3xl font-semibold text-black mt-3">
+          Create Blog
+        </h1>
+
+        <p className="text-sm text-gray-500 mt-1">
+          Write and publish a new blog post
+        </p>
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={saving}
+        className="inline-flex items-center gap-2 rounded-xl bg-black text-white px-6 py-2.5 text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
+      >
+        <Save size={16} />
+        {saving ? "Saving..." : "Publish"}
+      </button>
+    </div>
+
+    {/* ================= BLOG COVER IMAGE ================= */}
+<div className="bg-white rounded-2xl shadow-sm p-8 space-y-4">
+  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+    Blog cover image
+  </h2>
+
+  <p className="text-sm text-gray-500">
+    This image appears on blog listing cards and at the top of the blog page
+  </p>
+
+  {/* PREVIEW */}
+  {form.image ? (
+    <div className="relative w-full max-w-md">
+      <img
+        src={form.image}
+        alt="Blog cover"
+        className="w-full h-[220px] object-cover rounded-xl border border-gray-200"
+      />
+
+      {/* ACTIONS */}
+      <div className="absolute top-3 right-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setImagePickerOpen(true)}
+          className="px-3 py-1.5 rounded-lg bg-white shadow text-xs font-medium hover:bg-gray-100"
+        >
+          Replace
+        </button>
+
+        <button
+          type="button"
+          onClick={() => set("image", "")}
+          className="px-3 py-1.5 rounded-lg bg-white shadow text-xs font-medium text-red-600 hover:bg-red-50"
+        >
+          Remove
+        </button>
+      </div>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setImagePickerOpen(true)}
+      className="flex items-center justify-center w-full max-w-md h-[220px] rounded-xl border-2 border-dashed border-gray-300 text-sm text-gray-500 hover:border-black hover:text-black transition"
+    >
+      Click to select cover image
+    </button>
+  )}
+
+  {/* MEDIA PICKER MODAL */}
+  <MediaPickerModal
+    open={imagePickerOpen}
+    onClose={() => setImagePickerOpen(false)}
+    folder="miray/blogs"
+    onSelect={(media) => {
+      set("image", media.url); // ✅ store only url
+      setImagePickerOpen(false);
+    }}
+  />
+</div>
+
+
+    {/* ================= BASIC INFO ================= */}
+    <div className="bg-white rounded-2xl shadow-sm p-8 space-y-6">
+      <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+        Basic information
+      </h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* TITLE */}
+        <div>
+          <label className="text-xs font-medium text-gray-500">
+            Title *
+          </label>
+          <input
+            value={form.title}
+            onChange={(e) => set("title", e.target.value)}
+            placeholder="Gen-Z Fashion Trends 2025"
+            className="mt-2 w-full bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm"
+          />
         </div>
 
-        {/* Main */}
-        <div className="bg-white border border-gray-200 p-5 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-semibold text-gray-800 block mb-1">Title *</label>
-              <input
-                value={form.title}
-                onChange={(e) => set("title", e.target.value)}
-                className="w-full bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
-                placeholder="Gen-Z Western Outfits Taking Over 2025"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-800 block mb-1">Slug *</label>
-              <div className="flex gap-2">
-                <input
-                  value={form.slug}
-                  onChange={(e) => set("slug", e.target.value)}
-                  className="flex-1 bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
-                  placeholder="genz-western-outfits-2025"
-                />
-                <button
-                  type="button"
-                  onClick={useAutoSlug}
-                  className="px-3 py-2 border bg-white hover:bg-gray-50 inline-flex items-center gap-2"
-                  title="Generate from title"
-                >
-                  <Sparkles size={16} />
-                  Auto
-                </button>
-              </div>
-              <div className="text-[11px] text-gray-500 mt-1">
-                Preview: <b>{previewSlug || "-"}</b>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="text-sm font-semibold text-gray-800 block mb-1">Date</label>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => set("date", e.target.value)}
-                className="w-full bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-800 block mb-1">Category *</label>
-              <input
-                value={form.category}
-                onChange={(e) => set("category", e.target.value)}
-                className="w-full bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
-                placeholder="Fashion / Lifestyle / Trends / Guides"
-              />
-            </div>
-
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <label className="text-sm font-semibold text-gray-800 block mb-1">Published</label>
-                <select
-                  value={String(form.isPublished)}
-                  onChange={(e) => set("isPublished", e.target.value === "true")}
-                  className="w-full bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
-                >
-                  <option value="true">Yes</option>
-                  <option value="false">No (Draft)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold text-gray-800 block mb-1">Excerpt *</label>
-            <textarea
-              value={form.excerpt}
-              onChange={(e) => set("excerpt", e.target.value)}
-              className="w-full bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
-              rows={3}
-              placeholder="Short summary shown on listing cards..."
+        {/* SLUG */}
+        <div>
+          <label className="text-xs font-medium text-gray-500">
+            Slug
+          </label>
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              value={form.slug}
+              onChange={(e) => set("slug", e.target.value)}
+              placeholder="gen-z-fashion-2025"
+              className="flex-1 bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm"
             />
+            <button
+              type="button"
+              onClick={() => set("slug", previewSlug)}
+              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"
+              title="Generate from title"
+            >
+              <Sparkles size={14} />
+            </button>
           </div>
-
-          {/* COVER IMAGE: MEDIA PICKER + UPLOAD */}
-          <div className="border bg-gray-50 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-14 h-14 bg-white border overflow-hidden flex items-center justify-center">
-                  {!!form.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={form.image} alt="cover" className="w-full h-full object-cover" />
-                  ) : (
-                    <ImageIcon className="text-gray-400" />
-                  )}
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-800">Cover Image</div>
-                  <div className="text-xs text-gray-600">Choose from Media or upload new (Cloudinary).</div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 justify-end">
-                <button
-                  type="button"
-                  onClick={openMediaPicker}
-                  className="px-3 py-2 border bg-white hover:bg-gray-50 inline-flex items-center gap-2"
-                >
-                  <ImageIcon size={16} />
-                  Select from Media
-                </button>
-
-                <label className="px-3 py-2 border bg-white hover:bg-gray-50 inline-flex items-center gap-2 cursor-pointer">
-                  <Upload size={16} />
-                  {uploading ? "Uploading..." : "Upload"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploading}
-                    onChange={(e) => handleUploadImage(e.target.files?.[0])}
-                  />
-                </label>
-
-                {!!form.image && (
-                  <button
-                    type="button"
-                    onClick={clearSelectedImage}
-                    className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white inline-flex items-center gap-2"
-                  >
-                    <X size={16} />
-                    Remove
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <label className="text-sm font-semibold text-gray-800 block mb-1">Cover Image URL</label>
-              <input
-                value={form.image}
-                onChange={(e) => set("image", e.target.value)}
-                className="w-full bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
-                placeholder="https://...jpg"
-              />
-            </div>
-
-            {!!form.image && (
-              <div className="mt-3 border bg-white p-3">
-                <div className="text-xs text-gray-600 mb-2">Preview</div>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={form.image} alt="cover preview" className="w-full max-h-64 object-contain bg-white" />
-              </div>
-            )}
-          </div>
-
-          {/* Tags */}
-          <div>
-            <label className="text-sm font-semibold text-gray-800 block mb-1">Tags (comma separated)</label>
-            <div className="flex gap-2">
-              <input
-                value={tagsInput}
-                onChange={(e) => setTagsInput(e.target.value)}
-                className="flex-1 bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
-                placeholder="Western, GenZ, Streetwear"
-              />
-              <button type="button" onClick={addTags} className="px-4 bg-blue-600 hover:bg-blue-700 text-white">
-                Add
-              </button>
-            </div>
-
-            {!!form.tags?.length && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {form.tags.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => removeTag(t)}
-                    className="text-xs px-3 py-1 bg-gray-100 border hover:bg-gray-200"
-                    title="Remove"
-                  >
-                    {t} ×
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Content */}
-          <div>
-            <label className="text-sm font-semibold text-gray-800 block mb-1">Content</label>
-            <textarea
-              value={form.content}
-              onChange={(e) => set("content", e.target.value)}
-              className="w-full bg-gray-100 border border-gray-200 px-3 py-2 outline-none"
-              rows={12}
-              placeholder={`Supports markdown-like text (same as your store).\n\nExample:\n✨ **What’s Trending?**\n• Oversized jackets...`}
-            />
-            <div className="text-[11px] text-gray-500 mt-1">
-              Tip: This string can include markdown-style formatting exactly like your existing BLOGS content.
-            </div>
-          </div>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Preview: <b>{previewSlug || "-"}</b>
+          </p>
         </div>
       </div>
 
-      {/* MEDIA PICKER MODAL */}
-      {mediaOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl border border-gray-200">
-            <div className="p-4 border-b flex items-center justify-between gap-3">
-              <div>
-                <div className="text-lg font-semibold">Select Cover Image</div>
-                <div className="text-xs text-gray-600">From /api/media (Cloudinary-backed)</div>
-              </div>
-              <button onClick={() => setMediaOpen(false)} className="p-2 hover:bg-gray-100">
-                <X />
-              </button>
-            </div>
+      {/* EXCERPT */}
+      <div>
+        <label className="text-xs font-medium text-gray-500">
+          Excerpt *
+        </label>
+        <textarea
+          value={form.excerpt}
+          onChange={(e) => set("excerpt", e.target.value)}
+          rows={3}
+          placeholder="Short summary shown on blog listings"
+          className="mt-2 w-full bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm resize-none"
+        />
+      </div>
+    </div>
 
-            <div className="p-4 space-y-4">
-              <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-                <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 px-3 py-2 w-full md:w-[420px]">
-                  <Search size={16} className="text-gray-500" />
-                  <input
-                    value={mediaQ}
-                    onChange={(e) => setMediaQ(e.target.value)}
-                    placeholder="Search media by name / folder..."
-                    className="bg-transparent outline-none w-full"
-                  />
-                </div>
+    
 
-                <div className="flex gap-2">
-                  <button
-                    className="px-3 py-2 border bg-white hover:bg-gray-50 inline-flex items-center gap-2"
-                    onClick={() => fetchMedia(1, mediaQ)}
-                    disabled={mediaLoading}
-                  >
-                    <RefreshCw size={16} />
-                    Search
-                  </button>
+    {/* ================= META ================= */}
+    <div className="bg-white rounded-2xl shadow-sm p-8 space-y-6">
+      <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+        Meta & visibility
+      </h2>
 
-                  <label className="px-3 py-2 border bg-white hover:bg-gray-50 inline-flex items-center gap-2 cursor-pointer">
-                    <Upload size={16} />
-                    {uploading ? "Uploading..." : "Upload"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleUploadImage(e.target.files?.[0])}
-                      disabled={uploading}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {mediaLoading ? (
-                <p className="text-gray-600">Loading media...</p>
-              ) : mediaItems.length ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {mediaItems.map((m) => (
-                    <button
-                      key={m._id}
-                      onClick={() => selectMedia(m.url)}
-                      className="group border border-gray-200 overflow-hidden hover:border-black text-left"
-                      title={m.originalName || m.publicId}
-                    >
-                      <div className="aspect-square bg-gray-50 overflow-hidden">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={m.url}
-                          alt={m.originalName || "media"}
-                          className="w-full h-full object-cover group-hover:scale-105 transition"
-                        />
-                      </div>
-                      <div className="p-2">
-                        <p className="text-xs font-medium truncate">{m.originalName || m.publicId}</p>
-                        <p className="text-[10px] text-gray-500 truncate">{m.folder || ""}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-600">No media found.</p>
-              )}
-
-              <div className="flex items-center justify-between pt-2">
-                <p className="text-xs text-gray-600">
-                  Page {mediaPage} of {mediaPages}
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    className="px-3 py-2 border bg-white hover:bg-gray-50"
-                    disabled={mediaPage <= 1 || mediaLoading}
-                    onClick={() => fetchMedia(mediaPage - 1, mediaQ)}
-                  >
-                    Prev
-                  </button>
-                  <button
-                    className="px-3 py-2 border bg-white hover:bg-gray-50"
-                    disabled={mediaPage >= mediaPages || mediaLoading}
-                    onClick={() => fetchMedia(mediaPage + 1, mediaQ)}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-
-              <div className="border bg-gray-50 p-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-white border overflow-hidden flex items-center justify-center">
-                    {!!form.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={form.image} alt="selected" className="w-full h-full object-cover" />
-                    ) : (
-                      <ImageIcon className="text-gray-400" />
-                    )}
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold">Selected</div>
-                    <div className="text-xs text-gray-600 truncate max-w-[520px]">
-                      {form.image || "None"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white inline-flex items-center gap-2"
-                    onClick={clearSelectedImage}
-                    disabled={!form.image}
-                  >
-                    <X size={16} />
-                    Clear
-                  </button>
-                  <button className="px-3 py-2 bg-black hover:bg-gray-900 text-white" onClick={() => setMediaOpen(false)}>
-                    Done
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* CATEGORY */}
+        <div>
+          <label className="text-xs font-medium text-gray-500">
+            Category
+          </label>
+          <input
+            value={form.category}
+            onChange={(e) => set("category", e.target.value)}
+            className="mt-2 w-full bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm"
+          />
         </div>
+
+        {/* STATUS */}
+        <div>
+          <label className="text-xs font-medium text-gray-500">
+            Status
+          </label>
+          <select
+            value={String(form.isPublished)}
+            onChange={(e) =>
+              set("isPublished", e.target.value === "true")
+            }
+            className="mt-2 w-full bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm"
+          >
+            <option value="true">Published</option>
+            <option value="false">Draft</option>
+          </select>
+        </div>
+      </div>
+
+      {/* TAGS */}
+      <div>
+        <label className="text-xs font-medium text-gray-500">
+          Tags
+        </label>
+        <div className="flex gap-2 mt-2">
+          <input
+            value={tagsInput}
+            onChange={(e) => setTagsInput(e.target.value)}
+            placeholder="Fashion, GenZ, Trends"
+            className="flex-1 bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={addTags}
+            className="rounded-lg bg-blue-600 text-white px-4 py-2 text-xs font-medium hover:bg-blue-700"
+          >
+            Add
+          </button>
+        </div>
+
+        {!!form.tags.length && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {form.tags.map((t) => (
+              <span
+                key={t}
+                className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700"
+              >
+                {t}
+                <button
+                  onClick={() => removeTag(t)}
+                  className="ml-2 text-gray-400 hover:text-black"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+
+    {/* ================= PRODUCTS ================= */}
+<div className="bg-white rounded-2xl shadow-sm p-8 space-y-6">
+  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+    Linked products
+  </h2>
+
+  <p className="text-sm text-gray-500">
+    Select products that will appear inside this blog
+  </p>
+
+  {/* SEARCH */}
+  <div className="flex items-center gap-2">
+    <input
+      value={productSearch}
+      onChange={(e) => setProductSearch(e.target.value)}
+      placeholder="Search products by name or category…"
+      className="w-full bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm"
+    />
+  </div>
+
+  {/* LIST */}
+  {productsLoading ? (
+    <p className="text-sm text-gray-500">Loading products…</p>
+  ) : (
+    <div className="max-h-[280px] overflow-y-auto space-y-2">
+      {products
+        .filter((p) => {
+          const q = productSearch.toLowerCase();
+          return (
+            !q ||
+            p.title?.toLowerCase().includes(q) ||
+            p.category?.toLowerCase().includes(q)
+          );
+        })
+        .map((p) => {
+          const checked = form.products.includes(p._id);
+
+          return (
+            <label
+              key={p._id}
+              className={`flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition ${
+                checked
+                  ? "bg-blue-50"
+                  : "hover:bg-gray-50"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleProduct(p._id)}
+                  className="accent-blue-600"
+                />
+
+                <div>
+                  <div className="text-sm font-medium text-gray-900">
+                    {p.title}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    ₹{p.price} · {p.category || "Uncategorized"}
+                  </div>
+                </div>
+              </div>
+
+              {checked && (
+                <span className="text-xs text-blue-600 font-medium">
+                  Selected
+                </span>
+              )}
+            </label>
+          );
+        })}
+
+      {/* EMPTY RESULT */}
+      {products.filter((p) => {
+        const q = productSearch.toLowerCase();
+        return (
+          !q ||
+          p.title?.toLowerCase().includes(q) ||
+          p.category?.toLowerCase().includes(q)
+        );
+      }).length === 0 && (
+        <p className="text-sm text-gray-500 px-2 py-6 text-center">
+          No matching products
+        </p>
       )}
-    </section>
+    </div>
+  )}
+
+  {!!form.products.length && (
+    <div className="pt-3 text-sm text-gray-600">
+      Selected products:{" "}
+      <b className="text-black">{form.products.length}</b>
+    </div>
+  )}
+</div>
+
+
+
+    {/* ================= CONTENT ================= */}
+    <div className="bg-white rounded-2xl shadow-sm p-8 space-y-4">
+      <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+        Blog content
+      </h2>
+
+      <textarea
+        value={form.content}
+        onChange={(e) => set("content", e.target.value)}
+        rows={16}
+        placeholder="Write your blog content here..."
+        className="w-full bg-transparent border border-gray-200 rounded-xl p-4 text-sm outline-none focus:border-black"
+      />
+
+      <p className="text-xs text-gray-400">
+        Supports markdown-style content (same as frontend blogs)
+      </p>
+    </div>
+  </div>
+</section>
+
   );
 }

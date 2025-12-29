@@ -11,6 +11,7 @@ import ProductImagesEditor from "@/components/product/ProductImagesEditor";
 import ProductContentEditor from "@/components/product/ProductContentEditor";
 import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
+import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -272,6 +273,23 @@ export default function AddProductPage() {
     }
   />
 </div>
+
+{/* COLLECTIONS (OPTIONAL) */}
+<div className="bg-white rounded-xl p-6 shadow space-y-4">
+  <h2 className="font-semibold">Collections (Optional)</h2>
+  <p className="text-sm text-gray-500">
+    Assign this product to one or more collections
+  </p>
+
+  <CollectionMultiSelect
+    collections={collections}
+    value={form.collections}
+    onChange={(next) =>
+      setForm((p) => ({ ...p, collections: next }))
+    }
+  />
+</div>
+
 
         {/* ADVANCED (REUSABLE COMPONENT ✅) */}
         <ProductAdvancedFields

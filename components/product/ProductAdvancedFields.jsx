@@ -104,40 +104,7 @@ export default function ProductAdvancedFields({
         )}
       </div>
 
-      {/* ================= COLLECTIONS (OPTIONAL) ================= */}
-      {collections.length > 0 && (
-        <div className="bg-white p-6 rounded-xl shadow space-y-3">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Collections{" "}
-            <span className="text-gray-400 text-sm font-normal">(Optional)</span>
-          </h3>
-
-          {editable ? (
-            <select
-              multiple
-              value={value.collections || []}
-              onChange={(e) =>
-                update({
-                  collections: Array.from(e.target.selectedOptions).map(
-                    (o) => o.value
-                  ),
-                })
-              }
-              className="input h-32"
-            >
-              {collections.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <p className="text-sm text-gray-600">
-              {(value.collections || []).length} selected
-            </p>
-          )}
-        </div>
-      )}
+    
 
       {/* ================= SHIPPING (OPTIONAL) ================= */}
       <div className="bg-white p-6 rounded-xl shadow space-y-4">

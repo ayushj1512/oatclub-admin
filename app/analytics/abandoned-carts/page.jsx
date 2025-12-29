@@ -145,7 +145,7 @@ function pickCustomerKey(c) {
 }
 
 function pickCustomerIdForLink(c) {
-  // If your AbandonedCart stores customerId (ObjectId of Customer), we can deep link
+  // If your AbandonedCart store customerId (ObjectId of Customer), we can deep link
   return c?.customerId || c?.customer?._id || null;
 }
 
@@ -273,7 +273,6 @@ export default async function AnalyticsAbandonedCartsPage() {
 
   return (
     <div className="p-6 w-full">
-      <meta httpEquiv="refresh" content={`${AUTO_REFRESH_SECONDS}`} />
 
       {/* Header */}
       <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-3">
@@ -412,7 +411,7 @@ export default async function AnalyticsAbandonedCartsPage() {
           </div>
 
           <p className="text-xs text-gray-500 mt-4">
-            Tip: make sure each abandoned cart stores <code className="px-2 py-0.5 bg-gray-50 rounded">items</code>,{" "}
+            Tip: make sure each abandoned cart store <code className="px-2 py-0.5 bg-gray-50 rounded">items</code>,{" "}
             <code className="px-2 py-0.5 bg-gray-50 rounded">total</code>, and{" "}
             <code className="px-2 py-0.5 bg-gray-50 rounded">abandonedAt</code>.
           </p>

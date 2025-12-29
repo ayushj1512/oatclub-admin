@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
-import { useAdminProductStore } from "@/stores/adminProductStore";
+import { useAdminProductStore } from "@/store/adminProductStore";
 
 export default function CrossSellSelector({
   value = [],            // array of product IDs

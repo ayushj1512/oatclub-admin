@@ -218,7 +218,6 @@ const st = rawStatus ? rawStatus.toLowerCase() : "unknown";
 
   return (
     <div className="p-6 w-full">
-      <meta httpEquiv="refresh" content={`${AUTO_REFRESH_SECONDS}`} />
 
       {/* Header */}
       <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-3">

@@ -1,313 +1,305 @@
-// app/blogs/all/page.jsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Search, RefreshCw, Pencil, Trash2, ExternalLink } from "lucide-react";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { useAdminBlogStore } from "@/store/adminBlogStore";
 
 const fmtDate = (d) => {
   if (!d) return "";
   const dt = new Date(d);
   if (Number.isNaN(dt.getTime())) return String(d);
-  return dt.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "2-digit" });
+  return dt.toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
 };
 
 export default function BlogsAllPage() {
-  const [items, setItems] = useState([]);
-  const [total, setTotal] = useState(0);
+  /* ================= STORE ================= */
+  const {
+    blogs: items,
+    total,
+    pages,
+    loading,
+    fetchBlogs,
+    deleteBlog,
+    setFilters,
+    filters,
+  } = useAdminBlogStore();
 
+  /* ================= LOCAL STATE ================= */
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
-  const [tag, setTag] = useState("");
   const [page, setPage] = useState(1);
   const limit = 12;
 
-  const [loading, setLoading] = useState(true);
-
-  // Admin toggles
   const [showPublishedOnly, setShowPublishedOnly] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  const pages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total]);
-
-  const load = async (opts = {}) => {
-    const p = opts.page ?? page;
-    setLoading(true);
-    try {
-      const url = new URL(`${API}/api/blogs`);
-      url.searchParams.set("page", String(p));
-      url.searchParams.set("limit", String(limit));
-      url.searchParams.set("sort", "newest");
-
-      // If your API supports `published=true`, we keep it optional via UI toggle
-      if (showPublishedOnly) url.searchParams.set("published", "true");
-
-      if (q.trim()) url.searchParams.set("q", q.trim());
-      if (category.trim()) url.searchParams.set("category", category.trim());
-      if (tag.trim()) url.searchParams.set("tag", tag.trim());
-
-      const r = await fetch(url.toString(), { cache: "no-store" });
-      const d = await r.json();
-
-      // supports { items, total } style
-      setItems(Array.isArray(d.items) ? d.items : []);
-      setTotal(Number(d.total) || 0);
-    } catch (e) {
-      console.error("❌ blogs/all load:", e);
-      setItems([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  /* ================= LOAD ================= */
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, showPublishedOnly]);
+    fetchBlogs({ page, limit });
+  }, [page, filters, fetchBlogs]);
 
+  /* ================= SEARCH ================= */
   const onSearch = (e) => {
     e.preventDefault();
     setPage(1);
-    load({ page: 1 });
+
+    setFilters({
+      q,
+      category,
+      published: showPublishedOnly ? "true" : "",
+    });
   };
 
-  const deleteBlog = async (id) => {
+  /* ================= DELETE ================= */
+  const handleDelete = async (id) => {
     if (!confirm("Delete this blog?")) return;
-    setDeletingId(id);
-    try {
-      const r = await fetch(`${API}/api/blogs/${id}`, { method: "DELETE" });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.message || "Delete failed");
 
-      alert("Deleted ✅");
-      // reload same page; if it becomes empty, go back 1 page
-      const nextItemsCount = Math.max(0, (items?.length || 0) - 1);
-      if (nextItemsCount === 0 && page > 1) {
-        setPage((p) => p - 1);
-      } else {
-        load({ page });
-      }
-    } catch (e) {
-      console.error("❌ delete blog:", e);
-      alert(e.message || "Delete failed");
-    } finally {
-      setDeletingId(null);
+    setDeletingId(id);
+    await deleteBlog(id);
+
+    if (items.length === 1 && page > 1) {
+      setPage((p) => p - 1);
+    } else {
+      fetchBlogs({ page, limit });
     }
+
+    setDeletingId(null);
   };
 
   return (
-    <section className="min-h-screen bg-gray-50">
-      {/* Top */}
-      <div className="max-w-7xl mx-auto px-6 pt-10 pb-6">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Blogs</h1>
-            <p className="text-sm text-gray-600 mt-1">Latest reads, styling guides & trends.</p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/blogs/create"
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2"
-              title="Create new blog"
-            >
-              + New
-            </Link>
-
-            <button
-              onClick={() => load({ page })}
-              className="inline-flex items-center gap-2 bg-black text-white px-4 py-2"
-            >
-              <RefreshCw size={18} />
-              Refresh
-            </button>
-          </div>
-        </div>
-
-        {/* Search row */}
-        <form onSubmit={onSearch} className="mt-6 bg-white border border-gray-200 p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="md:col-span-2 flex items-center gap-2 bg-gray-100 border border-gray-200 px-3 py-2">
-              <Search size={16} className="text-gray-500" />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search title / excerpt / tags..."
-                className="bg-transparent outline-none w-full text-sm"
-              />
-            </div>
-
-            <input
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Category (optional)"
-              className="bg-gray-100 border border-gray-200 px-3 py-2 outline-none text-sm"
-            />
-
-            <div className="flex gap-2">
-              <input
-                value={tag}
-                onChange={(e) => setTag(e.target.value)}
-                placeholder="Tag (optional)"
-                className="flex-1 bg-gray-100 border border-gray-200 px-3 py-2 outline-none text-sm"
-              />
-              <button className="px-4 py-2 bg-black text-white">Search</button>
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-gray-600">
-            <div>
-              Total: <b>{total}</b>
-            </div>
-
-            <label className="inline-flex items-center gap-2 select-none">
-              <input
-                type="checkbox"
-                checked={showPublishedOnly}
-                onChange={(e) => {
-                  setPage(1);
-                  setShowPublishedOnly(e.target.checked);
-                }}
-              />
-              Show published only
-            </label>
-          </div>
-        </form>
+   <section className="min-h-screen bg-[#f6f7f9]">
+  {/* ================= HEADER ================= */}
+  <div className="max-w-7xl mx-auto px-6 pt-12 pb-8">
+    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+      <div>
+        <h1 className="text-3xl font-semibold text-black">
+          Blogs
+        </h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Manage blogs, content & linked products
+        </p>
       </div>
 
-      {/* Grid */}
-      <div className="max-w-7xl mx-auto px-6 pb-10">
-        {loading ? (
-          <div className="text-gray-600">Loading...</div>
-        ) : items.length === 0 ? (
-          <div className="text-gray-600">No blogs found.</div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {items.map((b) => (
-              <div
-                key={b._id}
-                className="group bg-white border border-gray-200 overflow-hidden hover:shadow-md transition"
-              >
-                <div className="relative h-52 bg-gray-100 overflow-hidden">
-                  {b.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={b.image}
-                      alt={b.title}
-                      className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">
-                      No image
-                    </div>
-                  )}
+      <div className="flex gap-3">
+        <Link
+          href="/blogs/create"
+          className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 text-sm font-medium"
+        >
+          + New Blog
+        </Link>
 
-                  {/* Admin actions */}
-                  <div className="absolute top-2 right-2 flex gap-2">
+        <button
+          onClick={() => fetchBlogs({ page, limit })}
+          className="rounded-xl bg-black text-white px-5 py-2.5 text-sm font-medium flex items-center gap-2 hover:bg-gray-900"
+        >
+          <RefreshCw size={16} />
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    {/* ================= FILTERS ================= */}
+    <form
+      onSubmit={onSearch}
+      className="mt-8 bg-white rounded-2xl shadow-sm px-6 py-5"
+    >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* SEARCH */}
+        <div className="flex items-center gap-2">
+          <Search size={16} className="text-gray-400" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search blogs"
+            className="w-full bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm"
+          />
+        </div>
+
+        {/* CATEGORY */}
+        <input
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          placeholder="Category"
+          className="bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm"
+        />
+
+        {/* ACTION */}
+        <button className="rounded-lg bg-black text-white px-4 py-2 text-sm font-medium hover:bg-gray-900">
+          Search
+        </button>
+      </div>
+
+      <div className="mt-5 flex justify-between items-center text-sm text-gray-500">
+        <div>
+          Total: <b className="text-black">{total}</b>
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showPublishedOnly}
+            onChange={(e) => {
+              setPage(1);
+              setShowPublishedOnly(e.target.checked);
+              setFilters({
+                ...filters,
+                published: e.target.checked ? "true" : "",
+              });
+            }}
+          />
+          Published only
+        </label>
+      </div>
+    </form>
+  </div>
+
+  {/* ================= TABLE ================= */}
+  <div className="max-w-7xl mx-auto px-6 pb-12">
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-[#fafafa] sticky top-0">
+          <tr className="text-left text-gray-500">
+            <th className="px-6 py-4 w-[36%] font-medium">Blog</th>
+            <th className="px-6 py-4 font-medium">Category</th>
+            <th className="px-6 py-4 font-medium">Products</th>
+            <th className="px-6 py-4 font-medium">Status</th>
+            <th className="px-6 py-4 font-medium">Date</th>
+            <th className="px-6 py-4 text-right font-medium">Actions</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {loading ? (
+            <tr>
+              <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
+                Loading blogs…
+              </td>
+            </tr>
+          ) : items.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
+                No blogs found
+              </td>
+            </tr>
+          ) : (
+            items.map((b, i) => (
+              <tr
+                key={b._id}
+                className={`hover:bg-gray-50 ${
+                  i !== items.length - 1 ? "border-b border-gray-100" : ""
+                }`}
+              >
+                {/* BLOG */}
+                <td className="px-6 py-4">
+                  <div className="font-medium text-gray-900 line-clamp-1">
+                    {b.title}
+                  </div>
+                  <div className="text-xs text-gray-500 line-clamp-1 mt-0.5">
+                    {b.excerpt || "-"}
+                  </div>
+                </td>
+
+                {/* CATEGORY */}
+                <td className="px-6 py-4 text-gray-700">
+                  {b.category || "-"}
+                </td>
+
+                {/* PRODUCTS */}
+                <td className="px-6 py-4">
+                  {b.products?.length ? (
+                    <span className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700">
+                      {b.products.length} linked
+                    </span>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+
+                {/* STATUS */}
+                <td className="px-6 py-4">
+                  <span
+                    className={`text-xs font-medium ${
+                      b.isPublished
+                        ? "text-green-700"
+                        : "text-orange-600"
+                    }`}
+                  >
+                    {b.isPublished ? "Published" : "Draft"}
+                  </span>
+                </td>
+
+                {/* DATE */}
+                <td className="px-6 py-4 text-gray-500">
+                  {fmtDate(b.date || b.createdAt)}
+                </td>
+
+                {/* ACTIONS */}
+                <td className="px-6 py-4">
+                  <div className="flex justify-end gap-3">
+                    <Link
+                      href={`/blogs/${b.slug}`}
+                      className="text-gray-400 hover:text-black"
+                      title="View"
+                    >
+                      <ExternalLink size={16} />
+                    </Link>
+
                     <Link
                       href={`/blogs/edit/${b._id}`}
-                      className="p-2 bg-white/95 border hover:bg-white"
+                      className="text-gray-400 hover:text-black"
                       title="Edit"
-                      onClick={(e) => e.stopPropagation()}
                     >
                       <Pencil size={16} />
                     </Link>
 
                     <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteBlog(b._id);
-                      }}
+                      onClick={() => handleDelete(b._id)}
                       disabled={deletingId === b._id}
-                      className={`p-2 border ${
-                        deletingId === b._id ? "bg-gray-100 text-gray-400" : "bg-white/95 hover:bg-white"
-                      }`}
+                      className="text-gray-400 hover:text-red-600 disabled:opacity-50"
                       title="Delete"
                     >
                       <Trash2 size={16} />
                     </button>
                   </div>
-                </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
 
-                <div className="p-4 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>{fmtDate(b.date || b.createdAt)}</span>
-                    <span className="px-2 py-0.5 bg-gray-100 border">{b.category || "Blog"}</span>
-                  </div>
+    {/* ================= PAGINATION ================= */}
+    <div className="flex justify-between items-center pt-8 text-sm text-gray-500">
+      <button
+        disabled={page <= 1}
+        onClick={() => setPage((p) => p - 1)}
+        className="px-4 py-2 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+      >
+        Prev
+      </button>
 
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">{b.title}</h3>
+      <span>
+        Page <b className="text-black">{page}</b> /{" "}
+        <b className="text-black">{pages}</b>
+      </span>
 
-                    {/* View */}
-                    <Link
-                      href={`/blogs/${b.slug}`}
-                      className="shrink-0 p-2 border bg-white hover:bg-gray-50"
-                      title="Open"
-                    >
-                      <ExternalLink size={16} />
-                    </Link>
-                  </div>
+      <button
+        disabled={page >= pages}
+        onClick={() => setPage((p) => p + 1)}
+        className="px-4 py-2 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+      >
+        Next
+      </button>
+    </div>
+  </div>
+</section>
 
-                  <p className="text-sm text-gray-600 line-clamp-3">{b.excerpt || ""}</p>
-
-                  {!!(b.tags?.length) && (
-                    <div className="pt-1 flex flex-wrap gap-2">
-                      {b.tags.slice(0, 4).map((t, i) => (
-                        <span key={i} className="text-[11px] px-2 py-0.5 bg-gray-100 border text-gray-700">
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="pt-2 flex items-center justify-between text-xs text-gray-600">
-                    <span>
-                      Status:{" "}
-                      <b className={b.isPublished ? "text-green-700" : "text-orange-700"}>
-                        {b.isPublished ? "Published" : "Draft"}
-                      </b>
-                    </span>
-                    <Link href={`/blogs/edit/${b._id}`} className="text-blue-700 hover:underline">
-                      Edit
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between pt-8">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className={`px-4 py-2 border ${
-              page <= 1 ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"
-            }`}
-          >
-            Prev
-          </button>
-
-          <div className="text-sm text-gray-600">
-            Page <b>{page}</b> / <b>{pages}</b>
-          </div>
-
-          <button
-            disabled={page >= pages}
-            onClick={() => setPage((p) => Math.min(pages, p + 1))}
-            className={`px-4 py-2 border ${
-              page >= pages ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"
-            }`}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    </section>
   );
 }

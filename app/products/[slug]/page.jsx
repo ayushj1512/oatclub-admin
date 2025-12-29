@@ -10,6 +10,8 @@ import ProductVariantsEditor from "@/components/product/ProductVariantsEditor";
 import ProductImagesEditor from "@/components/product/ProductImagesEditor";
 import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
+import ProductFabricAssignment from "@/components/product/ProductFabricAssignment";
+import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -26,7 +28,7 @@ export default function ProductDetailsPage({ params }) {
 
   // ✅ Next 15/16: params is a Promise in client components
   const { slug } = use(params);
-
+const [collections, setCollections] = useState([]);
   const [product, setProduct] = useState(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,7 @@ const [allAttributes, setAllAttributes] = useState([]);
   isInStock: true,
   isActive: true,
 crossSellProducts: [],
+  fabrics: [], // ✅ ADD THIS
 
   shortDescription: "",
   description: "",
@@ -106,6 +109,9 @@ const loadProduct = async () => {
       stock: toNum(data?.stock),
       isInStock: Boolean(data?.isInStock ?? true),
       isActive: Boolean(data?.isActive ?? true),
+
+      /* FABRICS */
+fabrics: Array.isArray(data?.fabrics) ? data.fabrics : [],
 
       /* CONTENT */
       shortDescription: toStr(data?.shortDescription),
@@ -188,6 +194,21 @@ const loadProduct = async () => {
   }
 };
 
+const fetchAllCollections = async () => {
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/collections`,
+      { cache: "no-store" }
+    );
+    const data = await res.json();
+    setCollections(Array.isArray(data) ? data : []);
+  } catch (e) {
+    console.error("Failed to fetch collections", e);
+    setCollections([]);
+  }
+};
+
+
 
 
   const fetchAllAttributes = async () => {
@@ -206,7 +227,7 @@ const loadProduct = async () => {
 
   useEffect(() => {
   if (!slug) return;
-
+  fetchAllCollections(); // ✅ ADD
   loadProduct();
   fetchAllAttributes(); 
 }, [slug]);
@@ -292,6 +313,7 @@ const saveProduct = async () => {
       /* CONTENT */
       shortDescription: form.shortDescription || "",
       description: form.description || "",
+fabrics: Array.isArray(form.fabrics) ? form.fabrics : [],
 
       /* MEDIA */
       images: Array.isArray(form.images) ? form.images : [],
@@ -579,6 +601,15 @@ const saveProduct = async () => {
   }
 />
 
+<ProductFabricAssignment
+  value={editing ? form.fabrics : product.fabrics}
+  editable={editing}
+  onChange={(next) =>
+    setForm((p) => ({ ...p, fabrics: next }))
+  }
+/>
+
+
 
 
    <AttributeSelector
@@ -589,6 +620,46 @@ const saveProduct = async () => {
   allAttributes={allAttributes}
   editable={editing}
 />
+
+{/* COLLECTIONS */}
+<div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
+  <h2 className="text-lg md:text-xl font-semibold">
+    Collections (Optional)
+  </h2>
+
+  {/* VIEW MODE */}
+  {!editing && (
+    <div className="flex flex-wrap gap-2">
+      {Array.isArray(product.collections) &&
+      product.collections.length > 0 ? (
+        product.collections.map((c) => (
+          <span
+            key={typeof c === "string" ? c : c?._id}
+            className="px-3 py-1 bg-gray-200 rounded-full text-xs"
+          >
+            {typeof c === "string" ? c : c?.name || "Collection"}
+          </span>
+        ))
+      ) : (
+        <p className="text-sm text-gray-600">
+          No collections assigned
+        </p>
+      )}
+    </div>
+  )}
+
+  {/* EDIT MODE */}
+  {editing && (
+    <CollectionMultiSelect
+      collections={collections}
+      value={form.collections}
+      onChange={(next) =>
+        setForm((p) => ({ ...p, collections: next }))
+      }
+    />
+  )}
+</div>
+
 
 <ProductAdvancedFields
   editable={editing}

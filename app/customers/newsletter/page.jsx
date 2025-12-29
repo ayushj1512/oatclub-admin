@@ -14,7 +14,7 @@ import { motion } from "framer-motion";
 import { Search, Download, Plus, CheckCircle, EyeOff } from "lucide-react";
 import * as XLSX from "xlsx";
 
-import { useNewsletterAdminStore } from "@/stores/newsletterStore";
+import { useNewsletterAdminStore } from "@/store/newsletterStore";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL + "/api/newsletters/subscribers";

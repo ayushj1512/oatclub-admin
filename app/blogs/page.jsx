@@ -94,204 +94,209 @@ export default function BlogsAdminPage() {
   };
 
   return (
-    <section className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Blogs</h1>
-            <p className="text-xs text-gray-500">Create, manage, publish/unpublish, and delete blogs.</p>
+  <section className="min-h-screen bg-gray-50 p-6">
+  <div className=" mx-auto space-y-6">
+    {/* ================= HEADER ================= */}
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900">Blogs</h1>
+        <p className="text-sm text-gray-500">
+          Create, manage, publish and delete blog posts
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={load}
+          className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white shadow-sm hover:bg-gray-100 text-gray-600"
+          title="Refresh"
+        >
+          <RefreshCw size={16} />
+        </button>
+
+        <button
+          onClick={() => router.push("/blogs/create")}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-medium text-white shadow-sm"
+        >
+          <Plus size={16} />
+          New Blog
+        </button>
+      </div>
+    </div>
+
+    {/* ================= FILTERS ================= */}
+    <div className="bg-white rounded-xl shadow-sm p-4">
+      <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
+        <form onSubmit={onSearch} className="flex gap-2 flex-1">
+          <div className="flex items-center gap-2 flex-1 rounded-lg bg-gray-100 px-3 py-2">
+            <Search size={16} className="text-gray-400" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search blogs…"
+              className="bg-transparent outline-none w-full text-sm"
+            />
           </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => load()}
-              className="inline-flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 hover:bg-gray-100"
-            >
-              <RefreshCw size={18} />
-              Refresh
-            </button>
-
-            <button
-              onClick={() => router.push("/blogs/create")}
-              className="inline-flex items-center gap-2 bg-black text-white px-4 py-2"
-            >
-              <Plus size={18} />
-              New Blog
-            </button>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-white border border-gray-200 p-4">
-          <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-            <form onSubmit={onSearch} className="flex gap-2 flex-1">
-              <div className="flex items-center gap-2 flex-1 bg-gray-100 border border-gray-200 px-3 py-2">
-                <Search size={16} className="text-gray-500" />
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search title / excerpt / slug / tags..."
-                  className="bg-transparent outline-none w-full text-sm"
-                />
-              </div>
-              <button className="px-4 py-2 bg-black text-white">Search</button>
-            </form>
-
-            <div className="flex gap-2 items-center">
-              <select
-                value={published}
-                onChange={(e) => {
-                  setPage(1);
-                  setPublished(e.target.value);
-                }}
-                className="bg-gray-100 border border-gray-200 px-3 py-2 outline-none text-sm"
-                title="Published filter"
-              >
-                <option value="">All</option>
-                <option value="true">Published</option>
-                <option value="false">Unpublished</option>
-              </select>
-
-              <input
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Category (optional)"
-                className="bg-gray-100 border border-gray-200 px-3 py-2 outline-none text-sm w-[180px]"
-              />
-
-              <div className="text-sm text-gray-600">
-                Total: <b>{total}</b>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* List */}
-        {loading ? (
-          <div className="text-gray-600">Loading...</div>
-        ) : items.length === 0 ? (
-          <div className="text-gray-600">No blogs found.</div>
-        ) : (
-          <div className="bg-white border border-gray-200 overflow-hidden">
-            <div className="hidden md:grid grid-cols-[80px_1fr_130px_120px_220px] gap-3 px-4 py-3 border-b text-xs font-semibold text-gray-600 bg-gray-50">
-              <div>Image</div>
-              <div>Title</div>
-              <div>Date</div>
-              <div>Status</div>
-              <div className="text-right">Actions</div>
-            </div>
-
-            {items.map((b) => {
-              const status = b.isPublished ? "Published" : "Draft";
-              return (
-                <div
-                  key={b._id || b.slug}
-                  className="grid grid-cols-1 md:grid-cols-[80px_1fr_130px_120px_220px] gap-3 px-4 py-4 border-b last:border-b-0"
-                >
-                  {/* Image */}
-                  <div className="w-20 h-14 bg-gray-100 border border-gray-200 overflow-hidden">
-                    {b.image ? (
-                      <img src={b.image} alt={b.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500">
-                        No image
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Title + meta */}
-                  <div className="min-w-0">
-                    <div className="font-semibold text-gray-900 truncate">{b.title}</div>
-                    <div className="text-xs text-gray-500 truncate">
-                      /{b.slug} {b.excerpt ? `• ${b.excerpt}` : ""}
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-600">
-                      {b.category ? <span className="px-2 py-0.5 bg-gray-100 border">{b.category}</span> : null}
-                      {(b.tags || b.hashtags || []).slice(0, 4).map((t, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-gray-100 border">
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Date */}
-                  <div className="text-sm text-gray-700">{fmtDate(b.date || b.createdAt)}</div>
-
-                  {/* Status */}
-                  <div className="text-sm">
-                    <span
-                      className={`inline-flex items-center gap-2 px-2 py-1 border text-xs ${
-                        b.isPublished ? "bg-green-50 border-green-200 text-green-700" : "bg-yellow-50 border-yellow-200 text-yellow-700"
-                      }`}
-                    >
-                      {b.isPublished ? <Eye size={14} /> : <EyeOff size={14} />}
-                      {status}
-                    </span>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex md:justify-end gap-2">
-                    <button
-                      onClick={() => router.push(`/blogs/${b.slug || b._id}`)}
-                      className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-sm"
-                      title="View"
-                    >
-                      <Eye size={16} />
-                      View
-                    </button>
-
-                    <button
-                      onClick={() => router.push(`/blogs/edit/${b._id}`)}
-                      className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm"
-                      title="Edit"
-                    >
-                      <Pencil size={16} />
-                      Edit
-                    </button>
-
-                    <button
-                      onClick={() => deleteBlog(b._id)}
-                      disabled={deletingId === b._id}
-                      className={`inline-flex items-center gap-2 px-3 py-2 text-white text-sm ${
-                        deletingId === b._id ? "bg-gray-400" : "bg-red-600 hover:bg-red-700"
-                      }`}
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between pt-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className={`px-4 py-2 border ${page <= 1 ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"}`}
-          >
-            Prev
+          <button className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm text-white">
+            Search
           </button>
+        </form>
 
-          <div className="text-sm text-gray-600">
-            Page <b>{page}</b> / <b>{pages}</b>
-          </div>
-
-          <button
-            disabled={page >= pages}
-            onClick={() => setPage((p) => Math.min(pages, p + 1))}
-            className={`px-4 py-2 border ${page >= pages ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"}`}
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <select
+            value={published}
+            onChange={(e) => {
+              setPage(1);
+              setPublished(e.target.value);
+            }}
+            className="rounded-lg bg-gray-100 px-3 py-2 outline-none"
           >
-            Next
-          </button>
+            <option value="">All</option>
+            <option value="true">Published</option>
+            <option value="false">Draft</option>
+          </select>
+
+          <input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="Category"
+            className="rounded-lg bg-gray-100 px-3 py-2 outline-none w-[160px]"
+          />
+
+          <span className="text-gray-600">
+            Total: <b>{total}</b>
+          </span>
         </div>
       </div>
-    </section>
+    </div>
+
+    {/* ================= LIST ================= */}
+    {loading ? (
+      <div className="text-gray-600">Loading blogs…</div>
+    ) : items.length === 0 ? (
+      <div className="text-gray-600">No blogs found.</div>
+    ) : (
+      <div className="space-y-3">
+        {items.map((b) => (
+          <div
+            key={b._id || b.slug}
+            className="bg-white rounded-xl shadow-sm p-4 flex flex-col md:flex-row gap-4 md:items-center"
+          >
+            {/* Image */}
+            <div className="w-20 h-14 rounded-lg bg-gray-100 overflow-hidden shrink-0">
+              {b.image ? (
+                <img
+                  src={b.image}
+                  alt={b.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                  No image
+                </div>
+              )}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-gray-900 truncate">
+                {b.title}
+              </div>
+              <div className="text-xs text-gray-500 truncate">
+                /{b.slug} {b.excerpt ? `• ${b.excerpt}` : ""}
+              </div>
+
+              <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-600">
+                {b.category && (
+                  <span className="px-2 py-0.5 rounded bg-gray-100">
+                    {b.category}
+                  </span>
+                )}
+                {(b.tags || b.hashtags || []).slice(0, 4).map((t, i) => (
+                  <span
+                    key={i}
+                    className="px-2 py-0.5 rounded bg-gray-100"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Meta */}
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-gray-600 whitespace-nowrap">
+                {fmtDate(b.date || b.createdAt)}
+              </span>
+
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${
+                  b.isPublished
+                    ? "bg-green-50 text-green-700"
+                    : "bg-yellow-50 text-yellow-700"
+                }`}
+              >
+                {b.isPublished ? <Eye size={12} /> : <EyeOff size={12} />}
+                {b.isPublished ? "Published" : "Draft"}
+              </span>
+
+              {/* ================= ACTIONS (COMPACT) ================= */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => router.push(`/blogs/${b.slug || b._id}`)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 text-gray-600"
+                  title="View"
+                >
+                  <Eye size={15} />
+                </button>
+
+                <button
+                  onClick={() => router.push(`/blogs/edit/${b._id}`)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-blue-50 text-blue-600"
+                  title="Edit"
+                >
+                  <Pencil size={15} />
+                </button>
+
+                <button
+                  onClick={() => deleteBlog(b._id)}
+                  disabled={deletingId === b._id}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-50 text-red-600 disabled:opacity-50"
+                  title="Delete"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {/* ================= PAGINATION ================= */}
+    <div className="flex items-center justify-between pt-4">
+      <button
+        disabled={page <= 1}
+        onClick={() => setPage((p) => Math.max(1, p - 1))}
+        className="rounded-lg bg-white px-4 py-2 text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50"
+      >
+        Prev
+      </button>
+
+      <div className="text-sm text-gray-600">
+        Page <b>{page}</b> of <b>{pages}</b>
+      </div>
+
+      <button
+        disabled={page >= pages}
+        onClick={() => setPage((p) => Math.min(pages, p + 1))}
+        className="rounded-lg bg-white px-4 py-2 text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50"
+      >
+        Next
+      </button>
+    </div>
+  </div>
+</section>
+
   );
 }

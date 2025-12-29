@@ -100,25 +100,33 @@ export const sidebarMenus = {
   ],
 
   products: [
-    { label: "Product Dashboard", href: "/products" },
-    { label: "Add New Product", href: "/products/add" },
-    { label: "Manage Products", href: "/products/manage" },
-    { label: "Categories", href: "/products/category" },
-    { label: "Subcategories", href: "/products/subcategories" },
-    { label: "Attributes", href: "/products/attributes" },
-    { label: "Variants", href: "/products/variants" },
-    { label: "Tags", href: "/products/tags" },
-    { label: "Brands", href: "/products/brands" },
-    { label: "Collections", href: "/products/collections" },
-    { label: "Bulk Import", href: "/products/bulk-import" },
-    { label: "Bulk Export", href: "/products/bulk-export" },
-    { label: "Media Library", href: "/media" },
-    { label: "Offers & Discounts", href: "/products/offers" },
-    { label: "SEO Manager", href: "/products/seo" },
-    { label: "Reviews & Ratings", href: "/products/reviews" },
-    { label: "Inventory Sync", href: "/products/inventory-sync" },
-    { label: "Price Updates", href: "/products/pricing" },
-  ],
+  { label: "Product Dashboard", href: "/products" },
+  { label: "Add New Product", href: "/products/add" },
+  { label: "Manage Products", href: "/products/manage" },
+
+  // ---- Master Data ----
+  { label: "Categories", href: "/products/category" },
+  { label: "Size Charts", href: "/products/size-charts" }, // 👈 NEW
+  { label: "Attributes", href: "/products/attributes" },
+  { label: "Variants", href: "/products/variants" },
+
+  // ---- Merchandising ----
+  { label: "Collections", href: "/products/collections" },
+  { label: "Fabric", href: "/products/fabric" },
+
+  // ---- Ops & Utilities ----
+  { label: "Bulk Import", href: "/products/bulk-import" },
+  { label: "Bulk Export", href: "/products/bulk-export" },
+  { label: "Media Library", href: "/media" },
+  { label: "Inventory Sync", href: "/products/inventory-sync" },
+  { label: "Price Updates", href: "/products/pricing" },
+
+  // ---- Growth ----
+  { label: "Offers & Discounts", href: "/products/offers" },
+  { label: "SEO Manager", href: "/products/seo" },
+  { label: "Reviews & Ratings", href: "/products/reviews" },
+],
+
 
   orders: [
     { label: "Orders Dashboard", href: "/orders" },
@@ -174,13 +182,9 @@ export const sidebarMenus = {
 
   customers: [
     { label: "Customer List", href: "/customers" },
-    { label: "Customer Groups", href: "/customers/groups" },
     { label: "Abandoned Carts", href: "/customers/carts" },
-    { label: "Reviews Manager", href: "/customers/reviews" },
     { label: "Tickets & Support", href: "/customers/support" },
     { label: "Newsletter Subscribers", href: "/customers/newsletter" },
-    { label: "Customer Segments", href: "/customers/segments" },
-    { label: "Refund Requests", href: "/customers/refunds" },
   ],
 
   support_tickets: [
@@ -217,7 +221,15 @@ export const sidebarMenus = {
     { label: "Manage Users", href: "/superadmin/manage" },
     { label: "Add User", href: "/superadmin/add" },
     { label: "Activity", href: "/superadmin/activity" },
+
   ],
+
+  // ✅ WORDPRESS / WOOCOMMERCE (MINIMAL SCOPE)
+wordpress: [ 
+ 
+  { label: "WP Orders", href: "/wordpress/orders/list" },
+],
+
 };
 
 // ------------------------------
@@ -229,8 +241,7 @@ export const sidebarMenus = {
 // ✅ Keep the most-specific prefixes earlier (future-safe)
 
 export const routeSidebarMap = [
-  // ✅ superadmin first (more specific than "/support-tickets" etc is fine either way,
-  // but keep "most-specific prefixes earlier" rule in mind across your app)
+  // ✅ superadmin first (most specific)
   { prefix: "/superadmin", key: "superadmin" },
 
   { prefix: "/support-tickets", key: "support_tickets" },
@@ -245,6 +256,10 @@ export const routeSidebarMap = [
   { prefix: "/media", key: "media" },
   { prefix: "/blogs", key: "blogs" },
   { prefix: "/products", key: "products" },
+
+  // ✅ WORDPRESS ORDERS (must come before "/orders")
+  { prefix: "/wordpress/orders", key: "wordpress" },
+
   { prefix: "/orders", key: "orders" },
   { prefix: "/coupons", key: "coupons" },
   { prefix: "/operations", key: "operations" },
@@ -253,3 +268,4 @@ export const routeSidebarMap = [
   { prefix: "/sales", key: "sales" },
   { prefix: "/account", key: "account_user" },
 ];
+

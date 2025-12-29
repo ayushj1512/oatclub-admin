@@ -153,7 +153,6 @@ export default async function AnalyticsPage() {
   return (
     <div className="p-6 w-full">
       {/* ✅ pure server auto-refresh (no client component) */}
-      <meta httpEquiv="refresh" content={`${AUTO_REFRESH_SECONDS}`} />
 
       {/* Header */}
       <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-3">

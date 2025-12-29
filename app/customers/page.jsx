@@ -9,7 +9,6 @@ export default function CustomersPage() {
   const BACKEND = process.env.NEXT_PUBLIC_API_URL;
 
   const [customers, setCustomers] = useState([]);
-  const [filtered, setFiltered] = useState([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -21,17 +20,31 @@ export default function CustomersPage() {
 
   // Fetch customers
   const fetchCustomers = async () => {
-    try {
-      const res = await fetch(`${BACKEND}/api/customers`);
-      const data = await res.json();
-      setCustomers(data);
-      setFiltered(data);
-    } catch (error) {
-      console.error("Failed to load customers:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const res = await fetch(`${BACKEND}/api/customers`);
+    const data = await res.json();
+
+    // ✅ normalize API response
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.customers)
+      ? data.customers
+      : Array.isArray(data?.data)
+      ? data.data
+      : [];
+
+    setCustomers(list);
+  } catch (error) {
+    console.error("Failed to load customers:", error);
+    setCustomers([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   useEffect(() => {
     fetchCustomers();
@@ -76,7 +89,6 @@ export default function CustomersPage() {
       );
     }
 
-    setFiltered(list);
     return list;
   }, [customers, search, countryFilter, statusFilter, sortBy]);
 
@@ -146,7 +158,7 @@ export default function CustomersPage() {
       )}
 
       {/* EMPTY */}
-      {!loading && filtered.length === 0 && (
+      {!loading  === 0 && (
         <p className="text-gray-700 text-center">No customers found.</p>
       )}
 

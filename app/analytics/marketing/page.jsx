@@ -256,7 +256,6 @@ export default async function AnalyticsMarketingPage() {
 
   return (
     <div className="p-6 w-full">
-      <meta httpEquiv="refresh" content={`${AUTO_REFRESH_SECONDS}`} />
 
       {/* Header */}
       <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-3">
@@ -299,7 +298,7 @@ export default async function AnalyticsMarketingPage() {
           value={subscribersTotal != null ? formatInt(subscribersTotal) : "—"}
           hint={
             subscribersTotal == null
-              ? "From /api/newsletters (array expected)"
+              ? "From /api/newsletters/subscribers (array expected)"
               : `${formatInt(activeCount)} active · ${formatInt(verifiedCount)} verified`
           }
           href="/marketing/email"

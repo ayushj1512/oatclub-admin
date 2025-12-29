@@ -25,6 +25,7 @@ import {
   ArrowUpDown,
   RefreshCw,
   Quote,
+  Globe,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -91,6 +92,7 @@ export default function HomeDashboard() {
       { id: "reports", name: "Reports", icon: FileBarChart, route: "/reports" },
       { id: "tickets", name: "Tickets / Issues", icon: Ticket, route: "/tickets" },
       { id: "coupons", name: "Coupons", icon: TicketPercent, route: "/coupons" },
+      { id: "wordpress", name: "WordPress Orders", icon: Globe, route: "/wordpress" },
     ],
     []
   );

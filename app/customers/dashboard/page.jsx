@@ -17,7 +17,7 @@ export default function CustomersPage() {
   useEffect(() => {
     async function loadStats() {
       try {
-        const res = await fetch(`${API}/api/newsletters`);
+        const res = await fetch(`${API}/api/newsletters/subscribers`);
         const data = await res.json();
 
         if (Array.isArray(data)) {
