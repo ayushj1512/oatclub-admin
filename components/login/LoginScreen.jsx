@@ -20,7 +20,7 @@ export default function LoginScreen() {
     login(username);
 
     // ✅ single fixed route
-    router.push("/dashboard");
+    router.push("/");
   };
 
   return (
