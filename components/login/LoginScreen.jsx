@@ -16,11 +16,11 @@ export default function LoginScreen() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // 🔹 TEMP AUTH (mock): allow any username/password
+    // ✅ simple mock login
     login(username);
 
-    // 🔹 navigate to superadmin route
-    router.push("/superadmin");
+    // ✅ single fixed route
+    router.push("/dashboard");
   };
 
   return (
@@ -29,8 +29,12 @@ export default function LoginScreen() {
 
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-blue-700 tracking-wide">Miray Fashion</h1>
-          <p className="text-gray-500 mt-2 text-sm">Admin Login Portal</p>
+          <h1 className="text-3xl font-extrabold text-blue-700 tracking-wide">
+            Miray Fashion
+          </h1>
+          <p className="text-gray-500 mt-2 text-sm">
+            Admin Login Portal
+          </p>
         </div>
 
         {/* Form */}
@@ -38,7 +42,9 @@ export default function LoginScreen() {
 
           {/* Username */}
           <div>
-            <label className="block text-gray-700 mb-1 font-medium">Username</label>
+            <label className="block text-gray-700 mb-1 font-medium">
+              Username
+            </label>
             <div className="relative">
               <User className="absolute left-3 top-3 text-gray-400" size={18} />
               <input
@@ -54,7 +60,9 @@ export default function LoginScreen() {
 
           {/* Password */}
           <div>
-            <label className="block text-gray-700 mb-1 font-medium">Password</label>
+            <label className="block text-gray-700 mb-1 font-medium">
+              Password
+            </label>
             <div className="relative">
               <Lock className="absolute left-3 top-3 text-gray-400" size={18} />
               <input

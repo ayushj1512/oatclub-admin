@@ -174,3 +174,29 @@ body {
     border-color: #000 !important;
   }
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  /* Hide app UI */
+  header,
+  nav,
+  aside,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Avoid splitting footer */
+  .print-footer {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  table, tr, td, th {
+    page-break-inside: avoid;
+  }
+}

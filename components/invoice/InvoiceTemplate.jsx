@@ -35,10 +35,11 @@ if (totalTax === 0 && grandTotal > 0) {
 
 
   return (
-    <div
-      id="invoice-root"
-      className="p-10 text-sm bg-white text-black max-w-4xl mx-auto"
-    >
+<div
+  id="invoice-root"
+  className="p-10 text-sm bg-white text-black max-w-4xl mx-auto"
+>
+
     {/* ================= LETTERHEAD ================= */}
 <div className="grid grid-cols-2 gap-6 items-start">
   {/* ================= LEFT : SELLER ================= */}
@@ -229,7 +230,7 @@ if (totalTax === 0 && grandTotal > 0) {
         </td>
 
         <td className="py-1 text-right whitespace-nowrap">
-          {FORMATTERS.currency(it.total)}
+       {FORMATTERS.currency(grandTotal)}
         </td>
       </tr>
     ))}
@@ -285,6 +286,26 @@ if (totalTax === 0 && grandTotal > 0) {
     <p className="font-semibold">Authorized Signatory</p>
   </div>
 </div>
+
+{/* ================= FOOTER ================= */}
+<div className="mt-6 pt-2 border-t text-center text-[10px] leading-snug text-gray-700 print-footer">
+  <p className="mt-[2px]">
+    <span className="font-semibold">Registered Address:</span>{" "}
+    {seller.address}
+  </p>
+
+  <p className="mt-[2px]">
+    <span className="font-semibold">GSTIN:</span>{" "}
+    {seller.gstin}
+    {"  |  "}
+    <span className="font-semibold">PAN:</span>{" "}
+    {seller.pan}
+  </p>
+</div>
+
+
+
+
 
     </div>
   );
