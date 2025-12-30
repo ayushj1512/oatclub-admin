@@ -216,7 +216,7 @@ if (totalTax === 0 && grandTotal > 0) {
 
         {/* HSN CODE */}
         <td className="py-1 whitespace-nowrap">
-          64041990
+         62105000
         </td>
 
         <td className="py-1 text-center">{it.qty}</td>
@@ -279,7 +279,7 @@ if (totalTax === 0 && grandTotal > 0) {
 <div className=" flex justify-end">
   <div className="text-center text-[11px] leading-tight">
     <img
-      src="https://res.cloudinary.com/djtva6hec/image/upload/v1767032209/miray/media/say6eugu7grxc0tomvf0.png"
+      src="https://res.cloudinary.com/djtva6hec/image/upload/v1767081191/miray/media/bjyys289bzzwlesw3938.png"
       alt="Authorized Signature"
       className="h-20 mx-auto mb-[2px] object-contain"
     />
