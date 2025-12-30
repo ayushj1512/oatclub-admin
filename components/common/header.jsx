@@ -2,9 +2,11 @@
 
 import { Menu, LogOut, User } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import useLoginStore from "../../store/useLoginStore";
 
 export default function Header({ toggleSidebar }) {
+  const router = useRouter();
   const logout = useLoginStore((state) => state.logout);
   const [open, setOpen] = useState(false);
 
@@ -31,7 +33,12 @@ export default function Header({ toggleSidebar }) {
         >
           <Menu size={22} />
         </button>
-        <h1 className="text-xl font-semibold text-gray-800 tracking-wide">
+
+        {/* Clickable Header Text */}
+        <h1
+          onClick={() => router.push("/")}
+          className="text-xl font-semibold text-blue-600 tracking-wide cursor-pointer hover:text-blue-700 transition"
+        >
           Miray Fashion Admin
         </h1>
       </div>
@@ -49,7 +56,10 @@ export default function Header({ toggleSidebar }) {
         {open && (
           <div className="absolute right-0 mt-2 w-40 bg-white shadow-md rounded-lg border border-gray-200 py-2 animate-fadeIn">
             <button
-              onClick={logout}
+              onClick={() => {
+                logout();
+                router.push("/login");
+              }}
               className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 w-full transition"
             >
               <LogOut size={18} />
