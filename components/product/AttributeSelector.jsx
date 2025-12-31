@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 /**
  * AttributeSelector
@@ -18,6 +18,43 @@ export default function AttributeSelector({
   editable = false,
 }) {
   const attributes = Array.isArray(value) ? value : [];
+
+  /* =========================================================
+     ✅ DEFAULT SIZE ATTRIBUTE (XS..XXL)
+     - Adds once when:
+       1) editable=true
+       2) attributes do NOT already contain Size
+       3) allAttributes loaded
+  ========================================================= */
+  useEffect(() => {
+    if (!editable) return;
+    if (!Array.isArray(allAttributes) || allAttributes.length === 0) return;
+
+    // check if size already exists (by key or by attribute match)
+    const hasSize = attributes.some(
+      (a) => String(a.key || "").toLowerCase() === "size"
+    );
+    if (hasSize) return;
+
+    // find predefined Size attribute from API list
+    const sizeDef =
+      allAttributes.find((a) => String(a.slug || "").toLowerCase() === "size") ||
+      allAttributes.find((a) => String(a.name || "").toLowerCase() === "size");
+
+    if (!sizeDef) return;
+
+    const defaultSizeValues = ["XS", "S", "M", "L", "XL"];
+
+    onChange([
+      {
+        attribute: sizeDef._id,
+        key: sizeDef.name || "Size",
+        values: defaultSizeValues,
+        mode: "select",
+      },
+      ...attributes,
+    ]);
+  }, [editable, allAttributes]); // run once after attributes arrive
 
   const updateAttr = (index, patch) => {
     const next = [...attributes];
@@ -64,15 +101,10 @@ export default function AttributeSelector({
       )}
 
       {attributes.map((attr, index) => {
-        const predefined = allAttributes.find(
-          (a) => a._id === attr.attribute
-        );
+        const predefined = allAttributes.find((a) => a._id === attr.attribute);
 
         return (
-          <div
-            key={index}
-            className="bg-gray-100 p-4 rounded-lg space-y-3"
-          >
+          <div key={index} className="bg-gray-100 p-4 rounded-lg space-y-3">
             {/* MODE SELECT */}
             {editable && (
               <div className="flex gap-2">
@@ -99,10 +131,16 @@ export default function AttributeSelector({
                       const def = allAttributes.find(
                         (a) => a._id === e.target.value
                       );
+
+                      // ✅ if selected attribute is Size → default preselect XS..XXL
+                      const isSize =
+                        String(def?.slug || "").toLowerCase() === "size" ||
+                        String(def?.name || "").toLowerCase() === "size";
+
                       updateAttr(index, {
                         attribute: def?._id || null,
                         key: def?.name || "",
-                        values: [],
+                        values: isSize ? ["XS", "S", "M", "L", "XL", "XXL"] : [],
                       });
                     }}
                     className="flex-1 rounded-lg bg-white px-3 py-2 text-sm"
@@ -119,16 +157,12 @@ export default function AttributeSelector({
             )}
 
             {/* ATTRIBUTE NAME */}
-            {!editable && (
-              <p className="font-semibold text-sm">{attr.key}</p>
-            )}
+            {!editable && <p className="font-semibold text-sm">{attr.key}</p>}
 
             {editable && attr.mode === "custom" && (
               <input
                 value={attr.key}
-                onChange={(e) =>
-                  updateAttr(index, { key: e.target.value })
-                }
+                onChange={(e) => updateAttr(index, { key: e.target.value })}
                 placeholder="Attribute name (e.g. Fabric)"
                 className="w-full rounded-lg bg-white px-3 py-2 text-sm outline-none"
               />
@@ -145,17 +179,11 @@ export default function AttributeSelector({
                         key={v.value}
                         onClick={() => {
                           const set = new Set(attr.values);
-                          active
-                            ? set.delete(v.value)
-                            : set.add(v.value);
-                          updateAttr(index, {
-                            values: Array.from(set),
-                          });
+                          active ? set.delete(v.value) : set.add(v.value);
+                          updateAttr(index, { values: Array.from(set) });
                         }}
                         className={`px-3 py-1 rounded-full text-xs ${
-                          active
-                            ? "bg-black text-white"
-                            : "bg-gray-300"
+                          active ? "bg-black text-white" : "bg-gray-300"
                         }`}
                       >
                         {predefined.type === "color" && (

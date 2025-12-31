@@ -1,260 +1,326 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ImageIcon, X, Star, Plus } from "lucide-react";
-import Media from "@/components/product/Media";
+import { useMemo, useState } from "react";
+import { ImagePlus, X, GripVertical } from "lucide-react";
+import MediaPickerModal from "@/components/media/MediaPickerModal";
 
 /**
  * ProductImagesEditor
+ * ✅ Uses universal MediaPickerModal (as per Media System README)
+ * 🚫 No upload logic here.
  *
- * images: string[]
- * thumbnail: string
- * onChange: ({ images, thumbnail }) => void
+ * Props:
+ *  - value?: string[]        (existing image URLs)
+ *  - onChange?: (urls: string[], mediaRefs?: {url, publicId}[]) => void
+ *  - folder?: string         (cloudinary folder)
+ *  - max?: number            (max images)
+ *
+ * Recommended storage:
+ *  - urls array OR (url + publicId) in separate field
  */
-
 export default function ProductImagesEditor({
-  images = [],
-  thumbnail = "",
+  value = [],
   onChange,
+  folder = "miray/products",
+  max = 12,
 }) {
-  const safeImages = useMemo(
-    () => (Array.isArray(images) ? images : []),
-    [images]
-  );
+  // store urls only for UI
+  const urls = Array.isArray(value) ? value.filter(Boolean) : [];
 
-  const [mode, setMode] = useState("images"); // images | thumbnail
-  const [openMedia, setOpenMedia] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  // state for modal
+  const [thumbOpen, setThumbOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
-  /* 🔍 Preview modal */
-  const [preview, setPreview] = useState(null);
+  // keep media refs (optional)
+  const [mediaRefs, setMediaRefs] = useState([]);
 
-  /* 🔀 Drag state */
-  const dragIndex = useRef(null);
+  const canAddMore = urls.length < max;
 
-  /* ---------------- AUTO THUMBNAIL ---------------- */
-  useEffect(() => {
-    if (!thumbnail && safeImages.length > 0) {
-      onChange({
-        images: safeImages,
-        thumbnail: safeImages[0],
-      });
-    }
-  }, [safeImages, thumbnail, onChange]);
+  const thumbnail = urls?.[0] || null;
+  const gallery = urls?.slice(1) || [];
 
-  /* ---------------- OPEN MEDIA PICKER ---------------- */
-  const openPicker = (m) => {
-    setMode(m);
-    setRefreshKey((k) => k + 1);
-    setOpenMedia(true);
+  const safeEmit = (nextUrls, nextRefs = mediaRefs) => {
+    onChange?.(nextUrls, nextRefs);
   };
 
-  /* ---------------- MEDIA SELECT ---------------- */
-  const handleSelect = (selection) => {
-    if (!selection) return;
+  /* ==============================
+     Selection Handlers
+  ============================== */
 
-    if (mode === "thumbnail") {
-      onChange({
-        images: safeImages,
-        thumbnail: selection.url,
-      });
-      setOpenMedia(false);
+  // Single image -> set as thumbnail (index 0)
+  const onSelectThumb = (media) => {
+    if (!media?.url) return;
+
+    const nextUrls = [media.url, ...gallery].slice(0, max);
+
+    // store refs (optional)
+    const nextRefs = upsertRef(mediaRefs, media);
+
+    setMediaRefs(nextRefs);
+    safeEmit(nextUrls, nextRefs);
+
+    setThumbOpen(false);
+  };
+
+  // Multiple images -> append to gallery
+  const onSelectGallery = (list) => {
+    const picked = Array.isArray(list) ? list : [];
+    if (!picked.length) {
+      setGalleryOpen(false);
       return;
     }
 
-    const urls = Array.isArray(selection)
-      ? selection.map((m) => m.url)
-      : [selection.url];
+    const addUrls = picked.map((m) => m.url).filter(Boolean);
 
-    const merged = Array.from(new Set([...safeImages, ...urls]));
+    // merge and unique
+    const merged = unique([thumbnail, ...gallery, ...addUrls].filter(Boolean)).slice(
+      0,
+      max
+    );
 
-    onChange({
-      images: merged,
-      thumbnail: thumbnail || merged[0] || "",
-    });
+    // thumbnail remains first
+    const nextUrls = merged;
 
-    setOpenMedia(false);
+    // refs merge
+    const nextRefs = mergeRefs(mediaRefs, picked);
+
+    setMediaRefs(nextRefs);
+    safeEmit(nextUrls, nextRefs);
+
+    setGalleryOpen(false);
   };
 
-  /* ---------------- REMOVE IMAGE ---------------- */
-  const removeImage = (url) => {
-    const filtered = safeImages.filter((i) => i !== url);
-
-    onChange({
-      images: filtered,
-      thumbnail: url === thumbnail ? filtered[0] || "" : thumbnail,
-    });
+  /* ==============================
+     Remove & Reorder
+  ============================== */
+  const removeAt = (idx) => {
+    const nextUrls = urls.filter((_, i) => i !== idx);
+    safeEmit(nextUrls);
   };
 
-  /* ---------------- SET THUMBNAIL ---------------- */
-  const setAsThumbnail = (url) => {
-    onChange({
-      images: safeImages,
-      thumbnail: url,
-    });
-  };
-
-  /* ---------------- DRAG & REORDER ---------------- */
-  const onDragStart = (index) => {
-    dragIndex.current = index;
-  };
-
-  const onDrop = (index) => {
-    const from = dragIndex.current;
-    if (from === null || from === index) return;
-
-    const reordered = [...safeImages];
-    const [moved] = reordered.splice(from, 1);
-    reordered.splice(index, 0, moved);
-
-    dragIndex.current = null;
-
-    onChange({
-      images: reordered,
-      thumbnail: reordered.includes(thumbnail)
-        ? thumbnail
-        : reordered[0] || "",
-    });
+  const move = (from, to) => {
+    if (to < 0 || to >= urls.length) return;
+    const copy = [...urls];
+    const [item] = copy.splice(from, 1);
+    copy.splice(to, 0, item);
+    safeEmit(copy);
   };
 
   return (
-    <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-5">
-      {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Product Images</h2>
+    <div className="space-y-4">
+      {/* Top: Thumbnail */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Product Images</p>
+          <p className="text-xs text-gray-500">
+            Thumbnail + gallery (max {max})
+          </p>
+        </div>
 
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => openPicker("images")}
-            className="px-3 py-1.5 text-sm rounded-lg border flex items-center gap-1 hover:bg-gray-50"
+            className="btn"
+            onClick={() => setThumbOpen(true)}
           >
-            <Plus size={14} />
-            Gallery
+            <ImagePlus size={16} />
+            Thumbnail
           </button>
 
           <button
             type="button"
-            onClick={() => openPicker("thumbnail")}
-            className="px-3 py-1.5 text-sm rounded-lg border flex items-center gap-1 hover:bg-gray-50"
+            className="btn"
+            disabled={!canAddMore}
+            onClick={() => setGalleryOpen(true)}
           >
-            <Star size={14} />
-            Thumbnail
+            <ImagePlus size={16} />
+            Gallery
           </button>
         </div>
       </div>
 
-      {/* IMAGE GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {safeImages.length > 0 ? (
-          safeImages.map((img, index) => (
-            <div
-              key={img}
-              draggable
-              onDragStart={() => onDragStart(index)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => onDrop(index)}
-              className={`relative group rounded-lg border overflow-hidden bg-gray-50 cursor-move ${
-                img === thumbnail ? "ring-2 ring-black" : ""
-              }`}
-            >
-              {/* IMAGE */}
-              <div
-                onClick={() => setPreview(img)}
-                className="h-36 flex items-center justify-center bg-white cursor-pointer"
-              >
-                <img
-                  src={img}
-                  alt=""
-                  className="max-h-full max-w-full object-contain"
-                />
+      {/* Preview Grid */}
+      {urls.length === 0 ? (
+        <div className="empty">
+          <p className="text-sm text-gray-500">No images selected</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {urls.map((url, idx) => (
+            <div key={url + idx} className="imgCard">
+              <div className="imgWrap">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="" className="img" />
               </div>
 
-              {/* THUMBNAIL BADGE */}
-              {img === thumbnail && (
-                <span className="absolute top-1 left-1 bg-black text-white text-[10px] px-2 py-0.5 rounded">
-                  Thumbnail
-                </span>
-              )}
+              {/* label */}
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs font-semibold text-gray-700">
+                  {idx === 0 ? "Thumbnail" : `Image ${idx + 1}`}
+                </p>
 
-              {/* HOVER ACTIONS */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setAsThumbnail(img)}
-                  className="p-2 bg-white rounded-full"
-                  title="Set thumbnail"
+                  className="xBtn"
+                  onClick={() => removeAt(idx)}
+                  title="Remove"
                 >
-                  <Star size={16} />
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* reorder */}
+              <div className="flex gap-2 mt-2">
+                <button
+                  type="button"
+                  className="miniBtn"
+                  onClick={() => move(idx, idx - 1)}
+                  disabled={idx === 0}
+                  title="Move left"
+                >
+                  <GripVertical size={14} />
+                  Up
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => removeImage(img)}
-                  className="p-2 bg-white rounded-full"
-                  title="Remove"
+                  className="miniBtn"
+                  onClick={() => move(idx, idx + 1)}
+                  disabled={idx === urls.length - 1}
+                  title="Move right"
                 >
-                  <X size={16} />
+                  <GripVertical size={14} />
+                  Down
                 </button>
               </div>
             </div>
-          ))
-        ) : (
-          <div className="col-span-full text-sm text-gray-500 flex items-center gap-2">
-            <ImageIcon size={16} />
-            No images selected
-          </div>
-        )}
-      </div>
-
-      {/* MEDIA PICKER */}
-      {openMedia && (
-        <div className="border rounded-2xl overflow-hidden">
-          <div className="px-4 py-2 border-b bg-gray-50 text-sm font-medium flex justify-between">
-            <span>
-              {mode === "thumbnail"
-                ? "Select ONE image as thumbnail"
-                : "Select MULTIPLE images for gallery"}
-            </span>
-            <button
-              type="button"
-              onClick={() => setOpenMedia(false)}
-              className="text-xs underline"
-            >
-              Close
-            </button>
-          </div>
-
-          <Media
-            refreshKey={refreshKey}
-            multiple={mode === "images"}
-            allowUpload
-            onSelect={handleSelect}
-          />
+          ))}
         </div>
       )}
 
-      {/* PREVIEW MODAL */}
-      {preview && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
-          onClick={() => setPreview(null)}
-        >
-          <div className="relative max-w-4xl max-h-[90vh] p-4">
-            <button
-              className="absolute top-2 right-2 text-white"
-              onClick={() => setPreview(null)}
-            >
-              <X size={24} />
-            </button>
-            <img
-              src={preview}
-              alt=""
-              className="max-h-[80vh] max-w-full object-contain bg-white rounded"
-            />
-          </div>
-        </div>
-      )}
+      {/* Universal Media Picker Modals */}
+      <MediaPickerModal
+        open={thumbOpen}
+        onClose={() => setThumbOpen(false)}
+        folder={folder}
+        onSelect={onSelectThumb}
+      />
+
+      <MediaPickerModal
+        open={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+        multiple
+        folder={`${folder}/gallery`}
+        onSelect={onSelectGallery}
+      />
+
+      {/* Minimal styles */}
+      <style jsx>{`
+        .btn {
+          padding: 10px 12px;
+          border-radius: 14px;
+          font-weight: 700;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          background: #111827;
+          color: white;
+          transition: 0.15s;
+        }
+        .btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .empty {
+          border-radius: 18px;
+          background: #fff;
+          padding: 28px;
+          text-align: center;
+          box-shadow: 0 1px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .imgCard {
+          background: white;
+          border-radius: 18px;
+          padding: 10px;
+          box-shadow: 0 1px 12px rgba(0, 0, 0, 0.06);
+        }
+
+        .imgWrap {
+          width: 100%;
+          aspect-ratio: 1/1;
+          border-radius: 14px;
+          overflow: hidden;
+          background: #f3f4f6;
+        }
+
+        .img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .xBtn {
+          width: 28px;
+          height: 28px;
+          border-radius: 10px;
+          background: #fee2e2;
+          color: #991b1b;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .miniBtn {
+          flex: 1;
+          font-size: 12px;
+          font-weight: 700;
+          padding: 8px;
+          border-radius: 12px;
+          background: #e5e7eb;
+          color: #111827;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+        }
+        .miniBtn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+      `}</style>
     </div>
   );
+}
+
+/* ==============================
+   Helpers
+============================== */
+
+function unique(arr) {
+  return Array.from(new Set(arr.map(String)));
+}
+
+/**
+ * Keep mediaRefs list updated (optional)
+ * recommended: store publicId + url
+ */
+function upsertRef(prevRefs, media) {
+  if (!media?.publicId) return prevRefs || [];
+  const refs = Array.isArray(prevRefs) ? prevRefs : [];
+  const map = new Map(refs.map((r) => [String(r.publicId), r]));
+  map.set(String(media.publicId), { url: media.url, publicId: media.publicId });
+  return Array.from(map.values());
+}
+
+function mergeRefs(prevRefs, mediaList) {
+  const refs = Array.isArray(prevRefs) ? prevRefs : [];
+  const map = new Map(refs.map((r) => [String(r.publicId), r]));
+
+  for (const m of mediaList || []) {
+    if (!m?.publicId) continue;
+    map.set(String(m.publicId), { url: m.url, publicId: m.publicId });
+  }
+  return Array.from(map.values());
 }

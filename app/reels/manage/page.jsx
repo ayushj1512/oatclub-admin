@@ -1,443 +1,567 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
+
 import {
-  Upload,
-  Trash2,
-  Copy,
   RefreshCw,
-  X,
+  Save,
+  Search,
   Video,
-  FolderLock,
-  FolderOpen,
+  Trash2,
+  GripVertical,
+  Eye,
+  Heart,
+  Share2,
+  MousePointerClick,
+  Bookmark,
+  BadgeCheck,
+  BadgeX,
+  ImageIcon,
+  PackageSearch,
 } from "lucide-react";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+import MediaPickerModal from "@/components/media/MediaPickerModal";
 
-function formatBytes(bytes = 0) {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let n = bytes;
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
+import { useAdminReelsStore } from "@/store/useAdminReelsStore";
+import { useAdminProductStore } from "@/store/adminProductStore";
 
-function shortName(s = "") {
-  const t = String(s);
-  return t.length > 26 ? t.slice(0, 26) + "…" : t;
-}
-
-// reels: allow video only (but accept unknown types too)
-function isAcceptedReelFile(file) {
-  return file?.type?.startsWith("video/") || file?.type === "" || file?.type === undefined;
+function shortText(s = "", max = 48) {
+  const t = String(s || "");
+  return t.length > max ? t.slice(0, max) + "…" : t;
 }
 
 export default function ReelsManagePage() {
-  const [items, setItems] = useState([]);
-  const [total, setTotal] = useState(0);
+  const router = useRouter();
+  const sp = useSearchParams();
+  const focusId = sp.get("focus");
 
-  const [files, setFiles] = useState([]); // [{ file, preview, kind, key }]
-  const [folder, setFolder] = useState("miray/reels");
-  const [lockFolder, setLockFolder] = useState(true);
+  /* -----------------------------
+     Stores
+  ------------------------------ */
+  const {
+    reels,
+    loading,
+    saving,
+    error,
+    success,
+    fetchReels,
+    setReelsLocal,
+    updateReel,
+    deleteReel,
+    toggleReelActive,
+    saveOrder,
+    clearMessages,
+  } = useAdminReelsStore();
 
-  const [page, setPage] = useState(1);
-  const limit = 24; // reels are heavier
+  const { products, fetchProducts, loading: productsLoading } =
+    useAdminProductStore();
 
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
+  /* -----------------------------
+     UI State
+  ------------------------------ */
+  const [query, setQuery] = useState("");
+  const [placement, setPlacement] = useState("home_row");
+  const [activeNow, setActiveNow] = useState(true);
 
-  const [dragOver, setDragOver] = useState(false);
-  const inputRef = useRef(null);
+  const [openMedia, setOpenMedia] = useState(false);
+  const [editMediaReelId, setEditMediaReelId] = useState(null);
 
-  const pages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total]);
+  const dragFrom = useRef(null);
+  const dragOver = useRef(null);
 
-  const load = async (targetPage = page) => {
-    setLoading(true);
-    try {
-      const url = new URL(`${API}/api/media`);
-      url.searchParams.set("page", String(targetPage));
-      url.searchParams.set("limit", String(limit));
+  /* -----------------------------
+     Load
+  ------------------------------ */
+  useEffect(() => {
+    fetchProducts({ page: 1, limit: 250, isActive: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      // ✅ reels are videos
-      url.searchParams.set("type", "video");
-
-      // ✅ optional: filter by folder (works if backend supports it)
-      url.searchParams.set("folder", folder);
-
-      const r = await fetch(url.toString(), { cache: "no-store" });
-      const d = await r.json();
-
-      setItems(d.items || []);
-      setTotal(d.total || 0);
-    } catch (e) {
-      console.error("❌ Reels load:", e);
-      setItems([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
+  const load = async () => {
+    clearMessages();
+    await fetchReels({
+      page: 1,
+      limit: 200,
+      sort: "priority",
+      placement,
+      activeNow: activeNow ? "true" : "false",
+      q: query || undefined,
+    });
   };
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, folder]);
+  }, [placement, activeNow]);
 
-  // cleanup previews on unmount
+  /* -----------------------------
+     Focus scroll
+  ------------------------------ */
   useEffect(() => {
-    return () => {
-      files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
+    if (!focusId) return;
+    const el = document.getElementById(`reel-${focusId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusId, reels]);
+
+  /* -----------------------------
+     Reel list filtered locally
+  ------------------------------ */
+  const filtered = useMemo(() => {
+    const list = reels || [];
+    if (!query?.trim()) return list;
+
+    const q = query.toLowerCase().trim();
+    return list.filter((r) => {
+      return (
+        (r.title || "").toLowerCase().includes(q) ||
+        (r.caption || "").toLowerCase().includes(q) ||
+        (r.slug || "").toLowerCase().includes(q) ||
+        (r.product?.name || "").toLowerCase().includes(q)
+      );
+    });
+  }, [reels, query]);
+
+  /* -----------------------------
+     Drag reorder logic
+  ------------------------------ */
+  const onDragStart = (idx) => {
+    dragFrom.current = idx;
+  };
+
+  const onDragEnter = (idx) => {
+    dragOver.current = idx;
+  };
+
+  const onDrop = () => {
+    const from = dragFrom.current;
+    const to = dragOver.current;
+
+    if (from === null || to === null || from === to) return;
+
+    const list = [...filtered];
+    const moved = list.splice(from, 1)[0];
+    list.splice(to, 0, moved);
+
+    setReelsLocal(list);
+
+    dragFrom.current = null;
+    dragOver.current = null;
+  };
+
+  /* -----------------------------
+     Helpers
+  ------------------------------ */
+  const updateFieldLocal = (id, key, value) => {
+    const list = [...(reels || [])];
+    const idx = list.findIndex((r) => r._id === id);
+    if (idx === -1) return;
+
+    list[idx] = { ...list[idx], [key]: value };
+    setReelsLocal(list);
+  };
+
+  const updateProductLocal = (id, productId) => {
+    const p = products.find((x) => x._id === productId);
+    if (!p) return;
+
+    const patchProduct = {
+      productId: p._id,
+      name: p.name || "",
+      slug: p.slug || "",
+      image: p.image || "",
+      price: p.price || 0,
+      currency: "INR",
+      href: "",
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  const addFiles = (incoming = []) => {
-    const list = Array.from(incoming || []).filter(isAcceptedReelFile);
-    if (!list.length) return;
+    const list = [...(reels || [])];
+    const idx = list.findIndex((r) => r._id === id);
+    if (idx === -1) return;
 
-    setFiles((prev) => {
-      const map = new Map();
-      prev.forEach((x) => map.set(x.key, x));
+    list[idx] = {
+      ...list[idx],
+      product: patchProduct,
+    };
 
-      list.forEach((file) => {
-        const key = `${file.name}-${file.size}-${file.lastModified}`;
-        if (map.has(key)) return;
+    setReelsLocal(list);
+  };
 
-        const kind = "video";
-        const preview = URL.createObjectURL(file);
-        map.set(key, { file, preview, kind, key });
-      });
-
-      return Array.from(map.values());
+  const saveSingle = async (reel) => {
+    clearMessages();
+    await updateReel(reel._id, {
+      title: reel.title,
+      caption: reel.caption,
+      hashtags: reel.hashtags || [],
+      placement: reel.placement,
+      priority: reel.priority || 0,
+      isActive: reel.isActive,
+      src: reel.src,
+      product: reel.product || {},
     });
   };
 
-  const onPickFiles = (e) => addFiles(e.target.files);
-
-  const removePicked = (idx) => {
-    setFiles((prev) => {
-      const target = prev[idx];
-      if (target?.preview) URL.revokeObjectURL(target.preview);
-      return prev.filter((_, i) => i !== idx);
-    });
+  const remove = async (id) => {
+    if (!confirm("Delete this reel?")) return;
+    await deleteReel(id);
   };
 
-  const clearPicked = () => {
-    setFiles((prev) => {
-      prev.forEach((x) => x.preview && URL.revokeObjectURL(x.preview));
-      return [];
-    });
+  const openMediaPicker = (id) => {
+    setEditMediaReelId(id);
+    setOpenMedia(true);
   };
 
-  const uploadBatch = async () => {
-    if (!files.length) return alert("Select reel videos first");
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      files.forEach(({ file }) => fd.append("files", file));
-      fd.append("folder", folder);
+  const onSelectMedia = (media) => {
+    if (!media?.url || !editMediaReelId) return;
 
-      const r = await fetch(`${API}/api/media/upload`, { method: "POST", body: fd });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.message || "Upload failed");
+    const list = [...(reels || [])];
+    const idx = list.findIndex((r) => r._id === editMediaReelId);
+    if (idx === -1) return;
 
-      clearPicked();
+    list[idx] = { ...list[idx], src: media.url, publicId: media.publicId || "" };
 
-      setPage(1);
-      await load(1);
-
-      alert(`Uploaded ${d.media?.length || 0} reel(s)!`);
-    } catch (e) {
-      console.error("❌ Upload:", e);
-      alert(e.message || "Upload failed");
-    } finally {
-      setUploading(false);
-    }
+    setReelsLocal(list);
+    setOpenMedia(false);
+    setEditMediaReelId(null);
   };
 
-  const copyUrl = async (url) => {
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      const el = document.createElement("textarea");
-      el.value = url;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-    }
+  const handleSaveOrder = async () => {
+    clearMessages();
+    await saveOrder();
+    await load();
   };
-
-  const deleteOne = async (id) => {
-    if (!confirm("Delete this reel permanently?")) return;
-    setDeletingId(id);
-    try {
-      const r = await fetch(`${API}/api/media/${id}`, { method: "DELETE" });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.message || "Delete failed");
-      await load();
-    } catch (e) {
-      console.error("❌ Delete:", e);
-      alert(e.message || "Delete failed");
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  // Drag & Drop
-  const onDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(true);
-  };
-  const onDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(true);
-  };
-  const onDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-  };
-  const onDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-    const dtFiles = e.dataTransfer?.files;
-    if (dtFiles?.length) addFiles(dtFiles);
-  };
-
-  const selectedCount = files.length;
 
   return (
-    <section className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
-        {/* Top bar */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Manage Reels</h1>
-            <p className="text-xs text-gray-500">Upload, copy URLs, and delete reels (videos).</p>
-          </div>
-
-          <button onClick={() => load()} className="inline-flex items-center gap-2 bg-black text-white px-4 py-2">
-            <RefreshCw size={18} />
-            Refresh
-          </button>
-        </div>
-
-        {/* Upload / Dropzone */}
-        <div className="bg-white border border-gray-200 p-4 space-y-4">
-          <div className="flex flex-col md:flex-row gap-3 md:items-end">
-            <div className="flex-1">
-              <label className="text-sm font-semibold text-gray-800 block mb-2">Cloudinary folder</label>
-
-              <div className="flex gap-2">
-                <input
-                  value={folder}
-                  onChange={(e) => setFolder(e.target.value)}
-                  disabled={lockFolder}
-                  className={`w-full bg-gray-100 px-3 py-2 outline-none border border-gray-200 ${
-                    lockFolder ? "opacity-60 cursor-not-allowed" : ""
-                  }`}
-                  placeholder="miray/reels"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setLockFolder((v) => !v)}
-                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 border border-gray-200"
-                  title={lockFolder ? "Unlock folder" : "Lock folder"}
-                >
-                  {lockFolder ? <FolderLock size={18} /> : <FolderOpen size={18} />}
-                </button>
-              </div>
-
-              <p className="text-[11px] text-gray-500 mt-1">
-                Default: <b>miray/reels</b>. Keep locked to avoid wrong uploads.
+    <section className="min-h-screen bg-gray-50 p-6 md:p-10">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* ✅ Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 flex items-center justify-center">
+              <Video size={18} />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-950">
+                Manage Reels
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Edit reels, attach products, reorder priority and track analytics.
               </p>
             </div>
-
-            <div className="md:w-[300px] flex gap-2">
-              <button
-                onClick={() => inputRef.current?.click()}
-                className="flex-1 inline-flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 px-4 py-2 border border-gray-200"
-              >
-                <Upload size={18} />
-                Choose
-              </button>
-
-              <button
-                onClick={uploadBatch}
-                disabled={uploading || !selectedCount}
-                className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-white ${
-                  uploading || !selectedCount ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
-                }`}
-              >
-                {uploading ? "Uploading..." : `Upload (${selectedCount})`}
-              </button>
-
-              <input
-                ref={inputRef}
-                type="file"
-                multiple
-                accept="video/*"
-                onChange={onPickFiles}
-                className="hidden"
-              />
-            </div>
           </div>
 
-          {/* Dropzone */}
-          <div
-            onDragEnter={onDragEnter}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-            onClick={() => inputRef.current?.click()}
-            className={`w-full border border-dashed p-6 cursor-pointer select-none ${
-              dragOver ? "bg-blue-50 border-blue-400" : "bg-gray-50 border-gray-300"
-            }`}
-          >
-            <div className="flex items-center justify-center gap-3">
-              <div className="p-3 bg-white border border-gray-200">
-                <Upload size={18} />
-              </div>
-              <div className="text-left">
-                <div className="text-sm font-semibold text-gray-800">Drag & drop reel videos here</div>
-                <div className="text-xs text-gray-500">or click to choose</div>
-              </div>
-            </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => router.push("/reels/add")}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-blue-600 text-white shadow-sm hover:bg-blue-700 transition"
+            >
+              + Add Reel
+            </button>
+
+            <button
+              onClick={load}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white text-gray-900 shadow-sm ring-1 ring-black/5 hover:bg-gray-100 transition"
+            >
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+
+            <button
+              onClick={handleSaveOrder}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gray-950 text-white shadow-sm hover:bg-black transition disabled:opacity-60"
+            >
+              <Save size={16} />
+              {saving ? "Saving..." : "Save Order"}
+            </button>
           </div>
+        </div>
 
-          {/* Preview meta */}
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-700 flex items-center gap-3">
-              <span>
-                Selected: <b>{selectedCount}</b>
-              </span>
-              <span className="text-xs text-gray-500 flex items-center gap-1">
-                <Video size={14} /> {selectedCount}
-              </span>
+        {/* ✅ Messages */}
+        <div className="space-y-2">
+          {loading && (
+            <div className="text-sm px-4 py-3 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 text-gray-700">
+              Loading reels...
             </div>
-
-            {selectedCount > 0 && (
-              <button onClick={clearPicked} className="text-sm text-red-600 hover:underline">
-                Clear all
-              </button>
-            )}
-          </div>
-
-          {/* Preview grid */}
-          {selectedCount > 0 && (
-            <div className="bg-gray-50 border border-gray-200 p-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                {files.slice(0, 12).map((f, idx) => (
-                  <div key={f.key} className="bg-white border border-gray-200 overflow-hidden">
-                    <div className="w-full aspect-[9/16] bg-black flex items-center justify-center">
-                      <video
-                        src={f.preview}
-                        className="w-full h-full object-contain bg-black"
-                        muted
-                        playsInline
-                        preload="metadata"
-                        controls
-                      />
-                    </div>
-
-                    <div className="p-2">
-                      <div className="text-[11px] text-gray-800 truncate" title={f.file.name}>
-                        {shortName(f.file.name)}
-                      </div>
-                      <div className="flex items-center justify-between mt-1">
-                        <div className="text-[10px] text-gray-500">{formatBytes(f.file.size)}</div>
-                        <button
-                          onClick={() => removePicked(idx)}
-                          className="p-1 bg-gray-100 hover:bg-gray-200"
-                          title="Remove"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {files.length > 12 && (
-                <div className="text-xs text-gray-500 mt-2">
-                  Showing preview of first <b>12</b>. Total selected: <b>{files.length}</b>
-                </div>
-              )}
+          )}
+          {error && (
+            <div className="text-sm px-4 py-3 rounded-2xl bg-red-50 shadow-sm ring-1 ring-red-200 text-red-700">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="text-sm px-4 py-3 rounded-2xl bg-green-50 shadow-sm ring-1 ring-green-200 text-green-700">
+              {success}
             </div>
           )}
         </div>
 
-        {/* Info row */}
-        <div className="text-sm text-gray-600 flex items-center justify-between">
-          <span>
-            Total reels: <b>{total}</b>
-          </span>
-          <span className="text-xs text-gray-500">
-            Page {page} / {pages}
-          </span>
+        {/* ✅ Filters */}
+        <div className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex gap-3 flex-wrap">
+            <div className="relative">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search reels..."
+                className="pl-10 pr-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition w-[280px]"
+              />
+            </div>
+
+            <select
+              value={placement}
+              onChange={(e) => setPlacement(e.target.value)}
+              className="px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+            >
+              <option value="home_row">Home Row</option>
+              <option value="global">Global</option>
+              <option value="product_page">Product Page</option>
+              <option value="category_page">Category Page</option>
+            </select>
+
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5">
+              <input
+                type="checkbox"
+                checked={activeNow}
+                onChange={(e) => setActiveNow(e.target.checked)}
+                className="accent-blue-600"
+              />
+              Active Now
+            </label>
+
+            <button
+              onClick={load}
+              className="px-4 py-3 rounded-2xl bg-gray-950 text-white shadow-sm hover:bg-black transition text-sm"
+            >
+              Search
+            </button>
+          </div>
+
+          <div className="text-sm text-gray-600">
+            Total: <b>{filtered.length}</b>
+          </div>
         </div>
 
-        {/* Library grid */}
-        {loading ? (
-          <div className="text-gray-600">Loading...</div>
-        ) : items.length === 0 ? (
-          <div className="text-gray-600">No reels found.</div>
+        {/* ✅ Media Picker */}
+        <MediaPickerModal
+          open={openMedia}
+          onClose={() => setOpenMedia(false)}
+          folder="miray/reels"
+          onSelect={onSelectMedia}
+        />
+
+        {/* ✅ List */}
+        {filtered.length === 0 ? (
+          <div className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-6 text-gray-700">
+            No reels found.
+          </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {items.map((m) => (
-              <div key={m._id} className="bg-white border border-gray-200 overflow-hidden">
-                <div className="w-full aspect-[9/16] bg-black flex items-center justify-center">
-                  <video
-                    src={m.url}
-                    className="w-full h-full object-contain bg-black"
-                    muted
-                    preload="metadata"
-                    controls
-                    playsInline
-                  />
-                </div>
-
-                <div className="p-3">
-                  <div className="text-sm font-semibold text-gray-900" title={m.originalName || m.publicId}>
-                    {shortName(m.originalName || m.publicId)}
+          <div className="space-y-4">
+            {filtered.map((r, idx) => (
+              <div
+                key={r._id}
+                id={`reel-${r._id}`}
+                draggable
+                onDragStart={() => onDragStart(idx)}
+                onDragEnter={() => onDragEnter(idx)}
+                onDragEnd={onDrop}
+                className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 overflow-hidden hover:shadow-md transition"
+              >
+                <div className="flex flex-col lg:flex-row gap-5 p-5">
+                  {/* Drag handle */}
+                  <div className="hidden lg:flex items-center justify-center pr-2 text-gray-400">
+                    <GripVertical size={20} />
                   </div>
 
-                  <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500">
-                    <span className="uppercase">{m.resourceType || "video"}</span>
-                    <span>{formatBytes(m.bytes)}</span>
+                  {/* Preview */}
+                  <div className="w-full lg:w-[260px] rounded-3xl overflow-hidden bg-black aspect-[9/16]">
+                    <video
+                      src={r.src}
+                      controls
+                      playsInline
+                      className="w-full h-full object-contain bg-black"
+                    />
                   </div>
 
-                  <div className="mt-3 flex gap-2">
+                  {/* Fields */}
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-950">
+                          {shortText(r.title || r.caption || r.slug, 52)}
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-1">
+                          Placement: <b>{r.placement}</b> • Priority:{" "}
+                          <b>{r.priority || 0}</b>
+                        </div>
+                      </div>
+
+                      {/* Active toggle */}
+                      <button
+                        onClick={() => toggleReelActive(r._id, !r.isActive)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ring-1 transition ${
+                          r.isActive
+                            ? "bg-green-50 text-green-700 ring-green-200 hover:bg-green-100"
+                            : "bg-gray-100 text-gray-600 ring-black/10 hover:bg-gray-200"
+                        }`}
+                      >
+                        {r.isActive ? "Active" : "Inactive"}
+                      </button>
+                    </div>
+
+                    {/* Change video */}
                     <button
-                      onClick={() => copyUrl(m.url)}
-                      className="flex-1 inline-flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-sm py-2"
-                      title="Copy URL"
+                      onClick={() => openMediaPicker(r._id)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gray-50 ring-1 ring-black/5 hover:bg-gray-100 transition text-sm"
                     >
-                      <Copy size={16} />
-                      Copy URL
+                      <ImageIcon size={16} />
+                      Change Video
                     </button>
 
-                    <button
-                      onClick={() => deleteOne(m._id)}
-                      disabled={deletingId === m._id}
-                      className={`inline-flex items-center justify-center px-4 py-2 text-white ${
-                        deletingId === m._id ? "bg-gray-400" : "bg-red-600 hover:bg-red-700"
-                      }`}
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {/* Title / caption */}
+                    <input
+                      value={r.title || ""}
+                      onChange={(e) =>
+                        updateFieldLocal(r._id, "title", e.target.value)
+                      }
+                      placeholder="Internal title"
+                      className="w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    />
+
+                    <textarea
+                      value={r.caption || ""}
+                      onChange={(e) =>
+                        updateFieldLocal(r._id, "caption", e.target.value)
+                      }
+                      placeholder="Caption..."
+                      rows={2}
+                      className="w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
+                    />
+
+                    {/* Priority */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <span className="text-xs text-gray-500">Priority:</span>
+                        <input
+                          type="number"
+                          value={r.priority || 0}
+                          onChange={(e) =>
+                            updateFieldLocal(
+                              r._id,
+                              "priority",
+                              Number(e.target.value)
+                            )
+                          }
+                          className="w-28 px-3 py-2 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+                        />
+                      </div>
+
+                      {/* Placement */}
+                      <select
+                        value={r.placement || "home_row"}
+                        onChange={(e) =>
+                          updateFieldLocal(r._id, "placement", e.target.value)
+                        }
+                        className="px-3 py-2 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+                      >
+                        <option value="home_row">Home Row</option>
+                        <option value="global">Global</option>
+                        <option value="product_page">Product Page</option>
+                        <option value="category_page">Category Page</option>
+                      </select>
+                    </div>
+
+                    {/* Attach Product */}
+                    <div className="rounded-3xl bg-gray-50 ring-1 ring-black/5 p-4">
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <PackageSearch size={14} />
+                        Attach Product
+                      </div>
+
+                      <select
+                        value={r.product?.productId || ""}
+                        onChange={(e) =>
+                          updateProductLocal(r._id, e.target.value)
+                        }
+                        className="mt-2 w-full px-4 py-3 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+                      >
+                        <option value="">No product linked</option>
+                        {productsLoading ? (
+                          <option>Loading products...</option>
+                        ) : (
+                          products.map((p) => (
+                            <option key={p._id} value={p._id}>
+                              {p.name} — ₹{p.price}
+                            </option>
+                          ))
+                        )}
+                      </select>
+
+                      {/* Product preview */}
+                      {r.product?.productId && (
+                        <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white ring-1 ring-black/5 p-3">
+                          <div className="w-14 h-16 rounded-xl overflow-hidden bg-gray-100 relative">
+                            <Image
+                              src={r.product?.image || "/placeholder.png"}
+                              alt={r.product?.name || "Product"}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-gray-950 truncate">
+                              {r.product?.name || "Linked Product"}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              ₹{r.product?.price || 0} • {r.product?.slug || "-"}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Analytics */}
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs pt-1">
+                      <MiniStat icon={Eye} label="Views" value={r.analytics?.views || 0} />
+                      <MiniStat icon={MousePointerClick} label="Taps" value={r.analytics?.taps || 0} />
+                      <MiniStat icon={Heart} label="Likes" value={r.analytics?.likes || 0} />
+                      <MiniStat icon={Bookmark} label="Wishlist" value={r.analytics?.wishlist || 0} />
+                      <MiniStat icon={Share2} label="Shares" value={r.analytics?.shares || 0} />
+                      <MiniStat
+                        icon={r.isActive ? BadgeCheck : BadgeX}
+                        label="Status"
+                        value={r.isActive ? "ON" : "OFF"}
+                      />
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 flex-wrap pt-2">
+                      <button
+                        onClick={() => saveSingle(r)}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gray-950 text-white shadow-sm hover:bg-black transition text-sm"
+                      >
+                        <Save size={16} />
+                        Save Reel
+                      </button>
+
+                      <button
+                        onClick={() => remove(r._id)}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white text-red-600 shadow-sm ring-1 ring-black/5 hover:bg-red-50 transition text-sm"
+                      >
+                        <Trash2 size={16} />
+                        Delete
+                      </button>
+                    </div>
+
+                    {/* hint */}
+                    <div className="text-[11px] text-gray-400">
+                      Drag this card to reorder priority (Save Order to persist).
+                    </div>
                   </div>
                 </div>
               </div>
@@ -445,29 +569,32 @@ export default function ReelsManagePage() {
           </div>
         )}
 
-        {/* Pagination */}
+        {/* Footer */}
         <div className="flex items-center justify-between pt-2">
           <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className={`px-4 py-2 border ${page <= 1 ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"}`}
+            onClick={() => router.push("/reels")}
+            className="text-sm text-gray-600 hover:text-gray-900"
           >
-            Prev
+            ← Back to Reels Dashboard
           </button>
 
-          <div className="text-sm text-gray-600">
-            Page <b>{page}</b> / <b>{pages}</b>
+          <div className="text-[11px] text-gray-400">
+            Uses Media Library + Reels API (/api/reels)
           </div>
-
-          <button
-            disabled={page >= pages}
-            onClick={() => setPage((p) => Math.min(pages, p + 1))}
-            className={`px-4 py-2 border ${page >= pages ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"}`}
-          >
-            Next
-          </button>
         </div>
       </div>
     </section>
+  );
+}
+
+function MiniStat({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-2xl bg-gray-50 ring-1 ring-black/5 px-3 py-2">
+      <div className="flex items-center gap-2 text-gray-600">
+        <Icon size={14} />
+        <span className="text-[11px]">{label}</span>
+      </div>
+      <div className="text-sm font-bold text-gray-950 mt-1">{value}</div>
+    </div>
   );
 }

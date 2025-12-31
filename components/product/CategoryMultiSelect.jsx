@@ -1,46 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useCategoryStore } from "@/store/categorystore";
 
-/**
- * CategoryMultiSelect
- *
- * Props:
- * - value: string[]        (selected category slugs/names)
- * - onChange: fn(string[]) (callback on change)
- * - apiUrl?: string        (optional override)
- * - placeholder?: string
- */
 export default function CategoryMultiSelect({
   value = [],
   onChange,
-  apiUrl = process.env.NEXT_PUBLIC_API_URL,
   placeholder = "Select categories",
 }) {
-  const [open, setOpen] = useState(false);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [q, setQ] = useState("");
+
+  // ✅ Use separate selectors (prevents snapshot loop)
+  const categories = useCategoryStore((state) => state.categories);
+  const loading = useCategoryStore((state) => state.loading);
+  const fetchCategories = useCategoryStore((state) => state.fetchCategories);
 
   /* ---------------- fetch categories ---------------- */
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch(`${apiUrl}/api/categories`, {
-          cache: "no-store",
-        });
-        const data = await res.json();
-        setCategories(Array.isArray(data) ? data : []);
-      } catch (e) {
-        console.error("Failed to load categories", e);
-        setCategories([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // ✅ only fetch once if store empty
+    if (!categories?.length) fetchCategories();
+  }, [categories?.length, fetchCategories]);
 
-    load();
-  }, [apiUrl]);
+  /* -----------------------------------------------------
+     ✅ Default select: all-clothing + new-arrivals
+     only if value is empty (first time)
+  ------------------------------------------------------ */
+  useEffect(() => {
+    if (!categories?.length) return;
+    if (value.length) return;
+
+    const defaults = ["all-clothing", "new-arrivals"];
+    const availableKeys = new Set(
+      categories.map((c) => (c.slug || c.name).toLowerCase())
+    );
+
+    const selectedDefaults = defaults.filter((d) => availableKeys.has(d));
+
+    if (selectedDefaults.length) {
+      onChange(selectedDefaults);
+    }
+  }, [categories, value.length, onChange]);
 
   /* ---------------- helpers ---------------- */
   const toggle = (key) => {
@@ -49,34 +48,68 @@ export default function CategoryMultiSelect({
     onChange(Array.from(set));
   };
 
-  const selectedNames = categories
-    .filter((c) => value.includes(c.slug || c.name))
-    .map((c) => c.name);
+  /* ---------------- filter categories ---------------- */
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return categories;
 
-  /* ---------------- UI ---------------- */
+    return categories.filter((c) => {
+      const name = String(c.name || "").toLowerCase();
+      const slug = String(c.slug || "").toLowerCase();
+      return name.includes(term) || slug.includes(term);
+    });
+  }, [categories, q]);
+
+  /* ---------------- selected labels ---------------- */
+  const selected = useMemo(() => {
+    const map = new Map();
+    categories?.forEach((c) => {
+      const key = c.slug || c.name;
+      map.set(key, c.name);
+    });
+    return value.map((k) => map.get(k) || k);
+  }, [categories, value]);
+
   return (
-    <div className="relative">
-      {/* Trigger */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between rounded-xl bg-gray-100 px-4 py-2 text-sm"
-      >
-        <span className="truncate">
-          {selectedNames.length ? selectedNames.join(", ") : placeholder}
-        </span>
-        <span className="text-xs">▾</span>
-      </button>
+    <div className="space-y-3">
+      {/* Selected summary */}
+      <div className="flex flex-wrap gap-2">
+        {selected.length ? (
+          value.map((k, idx) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => toggle(k)}
+              className="px-3 py-1 rounded-full text-sm bg-black text-white hover:opacity-80 transition"
+              title="Click to remove"
+            >
+              {selected[idx]} ✕
+            </button>
+          ))
+        ) : (
+          <p className="text-sm text-gray-500">{placeholder}</p>
+        )}
+      </div>
 
-      {/* Dropdown */}
-      {open && (
-        <div className="absolute z-30 mt-2 w-full max-h-64 overflow-auto rounded-xl bg-white shadow-lg border">
-          {loading && (
-            <p className="px-4 py-3 text-sm text-gray-500">Loading…</p>
-          )}
+      {/* Search */}
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search categories..."
+        className="w-full rounded-xl border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+      />
 
-          {!loading &&
-            categories.map((cat) => {
+      {/* Categories as tags */}
+      <div className="rounded-xl border bg-white p-3 max-h-64 overflow-auto">
+        {loading && <p className="text-sm text-gray-500">Loading…</p>}
+
+        {!loading && filtered?.length === 0 && (
+          <p className="text-sm text-gray-500">No categories found</p>
+        )}
+
+        {!loading && filtered?.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {filtered.map((cat) => {
               const key = cat.slug || cat.name;
               const active = value.includes(key);
 
@@ -85,24 +118,19 @@ export default function CategoryMultiSelect({
                   key={key}
                   type="button"
                   onClick={() => toggle(key)}
-                  className={`w-full px-4 py-2 text-left text-sm transition ${
+                  className={`px-3 py-1 rounded-full text-sm border transition ${
                     active
-                      ? "bg-black text-white"
-                      : "bg-gray-100 hover:bg-gray-200"
+                      ? "bg-black text-white border-black"
+                      : "bg-gray-100 hover:bg-gray-200 border-gray-200"
                   }`}
                 >
                   {cat.name}
                 </button>
               );
             })}
-
-          {!loading && categories.length === 0 && (
-            <p className="px-4 py-3 text-sm text-gray-500">
-              No categories found
-            </p>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

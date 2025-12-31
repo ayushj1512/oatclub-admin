@@ -10,7 +10,6 @@ export const sidebarMenus = {
     { label: "Quick Actions", href: "/dashboard/actions" },
   ],
 
-  // ✅ NEW: Analytics section (separate from dashboard)
   analytics: [
     { label: "Analytics Home", href: "/analytics" },
     { label: "Overview", href: "/analytics/overview" },
@@ -24,16 +23,24 @@ export const sidebarMenus = {
     { label: "Reports Export", href: "/analytics/reports" },
   ],
 
-  designing: [
-    { label: "Design Home", href: "/designing" },
-    { label: "Banners Manager", href: "/designing/banners" },
-    { label: "Homepage Layout", href: "/designing/homepage" },
-    { label: "Themes & Colors", href: "/designing/themes" },
-    { label: "Collections Editor", href: "/designing/collections" },
-    { label: "Product Badges", href: "/designing/badges" },
-    { label: "Topbar / Announcements", href: "/designing/topbar" },
-    { label: "Footer Links", href: "/designing/footer" },
-  ],
+designing: [
+  { label: "Design Home", href: "/designing" },
+  { label: "Banners Manager", href: "/designing/banners" },
+  { label: "Homepage Layout", href: "/designing/homepage" },
+
+  // ✅ NEW: Homepage Settings (for hero banners + top categories icons/names)
+  { label: "Homepage Settings", href: "/designing/homepage-settings" },
+  { label: "Hero Banners", href: "/designing/banners" },
+  { label: "Top Categories", href: "/designing/top-categories" },
+  { label: "Homepage Preview", href: "/designing/preview" },
+
+  { label: "Themes & Colors", href: "//themes" },
+  { label: "Collections Editor", href: "/designing/collections" },
+  { label: "Product Badges", href: "/designing/badges" },
+  { label: "Topbar / Announcements", href: "/designing/topbar" },
+  { label: "Footer Links", href: "/designing/footer" },
+],
+
 
   production: [
     { label: "Production Dashboard", href: "/production" },
@@ -57,7 +64,6 @@ export const sidebarMenus = {
     { label: "Refunds Ledger", href: "/accounts/refunds" },
   ],
 
-  // ✅ UPDATED: inventory (Barcodes added)
   inventory: [
     { label: "Inventory Dashboard", href: "/inventory" },
     { label: "All Inventory", href: "/inventory/list" },
@@ -67,8 +73,6 @@ export const sidebarMenus = {
     { label: "Bulk Upload", href: "/inventory/bulk-upload" },
     { label: "Purchase Invoices", href: "/inventory/purchase" },
     { label: "Stock Movement", href: "/inventory/movements" },
-
-    // ✅ Barcode menus
     { label: "Barcodes Dashboard", href: "/inventory/barcodes" },
     { label: "Generate Barcode", href: "/inventory/barcodes/generate" },
     { label: "Barcode Items (Saved)", href: "/inventory/barcodes/items" },
@@ -82,7 +86,6 @@ export const sidebarMenus = {
     { label: "Folders", href: "/media/folders" },
   ],
 
-  // ✅ NEW: REELS SECTION
   reels: [
     { label: "Reels Dashboard", href: "/reels" },
     { label: "Add Reels", href: "/reels/add" },
@@ -100,33 +103,25 @@ export const sidebarMenus = {
   ],
 
   products: [
-  { label: "Product Dashboard", href: "/products" },
-  { label: "Add New Product", href: "/products/add" },
-  { label: "Manage Products", href: "/products/manage" },
-
-  // ---- Master Data ----
-  { label: "Categories", href: "/products/category" },
-  { label: "Size Charts", href: "/products/size-charts" }, // 👈 NEW
-  { label: "Attributes", href: "/products/attributes" },
-  { label: "Variants", href: "/products/variants" },
-
-  // ---- Merchandising ----
-  { label: "Collections", href: "/products/collections" },
-  { label: "Fabric", href: "/products/fabric" },
-
-  // ---- Ops & Utilities ----
-  { label: "Bulk Import", href: "/products/bulk-import" },
-  { label: "Bulk Export", href: "/products/bulk-export" },
-  { label: "Media Library", href: "/media" },
-  { label: "Inventory Sync", href: "/products/inventory-sync" },
-  { label: "Price Updates", href: "/products/pricing" },
-
-  // ---- Growth ----
-  { label: "Offers & Discounts", href: "/products/offers" },
-  { label: "SEO Manager", href: "/products/seo" },
-  { label: "Reviews & Ratings", href: "/products/reviews" },
-],
-
+    { label: "Product Dashboard", href: "/products" },
+    { label: "Add New Product", href: "/products/add" },
+    { label: "Manage Products", href: "/products/manage" },
+    { label: "Analytics", href: "/products/analytics" },
+    { label: "Categories", href: "/products/category" },
+    { label: "Size Charts", href: "/products/size-charts" },
+    { label: "Attributes", href: "/products/attributes" },
+    { label: "Variants", href: "/products/variants" },
+    { label: "Collections", href: "/products/collections" },
+    { label: "Fabric", href: "/products/fabric" },
+    { label: "Bulk Import", href: "/products/bulk-import" },
+    { label: "Bulk Export", href: "/products/bulk-export" },
+    { label: "Media Library", href: "/media" },
+    { label: "Inventory Sync", href: "/products/inventory-sync" },
+    { label: "Price Updates", href: "/products/pricing" },
+    { label: "Offers & Discounts", href: "/products/offers" },
+    { label: "SEO Manager", href: "/products/seo" },
+    { label: "Reviews & Ratings", href: "/products/reviews" },
+  ],
 
   orders: [
     { label: "Orders Dashboard", href: "/orders" },
@@ -159,15 +154,7 @@ export const sidebarMenus = {
     { label: "NDR Follow-ups", href: "/operations/ndr" },
   ],
 
-  it_systems: [
-    { label: "IT Dashboard", href: "/it" },
-    { label: "Integrations", href: "/it/integrations" },
-    { label: "API Keys", href: "/it/api-keys" },
-    { label: "Backup & Restore", href: "/it/backups" },
-    { label: "Error Logs", href: "/it/logs" },
-    { label: "System Monitor", href: "/it/monitor" },
-    { label: "Webhooks", href: "/it/webhooks" },
-  ],
+
 
   marketing: [
     { label: "Marketing Dashboard", href: "/marketing" },
@@ -214,34 +201,22 @@ export const sidebarMenus = {
     { label: "Logout", href: "/logout" },
   ],
 
-  // ✅ NEW: SUPERADMIN SECTION
-  // (Add/remove items as you create pages)
   superadmin: [
     { label: "Vault", href: "/superadmin" },
     { label: "Manage Users", href: "/superadmin/manage" },
     { label: "Add User", href: "/superadmin/add" },
     { label: "Activity", href: "/superadmin/activity" },
-
   ],
 
-  // ✅ WORDPRESS / WOOCOMMERCE (MINIMAL SCOPE)
-wordpress: [ 
- 
-  { label: "WP Orders", href: "/wordpress/orders/list" },
-],
-
+  wordpress: [{ label: "WP Orders", href: "/wordpress/orders/list" }],
 };
 
 // ------------------------------
 // ROUTE → SIDEBAR CATEGORY MAP
 // ------------------------------
-// ✅ Add "/analytics" → analytics menu
-// ✅ Add "/reels" → reels menu
-// ✅ Add "/superadmin" → superadmin menu
 // ✅ Keep the most-specific prefixes earlier (future-safe)
 
 export const routeSidebarMap = [
-  // ✅ superadmin first (most specific)
   { prefix: "/superadmin", key: "superadmin" },
 
   { prefix: "/support-tickets", key: "support_tickets" },
@@ -249,6 +224,8 @@ export const routeSidebarMap = [
   { prefix: "/analytics", key: "analytics" },
   { prefix: "/reels", key: "reels" },
   { prefix: "/marketing", key: "marketing" },
+
+
   { prefix: "/dashboard", key: "dashboard" },
   { prefix: "/designing", key: "designing" },
   { prefix: "/production", key: "production" },
@@ -257,7 +234,6 @@ export const routeSidebarMap = [
   { prefix: "/blogs", key: "blogs" },
   { prefix: "/products", key: "products" },
 
-  // ✅ WORDPRESS ORDERS (must come before "/orders")
   { prefix: "/wordpress/orders", key: "wordpress" },
 
   { prefix: "/orders", key: "orders" },
@@ -268,4 +244,3 @@ export const routeSidebarMap = [
   { prefix: "/sales", key: "sales" },
   { prefix: "/account", key: "account_user" },
 ];
-

@@ -1,584 +1,389 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+
 import {
-  Upload,
+  Plus,
+  Save,
   RefreshCw,
-  Copy,
-  X,
   Video,
-  ArrowLeft,
-  CheckCircle2,
-  Search,
-  FolderLock,
-  FolderOpen,
+  Tag,
+  Sparkles,
+  Link as LinkIcon,
+  PackageSearch,
 } from "lucide-react";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+import MediaPickerModal from "@/components/media/MediaPickerModal";
 
-function formatBytes(bytes = 0) {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let n = bytes;
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+import { useAdminReelsStore } from "@/store/useAdminReelsStore";
+import { useAdminProductStore } from "@/store/adminProductStore";
+
+function cleanHashtags(input = "") {
+  return String(input || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((x) => (x.startsWith("#") ? x : `#${x}`));
 }
 
-function shortName(s = "") {
-  const t = String(s);
-  return t.length > 32 ? t.slice(0, 32) + "…" : t;
-}
-
-// reels: allow video only (but accept unknown types too)
-function isAcceptedReelFile(file) {
-  return file?.type?.startsWith("video/") || file?.type === "" || file?.type === undefined;
-}
-
-export default function ReelsAddPage() {
+export default function AddReelPage() {
   const router = useRouter();
-  const inputRef = useRef(null);
 
-  // Upload selection (local files)
-  const [files, setFiles] = useState([]); // [{ file, preview, kind, key }]
+  /* -----------------------------
+     STORES
+  ------------------------------ */
+  const { createReel, saving } = useAdminReelsStore();
 
-  // Existing media picker
-  const [items, setItems] = useState([]);
-  const [total, setTotal] = useState(0);
+  const {
+    products,
+    fetchProducts,
+    loading: productsLoading,
+  } = useAdminProductStore();
 
-  // Search within library (your backend uses q=... to search folder/originalName/publicId)
-  const [search, setSearch] = useState("");
+  /* -----------------------------
+     MEDIA MODAL STATE
+  ------------------------------ */
+  const [openMedia, setOpenMedia] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState(null);
 
-  // Selection from existing library
-  const [selectedExisting, setSelectedExisting] = useState(new Map()); // id -> media
+  /* -----------------------------
+     FORM STATE
+  ------------------------------ */
+  const [form, setForm] = useState({
+    title: "",
+    caption: "",
+    hashtags: "",
+    placement: "home_row",
+    priority: 0,
+    isActive: true,
+    productId: "",
+  });
 
-  // paging for existing media
-  const [page, setPage] = useState(1);
-  const limit = 24;
-  const pages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total]);
-
-  // folder preset
-  const [folder, setFolder] = useState("miray/reels");
-  const [lockFolder, setLockFolder] = useState(true);
-
-  // UI state
-  const [loadingLibrary, setLoadingLibrary] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-
-  // ✅ This makes your backend return only items in reels folder, because q matches folder too.
-  // Also supports search by name/publicId while still scoping to folder.
-  const qParam = useMemo(() => {
-    const s = search.trim();
-    return s ? `${folder} ${s}` : folder;
-  }, [folder, search]);
-
-  const loadLibrary = async (targetPage = page) => {
-    setLoadingLibrary(true);
-    try {
-      const url = new URL(`${API}/api/media`);
-      url.searchParams.set("page", String(targetPage));
-      url.searchParams.set("limit", String(limit));
-
-      // ✅ reels are videos
-      url.searchParams.set("type", "video");
-
-      // ✅ your backend doesn't have folder= filter, so we use q= which searches folder too
-      url.searchParams.set("q", qParam);
-
-      const r = await fetch(url.toString(), { cache: "no-store" });
-      const d = await r.json();
-
-      setItems(d.items || []);
-      setTotal(d.total || 0);
-    } catch (e) {
-      console.error("❌ Reels library load:", e);
-      setItems([]);
-      setTotal(0);
-    } finally {
-      setLoadingLibrary(false);
-    }
-  };
-
+  /* -----------------------------
+     Load products once
+  ------------------------------ */
   useEffect(() => {
-    loadLibrary();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, qParam]);
-
-  // cleanup previews on unmount
-  useEffect(() => {
-    return () => {
-      files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
-    };
+    fetchProducts({ page: 1, limit: 200, isActive: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---------- local file picking ----------
-  const addFiles = (incoming = []) => {
-    const list = Array.from(incoming || []).filter(isAcceptedReelFile);
-    if (!list.length) return;
+  /* -----------------------------
+     Selected product snapshot builder
+  ------------------------------ */
+  const selectedProduct = useMemo(() => {
+    if (!form.productId) return null;
+    return products?.find((p) => p._id === form.productId) || null;
+  }, [form.productId, products]);
 
-    setFiles((prev) => {
-      const map = new Map();
-      prev.forEach((x) => map.set(x.key, x));
+  /* -----------------------------
+     Handlers
+  ------------------------------ */
+  const update = (key, value) => setForm((p) => ({ ...p, [key]: value }));
 
-      list.forEach((file) => {
-        const key = `${file.name}-${file.size}-${file.lastModified}`;
-        if (map.has(key)) return;
+  const onSelectMedia = (media) => {
+    if (!media?.url) return;
+    setSelectedMedia(media);
+    setOpenMedia(false);
+  };
 
-        const kind = "video";
-        const preview = URL.createObjectURL(file);
-        map.set(key, { file, preview, kind, key });
-      });
-
-      return Array.from(map.values());
+  const reset = () => {
+    setSelectedMedia(null);
+    setForm({
+      title: "",
+      caption: "",
+      hashtags: "",
+      placement: "home_row",
+      priority: 0,
+      isActive: true,
+      productId: "",
     });
   };
 
-  const onPickFiles = (e) => addFiles(e.target.files);
+  const save = async () => {
+    if (!selectedMedia?.url) {
+      alert("Please select a reel video from Media Library");
+      return;
+    }
 
-  const removePicked = (idx) => {
-    setFiles((prev) => {
-      const target = prev[idx];
-      if (target?.preview) URL.revokeObjectURL(target.preview);
-      return prev.filter((_, i) => i !== idx);
-    });
-  };
+    const payload = {
+      title: form.title,
+      caption: form.caption,
+      hashtags: cleanHashtags(form.hashtags),
+      placement: form.placement,
+      priority: Number(form.priority || 0),
+      isActive: !!form.isActive,
 
-  const clearPicked = () => {
-    setFiles((prev) => {
-      prev.forEach((x) => x.preview && URL.revokeObjectURL(x.preview));
-      return [];
-    });
-  };
+      // ✅ Reel video
+      src: selectedMedia.url,
+      poster: "",
 
-  // ---------- upload ----------
-  const uploadBatch = async () => {
-    if (!files.length) return alert("Select reel videos first");
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      files.forEach(({ file }) => fd.append("files", file));
+      // ✅ Product snapshot + productId
+      product: selectedProduct
+        ? {
+            productId: selectedProduct._id,
+            name: selectedProduct.name || "",
+            slug: selectedProduct.slug || "",
+            image: selectedProduct.image || "",
+            price: selectedProduct.price || 0,
+            currency: "INR",
+            href: "",
+          }
+        : {
+            productId: null,
+            name: "",
+            slug: "",
+            image: "",
+            price: 0,
+            currency: "INR",
+            href: "",
+          },
+    };
 
-      // ✅ Your upload controller uses req.body.folder
-      fd.append("folder", folder);
+    const created = await createReel(payload);
 
-      const r = await fetch(`${API}/api/media/upload`, { method: "POST", body: fd });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.message || "Upload failed");
-
-      clearPicked();
-
-      setPage(1);
-      await loadLibrary(1);
-
-      alert(`Uploaded ${d.media?.length || 0} reel(s)!`);
-    } catch (e) {
-      console.error("❌ Upload:", e);
-      alert(e.message || "Upload failed");
-    } finally {
-      setUploading(false);
+    if (created?._id) {
+      router.push("/reels");
     }
   };
-
-  // ---------- copy ----------
-  const copyUrl = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const el = document.createElement("textarea");
-      el.value = text;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-    }
-  };
-
-  // ---------- choose existing ----------
-  const toggleExisting = (m) => {
-    setSelectedExisting((prev) => {
-      const next = new Map(prev);
-      if (next.has(m._id)) next.delete(m._id);
-      else next.set(m._id, m);
-      return next;
-    });
-  };
-
-  const clearExisting = () => setSelectedExisting(new Map());
-
-  // ---------- Drag & Drop ----------
-  const onDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(true);
-  };
-  const onDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(true);
-  };
-  const onDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-  };
-  const onDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-    const dtFiles = e.dataTransfer?.files;
-    if (dtFiles?.length) addFiles(dtFiles);
-  };
-
-  const selectedExistingCount = selectedExisting.size;
 
   return (
-    <section className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-5">
+    <section className="min-h-screen bg-gray-50 p-6 md:p-10">
+      <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <button
-              onClick={() => router.push("/reels")}
-              className="p-2 bg-white border border-gray-200 hover:bg-gray-50"
-              title="Back to Reels"
-            >
-              <ArrowLeft size={18} />
-            </button>
-
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 flex items-center justify-center">
+              <Video size={18} className="text-gray-900" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Add Reels</h1>
-              <p className="text-xs text-gray-500">
-                Upload new reel videos to Cloudinary, or choose from existing reels in library.
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-950">
+                Add Reel
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Upload/select reel video and attach a product for homepage video row.
               </p>
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
-              onClick={() => router.push("/reels/manage")}
-              className="inline-flex items-center gap-2 bg-white hover:bg-gray-50 border border-gray-200 px-4 py-2"
+              onClick={reset}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white text-gray-800 shadow-sm ring-1 ring-black/5 hover:bg-gray-100 transition"
             >
-              Manage
+              <RefreshCw size={16} />
+              Reset
             </button>
 
             <button
-              onClick={() => loadLibrary(page)}
-              className="inline-flex items-center gap-2 bg-black text-white px-4 py-2"
+              onClick={save}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gray-950 text-white shadow-sm hover:bg-black transition disabled:opacity-60"
             >
-              <RefreshCw size={18} />
-              Refresh
+              <Save size={16} />
+              {saving ? "Saving..." : "Save Reel"}
             </button>
           </div>
         </div>
 
-        {/* Folder / Upload */}
-        <div className="bg-white border border-gray-200 p-4 space-y-4">
-          <div className="flex flex-col md:flex-row gap-3 md:items-end">
-            <div className="flex-1">
-              <label className="text-sm font-semibold text-gray-800 block mb-2">Cloudinary folder (reels)</label>
+        {/* ✅ Media Picker Modal */}
+        <MediaPickerModal
+          open={openMedia}
+          onClose={() => setOpenMedia(false)}
+          folder="miray/reels"
+          onSelect={onSelectMedia}
+        />
 
-              <div className="flex gap-2">
-                <input
-                  value={folder}
-                  onChange={(e) => setFolder(e.target.value)}
-                  disabled={lockFolder}
-                  className={`w-full bg-gray-100 px-3 py-2 outline-none border border-gray-200 ${
-                    lockFolder ? "opacity-60 cursor-not-allowed" : ""
-                  }`}
-                  placeholder="miray/reels"
-                />
-                <button
-                  type="button"
-                  onClick={() => setLockFolder((v) => !v)}
-                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 border border-gray-200"
-                  title={lockFolder ? "Unlock folder" : "Lock folder"}
-                >
-                  {lockFolder ? <FolderLock size={18} /> : <FolderOpen size={18} />}
-                </button>
+        {/* Main form */}
+        <div className="grid md:grid-cols-2 gap-5">
+          {/* LEFT: Media Select + Preview */}
+          <div className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-gray-950">Reel Video</h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select from Media Library (folder: <b>miray/reels</b>)
+                </p>
               </div>
-
-              <p className="text-[11px] text-gray-500 mt-1">
-                Default is <b>miray/reels</b>. Keep locked to avoid wrong uploads.
-              </p>
-            </div>
-
-            <div className="md:w-[360px] flex gap-2">
-              <button
-                onClick={() => inputRef.current?.click()}
-                className="flex-1 inline-flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 px-4 py-2 border border-gray-200"
-              >
-                <Upload size={18} />
-                Choose Videos
-              </button>
 
               <button
-                onClick={uploadBatch}
-                disabled={uploading || files.length === 0}
-                className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-white ${
-                  uploading || files.length === 0 ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
-                }`}
+                onClick={() => setOpenMedia(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-blue-600 text-white shadow-sm hover:bg-blue-700 transition"
               >
-                {uploading ? "Uploading..." : `Upload (${files.length})`}
+                <Plus size={16} />
+                Select Video
               </button>
-
-              <input
-                ref={inputRef}
-                type="file"
-                multiple
-                accept="video/*"
-                onChange={onPickFiles}
-                className="hidden"
-              />
-            </div>
-          </div>
-
-          {/* Dropzone */}
-          <div
-            onDragEnter={onDragEnter}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-            onClick={() => inputRef.current?.click()}
-            className={`w-full border border-dashed p-6 cursor-pointer select-none ${
-              dragOver ? "bg-blue-50 border-blue-400" : "bg-gray-50 border-gray-300"
-            }`}
-          >
-            <div className="flex items-center justify-center gap-3">
-              <div className="p-3 bg-white border border-gray-200">
-                <Upload size={18} />
-              </div>
-              <div className="text-left">
-                <div className="text-sm font-semibold text-gray-800">Drag & drop reel videos here</div>
-                <div className="text-xs text-gray-500">or click to choose</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Local preview meta */}
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-700 flex items-center gap-3">
-              <span>
-                Selected uploads: <b>{files.length}</b>
-              </span>
-              <span className="text-xs text-gray-500 flex items-center gap-1">
-                <Video size={14} /> {files.length}
-              </span>
             </div>
 
-            {files.length > 0 && (
-              <button onClick={clearPicked} className="text-sm text-red-600 hover:underline">
-                Clear all
-              </button>
-            )}
-          </div>
-
-          {files.length > 0 && (
-            <div className="bg-gray-50 border border-gray-200 p-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {files.map((f, idx) => (
-                  <div key={f.key} className="bg-white border border-gray-200 overflow-hidden">
-                    <div className="w-full aspect-[9/16] bg-black flex items-center justify-center">
-                      <video
-                        src={f.preview}
-                        className="w-full h-full object-contain bg-black"
-                        muted
-                        playsInline
-                        preload="metadata"
-                        controls
-                      />
-                    </div>
-
-                    <div className="p-2">
-                      <div className="text-[12px] text-gray-900 font-semibold truncate" title={f.file.name}>
-                        {shortName(f.file.name)}
-                      </div>
-                      <div className="flex items-center justify-between mt-1">
-                        <div className="text-[11px] text-gray-500">{formatBytes(f.file.size)}</div>
-                        <button
-                          onClick={() => removePicked(idx)}
-                          className="p-1 bg-gray-100 hover:bg-gray-200"
-                          title="Remove"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Choose from existing */}
-        <div className="bg-white border border-gray-200 p-4 space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">Choose from existing reels</h2>
-              <p className="text-xs text-gray-500">
-                This uses your <b>/api/media</b> and shows videos from the reels folder via <b>q</b> search.
-              </p>
-            </div>
-
-            <div className="flex gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                <input
-                  value={search}
-                  onChange={(e) => {
-                    setPage(1);
-                    setSearch(e.target.value);
-                  }}
-                  placeholder="Search reel name / publicId..."
-                  className="pl-9 pr-3 py-2 bg-gray-100 border border-gray-200 outline-none w-[280px]"
-                />
-              </div>
-
-              {selectedExistingCount > 0 && (
-                <button
-                  onClick={clearExisting}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 border border-gray-200"
-                >
-                  Clear selected ({selectedExistingCount})
-                </button>
+            <div className="mt-4 rounded-3xl bg-gray-50 ring-1 ring-black/5 overflow-hidden">
+              {selectedMedia?.url ? (
+                <div className="w-full aspect-[9/16] bg-black">
+                  <video
+                    src={selectedMedia.url}
+                    controls
+                    playsInline
+                    className="w-full h-full object-contain bg-black"
+                  />
+                </div>
+              ) : (
+                <div className="w-full aspect-[9/16] flex items-center justify-center text-sm text-gray-400">
+                  No video selected
+                </div>
               )}
             </div>
+
+            <div className="mt-3 text-[11px] text-gray-400">
+              {selectedMedia?.publicId
+                ? `publicId: ${selectedMedia.publicId}`
+                : "publicId: -"}
+            </div>
           </div>
 
-          {/* Selected summary */}
-          {selectedExistingCount > 0 && (
-            <div className="bg-gray-50 border border-gray-200 p-3 flex items-center justify-between">
-              <div className="text-sm text-gray-700 flex items-center gap-2">
-                <CheckCircle2 size={18} className="text-green-600" />
-                Selected: <b>{selectedExistingCount}</b>
+          {/* RIGHT: Fields */}
+          <div className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-5 space-y-4">
+            <div>
+              <label className="text-xs text-gray-500">Internal Title</label>
+              <input
+                value={form.title}
+                onChange={(e) => update("title", e.target.value)}
+                placeholder="ex: Western Denim Reel"
+                className="mt-1 w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-500 flex items-center gap-2">
+                <Sparkles size={14} />
+                Caption
+              </label>
+              <textarea
+                value={form.caption}
+                onChange={(e) => update("caption", e.target.value)}
+                placeholder="ex: Unleashing western vibes ✨"
+                rows={3}
+                className="mt-1 w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-500 flex items-center gap-2">
+                <Tag size={14} />
+                Hashtags (comma separated)
+              </label>
+              <input
+                value={form.hashtags}
+                onChange={(e) => update("hashtags", e.target.value)}
+                placeholder="mirayfashions, western, ootd"
+                className="mt-1 w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+              />
+            </div>
+
+            {/* Placement + Priority */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500">Placement</label>
+                <select
+                  value={form.placement}
+                  onChange={(e) => update("placement", e.target.value)}
+                  className="mt-1 w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+                >
+                  <option value="home_row">Home Row</option>
+                  <option value="global">Global</option>
+                  <option value="product_page">Product Page</option>
+                  <option value="category_page">Category Page</option>
+                </select>
               </div>
 
-              <button
-                onClick={() => {
-                  const urls = Array.from(selectedExisting.values()).map((m) => m.url).join("\n");
-                  copyUrl(urls);
-                  alert("Copied selected reel URLs!");
-                }}
-                className="inline-flex items-center gap-2 bg-black text-white px-4 py-2"
+              <div>
+                <label className="text-xs text-gray-500">Priority</label>
+                <input
+                  type="number"
+                  value={form.priority}
+                  onChange={(e) => update("priority", Number(e.target.value))}
+                  placeholder="Higher = shows first"
+                  className="mt-1 w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+                />
+              </div>
+            </div>
+
+            {/* Active */}
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => update("isActive", e.target.checked)}
+                className="accent-blue-600"
+              />
+              Active (visible on site)
+            </label>
+
+            {/* Product Attach */}
+            <div className="rounded-3xl bg-gray-50 ring-1 ring-black/5 p-4">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <PackageSearch size={14} />
+                Attach Product (optional)
+              </div>
+
+              <select
+                value={form.productId}
+                onChange={(e) => update("productId", e.target.value)}
+                className="mt-2 w-full px-4 py-3 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
               >
-                <Copy size={16} />
-                Copy selected URLs
-              </button>
-            </div>
-          )}
+                <option value="">No product linked</option>
+                {productsLoading ? (
+                  <option>Loading products...</option>
+                ) : (
+                  products.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.name} — ₹{p.price}
+                    </option>
+                  ))
+                )}
+              </select>
 
-          {loadingLibrary ? (
-            <div className="text-gray-600">Loading library...</div>
-          ) : items.length === 0 ? (
-            <div className="text-gray-600">No reels found.</div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map((m) => {
-                const checked = selectedExisting.has(m._id);
-                return (
-                  <button
-                    key={m._id}
-                    type="button"
-                    onClick={() => toggleExisting(m)}
-                    className={`text-left bg-white border overflow-hidden transition ${
-                      checked ? "border-blue-600 ring-2 ring-blue-200" : "border-gray-200 hover:border-gray-300"
-                    }`}
-                    title="Click to select"
-                  >
-                    <div className="w-full aspect-[9/16] bg-black flex items-center justify-center">
-                      <video
-                        src={m.url}
-                        className="w-full h-full object-contain bg-black"
-                        preload="metadata"
-                        playsInline
-                        muted
-                      />
+              {/* Preview attached product */}
+              {selectedProduct && (
+                <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white ring-1 ring-black/5 p-3">
+                  <div className="w-14 h-16 rounded-xl overflow-hidden bg-gray-100 relative">
+                    <Image
+                      src={selectedProduct.image || "/placeholder.png"}
+                      alt={selectedProduct.name}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-gray-950 truncate">
+                      {selectedProduct.name}
                     </div>
-
-                    <div className="p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="text-sm font-semibold text-gray-900" title={m.originalName || m.publicId}>
-                          {shortName(m.originalName || m.publicId)}
-                        </div>
-
-                        <div
-                          className={`text-[10px] px-2 py-1 border ${
-                            checked ? "bg-blue-600 text-white border-blue-600" : "bg-gray-50 text-gray-700 border-gray-200"
-                          }`}
-                        >
-                          {checked ? "Selected" : "Select"}
-                        </div>
-                      </div>
-
-                      <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500">
-                        <span className="uppercase">{m.resourceType || "video"}</span>
-                        <span>{formatBytes(m.bytes)}</span>
-                      </div>
-
-                      <div className="mt-3 flex gap-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyUrl(m.url);
-                            alert("Copied URL!");
-                          }}
-                          className="flex-1 inline-flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-sm py-2"
-                          title="Copy URL"
-                        >
-                          <Copy size={16} />
-                          Copy URL
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleExisting(m);
-                          }}
-                          className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-sm"
-                        >
-                          {checked ? "Unselect" : "Select"}
-                        </button>
-                      </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      ₹{selectedProduct.price} • {selectedProduct.slug}
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Pagination */}
-          <div className="flex items-center justify-between pt-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className={`px-4 py-2 border ${
-                page <= 1 ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"
-              }`}
-            >
-              Prev
-            </button>
-
-            <div className="text-sm text-gray-600">
-              Page <b>{page}</b> / <b>{pages}</b>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <button
-              disabled={page >= pages}
-              onClick={() => setPage((p) => Math.min(pages, p + 1))}
-              className={`px-4 py-2 border ${
-                page >= pages ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"
-              }`}
-            >
-              Next
-            </button>
+            {/* Hint */}
+            <div className="text-xs text-gray-500 leading-relaxed">
+              ✅ Tip: Video should be vertical <b>9:16</b>.  
+              Add a product to show price + card below reel on homepage.
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between pt-2">
+          <button
+            onClick={() => router.push("/reels")}
+            className="text-sm text-gray-600 hover:text-gray-900"
+          >
+            ← Back to Reels Dashboard
+          </button>
+
+          <div className="text-[11px] text-gray-400">
+            Uses Media Library + Reels API (/api/reels)
           </div>
         </div>
       </div>

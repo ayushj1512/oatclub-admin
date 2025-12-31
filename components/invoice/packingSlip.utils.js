@@ -3,7 +3,11 @@ export function buildPackingSlipData(order) {
 
   return {
     orderNumber: order.orderNumber,
-    orderDate: new Date(order.orderDate).toLocaleDateString(),
+    orderDate: new Date(order.orderDate),
+
+    // ✅ INPUT / API BASED
+    courierName: order.shipping?.courier || "Blue Dart Air",
+    awb: order.shipping?.awb || "",
 
     shipping: order.shippingAddressSnapshot,
 

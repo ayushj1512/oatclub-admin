@@ -12,28 +12,65 @@ const CS = process.env.NEXT_PUBLIC_WC_CONSUMER_SECRET;
 const withAuth = (url) =>
   `${url}${url.includes("?") ? "&" : "?"}consumer_key=${CK}&consumer_secret=${CS}`;
 
-export const useWordpressStore = create((set) => ({
+export const useWordpressStore = create((set, get) => ({
   /* ============================================================
      STATE
   ============================================================ */
   orders: [],
   order: null,
+
+  // ✅ Common loader/error (used for both single + list)
   loading: false,
   error: null,
 
   /* ============================================================
+     ✅ ALIASES (Dashboard expects these names)
+  ============================================================ */
+  loadingOrders: false,
+  errorOrders: null,
+
+  /* ============================================================
      HELPERS
   ============================================================ */
-  _start: () => set({ loading: true, error: null }),
-  _success: () => set({ loading: false }),
+  _start: () =>
+    set({
+      loading: true,
+      error: null,
+
+      // ✅ Dashboard friendly
+      loadingOrders: true,
+      errorOrders: null,
+    }),
+
+  _success: () =>
+    set({
+      loading: false,
+
+      // ✅ Dashboard friendly
+      loadingOrders: false,
+    }),
+
   _error: (err) =>
     set({
       loading: false,
       error: err?.message || "Failed to fetch WooCommerce data",
+
+      // ✅ Dashboard friendly
+      loadingOrders: false,
+      errorOrders: err?.message || "Failed to fetch WooCommerce data",
     }),
 
-  
-
+  /* ============================================================
+     DEBUG CONFIG (call once if needed)
+  ============================================================ */
+  debugConfig: () => {
+    console.log("WC CONFIG", {
+      WC_BASE,
+      CK_PRESENT: !!CK,
+      CS_PRESENT: !!CS,
+      STORE_URL: process.env.NEXT_PUBLIC_WC_STORE_URL,
+    });
+  },
 
   /* ============================================================
      FETCH SINGLE WC ORDER BY ID
@@ -45,10 +82,9 @@ export const useWordpressStore = create((set) => ({
     set({ loading: true, error: null });
 
     try {
-      const res = await fetch(
-        withAuth(`${WC_BASE}/orders/${orderId}`),
-        { cache: "no-store" }
-      );
+      const res = await fetch(withAuth(`${WC_BASE}/orders/${orderId}`), {
+        cache: "no-store",
+      });
 
       if (!res.ok) {
         const text = await res.text();
@@ -74,10 +110,9 @@ export const useWordpressStore = create((set) => ({
     set({ loading: true, error: null });
 
     try {
-      const res = await fetch(
-        withAuth(`${WC_BASE}/orders?search=${orderNumber}`),
-        { cache: "no-store" }
-      );
+      const res = await fetch(withAuth(`${WC_BASE}/orders?search=${orderNumber}`), {
+        cache: "no-store",
+      });
 
       if (!res.ok) {
         const text = await res.text();
@@ -98,25 +133,30 @@ export const useWordpressStore = create((set) => ({
   },
 
   /* ============================================================
-     FETCH MULTIPLE WC ORDERS (OPTIONAL)
-     status, per_page, page
+     ✅ FETCH MULTIPLE WC ORDERS (LIST)
+     filters example:
+     { status: "processing", per_page: 50, page: 1 }
   ============================================================ */
   fetchAllOrders: async (filters = {}) => {
-    set({ loading: true, error: null });
+    get()._start();
 
     try {
-      const qs = new URLSearchParams(filters).toString();
-      const res = await fetch(
-        withAuth(`${WC_BASE}/orders?${qs}`),
-        { cache: "no-store" }
-      );
+      // ✅ default filters (latest 50 orders)
+      const finalFilters = {
+        per_page: 50,
+        page: 1,
+        orderby: "date",
+        order: "desc",
+        ...filters,
+      };
 
-      console.log("WC CONFIG", {
-  WC_BASE: `${process.env.NEXT_PUBLIC_WC_STORE_URL}/wp-json/wc/v3`,
-  CK_PRESENT: !!process.env.NEXT_PUBLIC_WC_CONSUMER_KEY,
-  CS_PRESENT: !!process.env.NEXT_PUBLIC_WC_CONSUMER_SECRET,
-});
+      const qs = new URLSearchParams(finalFilters).toString();
+      const url = withAuth(`${WC_BASE}/orders?${qs}`);
 
+      // ✅ Debug
+      console.log("FETCH ALL ORDERS =>", url);
+
+      const res = await fetch(url, { cache: "no-store" });
 
       if (!res.ok) {
         const text = await res.text();
@@ -124,16 +164,23 @@ export const useWordpressStore = create((set) => ({
       }
 
       const data = await res.json();
+
       set({
         orders: Array.isArray(data) ? data : [],
-        loading: false,
       });
+
+      get()._success();
     } catch (e) {
-      set({ loading: false, error: e.message });
+      get()._error(e);
     }
   },
 
-  
+  /* ============================================================
+     ✅ ALIAS: Dashboard expects fetchOrders()
+  ============================================================ */
+  fetchOrders: async (filters = {}) => {
+    return get().fetchAllOrders(filters);
+  },
 
   /* ============================================================
      RESET

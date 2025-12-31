@@ -40,11 +40,11 @@ export default function AddProductPage() {
     tagsText: "",
 
     /* MEDIA */
-    images: [],
-    thumbnail: "",
+    images: [], // ✅ urls array
+    thumbnail: "", // ✅ always synced from images[0]
 
- /* ✅ CROSS SELL */
-  crossSellProducts: [],
+    /* ✅ CROSS SELL */
+    crossSellProducts: [],
 
     /* ATTRIBUTES / VARIANTS */
     attributes: [],
@@ -103,8 +103,9 @@ export default function AddProductPage() {
       shortDescription: form.shortDescription,
       description: form.description,
 
+      // ✅ Images and thumbnail always correct now
       images: form.images,
-      thumbnail: form.thumbnail || form.images[0],
+      thumbnail: form.images?.[0] || "",
 
       tags: form.tagsText
         .split(",")
@@ -115,7 +116,7 @@ export default function AddProductPage() {
       variants: form.variants,
 
       /* ✅ CROSS SELL */
-  crossSellProducts: form.crossSellProducts,
+      crossSellProducts: form.crossSellProducts,
 
       /* ADVANCED */
       highlights: form.highlights,
@@ -155,7 +156,6 @@ export default function AddProductPage() {
   return (
     <section className="min-h-screen bg-gray-50 px-6 py-8">
       <div className="w-full max-w-full mx-auto space-y-8">
-
         {/* HEADER */}
         <div className="flex items-center justify-between">
           <div>
@@ -213,20 +213,27 @@ export default function AddProductPage() {
           <h2 className="font-semibold">Categories</h2>
           <CategoryMultiSelect
             value={form.categories}
-            onChange={(next) =>
-              setForm((p) => ({ ...p, categories: next }))
-            }
+            onChange={(next) => setForm((p) => ({ ...p, categories: next }))}
           />
         </div>
 
-        {/* IMAGES */}
-        <ProductImagesEditor
-          images={form.images}
-          thumbnail={form.thumbnail}
-          onChange={({ images, thumbnail }) =>
-            setForm((p) => ({ ...p, images, thumbnail }))
-          }
-        />
+        {/* ✅ IMAGES (FIXED) */}
+        <div className="bg-white rounded-xl p-6 shadow space-y-4">
+          <h2 className="font-semibold">Product Images</h2>
+
+          <ProductImagesEditor
+            value={form.images} // ✅ correct prop
+            folder="miray/products" // ✅ cloudinary folder
+            onChange={(urls) => {
+              // ✅ thumbnail always first
+              setForm((p) => ({
+                ...p,
+                images: urls,
+                thumbnail: urls?.[0] || "",
+              }));
+            }}
+          />
+        </div>
 
         {/* CONTENT */}
         <ProductContentEditor
@@ -236,9 +243,7 @@ export default function AddProductPage() {
             description: form.description,
             tagsText: form.tagsText,
           }}
-          onChange={(next) =>
-            setForm((p) => ({ ...p, ...next }))
-          }
+          onChange={(next) => setForm((p) => ({ ...p, ...next }))}
         />
 
         {/* ATTRIBUTES */}
@@ -246,9 +251,7 @@ export default function AddProductPage() {
           editable
           value={form.attributes}
           allAttributes={allAttributes}
-          onChange={(next) =>
-            setForm((p) => ({ ...p, attributes: next }))
-          }
+          onChange={(next) => setForm((p) => ({ ...p, attributes: next }))}
         />
 
         {/* VARIANTS */}
@@ -256,42 +259,37 @@ export default function AddProductPage() {
           <ProductVariantsEditor
             editable
             value={form.variants}
-            onChange={(next) =>
-              setForm((p) => ({ ...p, variants: next }))
-            }
+            onChange={(next) => setForm((p) => ({ ...p, variants: next }))}
           />
         )}
 
         {/* CROSS SELL */}
-<div className="bg-white rounded-xl p-6 shadow space-y-4">
-  <h2 className="font-semibold">Cross-sell Products</h2>
+        <div className="bg-white rounded-xl p-6 shadow space-y-4">
+          <h2 className="font-semibold">Cross-sell Products</h2>
 
-  <CrossSellSelector
-    value={form.crossSellProducts}
-    onChange={(next) =>
-      setForm((p) => ({ ...p, crossSellProducts: next }))
-    }
-  />
-</div>
+          <CrossSellSelector
+            value={form.crossSellProducts}
+            onChange={(next) =>
+              setForm((p) => ({ ...p, crossSellProducts: next }))
+            }
+          />
+        </div>
 
-{/* COLLECTIONS (OPTIONAL) */}
-<div className="bg-white rounded-xl p-6 shadow space-y-4">
-  <h2 className="font-semibold">Collections (Optional)</h2>
-  <p className="text-sm text-gray-500">
-    Assign this product to one or more collections
-  </p>
+        {/* COLLECTIONS (OPTIONAL) */}
+        <div className="bg-white rounded-xl p-6 shadow space-y-4">
+          <h2 className="font-semibold">Collections (Optional)</h2>
+          <p className="text-sm text-gray-500">
+            Assign this product to one or more collections
+          </p>
 
-  <CollectionMultiSelect
-    collections={collections}
-    value={form.collections}
-    onChange={(next) =>
-      setForm((p) => ({ ...p, collections: next }))
-    }
-  />
-</div>
+          <CollectionMultiSelect
+            collections={collections}
+            value={form.collections}
+            onChange={(next) => setForm((p) => ({ ...p, collections: next }))}
+          />
+        </div>
 
-
-        {/* ADVANCED (REUSABLE COMPONENT ✅) */}
+        {/* ADVANCED */}
         <ProductAdvancedFields
           value={form}
           collections={collections}

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Save, Sparkles, ArrowLeft } from "lucide-react";
 import { useAdminBlogStore } from "@/store/adminBlogStore";
 import MediaPickerModal from "@/components/media/MediaPickerModal";
+import { useAdminProductStore } from "@/store/adminProductStore";
 
 /* ---------------- utils ---------------- */
 const slugify = (s = "") =>
@@ -36,18 +37,28 @@ export default function BlogEditPage() {
     saving,
   } = useAdminBlogStore();
 
+  const {
+  products,
+  fetchProducts,
+  loading: productsLoading,
+} = useAdminProductStore();
+
+const [productSearch, setProductSearch] = useState("");
+
   /* ---------------- form state ---------------- */
-  const [form, setForm] = useState({
-    title: "",
-    slug: "",
-    excerpt: "",
-    date: "",
-    category: "Fashion",
-    tags: [],
-    image: "",
-    content: "",
-    isPublished: true,
-  });
+const [form, setForm] = useState({
+  title: "",
+  slug: "",
+  excerpt: "",
+  date: "",
+  category: "Fashion",
+  tags: [],
+  products: [], // ✅ ADD THIS
+  image: "",
+  content: "",
+  isPublished: true,
+});
+
 const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [tagsInput, setTagsInput] = useState("");
 
@@ -64,20 +75,27 @@ const [imagePickerOpen, setImagePickerOpen] = useState(false);
     if (id) fetchBlogById(id);
   }, [id, fetchBlogById]);
 
+useEffect(() => {
+  fetchProducts({ page: 1, limit: 200 });
+}, [fetchProducts]);
+
   useEffect(() => {
     if (!blog) return;
 
-    setForm({
-      title: blog.title || "",
-      slug: blog.slug || "",
-      excerpt: blog.excerpt || "",
-      date: toDateInput(blog.date || blog.createdAt),
-      category: blog.category || "Fashion",
-      tags: Array.isArray(blog.tags) ? blog.tags : [],
-      image: blog.image || "",
-      content: blog.content || "",
-      isPublished: blog.isPublished ?? true,
-    });
+   // eslint-disable-next-line react-hooks/set-state-in-effect
+   setForm({
+  title: blog.title || "",
+  slug: blog.slug || "",
+  excerpt: blog.excerpt || "",
+  date: toDateInput(blog.date || blog.createdAt),
+  category: blog.category || "Fashion",
+  tags: Array.isArray(blog.tags) ? blog.tags : [],
+  products: Array.isArray(blog.products) ? blog.products : [], // ✅
+  image: blog.image || "",
+  content: blog.content || "",
+  isPublished: blog.isPublished ?? true,
+});
+
 
     setTagsInput("");
   }, [blog]);
@@ -98,16 +116,27 @@ const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const removeTag = (t) =>
     set("tags", form.tags.filter((x) => x !== t));
 
+  const toggleProduct = (id) => {
+  set("products",
+    form.products.includes(id)
+      ? form.products.filter((p) => p !== id)
+      : [...form.products, id]
+  );
+};
+
+
   /* ---------------- submit ---------------- */
   const handleSubmit = async () => {
     if (!form.title.trim()) return alert("Title is required");
     if (!form.excerpt.trim()) return alert("Excerpt is required");
 
-    await updateBlog(id, {
-      ...form,
-      slug: previewSlug,
-      tags: form.tags || [],
-    });
+  await updateBlog(id, {
+  ...form,
+  slug: previewSlug,
+  tags: form.tags || [],
+  products: form.products || [], // ✅ IMPORTANT
+});
+
 
     router.push("/blogs/all");
   };
@@ -361,6 +390,92 @@ const [imagePickerOpen, setImagePickerOpen] = useState(false);
             )}
           </div>
         </div>
+
+        {/* ================= PRODUCTS ================= */}
+<div className="bg-white rounded-2xl shadow-sm p-8 space-y-6">
+  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+    Linked products
+  </h2>
+
+  <p className="text-sm text-gray-500">
+    Select products that should appear inside this blog
+  </p>
+
+  {/* SEARCH */}
+  <input
+    value={productSearch}
+    onChange={(e) => setProductSearch(e.target.value)}
+    placeholder="Search products by name or category…"
+    className="w-full bg-transparent border-b border-gray-200 focus:border-black outline-none py-2 text-sm"
+  />
+
+  {/* LIST */}
+  {productsLoading ? (
+    <p className="text-sm text-gray-500">Loading products…</p>
+  ) : (
+    <div className="max-h-[300px] overflow-y-auto space-y-2">
+      {products
+        .filter((p) => {
+          const q = productSearch.toLowerCase();
+          return (
+            !q ||
+            p.title?.toLowerCase().includes(q) ||
+            p.category?.toLowerCase().includes(q)
+          );
+        })
+        .map((p) => {
+          const checked = form.products.includes(p._id);
+
+          return (
+            <label
+              key={p._id}
+              className={`flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition ${
+                checked ? "bg-blue-50" : "hover:bg-gray-50"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleProduct(p._id)}
+                  className="accent-blue-600"
+                />
+
+                <div>
+                  <div className="text-sm font-medium text-gray-900">
+                    {p.title}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    ₹{p.price} · {p.category || "Uncategorized"}
+                  </div>
+                </div>
+              </div>
+
+              {checked && (
+                <span className="text-xs text-blue-600 font-medium">
+                  Selected
+                </span>
+              )}
+            </label>
+          );
+        })}
+
+      {products.length === 0 && (
+        <p className="text-sm text-gray-500 text-center py-6">
+          No products found
+        </p>
+      )}
+    </div>
+  )}
+
+  {!!form.products.length && (
+    <div className="pt-3 text-sm text-gray-600">
+      Selected products:{" "}
+      <b className="text-black">{form.products.length}</b>
+    </div>
+  )}
+</div>
+
 
         {/* ================= CONTENT ================= */}
         <div className="bg-white rounded-2xl shadow-sm p-8 space-y-4">
