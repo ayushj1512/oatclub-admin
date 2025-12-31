@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+
 import useLoginStore from "../../store/useLoginStore";
 import { Lock, User, LogIn } from "lucide-react";
 
@@ -26,20 +28,29 @@ export default function LoginScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-100 via-white to-gray-100 text-gray-800 px-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-200 p-10">
-
+        
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-blue-700 tracking-wide">
-            Miray Fashion
-          </h1>
-          <p className="text-gray-500 mt-2 text-sm">
+          {/* ✅ LOGO (Next/Image) */}
+          <div className="flex justify-center mb-4">
+            <Image
+              src="https://res.cloudinary.com/djtva6hec/image/upload/v1767196261/miray/media/rwhqczcfjnmnvoytyrmh.png"
+              alt="Miray Logo"
+              width={160}
+              height={70}
+              priority
+              className="object-contain"
+            />
+          </div>
+
+          <p className="text-gray-500 text-sm">
             Admin Login Portal
           </p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
-
+          
           {/* Username */}
           <div>
             <label className="block text-gray-700 mb-1 font-medium">
@@ -88,7 +99,7 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-gray-500">
-          <p>© 2025 Miray Fashion Admin. All rights reserved.</p>
+          <p>© 2025 Admin Portal. All rights reserved.</p>
         </div>
       </div>
     </div>

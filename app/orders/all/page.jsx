@@ -558,66 +558,79 @@ export default function OrdersListPage() {
     );
   }
 
-  return (
-    <section className="min-h-screen bg-gray-50 p-10">
-      <div className="max-w-7xl mx-auto space-y-10">
-        {/* =======================================
-              PAGE HEADER & SEARCH BAR
-        ======================================== */}
-        <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">All Orders</h1>
-            <p className="text-gray-500 mt-1">View, filter and manage all customer orders.</p>
-            <div className="text-sm text-gray-600 mt-2">
-              Showing <span className="font-semibold">{totals.count}</span> orders • Total{" "}
-              <span className="font-semibold">₹{totals.sum}</span>
-            </div>
-          </div>
+return (
+  <section className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-10">
+    <div className="max-w-7xl mx-auto space-y-10">
 
-          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full md:w-auto">
-            {/* Search Input */}
-            <div className="flex items-center gap-3 bg-white rounded-xl p-3 shadow-sm w-full md:w-80">
-              <Search size={20} className="text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search customer or order..."
-                className="outline-none w-full"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
+      {/* =======================================
+            PAGE HEADER & SEARCH BAR
+      ======================================== */}
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
+        
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900">
+            All Orders
+          </h1>
+          <p className="text-gray-500 mt-1">
+            View, filter and manage all customer orders.
+          </p>
 
-            {/* Export Button */}
-            <button
-              onClick={exportToCSV}
-              className="inline-flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2 rounded-xl bg-black text-white text-sm font-medium shadow-sm hover:bg-gray-900 transition"
-            >
-              <Download size={18} />
-              Export CSV (Full)
-            </button>
+          <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
+            <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
+              {totals.count} Orders
+            </span>
+            <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
+              Total ₹{totals.sum}
+            </span>
           </div>
         </div>
 
-        {/* =======================================
-              ADVANCED FILTERS
-        ======================================== */}
-        <div className="bg-white p-5 rounded-xl shadow grid md:grid-cols-4 gap-5 border">
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          {/* Search Input */}
+          <div className="flex items-center gap-3 bg-white/90 backdrop-blur rounded-2xl px-4 py-3 shadow-sm ring-1 ring-gray-200 w-full md:w-80">
+            <Search size={18} className="text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search customer or order..."
+              className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Export Button */}
+          <button
+            onClick={exportToCSV}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-medium shadow-sm hover:bg-gray-900 active:scale-[0.98] transition"
+          >
+            <Download size={18} />
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* =======================================
+            ADVANCED FILTERS
+      ======================================== */}
+      <div className="bg-white/90 backdrop-blur p-6 rounded-2xl shadow-sm ring-1 ring-gray-200">
+        <div className="grid md:grid-cols-4 gap-5">
+
           {/* Date Range */}
           <div>
-            <label className="text-sm font-semibold">Start Date</label>
+            <label className="text-sm font-semibold text-gray-700">Start Date</label>
             <input
               type="date"
-              className="w-full mt-1 p-2 rounded-lg bg-gray-100"
+              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="text-sm font-semibold">End Date</label>
+            <label className="text-sm font-semibold text-gray-700">End Date</label>
             <input
               type="date"
-              className="w-full mt-1 p-2 rounded-lg bg-gray-100"
+              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
@@ -625,10 +638,10 @@ export default function OrdersListPage() {
 
           {/* Amount Range */}
           <div>
-            <label className="text-sm font-semibold">Min Amount</label>
+            <label className="text-sm font-semibold text-gray-700">Min Amount</label>
             <input
               type="number"
-              className="w-full mt-1 p-2 rounded-lg bg-gray-100"
+              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
               placeholder="₹0"
               value={minAmount}
               onChange={(e) => setMinAmount(e.target.value)}
@@ -636,10 +649,10 @@ export default function OrdersListPage() {
           </div>
 
           <div>
-            <label className="text-sm font-semibold">Max Amount</label>
+            <label className="text-sm font-semibold text-gray-700">Max Amount</label>
             <input
               type="number"
-              className="w-full mt-1 p-2 rounded-lg bg-gray-100"
+              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
               placeholder="₹5000"
               value={maxAmount}
               onChange={(e) => setMaxAmount(e.target.value)}
@@ -647,10 +660,10 @@ export default function OrdersListPage() {
           </div>
 
           {/* Payment Method */}
-          <div>
-            <label className="text-sm font-semibold">Payment Method</label>
+          <div className="md:col-span-2">
+            <label className="text-sm font-semibold text-gray-700">Payment Method</label>
             <select
-              className="w-full mt-1 p-2 rounded-lg bg-gray-100"
+              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
             >
@@ -662,74 +675,93 @@ export default function OrdersListPage() {
               <option value="netbanking">Netbanking</option>
             </select>
           </div>
-
-          {/* Fulfillment Buttons */}
-          <div className="md:col-span-4 flex gap-3 overflow-x-auto pt-3">
-            {[
-              { key: "", label: "All" },
-              { key: "processing", label: "Processing" },
-              { key: "packed", label: "Packed" },
-              { key: "shipped", label: "Shipped" },
-              { key: "out_for_delivery", label: "Out for Delivery" },
-              { key: "delivered", label: "Delivered" },
-              { key: "returned", label: "Returned" },
-              { key: "cancelled", label: "Cancelled" },
-            ].map((s) => (
-              <button
-                key={s.key}
-                onClick={() => setStatus(s.key)}
-                className={`px-4 py-2 rounded-lg border text-sm ${
-                  status === s.key ? "bg-black text-white" : "bg-gray-100 text-gray-700"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
         </div>
 
-        {/* =======================================
-                ORDERS TABLE
-        ======================================== */}
-        <div className="bg-white rounded-xl shadow overflow-x-auto">
+        {/* Fulfillment Buttons */}
+        <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+          {[
+            { key: "", label: "All" },
+            { key: "processing", label: "Processing" },
+            { key: "packed", label: "Packed" },
+            { key: "shipped", label: "Shipped" },
+            { key: "out_for_delivery", label: "Out for Delivery" },
+            { key: "delivered", label: "Delivered" },
+            { key: "returned", label: "Returned" },
+            { key: "cancelled", label: "Cancelled" },
+          ].map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setStatus(s.key)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap
+                ${
+                  status === s.key
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* =======================================
+              ORDERS TABLE
+      ======================================== */}
+      <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="border-b text-gray-600">
+            <thead className="bg-gray-50 text-gray-600">
               <tr>
-                <th className="py-3 px-4 text-left">Order #</th>
-                <th className="py-3 px-4 text-left">Customer</th>
-                <th className="py-3 px-4 text-left">Payment</th>
-                <th className="py-3 px-4 text-left">Fulfillment</th>
-                <th className="py-3 px-4 text-left">Amount</th>
-                <th className="py-3 px-4 text-left">Date</th>
-                <th className="py-3 px-4 text-left">Action</th>
+                <th className="py-4 px-5 text-left font-semibold">Order #</th>
+                <th className="py-4 px-5 text-left font-semibold">Customer</th>
+                <th className="py-4 px-5 text-left font-semibold">Payment</th>
+                <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
+                <th className="py-4 px-5 text-left font-semibold">Amount</th>
+                <th className="py-4 px-5 text-left font-semibold">Date</th>
+                <th className="py-4 px-5 text-left font-semibold">Action</th>
               </tr>
             </thead>
 
-            <tbody>
+            <tbody className="divide-y divide-gray-100">
               {filteredOrders.length > 0 ? (
                 filteredOrders.map((order) => (
-                  <tr key={order._id} className="border-b hover:bg-gray-50 transition">
-                    <td className="py-3 px-4 font-semibold">{order.orderNumber}</td>
-
-                    <td className="py-3 px-4">
-                      {order.customerId?.name || "Unknown"}
-                      <div className="text-xs text-gray-500">{order.customerId?.phone}</div>
+                  <tr key={order._id} className="hover:bg-blue-50/40 transition">
+                    <td className="py-4 px-5 font-semibold text-gray-900">
+                      {order.orderNumber}
                     </td>
 
-                    <td className="py-3 px-4 capitalize">{order.paymentMethod}</td>
+                    <td className="py-4 px-5">
+                      <div className="font-medium text-gray-900">
+                        {order.customerId?.name || "Unknown"}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {order.customerId?.phone}
+                      </div>
+                    </td>
 
-                    <td className="py-3 px-4 capitalize">{order.fulfillmentStatus?.replace(/_/g, " ")}</td>
+                    <td className="py-4 px-5 capitalize text-gray-800">
+                      {order.paymentMethod}
+                    </td>
 
-                    <td className="py-3 px-4 font-semibold">₹{order.finalPayable}</td>
+                    <td className="py-4 px-5 capitalize">
+                      <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">
+                        {order.fulfillmentStatus?.replace(/_/g, " ")}
+                      </span>
+                    </td>
 
-                    <td className="py-3 px-4">
+                    <td className="py-4 px-5 font-semibold text-gray-900">
+                      ₹{order.finalPayable}
+                    </td>
+
+                    <td className="py-4 px-5 text-gray-700">
                       {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ""}
                     </td>
 
-                    <td className="py-3 px-4">
+                    <td className="py-4 px-5">
                       <button
                         onClick={() => router.push(`/orders/${order._id}`)}
-                        className="text-blue-600 flex items-center gap-1 hover:underline"
+                        className="inline-flex items-center gap-1 text-blue-600 font-semibold hover:text-blue-700 transition"
                       >
                         View <ArrowRight size={16} />
                       </button>
@@ -738,7 +770,7 @@ export default function OrdersListPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-gray-500">
+                  <td colSpan={7} className="py-12 text-center text-gray-500">
                     No orders found for applied filters.
                   </td>
                 </tr>
@@ -747,6 +779,8 @@ export default function OrdersListPage() {
           </table>
         </div>
       </div>
-    </section>
-  );
+    </div>
+  </section>
+);
+
 }
