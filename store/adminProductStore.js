@@ -114,31 +114,32 @@
       UPDATE PRODUCT
       (crossSellProducts safe)
     ============================================================ */
-    updateProduct: async (id, payload) => {
-      try {
-        set({ saving: true, error: null });
+   updateProduct: async (id, payload) => {
+  try {
+    set({ saving: true, error: null });
 
-        const res = await fetch(`${API}/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
+    const res = await fetch(`${API}/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Update failed");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Update failed");
 
-        set({ product: data.product });
-        toast.success("Product updated successfully");
-        return data.product;
-      } catch (e) {
-        console.error(e);
-        toast.error(e.message);
-        throw e;
-      } finally {
-        set({ saving: false });
-      }
-    },
+    set({ product: data.product });
+    toast.success("Product updated successfully");
+    return data.product;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
+
 
     /* ============================================================
       DELETE PRODUCT
@@ -298,77 +299,120 @@
     /* ============================================================
       BULK PUBLISH / UNPUBLISH
     ============================================================ */
-    bulkPublish: async (ids = [], isPublished = true) => {
-      try {
-        if (!ids.length) return;
+   bulkPublish: async (ids = [], isPublished = true) => {
+  try {
+    if (!ids.length) return;
+    set({ saving: true });
 
-        set({ saving: true });
-
-        // ✅ If you make backend route later:
-        // POST /api/products/bulk/publish { ids, isPublished }
-        // for now doing parallel updates
-
-        await Promise.all(
-          ids.map((id) =>
-            fetch(`${API}/${id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ isPublished }),
-            })
-          )
-        );
-
-        set({
-          products: get().products.map((p) =>
-            ids.includes(p._id) ? { ...p, isPublished } : p
-          ),
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        const res = await fetch(`${API}/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ isPublished }),
         });
 
-        toast.success(
-          isPublished ? "Products Published ✅" : "Products Unpublished ✅"
-        );
-      } catch (e) {
-        console.error(e);
-        toast.error("Bulk publish failed");
-      } finally {
-        set({ saving: false });
-      }
-    },
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.message || `Failed for ${id}`);
+        }
+      })
+    );
+
+    set({
+      products: get().products.map((p) =>
+        ids.includes(p._id) ? { ...p, isPublished } : p
+      ),
+    });
+
+    toast.success(
+      isPublished ? "Products Published ✅" : "Products Unpublished ✅"
+    );
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message || "Bulk publish failed");
+  } finally {
+    set({ saving: false });
+  }
+},
+
 
       /* ============================================================
     INLINE PRICE UPDATE (grid)
   ============================================================ */
-  updatePriceInline: async (id, price) => {
-    try {
-      set({ saving: true });
+ updatePriceInline: async (id, price) => {
+  try {
+    set({ saving: true });
 
-      const res = await fetch(`${API}/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ price }),
-      });
+    const res = await fetch(`${API}/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ price }),
+    });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Price update failed");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Price update failed");
 
-      // ✅ update in products list instantly
-      set({
-        products: get().products.map((p) =>
-          p._id === id ? { ...p, price } : p
-        ),
-      });
+    set({
+      products: get().products.map((p) =>
+        p._id === id ? { ...p, price } : p
+      ),
+    });
 
-      toast.success("Price updated ✅");
-      return data.product;
-    } catch (e) {
-      console.error(e);
-      toast.error(e.message);
-      throw e;
-    } finally {
-      set({ saving: false });
+    toast.success("Price updated ✅");
+    return data.product;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
+
+
+updateCategoriesInline: async (id, categories) => {
+  set({ saving: true });
+
+  try {
+    if (!Array.isArray(categories) || categories.length === 0) {
+      toast.error("At least 1 category required");
+      return;
     }
-  },
+
+    const res = await fetch(`${API}/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ categories }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || "Failed to update categories");
+
+    const updatedProduct = data?.product;
+
+    set((state) => ({
+      products: state.products.map((p) =>
+        p._id === id
+          ? { ...p, categories: updatedProduct?.categories || categories }
+          : p
+      ),
+    }));
+
+    toast.success("Categories updated ✅");
+    return updatedProduct;
+  } catch (e) {
+    console.error("❌ updateCategoriesInline error:", e);
+    toast.error(e.message || "Failed to update categories");
+  } finally {
+    set({ saving: false });
+  }
+},
+
+
+
 
   }));

@@ -59,18 +59,63 @@ export default function ProductsPage() {
 
   const [selectedIds, setSelectedIds] = useState(new Set());
 
+const [published, setPublished] = useState(""); // "", "published", "draft"
+const [stockFilter, setStockFilter] = useState(""); // "", "in", "out"
+const [typeFilter, setTypeFilter] = useState(""); // "", "simple", "variable"
+const [minPrice, setMinPrice] = useState("");
+const [maxPrice, setMaxPrice] = useState("");
+const [tagFilter, setTagFilter] = useState("");
+const [skuFilter, setSkuFilter] = useState("");
+
   /* ==============================
      Derived states
   ============================== */
   const selectedCount = selectedIds.size;
 
-  const allSelected = useMemo(() => {
-    return products.length > 0 && selectedIds.size === products.length;
-  }, [products, selectedIds]);
 
-  const someSelected = useMemo(() => {
-    return selectedIds.size > 0 && selectedIds.size < products.length;
-  }, [products, selectedIds]);
+  const filteredProducts = useMemo(() => {
+  return (products || []).filter((p) => {
+    // ✅ Published filter
+    if (published === "published" && !p.isPublished) return false;
+    if (published === "draft" && p.isPublished) return false;
+
+    // ✅ Stock filter
+    if (stockFilter === "in" && Number(p.stock || 0) <= 0) return false;
+    if (stockFilter === "out" && Number(p.stock || 0) > 0) return false;
+
+    // ✅ Type filter
+    if (typeFilter && p.productType !== typeFilter) return false;
+
+    // ✅ SKU filter
+    if (skuFilter && !String(p.sku || "").toLowerCase().includes(skuFilter.toLowerCase()))
+      return false;
+
+    // ✅ Tag filter (array)
+    if (tagFilter) {
+      const tags = Array.isArray(p.tags) ? p.tags : [];
+      if (!tags.some((t) => String(t).toLowerCase().includes(tagFilter.toLowerCase())))
+        return false;
+    }
+
+    // ✅ Price range
+    const price = Number(p.price || 0);
+    if (minPrice && price < Number(minPrice)) return false;
+    if (maxPrice && price > Number(maxPrice)) return false;
+
+    return true;
+  });
+}, [products, published, stockFilter, typeFilter, minPrice, maxPrice, tagFilter, skuFilter]);
+
+
+const allSelected = useMemo(() => {
+  return filteredProducts.length > 0 && selectedIds.size === filteredProducts.length;
+}, [filteredProducts, selectedIds]);
+
+
+ const someSelected = useMemo(() => {
+  return selectedIds.size > 0 && selectedIds.size < filteredProducts.length;
+}, [filteredProducts, selectedIds]);
+
 
   /* ==============================
      Load categories
@@ -154,10 +199,11 @@ export default function ProductsPage() {
     });
   };
 
-  const toggleAll = () => {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(products.map((p) => p._id)));
-  };
+const toggleAll = () => {
+  if (allSelected) setSelectedIds(new Set());
+  else setSelectedIds(new Set(filteredProducts.map((p) => p._id)));
+};
+
 
   const clearSelection = () => setSelectedIds(new Set());
 
@@ -259,6 +305,117 @@ export default function ProductsPage() {
   );
 }
 
+function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
+  const { updateCategoriesInline, saving } = useAdminProductStore();
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(Array.isArray(value) ? value : []);
+
+  useEffect(() => {
+    if (!editing) {
+      const next = Array.isArray(value) ? value : [];
+
+      setDraft((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        return next;
+      });
+    }
+  }, [value, editing]);
+
+  const toggleCategory = (cat) => {
+    setDraft((prev) => {
+      if (prev.includes(cat)) return prev.filter((x) => x !== cat);
+      return [...prev, cat];
+    });
+  };
+
+  const save = async () => {
+    await updateCategoriesInline(id, draft);
+    setEditing(false);
+  };
+
+  /* ✅ VIEW MODE (comma separated) */
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        {draft.length ? (
+          <span className="text-sm text-gray-700 truncate max-w-[240px]">
+            {draft.join(", ")}
+          </span>
+        ) : (
+          <span className="text-gray-400 text-sm">-</span>
+        )}
+
+        <button
+          className="icon blue"
+          title="Edit Categories"
+          onClick={() => setEditing(true)}
+          style={{ width: 30, height: 30 }}
+        >
+          <Pencil size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  /* ✅ EDIT MODE */
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2 p-2 border rounded-xl bg-gray-50 max-w-[320px]">
+        {allCategories.map((c) => {
+          const key = c.slug || c.name;
+          const label = c.name;
+          const checked = draft.includes(key);
+
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggleCategory(key)}
+              className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                checked
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-gray-700 border-gray-300"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="icon blue"
+          style={{ width: 32, height: 32 }}
+          title="Save"
+        >
+          {saving ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Check size={14} />
+          )}
+        </button>
+
+        <button
+          onClick={() => {
+            setDraft(Array.isArray(value) ? value : []);
+            setEditing(false);
+          }}
+          className="icon red"
+          style={{ width: 32, height: 32 }}
+          title="Cancel"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 
 
   /* ==============================
@@ -273,7 +430,7 @@ export default function ProductsPage() {
         <p className="text-sm text-gray-600">
   Manage, publish, bulk edit & update products •{" "}
   <span className="font-semibold text-gray-900">
-    {loading ? "…" : products.length} Products
+{loading ? "…" : filteredProducts.length} Products
   </span>
 </p>
 
@@ -287,6 +444,22 @@ export default function ProductsPage() {
               <RefreshCw size={18} />
             )}
           </button>
+
+<button
+  onClick={() => {
+    setPublished("");
+    setStockFilter("");
+    setTypeFilter("");
+    setMinPrice("");
+    setMaxPrice("");
+    setTagFilter("");
+    setSkuFilter("");
+  }}
+  className="btn btn-dark"
+>
+  Clear Filters
+</button>
+
 
           <button
             onClick={() => router.push("/products/add")}
@@ -332,137 +505,256 @@ export default function ProductsPage() {
         />
       </div>
 
+ <div className="flex flex-wrap items-end gap-4">
+  {/* Status */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs font-semibold text-gray-600">Status</label>
+    <select
+      value={published}
+      onChange={(e) => setPublished(e.target.value)}
+      className="select"
+    >
+      <option value="">All</option>
+      <option value="published">Published</option>
+      <option value="draft">Draft</option>
+    </select>
+  </div>
+
+  {/* Stock */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs font-semibold text-gray-600">Stock</label>
+    <select
+      value={stockFilter}
+      onChange={(e) => setStockFilter(e.target.value)}
+      className="select"
+    >
+      <option value="">All</option>
+      <option value="in">In Stock</option>
+      <option value="out">Out of Stock</option>
+    </select>
+  </div>
+
+  {/* Type */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs font-semibold text-gray-600">Type</label>
+    <select
+      value={typeFilter}
+      onChange={(e) => setTypeFilter(e.target.value)}
+      className="select"
+    >
+      <option value="">All</option>
+      <option value="simple">Simple</option>
+      <option value="variable">Variable</option>
+    </select>
+  </div>
+
+  {/* SKU */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs font-semibold text-gray-600">SKU</label>
+    <input
+      className="select"
+      value={skuFilter}
+      onChange={(e) => setSkuFilter(e.target.value)}
+    />
+  </div>
+
+  {/* Tag */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs font-semibold text-gray-600">Tag</label>
+    <input
+      className="select"
+      value={tagFilter}
+      onChange={(e) => setTagFilter(e.target.value)}
+    />
+  </div>
+
+  {/* Min Price */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs font-semibold text-gray-600">Min Price</label>
+    <input
+      className="select"
+      type="number"
+      value={minPrice}
+      onChange={(e) => setMinPrice(e.target.value)}
+      style={{ width: 120 }}
+    />
+  </div>
+
+  {/* Max Price */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs font-semibold text-gray-600">Max Price</label>
+    <input
+      className="select"
+      type="number"
+      value={maxPrice}
+      onChange={(e) => setMaxPrice(e.target.value)}
+      style={{ width: 120 }}
+    />
+  </div>
+</div>
+
+
+
       {/* Table */}
-      <div className="tableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th className="w-[48px]">
-                <Checkbox
-                  checked={allSelected}
-                  indeterminate={someSelected}
-                  onChange={toggleAll}
+    <div className="mt-4 overflow-x-auto bg-white border border-gray-200 rounded-xl">
+  <table className="w-full border-collapse text-sm">
+    {/* Header */}
+    <thead className="bg-gray-50">
+      <tr className="text-xs text-gray-500 uppercase tracking-wide">
+        <th className="w-[48px] px-4 py-3 border-b border-gray-200">
+          <Checkbox
+            checked={allSelected}
+            indeterminate={someSelected}
+            onChange={toggleAll}
+          />
+        </th>
+
+        <th className="px-4 py-3 border-b border-gray-200">
+          <Th onClick={() => toggleSort("title")} label="Title" />
+        </th>
+
+        <th className="px-4 py-3 border-b border-gray-200">
+          <Th onClick={() => toggleSort("price")} label="Price" />
+        </th>
+
+        <th className="px-4 py-3 border-b border-gray-200">Categories</th>
+
+        <th className="px-4 py-3 border-b border-gray-200 text-green-700">
+          <Th onClick={() => toggleSort("stock")} label="Stock" />
+        </th>
+
+        <th className="px-4 py-3 border-b border-gray-200 text-blue-700">
+          Status
+        </th>
+
+        <th className="px-4 py-3 border-b border-gray-200">
+          <Th onClick={() => toggleSort("createdAt")} label="Created" />
+        </th>
+
+        <th className="w-[120px] px-4 py-3 border-b border-gray-200 text-right text-gray-700">
+          Actions
+        </th>
+      </tr>
+    </thead>
+
+    {/* Body */}
+    <tbody>
+      {loading ? (
+        <tr>
+          <td colSpan={8} className="py-10 text-center text-gray-400">
+            Loading products…
+          </td>
+        </tr>
+      ) : filteredProducts.length === 0 ? (
+        <tr>
+          <td colSpan={8} className="py-10 text-center text-gray-400">
+            No products found
+          </td>
+        </tr>
+      ) : (
+        filteredProducts.map((p) => (
+          <tr
+            key={p._id}
+            className="border-b border-gray-100 hover:bg-gray-50 transition"
+          >
+            {/* Checkbox */}
+            <td className="px-4 py-3">
+              <Checkbox
+                checked={selectedIds.has(p._id)}
+                onChange={() => toggleOne(p._id)}
+              />
+            </td>
+
+            {/* Title */}
+            <td className="px-4 py-3">
+              <div className="flex items-center gap-3">
+                <img
+                  src={p.images?.[0] || "/no-image.png"}
+                  className="w-10 h-10 rounded-md border border-gray-200 object-cover"
+                  alt=""
                 />
-              </th>
+                <div className="flex flex-col leading-tight">
+                  <span className="font-medium text-gray-900">{p.title}</span>
+                  <span className="text-xs text-gray-400">
+                    {p.productType || "-"} • {p.sku || "-"}
+                  </span>
+                </div>
+              </div>
+            </td>
 
-              <Th onClick={() => toggleSort("title")} label="Title" />
-              <Th onClick={() => toggleSort("price")} label="Price" />
-              <Th label="Categories" />
-              <Th onClick={() => toggleSort("stock")} label="Stock" />
-              <Th label="Published" />
-              <Th onClick={() => toggleSort("createdAt")} label="Created" />
-              <th className="w-[140px]">Actions</th>
-            </tr>
-          </thead>
+            {/* Price */}
+            <td className="px-4 py-3">
+              <PriceInlineEditor id={p._id} value={p.price} />
+            </td>
 
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={8} className="py-10 text-center text-gray-500">
-                  Loading products…
-                </td>
-              </tr>
-            ) : products.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="py-10 text-center text-gray-500">
-                  No products found
-                </td>
-              </tr>
-            ) : (
-              products.map((p) => (
-                <tr key={p._id}>
-                  <td>
-                    <Checkbox
-                      checked={selectedIds.has(p._id)}
-                      onChange={() => toggleOne(p._id)}
-                    />
-                  </td>
+            {/* Categories */}
+            <td className="px-4 py-3">
+              <CategoryInlineEditor
+                id={p._id}
+                value={p.categories}
+                allCategories={categories}
+              />
+            </td>
 
-                  <td>
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={p.images?.[0] || "/no-image.png"}
-                        className="thumb"
-                        alt=""
-                      />
-                      <div className="flex flex-col">
-                        <span className="font-medium">{p.title}</span>
-                        <span className="text-xs text-gray-500">
-                          {p.productType || "-"} • SKU: {p.sku || "-"}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
+            {/* Stock */}
+            <td className="px-4 py-3">
+              <span
+                className={`text-xs font-semibold px-2 py-1 rounded-full border ${
+                  p.stock > 0
+                    ? "bg-green-50 text-green-700 border-green-200"
+                    : "bg-red-50 text-red-700 border-red-200"
+                }`}
+              >
+                {p.stock > 0 ? `In Stock (${p.stock})` : "Out of Stock"}
+              </span>
+            </td>
 
-                 <td>
-  <PriceInlineEditor id={p._id} value={p.price} />
-</td>
+            {/* Status */}
+            <td className="px-4 py-3">
+              <span
+                className={`text-xs font-semibold px-2 py-1 rounded-full border ${
+                  p.isPublished
+                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                    : "bg-gray-100 text-gray-500 border-gray-200"
+                }`}
+              >
+                {p.isPublished ? "Published" : "Draft"}
+              </span>
+            </td>
+
+            {/* Created */}
+            <td className="px-4 py-3 text-gray-500">
+              {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "-"}
+            </td>
+
+            {/* Actions */}
+            <td className="px-4 py-3">
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => router.push(`/products/${p._id}`)}
+                  className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition"
+                  title="Edit"
+                >
+                  <Pencil size={16} />
+                </button>
+
+                <button
+                  onClick={() => deleteProduct(p._id)}
+                  className="p-2 rounded-lg text-red-600 hover:bg-red-50 transition"
+                  title="Delete"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </td>
+          </tr>
+        ))
+      )}
+    </tbody>
+  </table>
+</div>
 
 
-                  <td>
-                    <div className="flex flex-wrap gap-1">
-                      {Array.isArray(p.categories) && p.categories.length ? (
-                        p.categories.map((c) => (
-                          <span key={c} className="badge gray">
-                            {c}
-                          </span>
-                        ))
-                      ) : (
-                        "-"
-                      )}
-                    </div>
-                  </td>
-
-                  <td>
-                    {p.stock > 0 ? (
-                      <span className="badge green">
-                        In Stock ({p.stock})
-                      </span>
-                    ) : (
-                      <span className="badge red">Out of Stock</span>
-                    )}
-                  </td>
-
-                  {/* ✅ Publish Toggle */}
-                  <td>
-                    <PublishToggle
-                      value={!!p.isPublished}
-                      loading={saving}
-                      onChange={(next) => togglePublish(p._id, next)}
-                    />
-                  </td>
-
-                  <td>
-                    {p.createdAt
-                      ? new Date(p.createdAt).toLocaleDateString()
-                      : "-"}
-                  </td>
-
-                  <td>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => router.push(`/products/${p._id}`)}
-                        className="icon blue"
-                        title="Edit"
-                      >
-                        <Pencil size={16} />
-                      </button>
-
-                      <button
-                        onClick={() => deleteProduct(p._id)}
-                        className="icon red"
-                        title="Delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
 
       {/* Styles */}
       <style jsx>{`
@@ -593,14 +885,18 @@ export default function ProductsPage() {
 
 function Th({ label, onClick }) {
   return (
-    <th onClick={onClick}>
-      <div className="flex items-center gap-1">
-        {label}
-        {onClick && <ArrowUpDown size={14} />}
-      </div>
-    </th>
+    <div
+      onClick={onClick}
+      className={`flex items-center gap-1 ${
+        onClick ? "cursor-pointer select-none" : ""
+      }`}
+    >
+      {label}
+      {onClick && <ArrowUpDown size={14} />}
+    </div>
   );
 }
+
 
 function Checkbox({ checked, indeterminate, onChange }) {
   return (
