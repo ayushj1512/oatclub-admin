@@ -336,5 +336,39 @@
       }
     },
 
-    
+      /* ============================================================
+    INLINE PRICE UPDATE (grid)
+  ============================================================ */
+  updatePriceInline: async (id, price) => {
+    try {
+      set({ saving: true });
+
+      const res = await fetch(`${API}/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ price }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Price update failed");
+
+      // ✅ update in products list instantly
+      set({
+        products: get().products.map((p) =>
+          p._id === id ? { ...p, price } : p
+        ),
+      });
+
+      toast.success("Price updated ✅");
+      return data.product;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
   }));

@@ -244,7 +244,7 @@ export const routeSidebarMap = [
   { prefix: "/blogs", key: "blogs" },
   { prefix: "/products", key: "products" },
 
-  { prefix: "/wordpress/orders", key: "wordpress" },
+  { prefix: "/wordpress", key: "wordpress" },
 
   // ✅ NEW: /rma route should show sidebar as RMA (or orders if you prefer)
   { prefix: "/rma", key: "rma" },

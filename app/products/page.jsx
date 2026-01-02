@@ -186,6 +186,81 @@ export default function ProductsPage() {
     clearSelection();
   };
 
+  function PriceInlineEditor({ id, value }) {
+  const { updatePriceInline, saving } = useAdminProductStore();
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+
+  const save = async () => {
+    const num = Number(draft);
+
+    if (!num || num <= 0) {
+      alert("Enter valid price");
+      return;
+    }
+
+    await updatePriceInline(id, num);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="font-medium">₹{value ?? "-"}</span>
+
+        <button
+          className="icon blue"
+          title="Edit Price"
+          onClick={() => setEditing(true)}
+          style={{ width: 30, height: 30 }}
+        >
+          <Pencil size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        className="px-2 py-1 border rounded-md w-[90px] text-sm"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        type="number"
+      />
+
+      <button
+        onClick={save}
+        disabled={saving}
+        className="icon blue"
+        style={{ width: 30, height: 30 }}
+        title="Save"
+      >
+        {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+      </button>
+
+      <button
+        onClick={() => {
+          setDraft(value ?? "");
+          setEditing(false);
+        }}
+        className="icon red"
+        style={{ width: 30, height: 30 }}
+        title="Cancel"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
+
+
   /* ==============================
      Render
   ============================== */
@@ -319,7 +394,10 @@ export default function ProductsPage() {
                     </div>
                   </td>
 
-                  <td className="font-medium">₹{p.price ?? "-"}</td>
+                 <td>
+  <PriceInlineEditor id={p._id} value={p.price} />
+</td>
+
 
                   <td>
                     <div className="flex flex-wrap gap-1">
