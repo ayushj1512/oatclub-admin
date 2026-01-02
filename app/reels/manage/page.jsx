@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-
 import {
   RefreshCw,
   Save,
@@ -23,23 +22,17 @@ import {
 } from "lucide-react";
 
 import MediaPickerModal from "@/components/media/MediaPickerModal";
-
 import { useAdminReelsStore } from "@/store/useAdminReelsStore";
 import { useAdminProductStore } from "@/store/adminProductStore";
 
-function shortText(s = "", max = 48) {
-  const t = String(s || "");
-  return t.length > max ? t.slice(0, max) + "…" : t;
-}
+const shortText = (s = "", max = 48) =>
+  String(s || "").length > max ? String(s).slice(0, max) + "…" : s;
 
 export default function ReelsManagePage() {
   const router = useRouter();
   const sp = useSearchParams();
   const focusId = sp.get("focus");
 
-  /* -----------------------------
-     Stores
-  ------------------------------ */
   const {
     reels,
     loading,
@@ -58,9 +51,6 @@ export default function ReelsManagePage() {
   const { products, fetchProducts, loading: productsLoading } =
     useAdminProductStore();
 
-  /* -----------------------------
-     UI State
-  ------------------------------ */
   const [query, setQuery] = useState("");
   const [placement, setPlacement] = useState("home_row");
   const [activeNow, setActiveNow] = useState(true);
@@ -71,13 +61,10 @@ export default function ReelsManagePage() {
   const dragFrom = useRef(null);
   const dragOver = useRef(null);
 
-  /* -----------------------------
-     Load
-  ------------------------------ */
+  /* ✅ Load products once */
   useEffect(() => {
-    fetchProducts({ page: 1, limit: 250, isActive: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    fetchProducts({ page: 1, limit: 500, isActive: true });
+  }, [fetchProducts]);
 
   const load = async () => {
     clearMessages();
@@ -96,109 +83,79 @@ export default function ReelsManagePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placement, activeNow]);
 
-  /* -----------------------------
-     Focus scroll
-  ------------------------------ */
+  /* ✅ Focus scroll */
   useEffect(() => {
     if (!focusId) return;
     const el = document.getElementById(`reel-${focusId}`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [focusId, reels]);
 
-  /* -----------------------------
-     Reel list filtered locally
-  ------------------------------ */
+  /* ✅ Local search filter */
   const filtered = useMemo(() => {
     const list = reels || [];
     if (!query?.trim()) return list;
-
     const q = query.toLowerCase().trim();
-    return list.filter((r) => {
-      return (
-        (r.title || "").toLowerCase().includes(q) ||
-        (r.caption || "").toLowerCase().includes(q) ||
-        (r.slug || "").toLowerCase().includes(q) ||
-        (r.product?.name || "").toLowerCase().includes(q)
-      );
-    });
+    return list.filter((r) =>
+      [r.title, r.caption, r.slug, r.product?.name]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
   }, [reels, query]);
 
-  /* -----------------------------
-     Drag reorder logic
-  ------------------------------ */
-  const onDragStart = (idx) => {
-    dragFrom.current = idx;
-  };
-
-  const onDragEnter = (idx) => {
-    dragOver.current = idx;
-  };
+  /* ✅ Drag reorder */
+  const onDragStart = (i) => (dragFrom.current = i);
+  const onDragEnter = (i) => (dragOver.current = i);
 
   const onDrop = () => {
     const from = dragFrom.current;
     const to = dragOver.current;
-
-    if (from === null || to === null || from === to) return;
+    if (from == null || to == null || from === to) return;
 
     const list = [...filtered];
     const moved = list.splice(from, 1)[0];
     list.splice(to, 0, moved);
 
     setReelsLocal(list);
-
-    dragFrom.current = null;
-    dragOver.current = null;
+    dragFrom.current = dragOver.current = null;
   };
 
-  /* -----------------------------
-     Helpers
-  ------------------------------ */
-  const updateFieldLocal = (id, key, value) => {
+  /* ✅ Update local fields */
+  const updateField = (id, key, value) => {
     const list = [...(reels || [])];
-    const idx = list.findIndex((r) => r._id === id);
+    const idx = list.findIndex((x) => x._id === id);
     if (idx === -1) return;
-
     list[idx] = { ...list[idx], [key]: value };
     setReelsLocal(list);
   };
 
-  const updateProductLocal = (id, productId) => {
+  /* ✅ Update product snapshot */
+  const updateProduct = (id, productId) => {
     const p = products.find((x) => x._id === productId);
     if (!p) return;
 
     const patchProduct = {
       productId: p._id,
-      name: p.name || "",
+      name: p.title || p.name || "",
       slug: p.slug || "",
-      image: p.image || "",
+      image: p.thumbnail || p.images?.[0] || "",
       price: p.price || 0,
       currency: "INR",
-      href: "",
     };
 
-    const list = [...(reels || [])];
-    const idx = list.findIndex((r) => r._id === id);
-    if (idx === -1) return;
-
-    list[idx] = {
-      ...list[idx],
-      product: patchProduct,
-    };
-
-    setReelsLocal(list);
+    updateField(id, "product", patchProduct);
   };
 
-  const saveSingle = async (reel) => {
+  const saveSingle = async (r) => {
     clearMessages();
-    await updateReel(reel._id, {
-      title: reel.title,
-      caption: reel.caption,
-      hashtags: reel.hashtags || [],
-      placement: reel.placement,
-      priority: reel.priority || 0,
-      isActive: reel.isActive,
-      src: reel.src,
-      product: reel.product || {},
+    await updateReel(r._id, {
+      title: r.title,
+      caption: r.caption,
+      placement: r.placement,
+      priority: r.priority || 0,
+      isActive: r.isActive,
+      src: r.src,
+      product: r.product || {},
     });
   };
 
@@ -214,14 +171,7 @@ export default function ReelsManagePage() {
 
   const onSelectMedia = (media) => {
     if (!media?.url || !editMediaReelId) return;
-
-    const list = [...(reels || [])];
-    const idx = list.findIndex((r) => r._id === editMediaReelId);
-    if (idx === -1) return;
-
-    list[idx] = { ...list[idx], src: media.url, publicId: media.publicId || "" };
-
-    setReelsLocal(list);
+    updateField(editMediaReelId, "src", media.url);
     setOpenMedia(false);
     setEditMediaReelId(null);
   };
@@ -233,73 +183,52 @@ export default function ReelsManagePage() {
   };
 
   return (
-    <section className="min-h-screen bg-gray-50 p-6 md:p-10">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* ✅ Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <section className="min-h-screen bg-gray-50 p-5 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-5">
+        {/* ✅ Top Bar */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-white ring-1 ring-black/5 flex items-center justify-center">
               <Video size={18} />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-950">
+              <h1 className="text-xl md:text-2xl font-bold text-gray-950">
                 Manage Reels
               </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Edit reels, attach products, reorder priority and track analytics.
+              <p className="text-xs text-gray-500">
+                Compact editor • drag reorder • attach products
               </p>
             </div>
           </div>
 
           <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => router.push("/reels/add")}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-blue-600 text-white shadow-sm hover:bg-blue-700 transition"
-            >
-              + Add Reel
-            </button>
-
-            <button
-              onClick={load}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white text-gray-900 shadow-sm ring-1 ring-black/5 hover:bg-gray-100 transition"
-            >
-              <RefreshCw size={16} />
+            <Btn onClick={() => router.push("/reels/add")}>+ Add</Btn>
+            <Btn onClick={load} icon={RefreshCw} variant="white">
               Refresh
-            </button>
-
-            <button
+            </Btn>
+            <Btn
               onClick={handleSaveOrder}
+              icon={Save}
+              variant="black"
               disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gray-950 text-white shadow-sm hover:bg-black transition disabled:opacity-60"
             >
-              <Save size={16} />
               {saving ? "Saving..." : "Save Order"}
-            </button>
+            </Btn>
           </div>
         </div>
 
         {/* ✅ Messages */}
-        <div className="space-y-2">
-          {loading && (
-            <div className="text-sm px-4 py-3 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 text-gray-700">
-              Loading reels...
-            </div>
-          )}
-          {error && (
-            <div className="text-sm px-4 py-3 rounded-2xl bg-red-50 shadow-sm ring-1 ring-red-200 text-red-700">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="text-sm px-4 py-3 rounded-2xl bg-green-50 shadow-sm ring-1 ring-green-200 text-green-700">
-              {success}
-            </div>
-          )}
-        </div>
+        {(loading || error || success) && (
+          <div className="space-y-2">
+            {loading && <Msg>Loading reels…</Msg>}
+            {error && <Msg type="red">{error}</Msg>}
+            {success && <Msg type="green">{success}</Msg>}
+          </div>
+        )}
 
         {/* ✅ Filters */}
-        <div className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div className="flex gap-3 flex-wrap">
+        <div className="bg-white rounded-3xl ring-1 ring-black/5 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex gap-3 flex-wrap items-center">
             <div className="relative">
               <Search
                 size={16}
@@ -309,22 +238,22 @@ export default function ReelsManagePage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search reels..."
-                className="pl-10 pr-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition w-[280px]"
+                className="pl-10 pr-4 py-2.5 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 w-[240px]"
               />
             </div>
 
             <select
               value={placement}
               onChange={(e) => setPlacement(e.target.value)}
-              className="px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+              className="px-4 py-2.5 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none"
             >
-              <option value="home_row">Home Row</option>
+              <option value="home_row">Home</option>
               <option value="global">Global</option>
-              <option value="product_page">Product Page</option>
-              <option value="category_page">Category Page</option>
+              <option value="product_page">Product</option>
+              <option value="category_page">Category</option>
             </select>
 
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700 px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 px-4 py-2.5 rounded-2xl bg-gray-50 ring-1 ring-black/5">
               <input
                 type="checkbox"
                 checked={activeNow}
@@ -334,12 +263,9 @@ export default function ReelsManagePage() {
               Active Now
             </label>
 
-            <button
-              onClick={load}
-              className="px-4 py-3 rounded-2xl bg-gray-950 text-white shadow-sm hover:bg-black transition text-sm"
-            >
-              Search
-            </button>
+            <Btn onClick={load} variant="black">
+              Apply
+            </Btn>
           </div>
 
           <div className="text-sm text-gray-600">
@@ -356,216 +282,199 @@ export default function ReelsManagePage() {
         />
 
         {/* ✅ List */}
-        {filtered.length === 0 ? (
-          <div className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-6 text-gray-700">
+        {!filtered.length ? (
+          <div className="bg-white rounded-3xl ring-1 ring-black/5 p-6 text-gray-700">
             No reels found.
           </div>
         ) : (
-          <div className="space-y-4">
-            {filtered.map((r, idx) => (
-              <div
-                key={r._id}
-                id={`reel-${r._id}`}
-                draggable
-                onDragStart={() => onDragStart(idx)}
-                onDragEnter={() => onDragEnter(idx)}
-                onDragEnd={onDrop}
-                className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 overflow-hidden hover:shadow-md transition"
-              >
-                <div className="flex flex-col lg:flex-row gap-5 p-5">
-                  {/* Drag handle */}
-                  <div className="hidden lg:flex items-center justify-center pr-2 text-gray-400">
-                    <GripVertical size={20} />
-                  </div>
+          <div className="space-y-3">
+            {filtered.map((r, idx) => {
+              const linked = products?.find(
+                (p) => p._id === r.product?.productId
+              );
 
-                  {/* Preview */}
-                  <div className="w-full lg:w-[260px] rounded-3xl overflow-hidden bg-black aspect-[9/16]">
-                    <video
-                      src={r.src}
-                      controls
-                      playsInline
-                      className="w-full h-full object-contain bg-black"
-                    />
-                  </div>
+              const productImg =
+                linked?.thumbnail ||
+                linked?.images?.[0] ||
+                r.product?.image ||
+                "/placeholder.png";
 
-                  {/* Fields */}
-                  <div className="flex-1 space-y-3">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-950">
-                          {shortText(r.title || r.caption || r.slug, 52)}
-                        </div>
-                        <div className="text-[11px] text-gray-500 mt-1">
-                          Placement: <b>{r.placement}</b> • Priority:{" "}
-                          <b>{r.priority || 0}</b>
-                        </div>
-                      </div>
+              const productName =
+                linked?.title || linked?.name || r.product?.name || "Product";
 
-                      {/* Active toggle */}
-                      <button
-                        onClick={() => toggleReelActive(r._id, !r.isActive)}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ring-1 transition ${
-                          r.isActive
-                            ? "bg-green-50 text-green-700 ring-green-200 hover:bg-green-100"
-                            : "bg-gray-100 text-gray-600 ring-black/10 hover:bg-gray-200"
-                        }`}
-                      >
-                        {r.isActive ? "Active" : "Inactive"}
-                      </button>
+              return (
+                <div
+                  key={r._id}
+                  id={`reel-${r._id}`}
+                  draggable
+                  onDragStart={() => onDragStart(idx)}
+                  onDragEnter={() => onDragEnter(idx)}
+                  onDragEnd={onDrop}
+                  className="bg-white rounded-3xl ring-1 ring-black/5 hover:shadow-md transition overflow-hidden"
+                >
+                  <div className="p-4 flex flex-col lg:flex-row gap-4">
+                    {/* drag */}
+                    <div className="hidden lg:flex items-center text-gray-400">
+                      <GripVertical />
                     </div>
 
-                    {/* Change video */}
-                    <button
-                      onClick={() => openMediaPicker(r._id)}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gray-50 ring-1 ring-black/5 hover:bg-gray-100 transition text-sm"
-                    >
-                      <ImageIcon size={16} />
-                      Change Video
-                    </button>
-
-                    {/* Title / caption */}
-                    <input
-                      value={r.title || ""}
-                      onChange={(e) =>
-                        updateFieldLocal(r._id, "title", e.target.value)
-                      }
-                      placeholder="Internal title"
-                      className="w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
-                    />
-
-                    <textarea
-                      value={r.caption || ""}
-                      onChange={(e) =>
-                        updateFieldLocal(r._id, "caption", e.target.value)
-                      }
-                      placeholder="Caption..."
-                      rows={2}
-                      className="w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
-                    />
-
-                    {/* Priority */}
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <span className="text-xs text-gray-500">Priority:</span>
-                        <input
-                          type="number"
-                          value={r.priority || 0}
-                          onChange={(e) =>
-                            updateFieldLocal(
-                              r._id,
-                              "priority",
-                              Number(e.target.value)
-                            )
-                          }
-                          className="w-28 px-3 py-2 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
-                        />
-                      </div>
-
-                      {/* Placement */}
-                      <select
-                        value={r.placement || "home_row"}
-                        onChange={(e) =>
-                          updateFieldLocal(r._id, "placement", e.target.value)
-                        }
-                        className="px-3 py-2 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
-                      >
-                        <option value="home_row">Home Row</option>
-                        <option value="global">Global</option>
-                        <option value="product_page">Product Page</option>
-                        <option value="category_page">Category Page</option>
-                      </select>
-                    </div>
-
-                    {/* Attach Product */}
-                    <div className="rounded-3xl bg-gray-50 ring-1 ring-black/5 p-4">
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <PackageSearch size={14} />
-                        Attach Product
-                      </div>
-
-                      <select
-                        value={r.product?.productId || ""}
-                        onChange={(e) =>
-                          updateProductLocal(r._id, e.target.value)
-                        }
-                        className="mt-2 w-full px-4 py-3 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
-                      >
-                        <option value="">No product linked</option>
-                        {productsLoading ? (
-                          <option>Loading products...</option>
-                        ) : (
-                          products.map((p) => (
-                            <option key={p._id} value={p._id}>
-                              {p.name} — ₹{p.price}
-                            </option>
-                          ))
-                        )}
-                      </select>
-
-                      {/* Product preview */}
-                      {r.product?.productId && (
-                        <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white ring-1 ring-black/5 p-3">
-                          <div className="w-14 h-16 rounded-xl overflow-hidden bg-gray-100 relative">
-                            <Image
-                              src={r.product?.image || "/placeholder.png"}
-                              alt={r.product?.name || "Product"}
-                              fill
-                              className="object-cover"
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-gray-950 truncate">
-                              {r.product?.name || "Linked Product"}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              ₹{r.product?.price || 0} • {r.product?.slug || "-"}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Analytics */}
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs pt-1">
-                      <MiniStat icon={Eye} label="Views" value={r.analytics?.views || 0} />
-                      <MiniStat icon={MousePointerClick} label="Taps" value={r.analytics?.taps || 0} />
-                      <MiniStat icon={Heart} label="Likes" value={r.analytics?.likes || 0} />
-                      <MiniStat icon={Bookmark} label="Wishlist" value={r.analytics?.wishlist || 0} />
-                      <MiniStat icon={Share2} label="Shares" value={r.analytics?.shares || 0} />
-                      <MiniStat
-                        icon={r.isActive ? BadgeCheck : BadgeX}
-                        label="Status"
-                        value={r.isActive ? "ON" : "OFF"}
+                    {/* ✅ Small video preview */}
+                    <div className="w-full lg:w-[170px] rounded-2xl overflow-hidden bg-black aspect-[9/16]">
+                      <video
+                        src={r.src}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="w-full h-full object-cover bg-black"
                       />
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex gap-2 flex-wrap pt-2">
-                      <button
-                        onClick={() => saveSingle(r)}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gray-950 text-white shadow-sm hover:bg-black transition text-sm"
-                      >
-                        <Save size={16} />
-                        Save Reel
-                      </button>
+                    {/* ✅ Compact Fields */}
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-gray-950 truncate">
+                            {shortText(r.title || r.caption || r.slug, 52)}
+                          </div>
+                          <div className="text-[11px] text-gray-500 mt-1">
+                            {r.placement} • priority <b>{r.priority || 0}</b>
+                          </div>
+                        </div>
 
-                      <button
-                        onClick={() => remove(r._id)}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white text-red-600 shadow-sm ring-1 ring-black/5 hover:bg-red-50 transition text-sm"
-                      >
-                        <Trash2 size={16} />
-                        Delete
-                      </button>
-                    </div>
+                        <button
+                          onClick={() => toggleReelActive(r._id, !r.isActive)}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold ring-1 ${
+                            r.isActive
+                              ? "bg-green-50 text-green-700 ring-green-200"
+                              : "bg-gray-100 text-gray-600 ring-black/10"
+                          }`}
+                        >
+                          {r.isActive ? "Active" : "Inactive"}
+                        </button>
+                      </div>
 
-                    {/* hint */}
-                    <div className="text-[11px] text-gray-400">
-                      Drag this card to reorder priority (Save Order to persist).
+                    {/* ✅ 2 column */}
+<div className="grid md:grid-cols-2 gap-3">
+  <div className="space-y-1">
+    <label className="text-[11px] font-medium text-gray-600">
+      Title
+    </label>
+    <input
+      value={r.title || ""}
+      onChange={(e) => updateField(r._id, "title", e.target.value)}
+      className="w-full px-4 py-2.5 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+    />
+  </div>
+
+  <div className="space-y-1">
+    <label className="text-[11px] font-medium text-gray-600">
+      Priority
+    </label>
+    <input
+      type="number"
+      value={r.priority || 0}
+      onChange={(e) =>
+        updateField(r._id, "priority", Number(e.target.value))
+      }
+      className="w-full px-4 py-2.5 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+    />
+  </div>
+</div>
+
+                      {/* ✅ Caption box bigger */}
+<div className="space-y-1">
+  <label className="text-[11px] font-medium text-gray-600">
+    Caption
+  </label>
+  <textarea
+    value={r.caption || ""}
+    onChange={(e) => updateField(r._id, "caption", e.target.value)}
+    rows={4}
+    className="w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition resize-none min-h-[110px]"
+  />
+</div>
+                      {/* ✅ Product attach + preview */}
+                      <div className="bg-gray-50 rounded-2xl ring-1 ring-black/5 p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <PackageSearch size={14} />
+                          Attach Product
+                        </div>
+
+                        <select
+                          value={r.product?.productId || ""}
+                          onChange={(e) => updateProduct(r._id, e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-2xl bg-white ring-1 ring-black/5 outline-none"
+                        >
+                          <option value="">No product</option>
+                          {productsLoading ? (
+                            <option>Loading products...</option>
+                          ) : (
+                            products.map((p) => (
+                              <option key={p._id} value={p._id}>
+                                {p.title || p.name} — ₹{p.price}
+                              </option>
+                            ))
+                          )}
+                        </select>
+
+                        {r.product?.productId && (
+                          <div className="flex items-center gap-3 bg-white rounded-2xl ring-1 ring-black/5 p-2">
+                            <div className="w-12 h-14 rounded-xl overflow-hidden bg-gray-100 relative shrink-0">
+                              <Image
+                                src={productImg}
+                                alt={
+                                  productName
+                                    ? `${productName} product image`
+                                    : "Product image"
+                                }
+                                fill
+                                className="object-cover"
+                                unoptimized
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold truncate">
+                                {productName}
+                              </div>
+                              <div className="text-[11px] text-gray-500">
+                                ₹{r.product?.price || 0} • {r.product?.slug || "-"}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ✅ compact analytics */}
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
+                        <MiniStat icon={Eye} value={r.analytics?.views || 0} />
+                        <MiniStat icon={MousePointerClick} value={r.analytics?.taps || 0} />
+                        <MiniStat icon={Heart} value={r.analytics?.likes || 0} />
+                        <MiniStat icon={Bookmark} value={r.analytics?.wishlist || 0} />
+                        <MiniStat icon={Share2} value={r.analytics?.shares || 0} />
+                        <MiniStat
+                          icon={r.isActive ? BadgeCheck : BadgeX}
+                          value={r.isActive ? "ON" : "OFF"}
+                        />
+                      </div>
+
+                      {/* ✅ actions row */}
+                      <div className="flex gap-2 flex-wrap">
+                        <Btn onClick={() => openMediaPicker(r._id)} icon={ImageIcon} variant="white">
+                          Change Video
+                        </Btn>
+                        <Btn onClick={() => saveSingle(r)} icon={Save} variant="black">
+                          Save Reel
+                        </Btn>
+                        <Btn onClick={() => remove(r._id)} icon={Trash2} variant="danger">
+                          Delete
+                        </Btn>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -575,26 +484,58 @@ export default function ReelsManagePage() {
             onClick={() => router.push("/reels")}
             className="text-sm text-gray-600 hover:text-gray-900"
           >
-            ← Back to Reels Dashboard
+            ← Back to Dashboard
           </button>
-
-          <div className="text-[11px] text-gray-400">
-            Uses Media Library + Reels API (/api/reels)
-          </div>
+          <div className="text-[11px] text-gray-400">Reels API (/api/reels)</div>
         </div>
       </div>
     </section>
   );
 }
 
-function MiniStat({ icon: Icon, label, value }) {
+/* ✅ Compact UI helpers */
+
+function Btn({ children, onClick, icon: Icon, variant = "blue", disabled }) {
+  const styles = {
+    blue: "bg-blue-600 text-white hover:bg-blue-700",
+    white: "bg-white text-gray-800 ring-1 ring-black/5 hover:bg-gray-100",
+    black: "bg-gray-950 text-white hover:bg-black",
+    danger: "bg-white text-red-600 ring-1 ring-black/5 hover:bg-red-50",
+  };
+  return (
+    <button
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl shadow-sm transition text-sm disabled:opacity-60 ${styles[variant]}`}
+    >
+      {Icon && <Icon size={16} />}
+      {children}
+    </button>
+  );
+}
+
+function Msg({ children, type = "white" }) {
+  const styles = {
+    white: "bg-white text-gray-700 ring-black/5",
+    red: "bg-red-50 text-red-700 ring-red-200",
+    green: "bg-green-50 text-green-700 ring-green-200",
+  };
+  return (
+    <div
+      className={`text-sm px-4 py-3 rounded-2xl shadow-sm ring-1 ${styles[type]}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function MiniStat({ icon: Icon, value }) {
   return (
     <div className="rounded-2xl bg-gray-50 ring-1 ring-black/5 px-3 py-2">
       <div className="flex items-center gap-2 text-gray-600">
         <Icon size={14} />
-        <span className="text-[11px]">{label}</span>
+        <span className="text-sm font-bold text-gray-950">{value}</span>
       </div>
-      <div className="text-sm font-bold text-gray-950 mt-1">{value}</div>
     </div>
   );
 }

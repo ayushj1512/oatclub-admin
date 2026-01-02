@@ -1,31 +1,61 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 const useLoginStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
       isLoggedIn: false,
-      username: "",
+      admin: null,
+      token: "",
 
-      // 🔐 Login and store username
-      login: (username) =>
+      login: ({ token, admin }) => {
+        if (typeof window !== "undefined" && token) {
+          localStorage.setItem("adminToken", token); // ✅ compatibility
+        }
+
         set({
           isLoggedIn: true,
-          username: username || "",
-        }),
+          admin: admin || null,
+          token: token || "",
+        });
+      },
 
-      // 🚪 Logout and clear session
-      logout: () =>
+      logout: () => {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("adminToken");
+        }
+
         set({
           isLoggedIn: false,
-          username: "",
-        }),
+          admin: null,
+          token: "",
+        });
+      },
+
+      setToken: (token) => {
+        if (typeof window !== "undefined" && token) {
+          localStorage.setItem("adminToken", token);
+        }
+        set({ token: token || "" });
+      },
+
+      getRole: () => get().admin?.role || "",
+      getUsername: () => get().admin?.username || "",
     }),
     {
-      name: "miray-admin-session", // 🧠 key in localStorage
-      getStorage: () => localStorage, // use browser localStorage
+      name: "miray-admin-session",
+
+      // ✅ correct JSON storage (fix)
+      storage: createJSONStorage(() => localStorage),
+
+      // ✅ optional but recommended (only store needed fields)
+      partialize: (state) => ({
+        isLoggedIn: state.isLoggedIn,
+        admin: state.admin,
+        token: state.token,
+      }),
     }
   )
 );

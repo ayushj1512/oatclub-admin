@@ -179,7 +179,7 @@ export default function MediaPage() {
     }
   };
 
-  // Drag & Drop
+  // ✅ Drag & Drop
   const onDragEnter = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -203,6 +203,39 @@ export default function MediaPage() {
     if (dtFiles?.length) addFiles(dtFiles);
   };
 
+  // ✅ NEW: Paste support (Ctrl+V / Cmd+V)
+  useEffect(() => {
+    const onPaste = (e) => {
+      const clipboardItems = e.clipboardData?.items;
+      if (!clipboardItems?.length) return;
+
+      const pastedFiles = [];
+
+      for (const item of clipboardItems) {
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file && isAcceptedFile(file)) {
+            // If screenshot pasted, it may have empty name -> assign something nicer
+            const named =
+              file.name && file.name !== "image.png"
+                ? file
+                : new File([file], `pasted-${Date.now()}.png`, { type: file.type });
+
+            pastedFiles.push(named);
+          }
+        }
+      }
+
+      if (pastedFiles.length) {
+        e.preventDefault();
+        addFiles(pastedFiles);
+      }
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
+
   const selectedCount = files.length;
   const selectedImages = files.filter((f) => f.kind === "image");
   const selectedVideos = files.filter((f) => f.kind === "video");
@@ -214,7 +247,9 @@ export default function MediaPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Media</h1>
-            <p className="text-xs text-gray-500">Drag & drop → preview → upload. Copy URLs for use anywhere.</p>
+            <p className="text-xs text-gray-500">
+              Drag & drop → preview → upload. ✅ You can also <b>paste images</b> (Ctrl+V / Cmd+V).
+            </p>
           </div>
 
           <button onClick={() => load()} className="inline-flex items-center gap-2 bg-black text-white px-4 py-2">
@@ -303,7 +338,9 @@ export default function MediaPage() {
               </div>
               <div className="text-left">
                 <div className="text-sm font-semibold text-gray-800">Drag & drop images/videos here</div>
-                <div className="text-xs text-gray-500">or click to choose</div>
+                <div className="text-xs text-gray-500">
+                  or click to choose — ✅ <b>or paste (Ctrl+V / Cmd+V)</b>
+                </div>
               </div>
             </div>
           </div>
@@ -329,7 +366,7 @@ export default function MediaPage() {
             )}
           </div>
 
-          {/* ✅ Preview grid (FIT = show full image) */}
+          {/* ✅ Preview grid */}
           {selectedCount > 0 && (
             <div className="bg-gray-50 border border-gray-200 p-3">
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-8 gap-2">
@@ -345,11 +382,7 @@ export default function MediaPage() {
                           preload="metadata"
                         />
                       ) : (
-                        <img
-                          src={f.preview}
-                          className="w-full h-full object-contain"
-                          alt={f.file.name}
-                        />
+                        <img src={f.preview} className="w-full h-full object-contain" alt={f.file.name} />
                       )}
                     </div>
 
@@ -391,7 +424,7 @@ export default function MediaPage() {
           </span>
         </div>
 
-        {/* Library grid (FIT = show full image) */}
+        {/* Library grid */}
         {loading ? (
           <div className="text-gray-600">Loading...</div>
         ) : items.length === 0 ? (

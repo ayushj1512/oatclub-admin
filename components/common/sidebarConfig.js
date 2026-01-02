@@ -23,24 +23,23 @@ export const sidebarMenus = {
     { label: "Reports Export", href: "/analytics/reports" },
   ],
 
-designing: [
-  { label: "Design Home", href: "/designing" },
-  { label: "Banners Manager", href: "/designing/banners" },
-  { label: "Homepage Layout", href: "/designing/homepage" },
+  designing: [
+    { label: "Design Home", href: "/designing" },
+    { label: "Banners Manager", href: "/designing/banners" },
+    { label: "Homepage Layout", href: "/designing/homepage" },
 
-  // ✅ NEW: Homepage Settings (for hero banners + top categories icons/names)
-  { label: "Homepage Settings", href: "/designing/homepage-settings" },
-  { label: "Hero Banners", href: "/designing/banners" },
-  { label: "Top Categories", href: "/designing/top-categories" },
-  { label: "Homepage Preview", href: "/designing/preview" },
+    // ✅ NEW: Homepage Settings
+    { label: "Homepage Settings", href: "/designing/homepage-settings" },
+    { label: "Hero Banners", href: "/designing/banners" },
+    { label: "Top Categories", href: "/designing/top-categories" },
+    { label: "Homepage Preview", href: "/designing/preview" },
 
-  { label: "Themes & Colors", href: "//themes" },
-  { label: "Collections Editor", href: "/designing/collections" },
-  { label: "Product Badges", href: "/designing/badges" },
-  { label: "Topbar / Announcements", href: "/designing/topbar" },
-  { label: "Footer Links", href: "/designing/footer" },
-],
-
+    { label: "Themes & Colors", href: "//themes" },
+    { label: "Collections Editor", href: "/designing/collections" },
+    { label: "Product Badges", href: "/designing/badges" },
+    { label: "Topbar / Announcements", href: "/designing/topbar" },
+    { label: "Footer Links", href: "/designing/footer" },
+  ],
 
   production: [
     { label: "Production Dashboard", href: "/production" },
@@ -126,13 +125,27 @@ designing: [
   orders: [
     { label: "Orders Dashboard", href: "/orders" },
     { label: "All Orders", href: "/orders/all" },
+
+    // Status Buckets
     { label: "Pending Orders", href: "/orders/pending" },
     { label: "Processing", href: "/orders/processing" },
     { label: "Shipped", href: "/orders/shipped" },
     { label: "Delivered", href: "/orders/delivered" },
+
+    // Returns & Exceptions
     { label: "Returned / Cancelled", href: "/orders/returns" },
     { label: "RTO / NDR", href: "/orders/rto" },
+
+    // ✅ UPDATED: RMA now points to /rma
+    { label: "RMA Requests", href: "/rma" },
+
+    // Other Tools
     { label: "Order Tags", href: "/orders/tags" },
+  ],
+
+  // ✅ OPTIONAL: Separate RMA menu group (if you want sidebar items when on /rma)
+  rma: [
+    { label: "RMA Requests", href: "/rma" },
   ],
 
   coupons: [
@@ -153,8 +166,6 @@ designing: [
     { label: "Manifest / Dispatch", href: "/operations/manifest" },
     { label: "NDR Follow-ups", href: "/operations/ndr" },
   ],
-
-
 
   marketing: [
     { label: "Marketing Dashboard", href: "/marketing" },
@@ -225,7 +236,6 @@ export const routeSidebarMap = [
   { prefix: "/reels", key: "reels" },
   { prefix: "/marketing", key: "marketing" },
 
-
   { prefix: "/dashboard", key: "dashboard" },
   { prefix: "/designing", key: "designing" },
   { prefix: "/production", key: "production" },
@@ -235,6 +245,9 @@ export const routeSidebarMap = [
   { prefix: "/products", key: "products" },
 
   { prefix: "/wordpress/orders", key: "wordpress" },
+
+  // ✅ NEW: /rma route should show sidebar as RMA (or orders if you prefer)
+  { prefix: "/rma", key: "rma" },
 
   { prefix: "/orders", key: "orders" },
   { prefix: "/coupons", key: "coupons" },

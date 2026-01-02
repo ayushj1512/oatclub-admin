@@ -26,13 +26,16 @@ import {
   RefreshCw,
   Quote,
   Globe,
+  RotateCcw, // ✅ Added for RMA
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function HomeDashboard() {
   const router = useRouter();
 
-  // ✅ Enhanced quotes UI: quote text + "tag" (focus area)
+  /* ============================
+     Quotes
+  ============================ */
   const quotes = useMemo(
     () => [
       { text: "Small progress every day beats big plans someday.", tag: "Consistency" },
@@ -49,7 +52,6 @@ export default function HomeDashboard() {
     []
   );
 
-  // ✅ changes automatically every few seconds + on refresh button
   const [quote, setQuote] = useState(quotes[0]);
   const lastIndexRef = useRef(-1);
 
@@ -65,19 +67,28 @@ export default function HomeDashboard() {
   };
 
   useEffect(() => {
-    pickNewQuote(); // initial
-    const t = setInterval(pickNewQuote, 9000); // change every 9s
+    pickNewQuote();
+    const t = setInterval(pickNewQuote, 9000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ============================
+     Domains (Dashboard Cards)
+  ============================ */
   const domains = useMemo(
     () => [
       { id: "designing", name: "Designing", icon: Palette, route: "/designing" },
       { id: "production", name: "Production / Tailoring", icon: Ticket, route: "/production" },
       { id: "accounts", name: "Accounts", icon: Calculator, route: "/accounts" },
       { id: "products", name: "Products", icon: Package, route: "/products" },
+
+      // ✅ Orders Group
       { id: "orders", name: "Orders", icon: ClipboardList, route: "/orders" },
+
+      // ✅ NEW: RMA Requests Page
+      { id: "rma", name: "RMA Requests", icon: RotateCcw, route: "/rma" },
+
       { id: "media", name: "Media", icon: Images, route: "/media" },
       { id: "reels", name: "Reels", icon: Clapperboard, route: "/reels" },
       { id: "blogs", name: "Blogs", icon: FileText, route: "/blogs" },
@@ -97,7 +108,10 @@ export default function HomeDashboard() {
     []
   );
 
-  const [sortBy, setSortBy] = useState("default"); // "default" | "name_asc" | "name_desc"
+  /* ============================
+     Sorting
+  ============================ */
+  const [sortBy, setSortBy] = useState("default");
 
   const sortedDomains = useMemo(() => {
     const copy = [...domains];
@@ -106,10 +120,13 @@ export default function HomeDashboard() {
     return copy.sort((a, b) => b.name.localeCompare(a.name));
   }, [domains, sortBy]);
 
+  /* ============================
+     UI
+  ============================ */
   return (
     <div className="min-h-screen bg-gray-50 px-6 md:px-8 py-10 md:py-12">
       <div className="mx-auto">
-        {/* Top Quote bar (enhanced UI) */}
+        {/* Top Quote bar */}
         <div className="mb-6">
           <div className="w-full rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-4 sm:px-5 py-4 flex items-center justify-between gap-3 shadow-sm">
             <div className="flex items-start gap-3 min-w-0">
@@ -120,16 +137,17 @@ export default function HomeDashboard() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <div className="font-semibold text-gray-900">Daily Focus</div>
+
                   <span className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-blue-600 text-white">
                     <Quote size={12} />
                     Quote
                   </span>
+
                   <span className="inline-flex items-center text-[11px] px-2 py-1 rounded-full border border-blue-100 bg-white text-blue-700">
                     {quote.tag}
                   </span>
                 </div>
 
-                {/* Animated quote text */}
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
                     key={quote.text}
@@ -159,7 +177,6 @@ export default function HomeDashboard() {
 
             {/* Right controls */}
             <div className="flex items-center gap-2 shrink-0">
-              {/* manual quote refresh */}
               <button
                 type="button"
                 onClick={pickNewQuote}
@@ -169,7 +186,6 @@ export default function HomeDashboard() {
                 <RefreshCw size={16} />
               </button>
 
-              {/* Sort dropdown */}
               <div className="flex items-center gap-2">
                 <div className="hidden md:flex items-center gap-2 text-xs text-gray-500">
                   <ArrowUpDown size={14} />
@@ -190,7 +206,7 @@ export default function HomeDashboard() {
           </div>
         </div>
 
-        {/* Animated rearrangement grid */}
+        {/* Domain cards */}
         <motion.div layout className="w-full flex flex-wrap justify-center gap-6 md:gap-8">
           <AnimatePresence initial={false}>
             {sortedDomains.map((domain) => {
@@ -211,9 +227,17 @@ export default function HomeDashboard() {
                   <div className="p-4 rounded-xl text-white shadow-md group-hover:scale-110 transition-transform bg-gradient-to-br from-blue-600 to-blue-500">
                     <Icon size={32} />
                   </div>
+
                   <h2 className="text-xl font-semibold text-gray-900 mt-4 transition group-hover:text-blue-700">
                     {domain.name}
                   </h2>
+
+                  {/* ✅ Small label for RMA */}
+                  {domain.id === "rma" && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      View Return / Exchange requests
+                    </p>
+                  )}
                 </motion.button>
               );
             })}

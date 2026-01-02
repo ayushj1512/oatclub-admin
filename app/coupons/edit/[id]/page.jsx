@@ -1,17 +1,25 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { TicketPercent, CheckCircle } from "lucide-react";
-
-// ✅ STORE IMPORT
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { TicketPercent, CheckCircle, ArrowLeft } from "lucide-react";
 import { useCouponStore } from "@/store/couponStore";
 
-export default function CreateCouponPage() {
+export default function EditCouponPage() {
   const router = useRouter();
+  const params = useParams();
+  const id = params?.id;
 
-  // ✅ STORE STATE + ACTIONS
-  const { createCoupon, loading, error, success, clearMessages } = useCouponStore();
+  const {
+    coupons,
+    fetchCoupons,
+    updateCoupon,
+    getCouponById,
+    loading,
+    error,
+    success,
+    clearMessages,
+  } = useCouponStore();
 
   const [form, setForm] = useState({
     code: "",
@@ -27,37 +35,67 @@ export default function CreateCouponPage() {
     isActive: true,
   });
 
+  // ✅ helper: convert date to YYYY-MM-DD for <input type="date">
+  const formatDate = (date) => {
+    if (!date) return "";
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "";
+    return d.toISOString().split("T")[0];
+  };
+
+  // ✅ Load coupon on first render
+  useEffect(() => {
+    if (!id) return;
+
+    const couponFromStore = getCouponById(id);
+
+    if (couponFromStore) {
+      setForm({
+        ...couponFromStore,
+        validFrom: formatDate(couponFromStore.validFrom),
+        validTill: formatDate(couponFromStore.validTill),
+      });
+    } else {
+      // ✅ if not in store, fetch all coupons & then set
+      (async () => {
+        await fetchCoupons();
+        const afterFetch = getCouponById(id);
+        if (afterFetch) {
+          setForm({
+            ...afterFetch,
+            validFrom: formatDate(afterFetch.validFrom),
+            validTill: formatDate(afterFetch.validTill),
+          });
+        }
+      })();
+    }
+  }, [id]);
+
+  // ✅ Auto uppercase code
   const handleChange = (e) => {
     let value = e.target.value;
 
-    // ✅ Auto uppercase coupon code
     if (e.target.name === "code") {
       value = value.toUpperCase();
     }
 
     setForm({ ...form, [e.target.name]: value });
 
-    // ✅ clear messages on change (better UX)
     if (error || success) clearMessages();
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // ✅ clear old messages
     clearMessages();
 
     try {
-      // ✅ Store action handles API call + updates store state
-      await createCoupon(form);
+      await updateCoupon(id, form);
 
-      // ✅ redirect after success
       setTimeout(() => {
         router.push("/coupons/manage");
       }, 1200);
     } catch (err) {
-      // error handled in store automatically
-      console.log("Create coupon error:", err.message);
+      console.log("Update error:", err.message);
     }
   };
 
@@ -66,21 +104,30 @@ export default function CreateCouponPage() {
       {/* HEADER */}
       <div className="mb-10 text-center">
         <div className="flex justify-center mb-4">
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-green-600 to-green-500 text-white shadow-md">
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-500 text-white shadow-md">
             <TicketPercent size={42} />
           </div>
         </div>
 
-        <h1 className="text-3xl font-bold text-gray-800">Create New Coupon</h1>
+        <h1 className="text-3xl font-bold text-gray-800">Edit Coupon</h1>
         <p className="text-gray-500 mt-2">
-          Fill in the details below to add a new coupon.
+          Update coupon rules, discount settings and validity.
         </p>
+
+        <button
+          onClick={() => router.back()}
+          className="mt-4 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+        >
+          <ArrowLeft size={16} /> Back
+        </button>
       </div>
 
       {/* FORM CARD */}
       <div className="max-w-3xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 md:grid-cols-2 gap-6"
+        >
           {/* COUPON CODE */}
           <div className="flex flex-col">
             <label className="text-sm font-medium mb-1">Coupon Code</label>
@@ -89,7 +136,6 @@ export default function CreateCouponPage() {
               name="code"
               value={form.code}
               onChange={handleChange}
-              placeholder="e.g., MIRAY50"
               className="input"
               required
             />
@@ -133,7 +179,6 @@ export default function CreateCouponPage() {
               name="discountValue"
               value={form.discountValue}
               onChange={handleChange}
-              placeholder="e.g., 10"
               className="input"
               required
             />
@@ -202,7 +247,9 @@ export default function CreateCouponPage() {
 
           {/* PER CUSTOMER */}
           <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">Usage Limit Per Customer</label>
+            <label className="text-sm font-medium mb-1">
+              Usage Limit Per Customer
+            </label>
             <input
               type="number"
               name="usageLimitPerCustomer"
@@ -218,23 +265,25 @@ export default function CreateCouponPage() {
               type="checkbox"
               name="isActive"
               checked={form.isActive}
-              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              onChange={(e) =>
+                setForm({ ...form, isActive: e.target.checked })
+              }
             />
             <label className="text-sm font-medium">Coupon Active</label>
           </div>
 
-          {/* SUBMIT BUTTON */}
+          {/* SUBMIT */}
           <div className="col-span-2 flex justify-center mt-4">
             <button
               type="submit"
               disabled={loading}
               className="
-                bg-gradient-to-br from-green-600 to-green-500
+                bg-gradient-to-br from-blue-600 to-blue-500
                 text-white px-10 py-3 rounded-xl shadow hover:shadow-md
                 transition-all duration-300 font-medium
               "
             >
-              {loading ? "Creating..." : "Create Coupon"}
+              {loading ? "Updating..." : "Update Coupon"}
             </button>
           </div>
 

@@ -41,9 +41,11 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      set({ order: data.order });
+      const order = data?.order || data;
+      set({ order });
+
       get()._success();
-      return data.order;
+      return order;
     } catch (e) {
       get()._error(e);
       throw e;
@@ -55,19 +57,25 @@ export const useOrderStore = create((set, get) => ({
      GET /api/orders/:id
   ============================================================ */
   fetchOrderById: async (orderId) => {
-    if (!orderId) return;
+    if (!orderId) return null;
+
     get()._start();
     try {
       const res = await fetch(`${API}/api/orders/${orderId}`, {
         cache: "no-store",
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      set({ order: data });
+      const order = data?.order || data;
+      set({ order });
+
       get()._success();
+      return order; // ✅ IMPORTANT
     } catch (e) {
       get()._error(e);
+      return null; // ✅ IMPORTANT
     }
   },
 
@@ -76,20 +84,25 @@ export const useOrderStore = create((set, get) => ({
      GET /api/orders/by-number/:orderNumber
   ============================================================ */
   fetchOrderByNumber: async (orderNumber) => {
-    if (!orderNumber) return;
+    if (!orderNumber) return null;
+
     get()._start();
     try {
-      const res = await fetch(
-        `${API}/api/orders/by-number/${orderNumber}`,
-        { cache: "no-store" }
-      );
+      const res = await fetch(`${API}/api/orders/by-number/${orderNumber}`, {
+        cache: "no-store",
+      });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      set({ order: data });
+      const order = data?.order || data;
+      set({ order });
+
       get()._success();
+      return order; // ✅ IMPORTANT
     } catch (e) {
       get()._error(e);
+      return null; // ✅ IMPORTANT
     }
   },
 
@@ -98,26 +111,31 @@ export const useOrderStore = create((set, get) => ({
      GET /api/orders/customer/:customerId
   ============================================================ */
   fetchOrdersByCustomer: async (customerId) => {
-    if (!customerId) return;
+    if (!customerId) return [];
+
     get()._start();
     try {
-      const res = await fetch(
-        `${API}/api/orders/customer/${customerId}`,
-        { cache: "no-store" }
-      );
+      const res = await fetch(`${API}/api/orders/customer/${customerId}`, {
+        cache: "no-store",
+      });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      set({ orders: Array.isArray(data) ? data : [] });
+      const orders = Array.isArray(data) ? data : data?.orders || [];
+      set({ orders });
+
       get()._success();
+      return orders;
     } catch (e) {
       get()._error(e);
+      return [];
     }
   },
 
   /* ============================================================
      GET ALL ORDERS (ADMIN)
-     GET /api/orders
+     GET /api/orders?filters
   ============================================================ */
   fetchAllOrders: async (filters = {}) => {
     get()._start();
@@ -130,10 +148,14 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      set({ orders: Array.isArray(data) ? data : [] });
+      const orders = Array.isArray(data) ? data : data?.orders || [];
+      set({ orders });
+
       get()._success();
+      return orders;
     } catch (e) {
       get()._error(e);
+      return [];
     }
   },
 
@@ -142,7 +164,8 @@ export const useOrderStore = create((set, get) => ({
      PATCH /api/orders/:id/status
   ============================================================ */
   updateOrderStatus: async (orderId, payload) => {
-    if (!orderId) return;
+    if (!orderId) return null;
+
     get()._start();
     try {
       const res = await fetch(`${API}/api/orders/${orderId}/status`, {
@@ -154,9 +177,11 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      set({ order: data.order });
+      const order = data?.order || data;
+      set({ order });
+
       get()._success();
-      return data.order;
+      return order;
     } catch (e) {
       get()._error(e);
       throw e;
@@ -168,7 +193,8 @@ export const useOrderStore = create((set, get) => ({
      POST /api/orders/:id/cancel
   ============================================================ */
   cancelOrder: async (orderId, reason) => {
-    if (!orderId) return;
+    if (!orderId) return false;
+
     get()._start();
     try {
       const res = await fetch(`${API}/api/orders/${orderId}/cancel`, {
@@ -180,6 +206,21 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
+      // ✅ update local order state (nice UX)
+      const current = get().order;
+      if (current && (current._id === orderId || current.id === orderId)) {
+        set({
+          order: {
+            ...current,
+            fulfillmentStatus: "cancelled",
+            shipment: {
+              ...(current.shipment || {}),
+              status: "cancelled",
+            },
+          },
+        });
+      }
+
       get()._success();
       return true;
     } catch (e) {
@@ -189,62 +230,16 @@ export const useOrderStore = create((set, get) => ({
   },
 
   /* ============================================================
-     CREATE RMA
-     POST /api/orders/:id/rma
-  ============================================================ */
-  createRma: async (orderId, payload) => {
-    if (!orderId) return;
-    get()._start();
-    try {
-      const res = await fetch(`${API}/api/orders/${orderId}/rma`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message);
-
-      set({ order: data.order || get().order });
-      get()._success();
-      return data;
-    } catch (e) {
-      get()._error(e);
-      throw e;
-    }
-  },
-
-  /* ============================================================
-     UPDATE RMA (ADMIN)
-     PATCH /api/orders/:id/rma/:rmaNumber
-  ============================================================ */
-  updateRma: async (orderId, rmaNumber, payload) => {
-    if (!orderId || !rmaNumber) return;
-    get()._start();
-    try {
-      const res = await fetch(
-        `${API}/api/orders/${orderId}/rma/${rmaNumber}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message);
-
-      set({ order: data.order || get().order });
-      get()._success();
-      return data;
-    } catch (e) {
-      get()._error(e);
-      throw e;
-    }
-  },
-
-  /* ============================================================
-     RESET
+     RESET / CLEAR
   ============================================================ */
   clearOrder: () => set({ order: null }),
+clearOrders: () => set({ orders: [] }),
+
+  resetStore: () =>
+    set({
+      orders: [],
+      order: null,
+      loading: false,
+      error: null,
+    }),
 }));

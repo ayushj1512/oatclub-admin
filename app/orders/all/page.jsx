@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ArrowRight, Search, Download } from "lucide-react";
+import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown"; // adjust path
+import OrderRow from "@/components/orders/OrderRow";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -83,6 +85,17 @@ export default function OrdersListPage() {
 
   const safe = (v) => (v === null || v === undefined ? "" : v);
 
+  const getPaymentLabel = (order) => {
+    if (order?.paymentMethod === "cod") return "COD";
+
+    if (order?.paymentMethod === "razorpay") {
+      if (order?.paymentStatus === "paid") return "Paid ✅";
+      if (order?.paymentStatus === "pending") return "Pending ⏳";
+      return "Failed ❌";
+    }
+
+    return "Unknown";
+  };
   // ------------------------------------
   // FLATTEN ORDER -> CSV ROWS
   // 1 row per item to export "all necessary details"
@@ -257,9 +270,9 @@ export default function OrdersListPage() {
         const itemVariantId = safe(itemVariant?.variantId);
         const itemVariantAttributes = Array.isArray(itemVariant?.attributes)
           ? itemVariant.attributes
-              .map((a) => `${safe(a?.key)}:${safe(a?.value)}`)
-              .filter(Boolean)
-              .join(" | ")
+            .map((a) => `${safe(a?.key)}:${safe(a?.value)}`)
+            .filter(Boolean)
+            .join(" | ")
           : "";
 
         const itemVariantImage = safe(itemVariant?.image);
@@ -558,229 +571,197 @@ export default function OrdersListPage() {
     );
   }
 
-return (
-  <section className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-10">
-    <div className="max-w-7xl mx-auto space-y-10">
+  return (
+    <section className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-10">
+      <div className="max-w-7xl mx-auto space-y-10">
 
-      {/* =======================================
+        {/* =======================================
             PAGE HEADER & SEARCH BAR
       ======================================== */}
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
-        
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">
-            All Orders
-          </h1>
-          <p className="text-gray-500 mt-1">
-            View, filter and manage all customer orders.
-          </p>
+        <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
 
-          <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
-            <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-              {totals.count} Orders
-            </span>
-            <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
-              Total ₹{totals.sum}
-            </span>
+          <div>
+            <h1 className="text-4xl font-bold tracking-tight text-gray-900">
+              All Orders
+            </h1>
+            <p className="text-gray-500 mt-1">
+              View, filter and manage all customer orders.
+            </p>
+
+            <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
+              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
+                {totals.count} Orders
+              </span>
+              <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
+                Total ₹{totals.sum}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            {/* Search Input */}
+            <div className="flex items-center gap-3 bg-white/90 backdrop-blur rounded-2xl px-4 py-3 shadow-sm ring-1 ring-gray-200 w-full md:w-80">
+              <Search size={18} className="text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search customer or order..."
+                className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            {/* Export Button */}
+            <button
+              onClick={exportToCSV}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-medium shadow-sm hover:bg-gray-900 active:scale-[0.98] transition"
+            >
+              <Download size={18} />
+              Export CSV
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-          {/* Search Input */}
-          <div className="flex items-center gap-3 bg-white/90 backdrop-blur rounded-2xl px-4 py-3 shadow-sm ring-1 ring-gray-200 w-full md:w-80">
-            <Search size={18} className="text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search customer or order..."
-              className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          {/* Export Button */}
-          <button
-            onClick={exportToCSV}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-medium shadow-sm hover:bg-gray-900 active:scale-[0.98] transition"
-          >
-            <Download size={18} />
-            Export CSV
-          </button>
-        </div>
-      </div>
-
-      {/* =======================================
+        {/* =======================================
             ADVANCED FILTERS
       ======================================== */}
-      <div className="bg-white/90 backdrop-blur p-6 rounded-2xl shadow-sm ring-1 ring-gray-200">
-        <div className="grid md:grid-cols-4 gap-5">
+        <div className="bg-white/90 backdrop-blur p-6 rounded-2xl shadow-sm ring-1 ring-gray-200">
+          <div className="grid md:grid-cols-4 gap-5">
 
-          {/* Date Range */}
-          <div>
-            <label className="text-sm font-semibold text-gray-700">Start Date</label>
-            <input
-              type="date"
-              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
+            {/* Date Range */}
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Start Date</label>
+              <input
+                type="date"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">End Date</label>
+              <input
+                type="date"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+
+            {/* Amount Range */}
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Min Amount</label>
+              <input
+                type="number"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                placeholder="₹0"
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Max Amount</label>
+              <input
+                type="number"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                placeholder="₹5000"
+                value={maxAmount}
+                onChange={(e) => setMaxAmount(e.target.value)}
+              />
+            </div>
+
+            {/* Payment Method */}
+            <div className="md:col-span-2">
+              <label className="text-sm font-semibold text-gray-700">Payment Method</label>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              >
+                <option value="">All</option>
+                <option value="cod">Cash on Delivery</option>
+                <option value="upi">UPI</option>
+                <option value="card">Card</option>
+                <option value="wallet">Wallet</option>
+                <option value="netbanking">Netbanking</option>
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label className="text-sm font-semibold text-gray-700">End Date</label>
-            <input
-              type="date"
-              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
-          </div>
-
-          {/* Amount Range */}
-          <div>
-            <label className="text-sm font-semibold text-gray-700">Min Amount</label>
-            <input
-              type="number"
-              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
-              placeholder="₹0"
-              value={minAmount}
-              onChange={(e) => setMinAmount(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold text-gray-700">Max Amount</label>
-            <input
-              type="number"
-              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
-              placeholder="₹5000"
-              value={maxAmount}
-              onChange={(e) => setMaxAmount(e.target.value)}
-            />
-          </div>
-
-          {/* Payment Method */}
-          <div className="md:col-span-2">
-            <label className="text-sm font-semibold text-gray-700">Payment Method</label>
-            <select
-              className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-            >
-              <option value="">All</option>
-              <option value="cod">Cash on Delivery</option>
-              <option value="upi">UPI</option>
-              <option value="card">Card</option>
-              <option value="wallet">Wallet</option>
-              <option value="netbanking">Netbanking</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Fulfillment Buttons */}
-        <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
-          {[
-            { key: "", label: "All" },
-            { key: "processing", label: "Processing" },
-            { key: "packed", label: "Packed" },
-            { key: "shipped", label: "Shipped" },
-            { key: "out_for_delivery", label: "Out for Delivery" },
-            { key: "delivered", label: "Delivered" },
-            { key: "returned", label: "Returned" },
-            { key: "cancelled", label: "Cancelled" },
-          ].map((s) => (
-            <button
-              key={s.key}
-              onClick={() => setStatus(s.key)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap
-                ${
-                  status === s.key
+          {/* Fulfillment Buttons */}
+          <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+            {[
+              { key: "", label: "All" },
+              { key: "processing", label: "Processing" },
+              { key: "packed", label: "Packed" },
+              { key: "shipped", label: "Shipped" },
+              { key: "out_for_delivery", label: "Out for Delivery" },
+              { key: "delivered", label: "Delivered" },
+              { key: "returned", label: "Returned" },
+              { key: "cancelled", label: "Cancelled" },
+            ].map((s) => (
+              <button
+                key={s.key}
+                onClick={() => setStatus(s.key)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap
+                ${status === s.key
                     ? "bg-blue-600 text-white shadow-sm"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-            >
-              {s.label}
-            </button>
-          ))}
+                  }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* =======================================
+        {/* =======================================
               ORDERS TABLE
       ======================================== */}
-      <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="py-4 px-5 text-left font-semibold">Order #</th>
-                <th className="py-4 px-5 text-left font-semibold">Customer</th>
-                <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
-                <th className="py-4 px-5 text-left font-semibold">Amount</th>
-                <th className="py-4 px-5 text-left font-semibold">Date</th>
-                <th className="py-4 px-5 text-left font-semibold">Action</th>
-              </tr>
-            </thead>
+        <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-600">
+                <tr>
+                  <th className="py-4 px-5 text-left font-semibold">Order #</th>
+                  <th className="py-4 px-5 text-left font-semibold">Customer</th>
+                  <th className="py-4 px-5 text-left font-semibold">Payment</th>
+                  <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
+                  <th className="py-4 px-5 text-left font-semibold">Amount</th>
+                  <th className="py-4 px-5 text-left font-semibold">Date</th>
+                  <th className="py-4 px-5 text-left font-semibold">Action</th>
+                </tr>
+              </thead>
 
             <tbody className="divide-y divide-gray-100">
-              {filteredOrders.length > 0 ? (
-                filteredOrders.map((order) => (
-                  <tr key={order._id} className="hover:bg-blue-50/40 transition">
-                    <td className="py-4 px-5 font-semibold text-gray-900">
-                      {order.orderNumber}
-                    </td>
+  {filteredOrders.length > 0 ? (
+    filteredOrders.map((order) => (
+      <OrderRow
+        key={order._id}
+        order={order}
+        onUpdated={(updatedOrder) => {
+          setOrders((prev) =>
+            prev.map((o) => (o._id === updatedOrder._id ? updatedOrder : o))
+          );
+        }}
+      />
+    ))
+  ) : (
+    <tr>
+      <td colSpan={7} className="py-12 text-center text-gray-500">
+        No orders found for applied filters.
+      </td>
+    </tr>
+  )}
+</tbody>
 
-                    <td className="py-4 px-5">
-                      <div className="font-medium text-gray-900">
-                        {order.customerId?.name || "Unknown"}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {order.customerId?.phone}
-                      </div>
-                    </td>
-
-                    <td className="py-4 px-5 capitalize text-gray-800">
-                      {order.paymentMethod}
-                    </td>
-
-                    <td className="py-4 px-5 capitalize">
-                      <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">
-                        {order.fulfillmentStatus?.replace(/_/g, " ")}
-                      </span>
-                    </td>
-
-                    <td className="py-4 px-5 font-semibold text-gray-900">
-                      ₹{order.finalPayable}
-                    </td>
-
-                    <td className="py-4 px-5 text-gray-700">
-                      {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ""}
-                    </td>
-
-                    <td className="py-4 px-5">
-                      <button
-                        onClick={() => router.push(`/orders/${order._id}`)}
-                        className="inline-flex items-center gap-1 text-blue-600 font-semibold hover:text-blue-700 transition"
-                      >
-                        View <ArrowRight size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-500">
-                    No orders found for applied filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
-);
+    </section>
+  );
 
 }

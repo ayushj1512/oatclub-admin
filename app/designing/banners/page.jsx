@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   Plus,
   Trash2,
-  Save,
   RefreshCw,
   ImageIcon,
   Link as LinkIcon,
@@ -37,9 +36,12 @@ import { CSS } from "@dnd-kit/utilities";
 function SortableBannerCard({
   banner,
   index,
+  isDirty,
+  updating,
   onChangeMedia,
   onUpdateField,
   onRemove,
+  onUpdateOne,
 }) {
   const id = banner._id || banner.tempId;
 
@@ -119,7 +121,9 @@ function SortableBannerCard({
               <input
                 type="checkbox"
                 checked={banner.isActive !== false}
-                onChange={(e) => onUpdateField(index, "isActive", e.target.checked)}
+                onChange={(e) =>
+                  onUpdateField(index, "isActive", e.target.checked)
+                }
                 className="accent-blue-600"
               />
               Active
@@ -132,6 +136,19 @@ function SortableBannerCard({
               <Trash2 size={16} />
               Delete
             </button>
+
+            {/* ✅ Update button only when dirty */}
+            {isDirty && (
+              <button
+                onClick={() => onUpdateOne()}
+                disabled={updating}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-white shadow-sm transition ${
+                  updating ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
+                }`}
+              >
+                {updating ? "Updating..." : "Update"}
+              </button>
+            )}
           </div>
 
           <div className="text-xs text-gray-500">
@@ -174,12 +191,23 @@ export default function BannersManagerPage() {
     link: "",
     title: "",
     isActive: true,
-    sortOrder: 0, // kept but now order mostly drag-based
+    sortOrder: 0,
   });
+
+  /* ✅ Track initial snapshot for dirty detection */
+  const snapshotRef = useRef([]);
+  const [updatingOne, setUpdatingOne] = useState(false);
 
   useEffect(() => {
     fetchHomepageSettings();
   }, [fetchHomepageSettings]);
+
+  /* ✅ Update snapshot when banners load first time */
+  useEffect(() => {
+    if (!loading && heroBanners?.length) {
+      snapshotRef.current = JSON.parse(JSON.stringify(heroBanners));
+    }
+  }, [loading, heroBanners]);
 
   /* ✅ local sorted view + stable drag id */
   const sortedBanners = useMemo(() => {
@@ -211,10 +239,33 @@ export default function BannersManagerPage() {
     setOpenMediaModal(true);
   };
 
+  const normalizeBanner = (b) => ({
+    image: b.image || "",
+    publicId: b.publicId || "",
+    link: b.link || "",
+    title: b.title || "",
+    isActive: b.isActive !== false,
+    sortOrder: b.sortOrder || 0,
+    _id: b._id || "",
+    tempId: b.tempId || "",
+  });
+
+  const isBannerDirty = (banner) => {
+    const snapshot = snapshotRef.current || [];
+    const original =
+      snapshot.find((x) => x._id && x._id === banner._id) ||
+      snapshot.find((x) => x.tempId && x.tempId === banner.tempId);
+
+    if (!original) return true; // new item not in snapshot
+
+    const a = normalizeBanner(original);
+    const b = normalizeBanner(banner);
+    return JSON.stringify(a) !== JSON.stringify(b);
+  };
+
   const handleMediaSelect = (media) => {
     if (!media?.url) return;
 
-    // ✅ editing existing banner
     if (editIndex !== null) {
       const next = [...sortedBanners];
       next[editIndex] = {
@@ -223,11 +274,9 @@ export default function BannersManagerPage() {
         publicId: media.publicId || "",
       };
 
-      // ✅ maintain sort order
       const withOrder = next.map((x, i) => ({ ...x, sortOrder: i + 1 }));
       setHeroBannersLocal(withOrder);
     } else {
-      // ✅ new banner
       setNewBanner((p) => ({
         ...p,
         image: media.url,
@@ -238,9 +287,12 @@ export default function BannersManagerPage() {
     setOpenMediaModal(false);
   };
 
-  const addBanner = () => {
+  /* ✅ Add banner and auto-update backend */
+  const addBanner = async () => {
     if (!newBanner.image?.trim())
       return alert("Please select banner image (recommended size 16:9)");
+
+    clearMessages();
 
     const next = [
       ...sortedBanners,
@@ -253,9 +305,9 @@ export default function BannersManagerPage() {
         sortOrder: sortedBanners.length + 1,
         tempId: `temp-${Date.now()}`,
       },
-    ];
+    ].map((x, i) => ({ ...x, sortOrder: i + 1 }));
 
-    setHeroBannersLocal(next.map((x, i) => ({ ...x, sortOrder: i + 1 })));
+    setHeroBannersLocal(next);
 
     setNewBanner({
       image: "",
@@ -265,6 +317,10 @@ export default function BannersManagerPage() {
       isActive: true,
       sortOrder: 0,
     });
+
+    // ✅ Auto save immediately
+    await updateHeroBanners(next);
+    snapshotRef.current = JSON.parse(JSON.stringify(next));
   };
 
   const updateField = (index, key, value) => {
@@ -273,14 +329,28 @@ export default function BannersManagerPage() {
     setHeroBannersLocal(next.map((x, i) => ({ ...x, sortOrder: i + 1 })));
   };
 
-  const removeBanner = (index) => {
+  const removeBanner = async (index) => {
+    clearMessages();
     const next = sortedBanners.filter((_, i) => i !== index);
-    setHeroBannersLocal(next.map((x, i) => ({ ...x, sortOrder: i + 1 })));
+    const withOrder = next.map((x, i) => ({ ...x, sortOrder: i + 1 }));
+    setHeroBannersLocal(withOrder);
+
+    // ✅ Auto save after delete too
+    await updateHeroBanners(withOrder);
+    snapshotRef.current = JSON.parse(JSON.stringify(withOrder));
   };
 
-  const saveBanners = async () => {
+  /* ✅ Update when dirty (per banner) */
+  const updateAllBanners = async () => {
     clearMessages();
-    await updateHeroBanners(heroBanners);
+    setUpdatingOne(true);
+    try {
+      const withOrder = sortedBanners.map((x, i) => ({ ...x, sortOrder: i + 1 }));
+      await updateHeroBanners(withOrder);
+      snapshotRef.current = JSON.parse(JSON.stringify(withOrder));
+    } finally {
+      setUpdatingOne(false);
+    }
   };
 
   /* ✅ Drag End */
@@ -288,12 +358,14 @@ export default function BannersManagerPage() {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = sortedBanners.findIndex((b) => (b._id || b.tempId) === active.id);
-    const newIndex = sortedBanners.findIndex((b) => (b._id || b.tempId) === over.id);
+    const oldIndex = sortedBanners.findIndex(
+      (b) => (b._id || b.tempId) === active.id
+    );
+    const newIndex = sortedBanners.findIndex(
+      (b) => (b._id || b.tempId) === over.id
+    );
 
     const moved = arrayMove(sortedBanners, oldIndex, newIndex);
-
-    // ✅ update sortOrder after reorder
     const withOrder = moved.map((x, i) => ({ ...x, sortOrder: i + 1 }));
     setHeroBannersLocal(withOrder);
   };
@@ -321,14 +393,16 @@ export default function BannersManagerPage() {
             Refresh
           </button>
 
-          <button
-            onClick={saveBanners}
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gray-950 text-white shadow-sm hover:bg-black transition disabled:opacity-60"
-          >
-            <Save size={16} />
-            {saving ? "Saving..." : "Save"}
-          </button>
+          {/* ✅ Show "Update All" only when ANY banner dirty */}
+          {sortedBanners.some(isBannerDirty) && (
+            <button
+              onClick={updateAllBanners}
+              disabled={saving || updatingOne}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-green-600 text-white shadow-sm hover:bg-green-700 transition disabled:opacity-60"
+            >
+              {saving || updatingOne ? "Updating..." : "Update Changes"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -371,10 +445,11 @@ export default function BannersManagerPage() {
 
           <button
             onClick={addBanner}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-blue-600 text-white shadow-sm hover:bg-blue-700 transition"
+            disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-blue-600 text-white shadow-sm hover:bg-blue-700 transition disabled:opacity-60"
           >
             <Plus size={16} />
-            Add Banner
+            {saving ? "Adding..." : "Add Banner"}
           </button>
         </div>
 
@@ -383,7 +458,7 @@ export default function BannersManagerPage() {
           <div className="rounded-3xl bg-gray-50 ring-1 ring-black/5 p-4">
             <div className="flex items-center justify-between gap-3">
               <button
-                onClick={openNewMediaPicker}
+                onClick={() => openNewMediaPicker()}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 hover:bg-gray-100 transition"
               >
                 <ImageIcon size={16} />
@@ -429,14 +504,18 @@ export default function BannersManagerPage() {
 
             <input
               value={newBanner.link}
-              onChange={(e) => setNewBanner((p) => ({ ...p, link: e.target.value }))}
+              onChange={(e) =>
+                setNewBanner((p) => ({ ...p, link: e.target.value }))
+              }
               placeholder="Link (optional) e.g. /category/dress"
               className="px-4 py-3 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
             />
 
             <input
               value={newBanner.title}
-              onChange={(e) => setNewBanner((p) => ({ ...p, title: e.target.value }))}
+              onChange={(e) =>
+                setNewBanner((p) => ({ ...p, title: e.target.value }))
+              }
               placeholder="Title (optional - internal)"
               className="px-4 py-3 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
             />
@@ -461,7 +540,7 @@ export default function BannersManagerPage() {
         </div>
       </div>
 
-      {/* Banner List (Drag & Drop enabled) */}
+      {/* Banner List */}
       <div className="mt-8 bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="font-semibold text-gray-950 text-lg">
@@ -488,16 +567,23 @@ export default function BannersManagerPage() {
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-4">
-                  {sortedBanners.map((b, idx) => (
-                    <SortableBannerCard
-                      key={b._id || b.tempId}
-                      banner={b}
-                      index={idx}
-                      onChangeMedia={openEditMediaPicker}
-                      onUpdateField={updateField}
-                      onRemove={removeBanner}
-                    />
-                  ))}
+                  {sortedBanners.map((b, idx) => {
+                    const dirty = isBannerDirty(b);
+
+                    return (
+                      <SortableBannerCard
+                        key={b._id || b.tempId}
+                        banner={b}
+                        index={idx}
+                        isDirty={dirty}
+                        updating={saving || updatingOne}
+                        onChangeMedia={openEditMediaPicker}
+                        onUpdateField={updateField}
+                        onRemove={removeBanner}
+                        onUpdateOne={updateAllBanners}
+                      />
+                    );
+                  })}
                 </div>
               </SortableContext>
             </DndContext>
