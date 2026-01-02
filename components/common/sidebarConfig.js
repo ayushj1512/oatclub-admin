@@ -219,7 +219,7 @@ export const sidebarMenus = {
     { label: "Activity", href: "/superadmin/activity" },
   ],
 
-  wordpress: [{ label: "WP Orders", href: "/wordpress/orders/list" }],
+wordpress: [{ label: "WP Orders", href: "/wordpress/orders" }],
 };
 
 // ------------------------------
