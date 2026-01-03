@@ -10,7 +10,8 @@
     ============================================================ */
     products: [],
     product: null,
-
+bulkSelectedIds: [],
+bulkPriceDraft: {}, // { [id]: { price?, compareAtPrice? } }
     page: 1,
     limit: 20,
     total: 0,
@@ -26,7 +27,24 @@
     setLoading: (v) => set({ loading: v }),
     setSaving: (v) => set({ saving: v }),
     resetProduct: () => set({ product: null }),
+toggleBulkSelect: (id) =>
+  set((state) => ({
+    bulkSelectedIds: state.bulkSelectedIds.includes(id)
+      ? state.bulkSelectedIds.filter((x) => x !== id)
+      : [...state.bulkSelectedIds, id],
+  })),
 
+clearBulkSelection: () => set({ bulkSelectedIds: [], bulkPriceDraft: {} }),
+
+setBulkDraft: (id, patch) =>
+  set((state) => ({
+    bulkPriceDraft: {
+      ...state.bulkPriceDraft,
+      [id]: { ...(state.bulkPriceDraft[id] || {}), ...patch },
+    },
+  })),
+
+  
     /* ============================================================
       FETCH ALL PRODUCTS (ADMIN GRID)
     ============================================================ */
@@ -56,6 +74,8 @@
         set({ loading: false });
       }
     },
+
+    
 
     /* ============================================================
       FETCH SINGLE PRODUCT (EDIT PAGE)
@@ -196,30 +216,39 @@
     /* ============================================================
       BULK IMPORT
     ============================================================ */
-    bulkImport: async (products = []) => {
-      try {
-        set({ saving: true });
 
-        const res = await fetch(`${API}/bulk/import`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ products }),
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Bulk import failed");
-
-        toast.success(`Imported ${data.importedCount} products`);
-        return data;
-      } catch (e) {
-        console.error(e);
-        toast.error(e.message);
-        throw e;
-      } finally {
-        set({ saving: false });
+    
+   
+  bulkImport: async (products = []) => {
+    try {
+      if (!products.length) {
+        toast.error("No products to import ❌");
+        return;
       }
-    },
+
+      set({ saving: true });
+
+      const res = await fetch(`${API}/bulk/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ products }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Bulk import failed");
+
+      toast.success(`Imported ${data.importedCount} ✅`);
+      return data;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
 
     /* ============================================================
       VARIANT STOCK UPDATE
@@ -264,71 +293,79 @@
       /* ============================================================
       TOGGLE PUBLISH (single)
     ============================================================ */
-    togglePublish: async (id, isPublished) => {
-      try {
-        set({ saving: true });
+ togglePublish: async (id, publish) => {
+  try {
+    set({ saving: true, error: null });
 
-        const res = await fetch(`${API}/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ isPublished }),
-        });
+    // ✅ Map publish toggle to your real schema fields
+    const payload = publish
+      ? { isActive: true, isDraft: false }   // Published ✅
+      : { isActive: false, isDraft: false }; // Unpublished ❌
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Publish update failed");
+    const res = await fetch(`${API}/${id}`, {
+      method: "PATCH", // ✅ PATCH is semantically correct for partial update
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
 
-        // update in products list (grid)
-        set({
-          products: get().products.map((p) =>
-            p._id === id ? { ...p, isPublished } : p
-          ),
-        });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Publish update failed");
 
-        toast.success(isPublished ? "Published ✅" : "Unpublished ✅");
-        return data.product;
-      } catch (e) {
-        console.error(e);
-        toast.error(e.message);
-        throw e;
-      } finally {
-        set({ saving: false });
-      }
-    },
+    const updated = data.product || null;
+
+    // ✅ Update the product list instantly using server response (best)
+    set({
+      products: get().products.map((p) =>
+        p._id === id ? (updated ? updated : { ...p, ...payload }) : p
+      ),
+    });
+
+    toast.success(publish ? "Published ✅" : "Unpublished ✅");
+    return updated;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
+
 
     /* ============================================================
       BULK PUBLISH / UNPUBLISH
     ============================================================ */
-   bulkPublish: async (ids = [], isPublished = true) => {
+   bulkPublish: async (ids = [], publish = true) => {
   try {
     if (!ids.length) return;
     set({ saving: true });
 
-    const results = await Promise.all(
+    const payload = publish
+      ? { isActive: true, isDraft: false }
+      : { isActive: false, isDraft: false };
+
+    await Promise.all(
       ids.map(async (id) => {
         const res = await fetch(`${API}/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ isPublished }),
+          body: JSON.stringify(payload),
         });
 
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.message || `Failed for ${id}`);
-        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || `Failed for ${id}`);
       })
     );
 
     set({
       products: get().products.map((p) =>
-        ids.includes(p._id) ? { ...p, isPublished } : p
+        ids.includes(p._id) ? { ...p, ...payload } : p
       ),
     });
 
-    toast.success(
-      isPublished ? "Products Published ✅" : "Products Unpublished ✅"
-    );
+    toast.success(publish ? "Products Published ✅" : "Products Unpublished ✅");
   } catch (e) {
     console.error(e);
     toast.error(e.message || "Bulk publish failed");
@@ -336,6 +373,7 @@
     set({ saving: false });
   }
 },
+
 
 
       /* ============================================================
@@ -413,6 +451,120 @@ updateCategoriesInline: async (id, categories) => {
 },
 
 
+updateProductStatus: async (id, status) => {
+  try {
+    set({ saving: true });
 
+    const payload =
+      status === "published"
+        ? { isDraft: false, isActive: true }
+        : status === "draft"
+        ? { isDraft: true, isActive: true }
+        : { isActive: false }; // unpublished
+
+    const res = await fetch(`${API}/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Status update failed");
+
+    // ✅ update in list instantly
+    set({
+      products: get().products.map((p) =>
+        p._id === id ? { ...p, ...payload } : p
+      ),
+    });
+
+    toast.success(`Status updated ✅ (${status})`);
+    return data.product;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+  } finally {
+    set({ saving: false });
+  }
+},
+
+
+applyBulkPricingRule: ({ mode, field, value }) => {
+  const { products, bulkSelectedIds, bulkPriceDraft } = get();
+
+  if (!bulkSelectedIds.length) {
+    toast.error("Select at least 1 product");
+    return;
+  }
+
+  const updatedDraft = { ...bulkPriceDraft };
+
+  bulkSelectedIds.forEach((id) => {
+    const p = products.find((x) => x._id === id);
+    if (!p) return;
+
+    const base = Number(updatedDraft[id]?.[field] ?? p[field] ?? 0);
+
+    let next = base;
+
+    if (mode === "set") next = Number(value);
+    if (mode === "inc_pct") next = Math.round(base * (1 + Number(value) / 100));
+    if (mode === "dec_pct") next = Math.round(base * (1 - Number(value) / 100));
+    if (mode === "inc_amt") next = base + Number(value);
+    if (mode === "dec_amt") next = base - Number(value);
+
+    if (next < 0) next = 0;
+
+    updatedDraft[id] = {
+      ...(updatedDraft[id] || {}),
+      [field]: next,
+    };
+  });
+
+  set({ bulkPriceDraft: updatedDraft });
+  toast.success("Bulk pricing rule applied ✅");
+},
+
+
+saveBulkPricing: async () => {
+  try {
+    set({ saving: true });
+
+    const { bulkPriceDraft } = get();
+    const updates = Object.entries(bulkPriceDraft).map(([id, values]) => ({
+      _id: id,
+      ...values,
+    }));
+
+    if (!updates.length) {
+      toast.error("No changes to save");
+      return;
+    }
+
+    const res = await fetch(`${API}/bulk/pricing`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ updates }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Bulk pricing failed");
+
+    // ✅ Refresh grid products after bulk update
+    await get().fetchProducts({ page: get().page, limit: get().limit });
+
+    set({ bulkPriceDraft: {}, bulkSelectedIds: [] });
+    toast.success(`Updated ${data.modifiedCount} products ✅`);
+    return data;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
 
   }));

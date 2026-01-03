@@ -3,7 +3,8 @@
 import { create } from "zustand";
 import axios from "axios";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL + "/api/categories";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+const API_URL = `${BASE_URL}/api/categories`;
 
 /**
  * Helper to build a tree structure from a flat array

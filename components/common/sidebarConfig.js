@@ -120,6 +120,8 @@ export const sidebarMenus = {
     { label: "Offers & Discounts", href: "/products/offers" },
     { label: "SEO Manager", href: "/products/seo" },
     { label: "Reviews & Ratings", href: "/products/reviews" },
+    { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
+
   ],
 
   orders: [

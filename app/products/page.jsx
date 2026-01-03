@@ -14,7 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useAdminProductStore } from "@/store/adminProductStore";
 
-const API = process.env.NEXT_PUBLIC_BACKEND_URL;
+const API = process.env.NEXT_PUBLIC_BACKEND_URL
 
 /* ==============================
    debounce helper
@@ -72,12 +72,31 @@ const [skuFilter, setSkuFilter] = useState("");
   ============================== */
   const selectedCount = selectedIds.size;
 
+const getProductStatus = (p) => {
+  if (!p.isActive) return "unpublished";
+  if (p.isDraft) return "draft";
+  return "published";
+};
 
-  const filteredProducts = useMemo(() => {
+const updateProductStatus = async (id, nextStatus) => {
+  if (nextStatus === "published") {
+    await togglePublish(id, true);
+  } else {
+    await togglePublish(id, false);
+  }
+};
+
+
+
+const filteredProducts = useMemo(() => {
   return (products || []).filter((p) => {
-    // ✅ Published filter
-    if (published === "published" && !p.isPublished) return false;
-    if (published === "draft" && p.isPublished) return false;
+    // ✅ status calculate once per product
+    const status = getProductStatus(p);
+
+    // ✅ Status filter
+    if (published === "published" && status !== "published") return false;
+    if (published === "draft" && status !== "draft") return false;
+    if (published === "unpublished" && status !== "unpublished") return false;
 
     // ✅ Stock filter
     if (stockFilter === "in" && Number(p.stock || 0) <= 0) return false;
@@ -87,13 +106,20 @@ const [skuFilter, setSkuFilter] = useState("");
     if (typeFilter && p.productType !== typeFilter) return false;
 
     // ✅ SKU filter
-    if (skuFilter && !String(p.sku || "").toLowerCase().includes(skuFilter.toLowerCase()))
+    if (
+      skuFilter &&
+      !String(p.sku || "").toLowerCase().includes(skuFilter.toLowerCase())
+    )
       return false;
 
     // ✅ Tag filter (array)
     if (tagFilter) {
       const tags = Array.isArray(p.tags) ? p.tags : [];
-      if (!tags.some((t) => String(t).toLowerCase().includes(tagFilter.toLowerCase())))
+      if (
+        !tags.some((t) =>
+          String(t).toLowerCase().includes(tagFilter.toLowerCase())
+        )
+      )
         return false;
     }
 
@@ -104,7 +130,17 @@ const [skuFilter, setSkuFilter] = useState("");
 
     return true;
   });
-}, [products, published, stockFilter, typeFilter, minPrice, maxPrice, tagFilter, skuFilter]);
+}, [
+  products,
+  published,
+  stockFilter,
+  typeFilter,
+  minPrice,
+  maxPrice,
+  tagFilter,
+  skuFilter,
+]);
+
 
 
 const allSelected = useMemo(() => {
@@ -170,6 +206,7 @@ const allSelected = useMemo(() => {
       }, 400),
     []
   );
+
 
   useEffect(() => {
     debouncedSearch(searchDraft);
@@ -357,6 +394,7 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
       </div>
     );
   }
+  
 
   /* ✅ EDIT MODE */
   return (
@@ -414,7 +452,6 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
     </div>
   );
 }
-
 
 
 
@@ -510,14 +547,16 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
   <div className="flex flex-col gap-1">
     <label className="text-xs font-semibold text-gray-600">Status</label>
     <select
-      value={published}
-      onChange={(e) => setPublished(e.target.value)}
-      className="select"
-    >
-      <option value="">All</option>
-      <option value="published">Published</option>
-      <option value="draft">Draft</option>
-    </select>
+  value={published}
+  onChange={(e) => setPublished(e.target.value)}
+  className="select"
+>
+  <option value="">All</option>
+  <option value="published">Published</option>
+  <option value="draft">Draft</option>
+  <option value="unpublished">Unpublished</option>
+</select>
+
   </div>
 
   {/* Stock */}
@@ -623,9 +662,10 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
           <Th onClick={() => toggleSort("stock")} label="Stock" />
         </th>
 
-        <th className="px-4 py-3 border-b border-gray-200 text-blue-700">
-          Status
-        </th>
+ <th className="px-4 py-3 border-b border-gray-200 text-blue-700">
+  Status
+</th>
+
 
         <th className="px-4 py-3 border-b border-gray-200">
           <Th onClick={() => toggleSort("createdAt")} label="Created" />
@@ -710,17 +750,14 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
             </td>
 
             {/* Status */}
-            <td className="px-4 py-3">
-              <span
-                className={`text-xs font-semibold px-2 py-1 rounded-full border ${
-                  p.isPublished
-                    ? "bg-blue-50 text-blue-700 border-blue-200"
-                    : "bg-gray-100 text-gray-500 border-gray-200"
-                }`}
-              >
-                {p.isPublished ? "Published" : "Draft"}
-              </span>
-            </td>
+           <td className="px-4 py-3">
+  <StatusDropdown
+    value={getProductStatus(p)}
+    loading={saving}
+    onChange={(next) => updateProductStatus(p._id, next)}
+  />
+</td>
+
 
             {/* Created */}
             <td className="px-4 py-3 text-gray-500">
@@ -986,5 +1023,26 @@ function BulkBar({ selectedCount, saving, onPublish, onUnpublish, onDelete, onCl
         }
       `}</style>
     </div>
+  );
+}
+
+function StatusDropdown({ value, onChange, loading }) {
+  const styles = {
+    published: "bg-green-50 text-green-700 border-green-200",
+    draft: "bg-yellow-50 text-yellow-700 border-yellow-200",
+    unpublished: "bg-gray-100 text-gray-500 border-gray-200",
+  };
+
+  return (
+    <select
+      value={value}
+      disabled={loading}
+      onChange={(e) => onChange(e.target.value)}
+      className={`text-xs font-semibold px-2 py-1 rounded-full border ${styles[value]} bg-white`}
+    >
+      <option value="published">Published</option>
+      <option value="draft">Draft</option>
+      <option value="unpublished">Unpublished</option>
+    </select>
   );
 }

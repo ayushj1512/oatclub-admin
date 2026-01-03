@@ -43,38 +43,42 @@ export default function MediaGalleryTab({ onSelect, multiple = false }) {
   };
 
   return (
-    <div className="space-y-4">
-      {/* ================= GRID ================= */}
-      <MediaGrid
-        items={items}
-        selected={selected}
-        onSelect={toggleSelect}
-        loading={loading}
-      />
+   <div className="space-y-5">
 
-      {/* ================= MULTI SELECT ACTION ================= */}
-      {multiple && selected.length > 0 && (
-        <div className="flex justify-end">
-          <button
-            onClick={() => onSelect?.(selected)}
-            className="px-4 py-2 bg-black text-white rounded-md text-sm"
-          >
-            Select {selected.length} item{selected.length > 1 ? "s" : ""}
-          </button>
-        </div>
-      )}
-
-      {/* ================= PAGINATION ================= */}
-      {page < pages && !loading && (
-        <div className="flex justify-center">
-          <button
-            onClick={() => fetchMedia({ page: page + 1 })}
-            className="text-sm text-gray-600 underline"
-          >
-            Load more
-          </button>
-        </div>
-      )}
+  {/* ✅ TOP STICKY SELECT BAR (Premium) */}
+  {multiple && selected.length > 0 && (
+    <div className="sticky top-0 z-10">
+      <div className="flex items-center justify-end rounded-2xl bg-white/90 backdrop-blur-md px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.06)] ring-1 ring-gray-200/60">
+        <button
+          onClick={() => onSelect?.(selected)}
+          className="rounded-2xl bg-black px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:opacity-90"
+        >
+          Select {selected.length} item{selected.length > 1 ? "s" : ""}
+        </button>
+      </div>
     </div>
+  )}
+
+  {/* ================= GRID ================= */}
+  <MediaGrid
+    items={items}
+    selected={selected}
+    onSelect={toggleSelect}
+    loading={loading}
+  />
+
+  {/* ================= PAGINATION (Premium) ================= */}
+  {page < pages && !loading && (
+    <div className="flex justify-center">
+      <button
+        onClick={() => fetchMedia({ page: page + 1 })}
+        className="rounded-2xl bg-white px-5 py-2 text-sm font-medium text-gray-800 shadow-sm ring-1 ring-gray-200/60 transition hover:bg-gray-50 hover:ring-gray-300"
+      >
+        Load more
+      </button>
+    </div>
+  )}
+</div>
+
   );
 }

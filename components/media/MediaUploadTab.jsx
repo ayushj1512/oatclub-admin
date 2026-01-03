@@ -88,86 +88,112 @@ export default function MediaUploadTab({ folder }) {
 
   return (
     <div className="space-y-6">
-      {/* ================= DROP ZONE ================= */}
-      <div
-        ref={dropRef}
-        onClick={() => inputRef.current?.click()}
-        className="flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-lg p-10 text-center cursor-pointer hover:border-black transition"
-      >
-        <UploadCloud className="w-10 h-10 text-gray-400" />
-        <p className="text-sm text-gray-600">
-          Drag & drop, paste, or click to upload
-        </p>
-        <p className="text-xs text-gray-400">
-          Supports images & videos
+  {/* ================= DROP ZONE ================= */}
+  <div
+    ref={dropRef}
+    onClick={() => inputRef.current?.click()}
+    className="
+      group flex flex-col items-center justify-center gap-3 
+      rounded-2xl p-12 text-center cursor-pointer 
+      bg-gray-50 shadow-sm hover:shadow-md transition-all duration-200
+      border border-transparent hover:border-gray-200
+    "
+  >
+    <div className="w-14 h-14 rounded-full bg-white shadow flex items-center justify-center">
+      <UploadCloud className="w-7 h-7 text-gray-500 group-hover:text-black transition" />
+    </div>
+
+    <p className="text-sm font-medium text-gray-700">
+      Drag & drop, paste, or click to upload
+    </p>
+
+    <p className="text-xs text-gray-400">
+      Supports images & videos
+    </p>
+
+    <input
+      ref={inputRef}
+      type="file"
+      multiple
+      accept="image/*,video/*"
+      className="hidden"
+      onChange={(e) => addFiles(e.target.files)}
+    />
+  </div>
+
+  {/* ================= PREVIEW ================= */}
+  {files.length > 0 && (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-gray-800">
+          Ready to upload <span className="text-gray-500">({files.length})</span>
         </p>
 
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept="image/*,video/*"
-          className="hidden"
-          onChange={(e) => addFiles(e.target.files)}
-        />
+        <button
+          disabled={uploading}
+          onClick={handleUpload}
+          className="
+            px-4 py-2 rounded-lg text-sm font-medium
+            bg-black text-white shadow-sm hover:shadow-md transition
+            disabled:opacity-50 disabled:cursor-not-allowed
+          "
+        >
+          {uploading ? "Uploading..." : "Upload Files"}
+        </button>
       </div>
 
-      {/* ================= PREVIEW ================= */}
-      {files.length > 0 && (
-        <div className="space-y-4">
-          <p className="text-sm font-medium">
-            Ready to upload ({files.length})
-          </p>
+      {/* ✅ Premium Preview Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-4">
+        {files.map((file, i) => {
+          const url = URL.createObjectURL(file);
+          const isVideo = file.type.startsWith("video");
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-            {files.map((file, i) => {
-              const url = URL.createObjectURL(file);
-              const isVideo = file.type.startsWith("video");
-
-              return (
-                <div
-                  key={i}
-                  className="relative border rounded-lg overflow-hidden"
-                >
-                  {isVideo ? (
-                    <video
-                      src={url}
-                      className="aspect-square object-cover"
-                      muted
-                    />
-                  ) : (
-                    <Image
-                      src={url}
-                      alt=""
-                      width={200}
-                      height={200}
-                      className="aspect-square object-cover"
-                    />
-                  )}
-
-                  <button
-                    onClick={() => removeFile(i)}
-                    className="absolute top-1 right-1 bg-black/70 text-white rounded-full p-1"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* ================= ACTION ================= */}
-          <div className="flex justify-end">
-            <button
-              disabled={uploading}
-              onClick={handleUpload}
-              className="px-4 py-2 bg-black text-white rounded-md text-sm disabled:opacity-50"
+          return (
+            <div
+              key={i}
+              className="
+                group relative rounded-xl overflow-hidden 
+                bg-gray-50 shadow-sm hover:shadow-md transition-all duration-200
+              "
             >
-              {uploading ? "Uploading..." : "Upload Files"}
-            </button>
-          </div>
-        </div>
-      )}
+              {isVideo ? (
+                <video
+                  src={url}
+                  className="aspect-square object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                  muted
+                />
+              ) : (
+                <Image
+                  src={url}
+                  alt=""
+                  width={200}
+                  height={200}
+                  className="aspect-square object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                />
+              )}
+
+              {/* Soft overlay on hover */}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition" />
+
+              {/* ❌ Remove Button (cleaner) */}
+              <button
+                onClick={() => removeFile(i)}
+                className="
+                  absolute top-2 right-2 
+                  w-7 h-7 flex items-center justify-center
+                  rounded-full bg-white/90 text-gray-700 shadow
+                  hover:bg-black hover:text-white transition
+                "
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
+  )}
+</div>
+
   );
 }

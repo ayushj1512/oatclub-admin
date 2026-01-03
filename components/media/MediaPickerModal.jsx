@@ -21,57 +21,78 @@ export default function MediaPickerModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
-      <div className="bg-white w-full max-w-6xl rounded-xl shadow-xl overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-3">
+      <div className="bg-white w-full max-w-6xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
 
-        {/* ================= HEADER ================= */}
-        <div className="flex items-center justify-between px-5 py-4 border-b">
-          <h2 className="text-lg font-semibold">Media Library</h2>
-          <button onClick={onClose}>
-            <X className="w-5 h-5 text-gray-500 hover:text-black" />
-          </button>
-        </div>
+        {/* ✅ Sticky Top */}
+        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
 
-        {/* ================= TABS ================= */}
-        <div className="flex border-b">
-          <button
-            onClick={() => setTab("upload")}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 ${
-              tab === "upload"
-                ? "border-black text-black"
-                : "border-transparent text-gray-500"
-            }`}
-          >
-            <Upload className="w-4 h-4" />
-            Upload Media
-          </button>
+          {/* ================= HEADER ================= */}
+          <div className="flex items-center justify-between px-6 py-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Media Library
+              </h2>
+              <p className="text-xs text-gray-500">
+                Upload or select media for your product
+              </p>
+            </div>
 
-          <button
-            onClick={() => setTab("select")}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 ${
-              tab === "select"
-                ? "border-black text-black"
-                : "border-transparent text-gray-500"
-            }`}
-          >
-            <ImageIcon className="w-4 h-4" />
-            Select from Media
-          </button>
+            <button
+              onClick={onClose}
+              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
+
+          {/* ================= TABS ================= */}
+          <div className="px-6 pb-4">
+            <div className="inline-flex bg-gray-100 rounded-xl p-1 gap-1">
+              <button
+                onClick={() => setTab("upload")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition
+                  ${
+                    tab === "upload"
+                      ? "bg-white text-black shadow-sm"
+                      : "text-gray-500 hover:text-black"
+                  }`}
+              >
+                <Upload className="w-4 h-4" />
+                Upload
+              </button>
+
+              <button
+                onClick={() => setTab("select")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition
+                  ${
+                    tab === "select"
+                      ? "bg-white text-black shadow-sm"
+                      : "text-gray-500 hover:text-black"
+                  }`}
+              >
+                <ImageIcon className="w-4 h-4" />
+                Library
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* ================= BODY ================= */}
-        <div className="p-4 min-h-[420px] max-h-[70vh] overflow-y-auto">
-          {tab === "upload" ? (
-            <MediaUploadTab folder={folder} />
-          ) : (
-            <MediaGalleryTab
-              multiple={multiple}
-              onSelect={(media) => {
-                onSelect(media);
-                onClose();
-              }}
-            />
-          )}
+        <div className="p-5 overflow-y-auto flex-1 bg-gray-50">
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            {tab === "upload" ? (
+              <MediaUploadTab folder={folder} />
+            ) : (
+              <MediaGalleryTab
+                multiple={multiple}
+                onSelect={(media) => {
+                  onSelect(media);
+                  onClose();
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

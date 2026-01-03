@@ -1,142 +1,337 @@
 "use client";
 
 import { create } from "zustand";
+import axios from "axios";
+import { toast } from "react-hot-toast";
 
-const API = process.env.NEXT_PUBLIC_BACKEND_URL;
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+
+// ✅ Update these endpoints based on your backend
+const PREVIEW_API = `${BASE_URL}/api/products/bulk/preview`;
+const CREATE_DRAFT_API = `${BASE_URL}/api/products/bulk/create-draft`;
+
+/* -------------------------------------------------------
+   HELPERS
+-------------------------------------------------------- */
+
+// ✅ Validation
+const validateRow = (r) => {
+  const errors = [];
+
+  const title = String(r.title || "").trim();
+  const price = Number(r.price);
+  const categories = Array.isArray(r.categories) ? r.categories : [];
+
+  if (!title) errors.push("Missing title");
+  if (!Number.isFinite(price)) errors.push("Invalid price");
+  if (!categories.length) errors.push("Missing category");
+
+  return {
+    ...r,
+    title,
+    price,
+    categories,
+    stock: Number(r.stock || 0),
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
+// ✅ normalize tags
+const tagsNorm = (tags) => {
+  if (!tags) return [];
+  if (Array.isArray(tags)) return tags.map((t) => String(t).trim().toLowerCase());
+  return String(tags)
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+};
+
+// ✅ apply global defaults to a row
+const applyDefaultsToRow = (row, defaults) => {
+  if (!defaults) return row;
+
+  return validateRow({
+    ...row,
+    categories:
+      defaults.categories?.length && (!row.categories || !row.categories.length)
+        ? defaults.categories
+        : row.categories,
+
+    attributes:
+      defaults.attributes?.length && (!row.attributes || !row.attributes.length)
+        ? defaults.attributes
+        : row.attributes,
+
+    images:
+      defaults.images?.length && (!row.images || !row.images.length)
+        ? defaults.images
+        : row.images,
+
+    thumbnail:
+      defaults.thumbnail && (!row.thumbnail || row.thumbnail === "")
+        ? defaults.thumbnail
+        : row.thumbnail,
+  });
+};
+
+// ✅ auto row number generator
+const nextRowNumber = (rows) => {
+  if (!Array.isArray(rows) || !rows.length) return 1;
+  return Math.max(...rows.map((r) => Number(r.row || 0))) + 1;
+};
 
 export const useAdminBulkProductStore = create((set, get) => ({
-  /* ======================================================
+  /* ============================================================
      STATE
-  ====================================================== */
-  previewRows: [],
+  ============================================================ */
+  previewRows: [], // combined CSV + Manual
+  selectedRowIds: [], // array of row numbers
+
   uploading: false,
   creating: false,
+
   error: null,
+  successMessage: null,
 
-  /* ======================================================
-     DERIVED (HELPERS)
-  ====================================================== */
-  get validRows() {
-    return get().previewRows.filter((r) => r.isValid);
+  globalDefaults: {
+    categories: [],
+    attributes: [],
+    images: [],
+    thumbnail: "",
   },
 
-  get invalidRows() {
-    return get().previewRows.filter((r) => !r.isValid);
-  },
+  /* ============================================================
+     STATUS HELPERS
+  ============================================================ */
+  clearStatus: () => set({ error: null, successMessage: null }),
 
-  get stats() {
-    const rows = get().previewRows;
-    return {
-      total: rows.length,
-      valid: rows.filter((r) => r.isValid).length,
-      invalid: rows.filter((r) => !r.isValid).length,
-    };
-  },
-
-  /* ======================================================
-     ACTIONS
-  ====================================================== */
-
-  /* ---------- RESET ---------- */
-  resetBulkImport: () =>
-    set({
-      previewRows: [],
-      uploading: false,
-      creating: false,
-      error: null,
-    }),
-
-  /* ---------- CSV PREVIEW ---------- */
+  /* ============================================================
+     UPLOAD CSV → PREVIEW
+  ============================================================ */
   uploadCSVForPreview: async (file) => {
-    if (!file) return;
-
     try {
-      set({ uploading: true, error: null });
+      set({
+        uploading: true,
+        error: null,
+        successMessage: null,
+      });
 
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch(`${API}/api/products/bulk/preview`, {
-        method: "POST",
-        body: formData,
+      const { data } = await axios.post(PREVIEW_API, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        withCredentials: true,
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.message || "CSV preview failed");
-      }
+      let preview = Array.isArray(data.preview) ? data.preview : [];
+
+      // ✅ apply global defaults to every row
+      const defaults = get().globalDefaults;
+      preview = preview.map((r) => applyDefaultsToRow(r, defaults));
+
+      // ✅ auto select all valid
+      const selectedRowIds = preview.filter((r) => r.isValid).map((r) => r.row);
 
       set({
-        previewRows: Array.isArray(data.preview) ? data.preview : [],
+        previewRows: preview,
+        selectedRowIds,
         uploading: false,
       });
+
+      toast.success("✅ CSV parsed successfully");
     } catch (e) {
+      console.error(e);
       set({
-        error: e.message || "Failed to preview CSV",
         uploading: false,
+        error: e?.response?.data?.message || e.message,
       });
+      toast.error(e?.response?.data?.message || e.message);
     }
   },
 
-  /* ---------- CREATE DRAFT PRODUCTS ---------- */
-  createDraftProducts: async () => {
-    const rows = get().validRows;
-    if (!rows.length) {
-      set({ error: "No valid rows to import" });
-      return;
+  /* ============================================================
+     MANUAL ROWS
+  ============================================================ */
+
+  // ✅ addManualRow is here now ✅
+  addManualRow: () => {
+    const rows = get().previewRows;
+    const newRowNumber = nextRowNumber(rows);
+
+    const emptyRow = validateRow({
+      row: newRowNumber,
+      title: "",
+      price: "",
+      compareAtPrice: null,
+      categories: [],
+      stock: 0,
+      tags: [],
+      shortDescription: "",
+      description: "",
+      images: [],
+      thumbnail: "",
+      attributes: [],
+      variants: [],
+      sku: "",
+    });
+
+    // ✅ apply defaults
+    const defaults = get().globalDefaults;
+    const finalRow = applyDefaultsToRow(emptyRow, defaults);
+
+    set({
+      previewRows: [...rows, finalRow],
+    });
+
+    toast.success("➕ Manual row added");
+  },
+
+  updateManualRowField: (rowId, field, value) => {
+    const rows = get().previewRows;
+
+    const updated = rows.map((r) => {
+      if (r.row !== rowId) return r;
+
+      const next = { ...r, [field]: value };
+
+      // normalize certain fields
+      if (field === "tags") next.tags = tagsNorm(value);
+      if (field === "price" || field === "stock") next[field] = Number(value);
+
+      // ensure categories always array
+      if (field === "categories" && typeof value === "string") {
+        next.categories = value.split(",").map((x) => x.trim()).filter(Boolean);
+      }
+
+      return validateRow(next);
+    });
+
+    set({ previewRows: updated });
+  },
+
+  deleteManualRow: (rowId) => {
+    const rows = get().previewRows.filter((r) => r.row !== rowId);
+    const selectedRowIds = get().selectedRowIds.filter((id) => id !== rowId);
+
+    set({
+      previewRows: rows,
+      selectedRowIds,
+    });
+
+    toast.success("🗑️ Row deleted");
+  },
+
+  /* ============================================================
+     ROW SELECTION
+  ============================================================ */
+  toggleRowSelection: (rowId) => {
+    const selected = get().selectedRowIds;
+
+    if (selected.includes(rowId)) {
+      set({ selectedRowIds: selected.filter((id) => id !== rowId) });
+    } else {
+      set({ selectedRowIds: [...selected, rowId] });
     }
+  },
 
+  selectAllValidRows: () => {
+    const ids = get()
+      .previewRows.filter((r) => r.isValid)
+      .map((r) => r.row);
+    set({ selectedRowIds: ids });
+  },
+
+  clearSelection: () => set({ selectedRowIds: [] }),
+
+  /* ============================================================
+     GLOBAL DEFAULTS (from Setup Modal)
+  ============================================================ */
+  setGlobalDefaults: (config) => {
+    set({
+      globalDefaults: {
+        categories: config.categories || [],
+        attributes: config.attributes || [],
+        images: config.images || [],
+        thumbnail: config.thumbnail || "",
+      },
+    });
+
+    toast.success("✅ Setup defaults saved");
+  },
+
+  applyDefaultsToSelectedRows: () => {
+    const defaults = get().globalDefaults;
+    const selected = get().selectedRowIds;
+
+    const updated = get().previewRows.map((r) => {
+      if (!selected.includes(r.row)) return r;
+      return applyDefaultsToRow(r, defaults);
+    });
+
+    set({ previewRows: updated });
+    toast.success("✅ Defaults applied to selected rows");
+  },
+
+  /* ============================================================
+     CREATE DRAFT PRODUCTS
+  ============================================================ */
+  createDraftProducts: async () => {
     try {
-      set({ creating: true, error: null });
+      set({ creating: true, error: null, successMessage: null });
 
-      const res = await fetch(
-        `${API}/api/products/bulk/create-draft`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows }),
-        }
+      const rows = get().previewRows;
+      const selected = get().selectedRowIds;
+
+      if (!selected.length) {
+        set({ creating: false, error: "No rows selected for import" });
+        toast.error("No rows selected");
+        return;
+      }
+
+      const selectedRows = rows.filter((r) => selected.includes(r.row));
+
+      const { data } = await axios.post(
+        CREATE_DRAFT_API,
+        { rows: selectedRows },
+        { withCredentials: true }
       );
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.message || "Bulk create failed");
-      }
-
       set({
         creating: false,
+        successMessage: data.message || "Draft products created successfully",
       });
 
-      return data; // { createdCount }
+      toast.success(data.message || "✅ Draft products created");
+      return data;
     } catch (e) {
+      console.error(e);
       set({
         creating: false,
-        error: e.message || "Failed to create draft products",
+        error: e?.response?.data?.message || e.message,
       });
+      toast.error(e?.response?.data?.message || e.message);
     }
   },
 
-  /* ---------- UPDATE SINGLE ROW (INLINE EDIT SUPPORT) ---------- */
-  updatePreviewRow: (rowIndex, patch) => {
-    const rows = [...get().previewRows];
-    if (!rows[rowIndex]) return;
-
-    rows[rowIndex] = {
-      ...rows[rowIndex],
-      ...patch,
-    };
-
-    // re-evaluate validity if needed
-    const errors = [];
-    if (!rows[rowIndex].title) errors.push("Missing title");
-    if (!Number.isFinite(Number(rows[rowIndex].price)))
-      errors.push("Invalid price");
-    if (!rows[rowIndex].categories?.length)
-      errors.push("Missing category");
-
-    rows[rowIndex].errors = errors;
-    rows[rowIndex].isValid = errors.length === 0;
-
-    set({ previewRows: rows });
+  /* ============================================================
+     RESET
+  ============================================================ */
+  resetBulkImport: () => {
+    set({
+      previewRows: [],
+      selectedRowIds: [],
+      uploading: false,
+      creating: false,
+      error: null,
+      successMessage: null,
+      globalDefaults: {
+        categories: [],
+        attributes: [],
+        images: [],
+        thumbnail: "",
+      },
+    });
   },
 }));
