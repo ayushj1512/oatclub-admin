@@ -9,18 +9,10 @@ import { useAdminProductStore } from "@/store/adminProductStore";
 export default function CollectionManager() {
   const router = useRouter();
 
-  const {
-    collections,
-    loading,
-    fetchCollections,
-    deleteCollection,
-  } = useAdminCollectionStore();
+  const { collections, loading, fetchCollections, deleteCollection } =
+    useAdminCollectionStore();
 
-  const {
-    products,
-    fetchProducts,
-    loading: productLoading,
-  } = useAdminProductStore();
+  const { products, fetchProducts } = useAdminProductStore();
 
   /* ---------------- load data ---------------- */
   useEffect(() => {
@@ -39,172 +31,191 @@ export default function CollectionManager() {
     await deleteCollection(id);
   };
 
-  /* ---------------- render ---------------- */
   return (
- <div className="p-6 bg-gray-50 min-h-screen space-y-6">
-  {/* HEADER */}
-  <div className="flex items-center justify-between">
-    <div>
-      <h1 className="text-2xl font-semibold text-gray-900">
-        Product Collections
-      </h1>
-      <p className="text-sm text-gray-600">
-        Group products into curated collections
-      </p>
-    </div>
+    <div className="min-h-screen bg-[#F6F7FB] p-6 space-y-6">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Product Collections
+          </h1>
+          <p className="text-sm text-gray-500">
+            Group products into curated collections
+          </p>
+        </div>
 
-    <button
-      onClick={() => router.push("/products/collections/add")}
-      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-    >
-      <Plus size={16} />
-      New Collection
-    </button>
-  </div>
+        <button
+          onClick={() => router.push("/products/collections/add")}
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 shadow-sm transition"
+        >
+          <Plus size={16} />
+          New Collection
+        </button>
+      </div>
 
-  {/* TABLE WRAPPER */}
-  <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-    <table className="w-full text-sm">
-      <thead className="bg-gray-100 text-gray-600 text-xs uppercase">
-        <tr>
-          <th className="px-4 py-3 text-left">Collection</th>
-          <th className="px-4 py-3 text-left">Type</th>
-          <th className="px-4 py-3 text-left">Products</th>
-          <th className="px-4 py-3 text-center">Status</th>
-          <th className="px-4 py-3 text-right">Action</th>
-        </tr>
-      </thead>
+      {/* TABLE WRAPPER */}
+      <div className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+            <tr>
+              <th className="px-5 py-4 text-left font-semibold">Collection</th>
+              <th className="px-5 py-4 text-left font-semibold">Type</th>
+              <th className="px-5 py-4 text-left font-semibold">Products</th>
+              <th className="px-5 py-4 text-center font-semibold">Status</th>
+              <th className="px-5 py-4 text-right font-semibold">Actions</th>
+            </tr>
+          </thead>
 
-      <tbody className="divide-y divide-gray-200">
-        {/* LOADING */}
-        {loading && (
-          <tr>
-            <td
-              colSpan="5"
-              className="px-6 py-10 text-center text-gray-500"
-            >
-              Loading collections…
-            </td>
-          </tr>
-        )}
-
-        {/* EMPTY */}
-        {!loading && collections.length === 0 && (
-          <tr>
-            <td
-              colSpan="5"
-              className="px-6 py-10 text-center text-gray-400"
-            >
-              No collections created yet
-              <div className="mt-2">
-                <button
-                  onClick={() =>
-                    router.push("/products/collections/add")
-                  }
-                  className="text-sm text-blue-600 hover:underline"
+          <tbody className="divide-y divide-gray-100">
+            {/* LOADING */}
+            {loading && (
+              <tr>
+                <td
+                  colSpan="5"
+                  className="px-6 py-12 text-center text-gray-500"
                 >
-                  Create your first collection
-                </button>
-              </div>
-            </td>
-          </tr>
-        )}
+                  Loading collections…
+                </td>
+              </tr>
+            )}
 
-        {/* ROWS */}
-        {collections.map((c) => (
-          <tr
-            key={c._id}
-            className="hover:bg-gray-50 transition"
-          >
-            {/* NAME */}
-            <td className="px-4 py-3">
-              <div className="font-medium text-gray-900">
-                {c.name}
-              </div>
-              <div className="text-xs text-gray-500">
-                {c.products?.length || 0} products
-              </div>
-            </td>
+            {/* EMPTY */}
+            {!loading && collections.length === 0 && (
+              <tr>
+                <td colSpan="5" className="px-6 py-14 text-center">
+                  <div className="text-gray-400 font-medium">
+                    No collections created yet
+                  </div>
 
-            {/* TYPE */}
-            <td className="px-4 py-3 capitalize text-gray-700">
-              {c.type}
-            </td>
+                  <button
+                    onClick={() =>
+                      router.push("/products/collections/add")
+                    }
+                    className="mt-3 inline-flex items-center justify-center text-sm font-medium text-blue-600 hover:underline"
+                  >
+                    Create your first collection
+                  </button>
+                </td>
+              </tr>
+            )}
 
-            {/* PRODUCTS */}
-            <td className="px-4 py-3">
-              {Array.isArray(c.products) && c.products.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {c.products.slice(0, 4).map((p) => {
-                    const id =
-                      typeof p === "string" ? p : p._id;
-                    const prod = productMap.get(id);
+            {/* ROWS */}
+            {collections.map((c) => (
+              <tr
+                key={c._id}
+                className="hover:bg-gray-50/70 transition cursor-pointer"
+                onClick={() => router.push(`/products/collections/${c._id}`)}
+              >
+                {/* NAME */}
+                <td className="px-5 py-4">
+                  <div className="font-semibold text-gray-900">{c.name}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {c.products?.length || 0} products
+                  </div>
+                </td>
 
-                    return (
-                      <span
-                        key={id}
-                        className="px-2 py-0.5 bg-gray-100 rounded-full text-xs max-w-[120px] truncate"
-                        title={prod?.title}
-                      >
-                        {prod?.title || "Product"}
-                      </span>
-                    );
-                  })}
+                {/* TYPE */}
+                <td className="px-5 py-4 capitalize text-gray-600">
+                  {c.type}
+                </td>
 
-                  {c.products.length > 4 && (
-                    <span className="text-xs text-gray-500">
-                      +{c.products.length - 4} more
+                {/* PRODUCTS */}
+                <td className="px-5 py-4">
+                  {Array.isArray(c.products) && c.products.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {c.products.slice(0, 4).map((p) => {
+                        const id = typeof p === "string" ? p : p._id;
+                        const prod = productMap.get(id);
+
+                        const img =
+                          prod?.images?.[0] ||
+                          prod?.image ||
+                          prod?.thumbnail ||
+                          "/placeholder.png";
+
+                        return (
+                          <span
+                            key={id}
+                            className="flex items-center gap-2 px-2 py-1 rounded-full bg-gray-100 text-xs text-gray-700 max-w-[170px] truncate"
+                            title={prod?.title}
+                          >
+                            <span className="h-6 w-6 rounded-full overflow-hidden bg-gray-200 ring-1 ring-black/10 flex-shrink-0">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={img}
+                                alt={prod?.title || "product"}
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.src = "/placeholder.png";
+                                }}
+                              />
+                            </span>
+
+                            <span className="truncate">
+                              {prod?.title || "Product"}
+                            </span>
+                          </span>
+                        );
+                      })}
+
+                      {c.products.length > 4 && (
+                        <span className="text-xs text-gray-500 flex items-center">
+                          +{c.products.length - 4} more
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400">No products</span>
+                  )}
+                </td>
+
+                {/* STATUS */}
+                <td className="px-5 py-4 text-center">
+                  {c.isActive ? (
+                    <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold ring-1 ring-blue-200">
+                      Active
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold ring-1 ring-gray-200">
+                      Inactive
                     </span>
                   )}
-                </div>
-              ) : (
-                <span className="text-xs text-gray-400">
-                  No products
-                </span>
-              )}
-            </td>
+                </td>
 
-            {/* STATUS */}
-            <td className="px-4 py-3 text-center">
-              {c.isActive ? (
-                <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs">
-                  Active
-                </span>
-              ) : (
-                <span className="px-2 py-1 rounded-full bg-gray-200 text-gray-600 text-xs">
-                  Inactive
-                </span>
-              )}
-            </td>
+                {/* ACTION */}
+                <td
+                  className="px-5 py-4 text-right space-x-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* EDIT */}
+                  <button
+                    onClick={() =>
+                      router.push(`/products/collections/${c._id}`)
+                    }
+                    className="px-3 py-1.5 text-xs rounded-xl bg-gray-100 text-gray-800 hover:bg-gray-200 transition font-medium"
+                  >
+                    Edit
+                  </button>
 
-            {/* ACTION */}
-            <td className="px-4 py-3 text-right space-x-2">
-  {/* EDIT */}
-  <button
-    onClick={() =>
-      router.push(`/products/collections/${c._id}`)
-    }
-    className="px-2 py-1 text-xs rounded-md border text-gray-700 hover:bg-gray-100"
-  >
-    Edit
-  </button>
+                  {/* DELETE */}
+                  <button
+                    onClick={() => handleDelete(c._id)}
+                    className="p-2 rounded-xl text-red-600 hover:bg-red-50 transition"
+                    title="Delete collection"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-  {/* DELETE */}
-  <button
-    onClick={() => handleDelete(c._id)}
-    className="p-1.5 rounded-md text-red-600 hover:bg-red-50"
-    title="Delete collection"
-  >
-    <Trash2 size={16} />
-  </button>
-</td>
-
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
-
+      {/* FOOTER TIP */}
+      <div className="text-xs text-gray-400 text-center">
+        Tip: Click on a row to quickly edit the collection.
+      </div>
+    </div>
   );
 }

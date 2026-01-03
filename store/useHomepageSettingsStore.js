@@ -6,6 +6,16 @@ import { create } from "zustand";
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const API_BASE = `${BASE_URL}/api/homepage-settings`;
 
+// ✅ helper: normalize + order + continuous sortOrder
+const normalizeCategoryRow = (row = []) => {
+  return [...row]
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    .map((item, index) => ({
+      ...item,
+      sortOrder: index + 1,
+    }));
+};
+
 export const useHomepageSettingsStore = create((set, get) => ({
   settings: null,
 
@@ -40,7 +50,7 @@ export const useHomepageSettingsStore = create((set, get) => ({
       set({
         settings: data,
         heroBanners: data.heroBanners || [],
-        categoryRow: data.categoryRow || [],
+        categoryRow: normalizeCategoryRow(data.categoryRow || []), // ✅ normalize
         loading: false,
       });
 
@@ -58,10 +68,18 @@ export const useHomepageSettingsStore = create((set, get) => ({
     try {
       set({ saving: true, error: null, success: null });
 
+      // ✅ if payload has categoryRow, normalize it
+      const finalPayload = {
+        ...payload,
+        categoryRow: payload.categoryRow
+          ? normalizeCategoryRow(payload.categoryRow)
+          : payload.categoryRow,
+      };
+
       const res = await fetch(API_BASE, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(finalPayload),
       });
 
       if (!res.ok) {
@@ -74,7 +92,7 @@ export const useHomepageSettingsStore = create((set, get) => ({
       set({
         settings: updated,
         heroBanners: updated.heroBanners || [],
-        categoryRow: updated.categoryRow || [],
+        categoryRow: normalizeCategoryRow(updated.categoryRow || []), // ✅ normalize
         saving: false,
         success: "Homepage settings updated ✅",
       });
@@ -127,10 +145,13 @@ export const useHomepageSettingsStore = create((set, get) => ({
     try {
       set({ saving: true, error: null, success: null });
 
+      // ✅ normalize before sending
+      const normalized = normalizeCategoryRow(categoryRow);
+
       const res = await fetch(`${API_BASE}/category-row`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoryRow }),
+        body: JSON.stringify({ categoryRow: normalized }),
       });
 
       if (!res.ok) {
@@ -142,7 +163,7 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
       set({
         settings: updated,
-        categoryRow: updated.categoryRow || categoryRow,
+        categoryRow: normalizeCategoryRow(updated.categoryRow || normalized), // ✅ normalize
         saving: false,
         success: "Category row updated ✅",
       });
@@ -158,7 +179,10 @@ export const useHomepageSettingsStore = create((set, get) => ({
      Local-only setters (UI)
   ---------------------------- */
   setHeroBannersLocal: (heroBanners) => set({ heroBanners }),
-  setCategoryRowLocal: (categoryRow) => set({ categoryRow }),
+
+  // ✅ normalize even locally (rearrangement always clean)
+  setCategoryRowLocal: (categoryRow) =>
+    set({ categoryRow: normalizeCategoryRow(categoryRow) }),
 
   /* ---------------------------
      Clear success/error
