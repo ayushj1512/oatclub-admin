@@ -567,4 +567,46 @@ saveBulkPricing: async () => {
   }
 },
 
+updateVariantStock: async (productId, variantId, stock) => {
+  try {
+    const res = await fetch(`${API}/${productId}/variant-stock`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ variantId, stock }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Stock update failed");
+
+    const updatedProduct = data.product;
+
+    // ✅ Update edit page product
+    set({ product: updatedProduct });
+
+    // ✅ ALSO update grid list
+    set((state) => ({
+      products: state.products.map((p) =>
+        p._id === productId
+          ? {
+              ...p,
+              stock: updatedProduct.stock ?? p.stock, // ✅ stock update
+              variants: updatedProduct.variants ?? p.variants, // ✅ optional
+            }
+          : p
+      ),
+    }));
+
+    toast.success("Variant stock updated ✅");
+    return updatedProduct;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+  }
+},
+
+
+
   }));
+
+  
