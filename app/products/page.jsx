@@ -153,6 +153,15 @@ const allSelected = useMemo(() => {
   return selectedIds.size > 0 && selectedIds.size < filteredProducts.length;
 }, [filteredProducts, selectedIds]);
 
+const productsWithMissingVariantIds = useMemo(() => {
+  return (filteredProducts || []).filter((p) => {
+    if (p.productType !== "variable") return false;
+    const variants = Array.isArray(p.variants) ? p.variants : [];
+    if (!variants.length) return false;
+
+    return variants.some((v) => !v?._id); // ✅ missing variantId
+  });
+}, [filteredProducts]);
 
   /* ==============================
      Load categories
@@ -507,6 +516,36 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
           </button>
         </div>
       </div>
+
+      {!loading && (
+  productsWithMissingVariantIds.length > 0 ? (
+    <div className="mb-4 p-4 rounded-xl border border-red-300 bg-red-50 text-red-700">
+      <p className="font-bold">
+        ⚠️ {productsWithMissingVariantIds.length} products have variants without Variant IDs:
+      </p>
+
+      <ul className="list-disc ml-6 text-sm mt-2 space-y-1">
+        {productsWithMissingVariantIds.slice(0, 10).map((p) => (
+          <li key={p._id}>
+            {p.title} ({p.sku || "No SKU"})
+          </li>
+        ))}
+      </ul>
+
+      {productsWithMissingVariantIds.length > 10 && (
+        <p className="text-xs mt-2 opacity-70">
+          + {productsWithMissingVariantIds.length - 10} more…
+        </p>
+      )}
+    </div>
+  ) : (
+    <div className="mb-4 p-4 rounded-xl border border-green-300 bg-green-50 text-green-700">
+      <p className="font-bold">all variant ID's are available.</p>
+    </div>
+  )
+)}
+
+
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4 items-center">
