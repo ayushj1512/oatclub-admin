@@ -11,36 +11,42 @@ import {
   createColumnHelper,
 } from "@tanstack/react-table";
 import { motion } from "framer-motion";
-import { Search, Download, Plus, CheckCircle, EyeOff } from "lucide-react";
+import { Search, Download, Plus, X } from "lucide-react";
 import * as XLSX from "xlsx";
 
 import { useNewsletterAdminStore } from "@/store/newsletterStore";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_BACKEND_URL + "/api/newsletters/subscribers";
+/* ✅ ENV SAFE BASE URL */
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:5000";
 
-// simple email regex
-const validEmail = (email) =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+/* ✅ API BASE */
+const API_BASE = `${BASE_URL}/api/newsletters`;
+
+/* simple email regex */
+const validEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 export default function NewsletterAdminPage() {
   /* ---------------- STORE ---------------- */
-  const {
-    subscribers,
-    fetchSubscribers,
-    loading,
-    error,
-  } = useNewsletterAdminStore();
+  const { subscribers, total, fetchSubscribers, loading, error } =
+    useNewsletterAdminStore();
 
   /* ---------------- LOCAL UI STATE ---------------- */
   const [globalFilter, setGlobalFilter] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [adding, setAdding] = useState(false);
 
+  /* ✅ Page size */
+  const [pageSize, setPageSize] = useState(100);
+  const pageSizeOptions = [25, 50, 100, 250];
+
   /* ---------------- FETCH DATA ---------------- */
   useEffect(() => {
     fetchSubscribers();
-  }, [fetchSubscribers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ---------------- ADD SUBSCRIBER ---------------- */
   const addSubscriber = async () => {
@@ -66,7 +72,7 @@ export default function NewsletterAdminPage() {
         throw new Error(json?.message || "Failed to add subscriber");
       }
 
-      await fetchSubscribers(); // refresh list
+      await fetchSubscribers();
       setNewEmail("");
     } catch (e) {
       alert(e.message || "Network error");
@@ -83,55 +89,38 @@ export default function NewsletterAdminPage() {
       columnHelper.accessor("email", {
         header: "Email",
         cell: (info) => (
-          <span className="font-medium text-gray-800">
-            {info.getValue()}
-          </span>
+          <span className="font-medium text-black">{info.getValue()}</span>
         ),
       }),
 
       columnHelper.accessor("isVerified", {
         header: "Verified",
-        cell: (info) =>
-          info.getValue() ? (
-            <span className="text-green-600 font-semibold flex items-center gap-1">
-              <CheckCircle size={14} /> Yes
-            </span>
-          ) : (
-            <span className="text-red-500 flex items-center gap-1">
-              <EyeOff size={14} /> No
-            </span>
-          ),
+        cell: (info) => (info.getValue() ? "Yes" : "No"),
       }),
 
       columnHelper.accessor("isActive", {
         header: "Status",
-        cell: (info) =>
-          info.getValue() ? (
-            <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs">
-              Active
-            </span>
-          ) : (
-            <span className="px-2 py-1 rounded-full bg-gray-200 text-gray-600 text-xs">
-              Inactive
-            </span>
-          ),
+        cell: (info) => (info.getValue() ? "Active" : "Inactive"),
       }),
 
       columnHelper.accessor("subscribedAt", {
-        header: "Subscribed On",
-        cell: (info) =>
-          new Date(info.getValue()).toLocaleDateString("en-IN", {
+        header: "Subscribed",
+        cell: (info) => {
+          const val = info.getValue();
+          if (!val) return "-";
+          return new Date(val).toLocaleDateString("en-IN", {
             day: "numeric",
             month: "short",
             year: "numeric",
-          }),
+          });
+        },
       }),
     ],
     []
   );
 
   const table = useReactTable({
-    data: subscribers,
+    data: subscribers || [],
     columns,
     state: { globalFilter },
     onGlobalFilterChange: setGlobalFilter,
@@ -139,60 +128,132 @@ export default function NewsletterAdminPage() {
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize,
+      },
+    },
   });
+
+  useEffect(() => {
+    table.setPageSize(pageSize);
+  }, [pageSize, table]);
 
   /* ---------------- EXPORT ---------------- */
   const exportExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(subscribers);
+    const clean = (subscribers || []).map((s) => ({
+      email: s.email,
+      isActive: s.isActive,
+      isVerified: s.isVerified,
+      subscribedAt: s.subscribedAt,
+      source: s.source,
+      tags: Array.isArray(s.tags) ? s.tags.join(", ") : "",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(clean);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Subscribers");
     XLSX.writeFile(wb, "newsletter_subscribers.xlsx");
   };
 
-  /* ---------------- UI ---------------- */
+  /* ---------------- UI HELPERS ---------------- */
+  const pageIndex = table.getState().pagination.pageIndex;
+  const currentRows = table.getRowModel().rows.length;
+  const showingFrom = currentRows ? pageIndex * pageSize + 1 : 0;
+  const showingTo = pageIndex * pageSize + currentRows;
+
   return (
-    <div className="p-6 w-full max-w-7xl mx-auto">
-      <motion.h1
+    <div className="p-6 w-full max-w-7xl mx-auto text-black">
+      {/* HEADER */}
+      <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-3xl font-bold mb-6 text-blue-700"
+        className="mb-8"
       >
-        Newsletter Subscribers
-      </motion.h1>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Newsletter Subscribers
+        </h1>
+        <p className="text-sm text-neutral-500 mt-1">
+          Premium admin view — search, add, export & manage your subscribers.
+        </p>
 
-      {/* SEARCH + EXPORT */}
-      <div className="flex flex-col md:flex-row gap-4 mb-6">
-        <div className="flex items-center border px-3 py-2 rounded-lg bg-white shadow-sm w-full md:w-1/3">
-          <Search className="w-4 h-4 text-gray-500" />
+        {/* STAT CHIP */}
+        <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-neutral-900 text-white px-4 py-2 text-sm shadow-sm">
+          <span className="opacity-80">Total</span>
+          <span className="font-semibold">{total || subscribers?.length || 0}</span>
+        </div>
+      </motion.div>
+
+      {/* TOP BAR */}
+      <div className="flex flex-col lg:flex-row gap-3 mb-6 items-start lg:items-center justify-between">
+        {/* SEARCH */}
+        <div className="w-full lg:w-[380px]">
+          <div className="flex items-center rounded-xl bg-white shadow-sm ring-1 ring-black/5 px-3 py-2">
+            <Search className="w-4 h-4 text-neutral-500" />
+            <input
+              placeholder="Search by email..."
+              value={globalFilter ?? ""}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="ml-2 outline-none text-sm w-full bg-transparent placeholder:text-neutral-400"
+            />
+            {globalFilter && (
+              <button
+                onClick={() => setGlobalFilter("")}
+                className="ml-2 text-neutral-400 hover:text-black transition"
+                title="Clear"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT CONTROLS */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+          {/* PAGE SIZE */}
+          <div className="flex items-center gap-2 rounded-xl bg-white shadow-sm ring-1 ring-black/5 px-3 py-2">
+            <span className="text-sm text-neutral-500">Rows</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="text-sm outline-none bg-transparent"
+            >
+              {pageSizeOptions.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* EXPORT */}
+          <button
+            onClick={exportExcel}
+            disabled={!subscribers?.length}
+            className="flex items-center justify-center gap-2 rounded-xl bg-black text-white px-5 py-2 text-sm shadow-sm hover:opacity-90 disabled:opacity-40 transition w-full sm:w-auto"
+          >
+            <Download size={16} />
+            Export
+          </button>
+        </div>
+      </div>
+
+      {/* ADD SUBSCRIBER */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="flex-1 rounded-xl bg-white shadow-sm ring-1 ring-black/5 px-3 py-2">
           <input
-            placeholder="Search email..."
-            value={globalFilter ?? ""}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="ml-2 outline-none text-sm w-full"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addSubscriber()}
+            placeholder="Add new email..."
+            className="w-full outline-none text-sm bg-transparent placeholder:text-neutral-400"
           />
         </div>
 
         <button
-          onClick={exportExcel}
-          className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-lg shadow hover:bg-blue-700 text-sm"
-        >
-          <Download size={16} /> Export
-        </button>
-      </div>
-
-      {/* ADD EMAIL */}
-      <div className="flex gap-3 mb-6">
-        <input
-          value={newEmail}
-          onChange={(e) => setNewEmail(e.target.value)}
-          placeholder="Add new email..."
-          className="border rounded-lg px-3 py-2 text-sm bg-white shadow-sm flex-1"
-        />
-
-        <button
           onClick={addSubscriber}
           disabled={adding}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 text-sm disabled:opacity-50"
+          className="flex items-center justify-center gap-2 rounded-xl bg-black text-white px-4 py-2 text-sm shadow-sm hover:opacity-90 disabled:opacity-40 transition"
         >
           <Plus size={16} />
           {adding ? "Adding..." : "Add"}
@@ -200,74 +261,101 @@ export default function NewsletterAdminPage() {
       </div>
 
       {/* TABLE */}
-      <motion.div className="overflow-x-auto border rounded-xl shadow bg-white">
+      <motion.div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 overflow-hidden">
         {loading ? (
-          <div className="p-6 text-center text-gray-500">Loading...</div>
+          <div className="p-12 text-center text-neutral-500">Loading...</div>
         ) : error ? (
-          <div className="p-6 text-center text-red-500">{error}</div>
+          <div className="p-12 text-center text-neutral-500">{error}</div>
         ) : (
-          <table className="w-full text-sm text-gray-800">
-            <thead className="bg-blue-50 border-b">
-              {table.getHeaderGroups().map((group) => (
-                <tr key={group.id}>
-                  {group.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      onClick={header.column.getToggleSortingHandler()}
-                      className="p-3 cursor-pointer text-left"
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-black/5">
+                {table.getHeaderGroups().map((group) => (
+                  <tr key={group.id}>
+                    {group.headers.map((header) => (
+                      <th
+                        key={header.id}
+                        onClick={header.column.getToggleSortingHandler()}
+                        className="px-5 py-4 text-left font-semibold cursor-pointer select-none whitespace-nowrap"
+                      >
+                        <div className="flex items-center gap-2">
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                          {{
+                            asc: "↑",
+                            desc: "↓",
+                          }[header.column.getIsSorted()] ?? null}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+
+              <tbody>
+                {table.getRowModel().rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-black/5 hover:bg-neutral-50/70 transition"
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td
+                        key={cell.id}
+                        className="px-5 py-4 text-neutral-700 whitespace-nowrap"
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+
+                {table.getRowModel().rows.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="p-12 text-center text-neutral-500"
                     >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                      {{
-                        asc: " ↑",
-                        desc: " ↓",
-                      }[header.column.getIsSorted()] ?? null}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-
-            <tbody>
-              {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="border-b hover:bg-gray-50">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="p-3">
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
+                      No subscribers found.
                     </td>
-                  ))}
-                </tr>
-              ))}
-
-              {table.getRowModel().rows.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="p-4 text-center text-gray-500">
-                    No subscribers found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </motion.div>
 
       {/* PAGINATION */}
-      <div className="flex items-center justify-between mt-4 text-sm">
-        <span>
-          Page {table.getState().pagination.pageIndex + 1} of{" "}
-          {table.getPageCount()}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-6 gap-3 text-sm">
+        <span className="text-neutral-600">
+          Showing{" "}
+          <span className="text-black font-medium">
+            {currentRows ? `${showingFrom}-${showingTo}` : "0"}
+          </span>{" "}
+          of{" "}
+          <span className="text-black font-medium">
+            {table.getFilteredRowModel().rows.length}
+          </span>
         </span>
 
         <div className="flex gap-2">
           <button
+            onClick={() => table.setPageIndex(0)}
+            disabled={!table.getCanPreviousPage()}
+            className="px-3 py-2 rounded-xl bg-white shadow-sm ring-1 ring-black/5 hover:bg-neutral-50 disabled:opacity-40 transition"
+          >
+            First
+          </button>
+
+          <button
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
-            className="px-3 py-1 border rounded disabled:opacity-40"
+            className="px-3 py-2 rounded-xl bg-white shadow-sm ring-1 ring-black/5 hover:bg-neutral-50 disabled:opacity-40 transition"
           >
             Prev
           </button>
@@ -275,9 +363,17 @@ export default function NewsletterAdminPage() {
           <button
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
-            className="px-3 py-1 border rounded disabled:opacity-40"
+            className="px-3 py-2 rounded-xl bg-white shadow-sm ring-1 ring-black/5 hover:bg-neutral-50 disabled:opacity-40 transition"
           >
             Next
+          </button>
+
+          <button
+            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+            disabled={!table.getCanNextPage()}
+            className="px-3 py-2 rounded-xl bg-white shadow-sm ring-1 ring-black/5 hover:bg-neutral-50 disabled:opacity-40 transition"
+          >
+            Last
           </button>
         </div>
       </div>
