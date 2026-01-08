@@ -25,6 +25,24 @@ export const useOrderStore = create((set, get) => ({
       error: err?.message || "Something went wrong",
     }),
 
+  _normalizeOrders: (data) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.orders)) return data.orders;
+    return [];
+  },
+
+  _normalizeOrder: (data) => data?.order || data || null,
+
+  _syncOrderInList: (updatedOrder) => {
+    if (!updatedOrder?._id) return;
+
+    set((state) => ({
+      orders: (state.orders || []).map((o) =>
+        String(o?._id) === String(updatedOrder._id) ? updatedOrder : o
+      ),
+    }));
+  },
+
   /* ============================================================
      CREATE ORDER
      POST /api/orders
@@ -41,8 +59,13 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      const order = data?.order || data;
+      const order = get()._normalizeOrder(data);
       set({ order });
+
+      // ✅ keep orders list updated too
+      set((state) => ({
+        orders: order ? [order, ...(state.orders || [])] : state.orders,
+      }));
 
       get()._success();
       return order;
@@ -68,14 +91,14 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      const order = data?.order || data;
+      const order = get()._normalizeOrder(data);
       set({ order });
 
       get()._success();
-      return order; // ✅ IMPORTANT
+      return order;
     } catch (e) {
       get()._error(e);
-      return null; // ✅ IMPORTANT
+      return null;
     }
   },
 
@@ -95,14 +118,14 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      const order = data?.order || data;
+      const order = get()._normalizeOrder(data);
       set({ order });
 
       get()._success();
-      return order; // ✅ IMPORTANT
+      return order;
     } catch (e) {
       get()._error(e);
-      return null; // ✅ IMPORTANT
+      return null;
     }
   },
 
@@ -122,7 +145,7 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      const orders = Array.isArray(data) ? data : data?.orders || [];
+      const orders = get()._normalizeOrders(data);
       set({ orders });
 
       get()._success();
@@ -141,14 +164,14 @@ export const useOrderStore = create((set, get) => ({
     get()._start();
     try {
       const qs = new URLSearchParams(filters).toString();
-      const res = await fetch(`${API}/api/orders?${qs}`, {
+      const res = await fetch(`${API}/api/orders${qs ? `?${qs}` : ""}`, {
         cache: "no-store",
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      const orders = Array.isArray(data) ? data : data?.orders || [];
+      const orders = get()._normalizeOrders(data);
       set({ orders });
 
       get()._success();
@@ -177,8 +200,41 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      const order = data?.order || data;
+      const order = get()._normalizeOrder(data);
+
       set({ order });
+      get()._syncOrderInList(order); // ✅ FIX: update list also
+
+      get()._success();
+      return order;
+    } catch (e) {
+      get()._error(e);
+      throw e;
+    }
+  },
+
+  /* ============================================================
+     UPDATE TRACKING (optional admin)
+     PATCH /api/orders/:id/tracking
+  ============================================================ */
+  updateTracking: async (orderId, payload) => {
+    if (!orderId) return null;
+
+    get()._start();
+    try {
+      const res = await fetch(`${API}/api/orders/${orderId}/tracking`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message);
+
+      const order = get()._normalizeOrder(data);
+
+      set({ order });
+      get()._syncOrderInList(order);
 
       get()._success();
       return order;
@@ -206,19 +262,21 @@ export const useOrderStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message);
 
-      // ✅ update local order state (nice UX)
+      // ✅ update local order + list
       const current = get().order;
-      if (current && (current._id === orderId || current.id === orderId)) {
-        set({
-          order: {
-            ...current,
-            fulfillmentStatus: "cancelled",
-            shipment: {
-              ...(current.shipment || {}),
-              status: "cancelled",
-            },
+
+      if (current && String(current._id) === String(orderId)) {
+        const updated = {
+          ...current,
+          fulfillmentStatus: "cancelled",
+          shipment: {
+            ...(current.shipment || {}),
+            status: "cancelled",
           },
-        });
+        };
+
+        set({ order: updated });
+        get()._syncOrderInList(updated);
       }
 
       get()._success();
@@ -233,7 +291,7 @@ export const useOrderStore = create((set, get) => ({
      RESET / CLEAR
   ============================================================ */
   clearOrder: () => set({ order: null }),
-clearOrders: () => set({ orders: [] }),
+  clearOrders: () => set({ orders: [] }),
 
   resetStore: () =>
     set({

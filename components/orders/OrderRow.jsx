@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown"; // ✅ if already made
+import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown";
 
 const money = (n) => {
   const x = Number(n);
@@ -14,7 +14,7 @@ const getPaymentBadge = (order) => {
   if (order?.paymentMethod === "cod") {
     return {
       label: "COD",
-      cls: "bg-gray-100 text-gray-700 ring-1 ring-gray-200",
+      cls: "bg-gray-100 text-gray-700",
     };
   }
 
@@ -22,24 +22,24 @@ const getPaymentBadge = (order) => {
     if (order?.paymentStatus === "paid") {
       return {
         label: "Paid ✅",
-        cls: "bg-green-50 text-green-700 ring-1 ring-green-200",
+        cls: "bg-green-50 text-green-700",
       };
     }
     if (order?.paymentStatus === "pending") {
       return {
         label: "Pending ⏳",
-        cls: "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200",
+        cls: "bg-yellow-50 text-yellow-700",
       };
     }
     return {
       label: "Failed ❌",
-      cls: "bg-red-50 text-red-700 ring-1 ring-red-200",
+      cls: "bg-red-50 text-red-700",
     };
   }
 
   return {
     label: "Unknown",
-    cls: "bg-gray-100 text-gray-700 ring-1 ring-gray-200",
+    cls: "bg-gray-100 text-gray-700",
   };
 };
 
@@ -55,13 +55,13 @@ export default function OrderRow({ order, onUpdated }) {
       {/* ===========================
           MAIN ROW
       ============================ */}
-      <tr className="hover:bg-blue-50/40 transition">
+      <tr className="hover:bg-black/[0.03] transition">
         {/* Order # */}
         <td className="py-4 px-5 font-semibold text-gray-900">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setOpen((v) => !v)}
-              className="p-1 rounded-md hover:bg-gray-100"
+              className="p-1.5 rounded-lg hover:bg-black/[0.05] transition"
               title="Expand"
             >
               {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
@@ -124,7 +124,7 @@ export default function OrderRow({ order, onUpdated }) {
         <td className="py-4 px-5">
           <button
             onClick={() => router.push(`/orders/${order._id}`)}
-            className="inline-flex items-center gap-1 text-blue-600 font-semibold hover:text-blue-700 transition"
+            className="inline-flex items-center gap-1 text-black font-semibold hover:opacity-80 transition"
           >
             View <ArrowRight size={16} />
           </button>
@@ -135,17 +135,15 @@ export default function OrderRow({ order, onUpdated }) {
           EXPANDED ROW (COMPACT)
       ============================ */}
       {open && (
-        <tr className="bg-gray-50/50">
+        <tr className="bg-black/[0.015]">
           <td colSpan={7} className="px-5 pb-4">
-            <div className="mt-2 bg-white rounded-xl ring-1 ring-gray-200 shadow-sm px-4 py-3 space-y-3">
+            <div className="mt-3 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 space-y-4">
               
               {/* ✅ COMPACT ITEMS */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-gray-900 text-sm">
-                    Items ({items.length})
-                  </h3>
-                </div>
+                <h3 className="font-semibold text-gray-900 text-sm">
+                  Items ({items.length})
+                </h3>
 
                 {items.length === 0 ? (
                   <p className="text-xs text-gray-500">No items</p>
@@ -155,23 +153,31 @@ export default function OrderRow({ order, onUpdated }) {
                       const snap = it?.productSnapshot || {};
                       const v = it?.variant || {};
 
-                      const variantText = Array.isArray(v?.attributes)
-                        ? v.attributes
-                            .map((a) => `${a?.key}:${a?.value}`)
-                            .filter(Boolean)
-                            .join(", ")
-                        : "";
+                      const size = it?.selectedSize || "";
+                      const color = it?.selectedColor || "";
+
+                      const variantText =
+                        size || color
+                          ? [size ? `Size: ${size}` : "", color ? `Color: ${color}` : ""]
+                              .filter(Boolean)
+                              .join(" • ")
+                          : Array.isArray(v?.attributes)
+                          ? v.attributes
+                              .map((a) => `${a?.key}:${a?.value}`)
+                              .filter(Boolean)
+                              .join(", ")
+                          : "";
 
                       return (
                         <div
                           key={idx}
-                          className="py-2 flex items-center justify-between gap-3"
+                          className="py-3 flex items-center justify-between gap-3"
                         >
                           {/* left */}
                           <div className="flex items-center gap-3 min-w-0">
                             <img
                               src={snap.thumbnail || "/placeholder.png"}
-                              className="w-9 h-9 rounded-lg object-cover ring-1 ring-gray-200"
+                              className="w-10 h-10 rounded-xl object-cover border border-gray-100"
                               alt={snap.title || "Product"}
                             />
 
@@ -179,12 +185,20 @@ export default function OrderRow({ order, onUpdated }) {
                               <p className="text-sm font-semibold text-gray-900 truncate">
                                 {snap.title || "-"}
                               </p>
+
                               <p className="text-xs text-gray-500 truncate">
                                 {variantText ||
                                   (v?.sku || snap?.sku
                                     ? `SKU: ${v?.sku || snap?.sku}`
                                     : "")}
                               </p>
+
+                              {/* ✅ variantId mini */}
+                              {v?.variantId ? (
+                                <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                                  VariantId: {String(v.variantId).slice(0, 10)}...
+                                </p>
+                              ) : null}
                             </div>
                           </div>
 
@@ -204,22 +218,22 @@ export default function OrderRow({ order, onUpdated }) {
                 )}
               </div>
 
-              {/* ✅ COMPACT TOTALS (CHIPS) */}
-              <div className="border-t pt-3 flex flex-wrap gap-2 text-xs text-gray-700">
-                <span className="px-2.5 py-1 rounded-full bg-gray-100 ring-1 ring-gray-200">
+              {/* ✅ COMPACT TOTALS */}
+              <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2 text-xs text-gray-700">
+                <span className="px-3 py-1 rounded-full bg-gray-100">
                   Subtotal: <b>₹{money(order.subtotal)}</b>
                 </span>
-                <span className="px-2.5 py-1 rounded-full bg-gray-100 ring-1 ring-gray-200">
+                <span className="px-3 py-1 rounded-full bg-gray-100">
                   Discount: <b>₹{money(order.discount)}</b>
                 </span>
-                <span className="px-2.5 py-1 rounded-full bg-gray-100 ring-1 ring-gray-200">
+                <span className="px-3 py-1 rounded-full bg-gray-100">
                   Shipping: <b>₹{money(order.shippingFee)}</b>
                 </span>
-                <span className="px-2.5 py-1 rounded-full bg-gray-100 ring-1 ring-gray-200">
+                <span className="px-3 py-1 rounded-full bg-gray-100">
                   Tax: <b>₹{money(order.tax)}</b>
                 </span>
 
-                <span className="ml-auto px-3 py-1 rounded-full bg-black text-white font-semibold">
+                <span className="ml-auto px-4 py-1 rounded-full bg-black text-white font-semibold">
                   Final: ₹{money(order.finalPayable)}
                 </span>
               </div>

@@ -11,36 +11,44 @@ import {
   Package,
   User,
   Receipt,
-  FileText,
   BadgeIndianRupee,
 } from "lucide-react";
 
 import { toast } from "react-hot-toast";
-import { useOrderStore } from "@/store/orderStore"; // ✅ make sure path matches
+import { useOrderStore } from "@/store/orderStore";
 import OrderPrintPanel from "@/components/orders/OrderPrintPanel";
-
+import OrderRmaMention from "../../../components/orders/OrderRma";
 const API = process.env.NEXT_PUBLIC_API_URL;
+
 
 const statusBadgeStyle = (status) => {
   switch (status) {
     case "processing":
-      return "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200";
+      return "bg-yellow-50 text-yellow-700";
     case "packed":
-      return "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200";
+      return "bg-indigo-50 text-indigo-700";
     case "shipped":
-      return "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
+      return "bg-blue-50 text-blue-700";
     case "out_for_delivery":
-      return "bg-purple-50 text-purple-700 ring-1 ring-purple-200";
+      return "bg-purple-50 text-purple-700";
     case "delivered":
-      return "bg-green-50 text-green-700 ring-1 ring-green-200";
+      return "bg-green-50 text-green-700";
     case "returned":
-      return "bg-orange-50 text-orange-700 ring-1 ring-orange-200";
+      return "bg-orange-50 text-orange-700";
     case "cancelled":
-      return "bg-red-50 text-red-700 ring-1 ring-red-200";
+      return "bg-red-50 text-red-700";
     default:
-      return "bg-gray-100 text-gray-700 ring-1 ring-gray-200";
+      return "bg-gray-100 text-gray-700";
   }
 };
+
+const Card = ({ children, className = "" }) => (
+  <div
+    className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-5 ${className}`}
+  >
+    {children}
+  </div>
+);
 
 export default function OrderDetailsClient({ id }) {
   const router = useRouter();
@@ -68,16 +76,15 @@ export default function OrderDetailsClient({ id }) {
     return String(order.fulfillmentStatus).replace(/_/g, " ");
   }, [order?.fulfillmentStatus]);
 
-  // ✅ Load order from store
+  /* ✅ Load order */
   useEffect(() => {
     if (!id) return;
     fetchOrderById(id);
-
     return () => clearOrder();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // ✅ Hydrate local inputs when order loads
+  /* ✅ Hydrate inputs */
   useEffect(() => {
     if (!order) return;
     setNewStatus(order.fulfillmentStatus || "processing");
@@ -86,9 +93,7 @@ export default function OrderDetailsClient({ id }) {
     setRemarks(order.adminRemarks || "");
   }, [order]);
 
-  // ------------------------------
-  // ✅ UPDATE ORDER STATUS (STORE)
-  // ------------------------------
+  /* ✅ Update status */
   const handleUpdateStatus = async () => {
     if (!order?._id) return;
 
@@ -104,9 +109,7 @@ export default function OrderDetailsClient({ id }) {
     }
   };
 
-  // ------------------------------
-  // ✅ UPDATE TRACKING (API PATCH)
-  // ------------------------------
+  /* ✅ Update tracking */
   const updateTracking = async () => {
     if (!order?._id) return;
 
@@ -118,21 +121,16 @@ export default function OrderDetailsClient({ id }) {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data?.message || "Failed to update tracking");
-        return;
-      }
+      if (!res.ok) return toast.error(data?.message || "Failed to update tracking");
 
       toast.success("Tracking updated ✅");
       await fetchOrderById(order._id);
-    } catch (e) {
+    } catch {
       toast.error("Failed to update tracking");
     }
   };
 
-  // ------------------------------
-  // ✅ UPDATE REMARKS (PUT)
-  // ------------------------------
+  /* ✅ Update remarks */
   const updateRemarks = async () => {
     if (!order?._id) return;
 
@@ -145,20 +143,18 @@ export default function OrderDetailsClient({ id }) {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data?.message || "Failed to update remarks");
-      } else {
-        toast.success("Remarks updated ✅");
-        await fetchOrderById(order._id);
-      }
-    } catch (e) {
+      if (!res.ok) return toast.error(data?.message || "Failed to update remarks");
+
+      toast.success("Remarks updated ✅");
+      await fetchOrderById(order._id);
+    } catch {
       toast.error("Failed to update remarks");
     } finally {
       setRemarksSaving(false);
     }
   };
 
-  // ✅ LOADING
+  /* ✅ LOADING */
   if (loading)
     return (
       <div className="p-10 flex justify-center">
@@ -166,16 +162,13 @@ export default function OrderDetailsClient({ id }) {
       </div>
     );
 
-  // ✅ ERROR
   if (error) return <p className="p-10 text-red-500">{error}</p>;
-
-  // ✅ NO ORDER
   if (!order) return <p className="p-10 text-red-500">Order not found</p>;
 
   const items = Array.isArray(order.items) ? order.items : [];
 
   return (
-    <section className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-6">
+    <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
 
         {/* BACK */}
@@ -207,8 +200,8 @@ export default function OrderDetailsClient({ id }) {
         </div>
 
         {/* ✅ ORDER ITEMS */}
-        <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm ring-1 ring-gray-200 space-y-4">
-          <h2 className="text-base font-semibold flex items-center gap-2">
+        <Card>
+          <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
             <Package size={18} /> Items in this Order
           </h2>
 
@@ -217,7 +210,7 @@ export default function OrderDetailsClient({ id }) {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-gray-600">
+                <thead className="text-gray-500 border-b border-gray-100">
                   <tr>
                     <th className="py-3 px-4 text-left font-semibold">Product</th>
                     <th className="py-3 px-4 text-left font-semibold">Variant</th>
@@ -226,35 +219,32 @@ export default function OrderDetailsClient({ id }) {
                     <th className="py-3 px-4 text-left font-semibold">Subtotal</th>
                   </tr>
                 </thead>
+
                 <tbody className="divide-y divide-gray-100">
                   {items.map((it, idx) => {
                     const snap = it?.productSnapshot || {};
                     const v = it?.variant || {};
 
-                    const variantText = Array.isArray(v?.attributes)
-                      ? v.attributes
-                          .map((a) => `${a?.key}: ${a?.value}`)
-                          .filter(Boolean)
-                          .join(", ")
-                      : "";
+                    const size = it?.selectedSize || "-";
+                    const color = it?.selectedColor || "-";
+                    const sku = v?.sku || snap?.sku || "-";
 
                     return (
-                      <tr key={idx} className="hover:bg-blue-50/30 transition">
+                      <tr key={idx} className="hover:bg-gray-50 transition">
                         {/* Product */}
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
                             <img
                               src={snap.thumbnail || "/placeholder.png"}
                               alt={snap.title || "Product"}
-                              className="w-12 h-12 rounded-xl object-cover ring-1 ring-gray-200"
+                              className="w-12 h-12 rounded-xl object-cover border border-gray-100"
                             />
                             <div>
                               <p className="font-semibold text-gray-900">
                                 {snap.title || "-"}
                               </p>
                               <p className="text-xs text-gray-500">
-                                Code: {snap.productCode || "-"} • SKU:{" "}
-                                {v?.sku || snap.sku || "-"}
+                                Code: {snap.productCode || "-"} • SKU: {sku}
                               </p>
                             </div>
                           </div>
@@ -262,7 +252,16 @@ export default function OrderDetailsClient({ id }) {
 
                         {/* Variant */}
                         <td className="py-4 px-4 text-gray-700">
-                          {variantText || "-"}
+                          <div className="space-y-1 text-xs">
+                            <p>
+                              <span className="font-medium">Size:</span>{" "}
+                              {size}
+                            </p>
+                            <p>
+                              <span className="font-medium">Color:</span>{" "}
+                              {color}
+                            </p>
+                          </div>
                         </td>
 
                         {/* Qty */}
@@ -286,11 +285,11 @@ export default function OrderDetailsClient({ id }) {
               </table>
             </div>
           )}
-        </div>
+        </Card>
 
-        {/* ✅ TOTALS SUMMARY */}
-        <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm ring-1 ring-gray-200 space-y-3">
-          <h2 className="text-base font-semibold flex items-center gap-2">
+        {/* ✅ TOTALS */}
+        <Card>
+          <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
             <BadgeIndianRupee size={18} /> Payment Summary
           </h2>
 
@@ -312,16 +311,16 @@ export default function OrderDetailsClient({ id }) {
               <span className="font-semibold">₹{order.tax}</span>
             </p>
 
-            <div className="sm:col-span-2 border-t pt-3 flex justify-between text-base font-bold text-gray-900">
+            <div className="sm:col-span-2 border-t border-gray-100 pt-4 flex justify-between text-base font-bold text-gray-900">
               <span>Final Payable</span>
               <span>₹{order.finalPayable}</span>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* CUSTOMER */}
-        <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm ring-1 ring-gray-200 space-y-3">
-          <h2 className="text-base font-semibold flex items-center gap-2">
+        <Card>
+          <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
             <User size={18} /> Customer
           </h2>
 
@@ -329,7 +328,7 @@ export default function OrderDetailsClient({ id }) {
             {order.customerId?.name || "-"}
           </p>
 
-          <div className="grid sm:grid-cols-2 gap-2 text-sm text-gray-600">
+          <div className="grid sm:grid-cols-2 gap-2 text-sm text-gray-600 mt-2">
             <p className="flex items-center gap-2">
               <Phone size={15} /> {order.customerId?.phone || "-"}
             </p>
@@ -337,12 +336,12 @@ export default function OrderDetailsClient({ id }) {
               <Mail size={15} /> {order.customerId?.email || "-"}
             </p>
           </div>
-        </div>
+        </Card>
 
         {/* ADDRESSES */}
-        <div className="grid md:grid-cols-2 gap-5 bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm ring-1 ring-gray-200">
-          <div>
-            <h2 className="text-base font-semibold flex items-center gap-2 mb-2">
+        <div className="grid md:grid-cols-2 gap-5">
+          <Card>
+            <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
               <MapPin size={18} /> Shipping Address
             </h2>
             <div className="text-gray-700 leading-relaxed text-sm space-y-0.5">
@@ -355,10 +354,10 @@ export default function OrderDetailsClient({ id }) {
                 {order.shippingAddressSnapshot?.pincode || "-"}
               </p>
             </div>
-          </div>
+          </Card>
 
-          <div>
-            <h2 className="text-base font-semibold flex items-center gap-2 mb-2">
+          <Card>
+            <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
               <Receipt size={18} /> Billing Address
             </h2>
             <div className="text-gray-700 leading-relaxed text-sm space-y-0.5">
@@ -371,14 +370,14 @@ export default function OrderDetailsClient({ id }) {
                 {order.billingAddressSnapshot?.pincode || "-"}
               </p>
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* STATUS UPDATE */}
-        <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm ring-1 ring-gray-200 space-y-3">
-          <h2 className="text-base font-semibold">Order Status</h2>
+        <Card>
+          <h2 className="text-base font-semibold mb-4">Order Status</h2>
 
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
             <div className="w-full sm:w-64">
               <label className="text-xs font-semibold text-gray-600">
                 Fulfillment Status
@@ -387,7 +386,7 @@ export default function OrderDetailsClient({ id }) {
               <select
                 value={newStatus}
                 onChange={(e) => setNewStatus(e.target.value)}
-                className="mt-2 w-full p-2.5 bg-gray-50 ring-1 ring-gray-200 rounded-md text-sm"
+                className="mt-2 w-full px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-black/10"
               >
                 <option value="processing">Processing</option>
                 <option value="packed">Packed</option>
@@ -402,16 +401,20 @@ export default function OrderDetailsClient({ id }) {
             <button
               onClick={handleUpdateStatus}
               disabled={statusUpdating}
-              className="h-[42px] px-5 bg-blue-600 text-white rounded-md text-sm font-semibold disabled:opacity-60 hover:bg-blue-700 transition"
+              className="h-[42px] px-6 rounded-lg bg-black text-white text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition"
             >
               {statusUpdating ? "Updating..." : "Update"}
             </button>
           </div>
-        </div>
+        </Card>
+
+<OrderRmaMention orderId={order._id} />
+
+
 
         {/* TRACKING */}
-        <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm ring-1 ring-gray-200 space-y-4">
-          <h2 className="text-base font-semibold">Tracking</h2>
+        <Card>
+          <h2 className="text-base font-semibold mb-4">Tracking</h2>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
@@ -419,7 +422,7 @@ export default function OrderDetailsClient({ id }) {
                 Tracking ID / AWB
               </label>
               <input
-                className="mt-2 p-2.5 bg-gray-50 ring-1 ring-gray-200 rounded-md w-full text-sm"
+                className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
                 value={trackingId}
                 onChange={(e) => setTrackingId(e.target.value)}
               />
@@ -430,7 +433,7 @@ export default function OrderDetailsClient({ id }) {
                 Courier Name
               </label>
               <input
-                className="mt-2 p-2.5 bg-gray-50 ring-1 ring-gray-200 rounded-md w-full text-sm"
+                className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
                 value={courierName}
                 onChange={(e) => setCourierName(e.target.value)}
               />
@@ -439,38 +442,41 @@ export default function OrderDetailsClient({ id }) {
 
           <button
             onClick={updateTracking}
-            className="px-5 py-2.5 bg-black text-white rounded-md text-sm font-semibold hover:bg-gray-900 transition"
+            className="mt-4 px-6 py-2.5 rounded-lg bg-black text-white text-sm font-semibold hover:opacity-90 transition"
           >
             Save Tracking
           </button>
-        </div>
+        </Card>
 
         {/* REMARKS */}
-        <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm ring-1 ring-gray-200 space-y-4">
-          <h2 className="text-base font-semibold">Admin Remarks</h2>
+        <Card>
+          <h2 className="text-base font-semibold mb-4">Admin Remarks</h2>
 
-          <div>
-            <label className="text-xs font-semibold text-gray-600">
-              Notes / Remarks
-            </label>
-            <textarea
-              className="mt-2 p-3 bg-gray-50 ring-1 ring-gray-200 rounded-md w-full h-28 text-sm"
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-            />
-          </div>
+          <label className="text-xs font-semibold text-gray-600">
+            Notes / Remarks
+          </label>
+
+          <textarea
+            className="mt-2 px-3 py-3 rounded-lg bg-gray-50 border border-gray-200 w-full h-28 text-sm outline-none focus:ring-2 focus:ring-black/10"
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+          />
 
           <button
             onClick={updateRemarks}
             disabled={remarksSaving}
-            className="px-5 py-2.5 bg-blue-600 text-white rounded-md text-sm font-semibold disabled:opacity-60 hover:bg-blue-700 transition"
+            className="mt-4 px-6 py-2.5 rounded-lg bg-black text-white text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition"
           >
             {remarksSaving ? "Saving..." : "Save Remarks"}
           </button>
-        </div>
+        </Card>
 
         {/* ✅ PRINT PANEL */}
-        <OrderPrintPanel order={order} courierName={courierName} trackingId={trackingId} />
+        <OrderPrintPanel
+          order={order}
+          courierName={courierName}
+          trackingId={trackingId}
+        />
       </div>
     </section>
   );

@@ -2,11 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, ArrowRight, Search, Download } from "lucide-react";
-import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown"; // adjust path
+import { Loader2, Search, Download } from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
+
+const Card = ({ children, className = "" }) => (
+  <div
+    className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-6 ${className}`}
+  >
+    {children}
+  </div>
+);
 
 export default function OrdersListPage() {
   const router = useRouter();
@@ -32,7 +39,6 @@ export default function OrdersListPage() {
 
       let url = `${API}/api/orders?`;
 
-      // backend keys depend on your API; keeping your existing query params:
       if (search) url += `customerName=${encodeURIComponent(search)}&`;
       if (startDate) url += `startDate=${startDate}&`;
       if (endDate) url += `endDate=${endDate}&`;
@@ -44,8 +50,7 @@ export default function OrdersListPage() {
       const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
 
-      // API returns array
-      setOrders(Array.isArray(data) ? data : []);
+      setOrders(Array.isArray(data) ? data : data?.orders || []);
       setLoading(false);
     } catch (err) {
       console.log("Orders Fetch Error:", err);
@@ -75,7 +80,7 @@ export default function OrdersListPage() {
     if (!d) return "";
     const dt = new Date(d);
     if (Number.isNaN(dt.getTime())) return "";
-    return dt.toISOString(); // best for exports
+    return dt.toISOString();
   };
 
   const money = (n) => {
@@ -85,20 +90,8 @@ export default function OrdersListPage() {
 
   const safe = (v) => (v === null || v === undefined ? "" : v);
 
-  const getPaymentLabel = (order) => {
-    if (order?.paymentMethod === "cod") return "COD";
-
-    if (order?.paymentMethod === "razorpay") {
-      if (order?.paymentStatus === "paid") return "Paid ✅";
-      if (order?.paymentStatus === "pending") return "Pending ⏳";
-      return "Failed ❌";
-    }
-
-    return "Unknown";
-  };
   // ------------------------------------
   // FLATTEN ORDER -> CSV ROWS
-  // 1 row per item to export "all necessary details"
   // ------------------------------------
   const buildCsvRows = (ordersArr) => {
     const rows = [];
@@ -107,40 +100,12 @@ export default function OrdersListPage() {
       const orderNumber = safe(order?.orderNumber);
       const orderDate = formatDate(order?.createdAt || order?.orderDate);
 
-      // customer
       const customerName = safe(order?.customerId?.name);
       const customerEmail = safe(order?.customerId?.email);
       const customerPhone = safe(order?.customerId?.phone);
 
-      // address snapshots
       const ship = order?.shippingAddressSnapshot || {};
       const bill = order?.billingAddressSnapshot || {};
-
-      const shipFull = safe(ship?.fullName);
-      const shipPhone = safe(ship?.phone);
-      const shipEmail = safe(ship?.email);
-      const shipLine1 = safe(ship?.line1);
-      const shipLine2 = safe(ship?.line2);
-      const shipCity = safe(ship?.city);
-      const shipState = safe(ship?.state);
-      const shipCountry = safe(ship?.country);
-      const shipPincode = safe(ship?.pincode);
-
-      const billFull = safe(bill?.fullName);
-      const billPhone = safe(bill?.phone);
-      const billEmail = safe(bill?.email);
-      const billLine1 = safe(bill?.line1);
-      const billLine2 = safe(bill?.line2);
-      const billCity = safe(bill?.city);
-      const billState = safe(bill?.state);
-      const billCountry = safe(bill?.country);
-      const billPincode = safe(bill?.pincode);
-
-      // payment + totals
-      const paymentMethodV = safe(order?.paymentMethod);
-      const paymentStatus = safe(order?.paymentStatus);
-      const fulfillmentStatus = safe(order?.fulfillmentStatus);
-      const source = safe(order?.source);
 
       const subtotal = money(order?.subtotal);
       const discount = money(order?.discount);
@@ -149,29 +114,11 @@ export default function OrdersListPage() {
       const totalAmount = money(order?.totalAmount);
       const finalPayable = money(order?.finalPayable);
 
-      const couponId = safe(order?.coupon?._id || order?.coupon);
-      const couponCode = safe(order?.coupon?.code);
-      const couponDiscountType = safe(order?.coupon?.discountType);
-      const couponDiscountValue = safe(order?.coupon?.discountValue);
-
-      // tracking
-      const tracking = order?.trackingDetails || {};
-      const trackingId = safe(tracking?.trackingId);
-      const courierName = safe(tracking?.courierName);
-      const shippedAt = formatDate(tracking?.shippedAt);
-      const deliveredAt = formatDate(tracking?.deliveredAt);
-      const expectedDelivery = formatDate(tracking?.expectedDelivery);
-
-      // notes
-      const customerMessage = safe(order?.customerMessage);
-      const adminRemarks = safe(order?.adminRemarks);
-
-      const isGiftOrder = !!order?.isGiftOrder;
+      const fulfillmentStatus = safe(order?.fulfillmentStatus);
 
       const items = Array.isArray(order?.items) ? order.items : [];
 
-      // If no items, still export 1 row with blanks for item fields
-      if (items.length === 0) {
+      if (!items.length) {
         rows.push({
           orderId,
           orderNumber,
@@ -179,110 +126,23 @@ export default function OrdersListPage() {
           customerName,
           customerEmail,
           customerPhone,
-
-          shipFull,
-          shipPhone,
-          shipEmail,
-          shipLine1,
-          shipLine2,
-          shipCity,
-          shipState,
-          shipCountry,
-          shipPincode,
-
-          billFull,
-          billPhone,
-          billEmail,
-          billLine1,
-          billLine2,
-          billCity,
-          billState,
-          billCountry,
-          billPincode,
-
-          paymentMethod: paymentMethodV,
-          paymentStatus,
           fulfillmentStatus,
-          source,
-
           subtotal,
           discount,
           shippingFee,
           tax,
           totalAmount,
           finalPayable,
-
-          couponId,
-          couponCode,
-          couponDiscountType,
-          couponDiscountValue,
-
-          trackingId,
-          courierName,
-          shippedAt,
-          deliveredAt,
-          expectedDelivery,
-
-          isGiftOrder,
-          customerMessage,
-          adminRemarks,
-
-          // item fields empty
           itemIndex: "",
-          itemProductId: "",
           itemTitle: "",
-          itemSlug: "",
-          itemCategoryId: "",
-          itemSubcategoryId: "",
-          itemThumbnail: "",
-          itemImages: "",
-          itemTags: "",
-          itemSku: "",
-          itemVariantSku: "",
-          itemVariantId: "",
-          itemVariantAttributes: "",
-          itemVariantImage: "",
           itemQuantity: "",
-          itemUnitPrice: "",
-          itemSubtotal: "",
-          itemWeight: "",
+          itemPrice: "",
         });
         continue;
       }
 
       items.forEach((item, idx) => {
         const snap = item?.productSnapshot || {};
-        const itemVariant = item?.variant || {};
-
-        const itemProductId = safe(item?.productId?._id || item?.productId);
-        const itemTitle = safe(snap?.title);
-        const itemSlug = safe(snap?.slug);
-        const itemCategoryId = safe(snap?.category?._id || snap?.category);
-        const itemSubcategoryId = safe(snap?.subcategory?._id || snap?.subcategory);
-
-        const itemThumbnail = safe(snap?.thumbnail);
-        const itemImages = Array.isArray(snap?.images) ? snap.images.join(" | ") : "";
-        const itemTags = Array.isArray(snap?.tags) ? snap.tags.join(" | ") : "";
-
-        const itemSku = safe(snap?.sku);
-        const itemVariantSku = safe(snap?.variantSku);
-
-        const itemVariantId = safe(itemVariant?.variantId);
-        const itemVariantAttributes = Array.isArray(itemVariant?.attributes)
-          ? itemVariant.attributes
-            .map((a) => `${safe(a?.key)}:${safe(a?.value)}`)
-            .filter(Boolean)
-            .join(" | ")
-          : "";
-
-        const itemVariantImage = safe(itemVariant?.image);
-
-        const itemQuantity = money(item?.quantity);
-        const itemUnitPrice = money(item?.price);
-        const itemSubtotal = money(item?.subtotal);
-
-        const itemWeight = money(snap?.weight);
-
         rows.push({
           orderId,
           orderNumber,
@@ -290,72 +150,17 @@ export default function OrdersListPage() {
           customerName,
           customerEmail,
           customerPhone,
-
-          shipFull,
-          shipPhone,
-          shipEmail,
-          shipLine1,
-          shipLine2,
-          shipCity,
-          shipState,
-          shipCountry,
-          shipPincode,
-
-          billFull,
-          billPhone,
-          billEmail,
-          billLine1,
-          billLine2,
-          billCity,
-          billState,
-          billCountry,
-          billPincode,
-
-          paymentMethod: paymentMethodV,
-          paymentStatus,
           fulfillmentStatus,
-          source,
-
           subtotal,
           discount,
           shippingFee,
           tax,
           totalAmount,
           finalPayable,
-
-          couponId,
-          couponCode,
-          couponDiscountType,
-          couponDiscountValue,
-
-          trackingId,
-          courierName,
-          shippedAt,
-          deliveredAt,
-          expectedDelivery,
-
-          isGiftOrder,
-          customerMessage,
-          adminRemarks,
-
           itemIndex: idx + 1,
-          itemProductId,
-          itemTitle,
-          itemSlug,
-          itemCategoryId,
-          itemSubcategoryId,
-          itemThumbnail,
-          itemImages,
-          itemTags,
-          itemSku,
-          itemVariantSku,
-          itemVariantId,
-          itemVariantAttributes,
-          itemVariantImage,
-          itemQuantity,
-          itemUnitPrice,
-          itemSubtotal,
-          itemWeight,
+          itemTitle: safe(snap?.title),
+          itemQuantity: money(item?.quantity),
+          itemPrice: money(item?.price),
         });
       });
     }
@@ -363,10 +168,10 @@ export default function OrdersListPage() {
   };
 
   // ------------------------------------
-  // EXPORT CURRENT VIEW TO CSV (ALL DETAILS)
+  // EXPORT CSV
   // ------------------------------------
   const exportToCSV = () => {
-    if (!filteredOrders || filteredOrders.length === 0) {
+    if (!filteredOrders?.length) {
       alert("No orders to export for the current filters.");
       return;
     }
@@ -374,89 +179,23 @@ export default function OrdersListPage() {
     const rows = buildCsvRows(filteredOrders);
 
     const headers = [
-      // order meta
       "Order DB Id",
       "Order #",
       "Order Date (ISO)",
-
-      // customer
       "Customer Name",
       "Customer Email",
       "Customer Phone",
-
-      // shipping
-      "Shipping Full Name",
-      "Shipping Phone",
-      "Shipping Email",
-      "Shipping Line1",
-      "Shipping Line2",
-      "Shipping City",
-      "Shipping State",
-      "Shipping Country",
-      "Shipping Pincode",
-
-      // billing
-      "Billing Full Name",
-      "Billing Phone",
-      "Billing Email",
-      "Billing Line1",
-      "Billing Line2",
-      "Billing City",
-      "Billing State",
-      "Billing Country",
-      "Billing Pincode",
-
-      // status/payment
-      "Payment Method",
-      "Payment Status",
       "Fulfillment Status",
-      "Source",
-
-      // totals
       "Subtotal",
       "Discount",
       "Shipping Fee",
       "Tax",
       "Total Amount",
       "Final Payable",
-
-      // coupon
-      "Coupon Id",
-      "Coupon Code",
-      "Coupon Discount Type",
-      "Coupon Discount Value",
-
-      // tracking
-      "Tracking Id",
-      "Courier Name",
-      "Shipped At (ISO)",
-      "Delivered At (ISO)",
-      "Expected Delivery (ISO)",
-
-      // misc
-      "Is Gift Order",
-      "Customer Message",
-      "Admin Remarks",
-
-      // item fields (1 row per item)
       "Item #",
-      "Item Product Id",
       "Item Title",
-      "Item Slug",
-      "Item Category Id",
-      "Item Subcategory Id",
-      "Item Thumbnail",
-      "Item Images (|)",
-      "Item Tags (|)",
-      "Item SKU (simple)",
-      "Item Variant SKU",
-      "Item Variant Id",
-      "Item Variant Attributes (key:value|)",
-      "Item Variant Image",
       "Item Quantity",
-      "Item Unit Price",
-      "Item Subtotal",
-      "Item Weight",
+      "Item Price",
     ];
 
     const csvLines = [
@@ -466,91 +205,37 @@ export default function OrdersListPage() {
           r.orderId,
           r.orderNumber,
           r.orderDate,
-
           r.customerName,
           r.customerEmail,
           r.customerPhone,
-
-          r.shipFull,
-          r.shipPhone,
-          r.shipEmail,
-          r.shipLine1,
-          r.shipLine2,
-          r.shipCity,
-          r.shipState,
-          r.shipCountry,
-          r.shipPincode,
-
-          r.billFull,
-          r.billPhone,
-          r.billEmail,
-          r.billLine1,
-          r.billLine2,
-          r.billCity,
-          r.billState,
-          r.billCountry,
-          r.billPincode,
-
-          r.paymentMethod,
-          r.paymentStatus,
           r.fulfillmentStatus,
-          r.source,
-
           r.subtotal,
           r.discount,
           r.shippingFee,
           r.tax,
           r.totalAmount,
           r.finalPayable,
-
-          r.couponId,
-          r.couponCode,
-          r.couponDiscountType,
-          r.couponDiscountValue,
-
-          r.trackingId,
-          r.courierName,
-          r.shippedAt,
-          r.deliveredAt,
-          r.expectedDelivery,
-
-          r.isGiftOrder ? "true" : "false",
-          r.customerMessage,
-          r.adminRemarks,
-
           r.itemIndex,
-          r.itemProductId,
           r.itemTitle,
-          r.itemSlug,
-          r.itemCategoryId,
-          r.itemSubcategoryId,
-          r.itemThumbnail,
-          r.itemImages,
-          r.itemTags,
-          r.itemSku,
-          r.itemVariantSku,
-          r.itemVariantId,
-          r.itemVariantAttributes,
-          r.itemVariantImage,
           r.itemQuantity,
-          r.itemUnitPrice,
-          r.itemSubtotal,
-          r.itemWeight,
+          r.itemPrice,
         ]
           .map(escapeCSV)
           .join(",")
       ),
     ];
 
-    const csvContent = csvLines.join("\r\n");
+    const blob = new Blob([csvLines.join("\r\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-
     const link = document.createElement("a");
+
     const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     link.href = url;
-    link.setAttribute("download", `orders-full-${ts}.csv`);
+    link.setAttribute("download", `orders-${ts}.csv`);
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -559,29 +244,32 @@ export default function OrdersListPage() {
 
   const totals = useMemo(() => {
     const count = filteredOrders.length;
-    const sum = filteredOrders.reduce((acc, o) => acc + (Number(o?.finalPayable) || 0), 0);
+    const sum = filteredOrders.reduce(
+      (acc, o) => acc + (Number(o?.finalPayable) || 0),
+      0
+    );
     return { count, sum };
   }, [filteredOrders]);
 
+  // ------------------------------------
+  // LOADING UI
+  // ------------------------------------
   if (loading) {
     return (
       <div className="p-10 flex justify-center">
-        <Loader2 size={32} className="animate-spin" />
+        <Loader2 size={32} className="animate-spin text-gray-600" />
       </div>
     );
   }
 
   return (
-    <section className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-10">
-      <div className="max-w-7xl mx-auto space-y-10">
+    <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
+      <div className="max-w-7xl mx-auto space-y-8">
 
-        {/* =======================================
-            PAGE HEADER & SEARCH BAR
-      ======================================== */}
+        {/* ✅ HEADER */}
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
-
           <div>
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900">
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
               All Orders
             </h1>
             <p className="text-gray-500 mt-1">
@@ -600,7 +288,7 @@ export default function OrdersListPage() {
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             {/* Search Input */}
-            <div className="flex items-center gap-3 bg-white/90 backdrop-blur rounded-2xl px-4 py-3 shadow-sm ring-1 ring-gray-200 w-full md:w-80">
+            <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 w-full md:w-80">
               <Search size={18} className="text-gray-400" />
               <input
                 type="text"
@@ -611,10 +299,10 @@ export default function OrdersListPage() {
               />
             </div>
 
-            {/* Export Button */}
+            {/* Export */}
             <button
               onClick={exportToCSV}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-medium shadow-sm hover:bg-gray-900 active:scale-[0.98] transition"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
             >
               <Download size={18} />
               Export CSV
@@ -622,39 +310,40 @@ export default function OrdersListPage() {
           </div>
         </div>
 
-        {/* =======================================
-            ADVANCED FILTERS
-      ======================================== */}
-        <div className="bg-white/90 backdrop-blur p-6 rounded-2xl shadow-sm ring-1 ring-gray-200">
+        {/* ✅ FILTERS */}
+        <Card>
           <div className="grid md:grid-cols-4 gap-5">
-
-            {/* Date Range */}
             <div>
-              <label className="text-sm font-semibold text-gray-700">Start Date</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Start Date
+              </label>
               <input
                 type="date"
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">End Date</label>
+              <label className="text-sm font-semibold text-gray-700">
+                End Date
+              </label>
               <input
                 type="date"
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
 
-            {/* Amount Range */}
             <div>
-              <label className="text-sm font-semibold text-gray-700">Min Amount</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Min Amount
+              </label>
               <input
                 type="number"
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 placeholder="₹0"
                 value={minAmount}
                 onChange={(e) => setMinAmount(e.target.value)}
@@ -662,10 +351,12 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">Max Amount</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Max Amount
+              </label>
               <input
                 type="number"
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 placeholder="₹5000"
                 value={maxAmount}
                 onChange={(e) => setMaxAmount(e.target.value)}
@@ -674,23 +365,22 @@ export default function OrdersListPage() {
 
             {/* Payment Method */}
             <div className="md:col-span-2">
-              <label className="text-sm font-semibold text-gray-700">Payment Method</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Payment Method
+              </label>
               <select
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-300 outline-none transition"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
               >
                 <option value="">All</option>
                 <option value="cod">Cash on Delivery</option>
-                <option value="upi">UPI</option>
-                <option value="card">Card</option>
-                <option value="wallet">Wallet</option>
-                <option value="netbanking">Netbanking</option>
+                <option value="razorpay">Razorpay</option>
               </select>
             </div>
           </div>
 
-          {/* Fulfillment Buttons */}
+          {/* Fulfillment buttons */}
           <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
             {[
               { key: "", label: "All" },
@@ -706,24 +396,23 @@ export default function OrdersListPage() {
                 key={s.key}
                 onClick={() => setStatus(s.key)}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap
-                ${status === s.key
-                    ? "bg-blue-600 text-white shadow-sm"
+                ${
+                  status === s.key
+                    ? "bg-black text-white shadow-sm"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                }`}
               >
                 {s.label}
               </button>
             ))}
           </div>
-        </div>
+        </Card>
 
-        {/* =======================================
-              ORDERS TABLE
-      ======================================== */}
-        <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
+        {/* ✅ TABLE */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600">
+              <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
                 <tr>
                   <th className="py-4 px-5 text-left font-semibold">Order #</th>
                   <th className="py-4 px-5 text-left font-semibold">Customer</th>
@@ -735,33 +424,33 @@ export default function OrdersListPage() {
                 </tr>
               </thead>
 
-            <tbody className="divide-y divide-gray-100">
-  {filteredOrders.length > 0 ? (
-    filteredOrders.map((order) => (
-      <OrderRow
-        key={order._id}
-        order={order}
-        onUpdated={(updatedOrder) => {
-          setOrders((prev) =>
-            prev.map((o) => (o._id === updatedOrder._id ? updatedOrder : o))
-          );
-        }}
-      />
-    ))
-  ) : (
-    <tr>
-      <td colSpan={7} className="py-12 text-center text-gray-500">
-        No orders found for applied filters.
-      </td>
-    </tr>
-  )}
-</tbody>
-
+              <tbody className="divide-y divide-gray-100">
+                {filteredOrders.length > 0 ? (
+                  filteredOrders.map((order) => (
+                    <OrderRow
+                      key={order._id}
+                      order={order}
+                      onUpdated={(updatedOrder) => {
+                        setOrders((prev) =>
+                          prev.map((o) =>
+                            o._id === updatedOrder._id ? updatedOrder : o
+                          )
+                        );
+                      }}
+                    />
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-gray-500">
+                      No orders found for applied filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
             </table>
           </div>
         </div>
       </div>
     </section>
   );
-
 }
