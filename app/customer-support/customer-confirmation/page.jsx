@@ -10,15 +10,13 @@ import {
   AlertTriangle,
   Loader2,
   CheckCircle2,
-  ArrowRight,
+  XCircle,
 } from "lucide-react";
 import { useOrderStore } from "@/store/orderStore";
 
 const safe = (v) => String(v ?? "").trim();
 const money = (n) => Number(n || 0).toLocaleString("en-IN");
 const fmtDate = (d) => (d ? new Date(d).toLocaleString() : "-");
-
-const getISO = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
 
 const Address = ({ a = {} }) => {
   const line1 = safe(a.line1);
@@ -52,19 +50,19 @@ export default function CustomerConfirmationPage() {
 
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-  // expanded order
   const [expandedId, setExpandedId] = useState(null);
-
-  // local error
   const [localError, setLocalError] = useState(null);
 
-  // per-order loading
-  const [actionLoading, setActionLoading] = useState({ confirmId: null, packedId: null });
+  // ✅ per-order loading (confirm + cancel only)
+  const [actionLoading, setActionLoading] = useState({
+    confirmId: null,
+    cancelId: null,
+  });
 
   // filters
   const [search, setSearch] = useState("");
-  const [confirmFilter, setConfirmFilter] = useState("ALL"); // ALL | CONFIRMED | NOT_CONFIRMED
-  const [paymentStatus, setPaymentStatus] = useState("ALL"); // ALL | pending | paid | failed ...
+  const [confirmFilter, setConfirmFilter] = useState("ALL");
+  const [paymentStatus, setPaymentStatus] = useState("ALL");
   const [minAmt, setMinAmt] = useState("");
   const [maxAmt, setMaxAmt] = useState("");
   const [city, setCity] = useState("");
@@ -86,7 +84,7 @@ export default function CustomerConfirmationPage() {
     fetchOrders();
   }, [fetchOrders]);
 
-  // options for dropdown from data
+  // dropdown options
   const paymentStatusOptions = useMemo(() => {
     const set = new Set();
     (orders || []).forEach((o) => {
@@ -116,7 +114,8 @@ export default function CustomerConfirmationPage() {
           const orderNumber = safe(o.orderNumber).toLowerCase();
           const email = safe(o.shippingAddressSnapshot?.email).toLowerCase();
           const phone = safe(o.shippingAddressSnapshot?.phone).toLowerCase();
-          if (!orderNumber.includes(q) && !email.includes(q) && !phone.includes(q)) return false;
+          if (!orderNumber.includes(q) && !email.includes(q) && !phone.includes(q))
+            return false;
         }
 
         // confirmed filter
@@ -138,15 +137,26 @@ export default function CustomerConfirmationPage() {
         if (city && !sc.includes(city.toLowerCase())) return false;
         if (state && !ss.includes(state.toLowerCase())) return false;
 
-        // date range (createdAt)
+        // date range
         const ct = o.createdAt ? new Date(o.createdAt).getTime() : null;
         if (fd != null && ct != null && ct < fd) return false;
         if (td != null && ct != null && ct > td) return false;
 
         return true;
       })
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // latest first
-  }, [orders, search, confirmFilter, paymentStatus, minAmt, maxAmt, city, state, fromDate, toDate]);
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [
+    orders,
+    search,
+    confirmFilter,
+    paymentStatus,
+    minAmt,
+    maxAmt,
+    city,
+    state,
+    fromDate,
+    toDate,
+  ]);
 
   const clearFilters = () => {
     setSearch("");
@@ -160,7 +170,7 @@ export default function CustomerConfirmationPage() {
     setToDate("");
   };
 
-  // confirm
+  // ✅ confirm
   const handleConfirm = async (orderId) => {
     try {
       setLocalError(null);
@@ -181,31 +191,35 @@ export default function CustomerConfirmationPage() {
     }
   };
 
-  // packed
-  const handlePacked = async (orderId) => {
+  // ✅ cancel
+  const handleCancel = async (orderId) => {
     try {
       setLocalError(null);
-      setActionLoading((p) => ({ ...p, packedId: orderId }));
+
+      const ok = window.confirm("Are you sure you want to cancel this order?");
+      if (!ok) return;
+
+      setActionLoading((p) => ({ ...p, cancelId: orderId }));
 
       const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fulfillmentStatus: "packed" }),
+        body: JSON.stringify({ fulfillmentStatus: "cancelled" }),
       });
 
-      if (!res.ok) throw new Error((await res.text()) || "Packed update failed");
+      if (!res.ok) throw new Error((await res.text()) || "Cancel failed");
       await fetchOrders();
     } catch (e) {
-      setLocalError(e?.message || "Packed update failed");
+      setLocalError(e?.message || "Cancel failed");
     } finally {
-      setActionLoading((p) => ({ ...p, packedId: null }));
+      setActionLoading((p) => ({ ...p, cancelId: null }));
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 sm:px-6 py-6">
-      <div className="mx-auto  space-y-5">
+      <div className="mx-auto space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -227,12 +241,14 @@ export default function CustomerConfirmationPage() {
           </button>
         </div>
 
-        {/* Filters (minimal) */}
+        {/* Filters */}
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4">
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            {/* search */}
             <div className="md:col-span-2 relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -241,7 +257,6 @@ export default function CustomerConfirmationPage() {
               />
             </div>
 
-            {/* confirmation */}
             <select
               value={confirmFilter}
               onChange={(e) => setConfirmFilter(e.target.value)}
@@ -252,7 +267,6 @@ export default function CustomerConfirmationPage() {
               <option value="NOT_CONFIRMED">Not Confirmed</option>
             </select>
 
-            {/* payment status */}
             <select
               value={paymentStatus}
               onChange={(e) => setPaymentStatus(e.target.value)}
@@ -265,7 +279,6 @@ export default function CustomerConfirmationPage() {
               ))}
             </select>
 
-            {/* amount range */}
             <input
               value={minAmt}
               onChange={(e) => setMinAmt(e.target.value)}
@@ -279,7 +292,6 @@ export default function CustomerConfirmationPage() {
               className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
             />
 
-            {/* city/state */}
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
@@ -293,7 +305,6 @@ export default function CustomerConfirmationPage() {
               className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none md:col-span-2"
             />
 
-            {/* date range */}
             <input
               type="date"
               value={fromDate}
@@ -316,7 +327,6 @@ export default function CustomerConfirmationPage() {
             </button>
           </div>
 
-          {/* counts + errors */}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-500">
             <div>
               Showing{" "}
@@ -362,7 +372,7 @@ export default function CustomerConfirmationPage() {
               const isConfirmed = order?.isConfirmed === true;
 
               const isConfirmLoading = actionLoading.confirmId === orderId;
-              const isPackedLoading = actionLoading.packedId === orderId;
+              const isCancelLoading = actionLoading.cancelId === orderId;
 
               return (
                 <motion.div
@@ -372,7 +382,6 @@ export default function CustomerConfirmationPage() {
                   exit={{ opacity: 0, y: 6 }}
                   className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4"
                 >
-                  {/* top row */}
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -436,21 +445,24 @@ export default function CustomerConfirmationPage() {
                         </button>
                       )}
 
+                      {/* ✅ Cancel button */}
                       <button
-                        onClick={() => handlePacked(orderId)}
-                        disabled={loading || !isConfirmed || isPackedLoading}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-gray-200 text-sm font-semibold hover:bg-gray-50 disabled:opacity-60"
+                        onClick={() => handleCancel(orderId)}
+                        disabled={loading || isCancelLoading}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-60"
                       >
-                        {isPackedLoading ? (
+                        {isCancelLoading ? (
                           <Loader2 size={16} className="animate-spin" />
                         ) : (
-                          <ArrowRight size={16} />
+                          <XCircle size={16} />
                         )}
-                        Packed
+                        Cancel
                       </button>
 
                       <button
-                        onClick={() => setExpandedId((p) => (p === orderId ? null : orderId))}
+                        onClick={() =>
+                          setExpandedId((p) => (p === orderId ? null : orderId))
+                        }
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-gray-200 text-sm font-semibold hover:bg-gray-50"
                       >
                         {isExpanded ? (
@@ -536,10 +548,7 @@ export default function CustomerConfirmationPage() {
                               const snap = it?.productSnapshot || {};
                               const variant = it?.variant || {};
                               const img =
-                                variant?.image ||
-                                snap?.thumbnail ||
-                                snap?.images?.[0] ||
-                                "";
+                                variant?.image || snap?.thumbnail || snap?.images?.[0] || "";
 
                               return (
                                 <div
