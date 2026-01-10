@@ -18,7 +18,7 @@ const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
 // ✅ Orders API base
-const API_BASE = `${BACKEND_URL}/orders`;
+const API_BASE = `${BACKEND_URL}/api/orders`;
 
 export const useAdminProductionStore = create((set, get) => ({
   // -----------------------------
