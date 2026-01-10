@@ -82,9 +82,17 @@ export default function OrdersDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ Compute stats
-  const stats = useMemo(() => {
+  /* ============================================================
+     ✅ ONLY CONFIRMED ORDERS
+  ============================================================ */
+  const confirmedOrders = useMemo(() => {
     const data = Array.isArray(orders) ? orders : [];
+    return data.filter((o) => o?.isConfirmed === true);
+  }, [orders]);
+
+  // ✅ Compute stats (ONLY confirmed)
+  const stats = useMemo(() => {
+    const data = confirmedOrders;
 
     const now = new Date();
     const todayDate = now.toISOString().slice(0, 10);
@@ -102,10 +110,11 @@ export default function OrdersDashboard() {
       data.filter((o) => o.fulfillmentStatus === status).length;
 
     return {
-      totalOrders: data.length,
+      totalOrders: data.length, // ✅ confirmed total
       processing: countBy("processing"),
       packed: countBy("packed"),
       shipped: countBy("shipped"),
+      outForDelivery: countBy("out_for_delivery"),
       delivered: countBy("delivered"),
       returned: data.filter((o) =>
         ["returned", "cancelled"].includes(o.fulfillmentStatus)
@@ -113,10 +122,11 @@ export default function OrdersDashboard() {
       todayOrders: todayOrders.length,
       todayRevenue: sumTodayRevenue,
     };
-  }, [orders]);
+  }, [confirmedOrders]);
 
+  // ✅ Recent Orders (ONLY confirmed)
   const recentOrders = useMemo(() => {
-    const data = Array.isArray(orders) ? orders : [];
+    const data = confirmedOrders;
     return [...data]
       .sort(
         (a, b) =>
@@ -124,49 +134,56 @@ export default function OrdersDashboard() {
           new Date(a.createdAt || a.orderDate).getTime()
       )
       .slice(0, 6);
-  }, [orders]);
+  }, [confirmedOrders]);
 
   const mainCards = [
     {
-      title: "All Orders",
+      title: "Confirmed Orders",
       value: stats.totalOrders,
       icon: ClipboardList,
-      route: "/orders/all",
+      route: "/orders/all?confirmed=true",
       tone: "blue",
     },
     {
       title: "Processing",
       value: stats.processing,
       icon: Clock,
-      route: "/orders/all?fulfillmentStatus=processing",
+      route: "/orders/all?confirmed=true&fulfillmentStatus=processing",
       tone: "yellow",
     },
     {
       title: "Packed",
       value: stats.packed,
       icon: TrendingUp,
-      route: "/orders/all?fulfillmentStatus=packed",
+      route: "/orders/all?confirmed=true&fulfillmentStatus=packed",
       tone: "purple",
     },
     {
       title: "Shipped",
       value: stats.shipped,
       icon: Truck,
-      route: "/orders/all?fulfillmentStatus=shipped",
+      route: "/orders/all?confirmed=true&fulfillmentStatus=shipped",
       tone: "indigo",
+    },
+    {
+      title: "Out for Delivery",
+      value: stats.outForDelivery,
+      icon: Truck,
+      route: "/orders/all?confirmed=true&fulfillmentStatus=out_for_delivery",
+      tone: "gray",
     },
     {
       title: "Delivered",
       value: stats.delivered,
       icon: CheckCircle,
-      route: "/orders/all?fulfillmentStatus=delivered",
+      route: "/orders/all?confirmed=true&fulfillmentStatus=delivered",
       tone: "green",
     },
     {
       title: "Returned / Cancelled",
       value: stats.returned,
       icon: RotateCcw,
-      route: "/orders/all?fulfillmentStatus=returned",
+      route: "/orders/all?confirmed=true&fulfillmentStatus=returned",
       tone: "red",
     },
   ];
@@ -216,36 +233,35 @@ export default function OrdersDashboard() {
               Orders Dashboard
             </h1>
             <p className="text-gray-500 mt-2 max-w-xl">
-              Monitor daily revenue, fulfillment flow and quickly jump into
-              orders.
+              Dashboard shows <b>ONLY CONFIRMED</b> orders.
             </p>
           </div>
 
           <button
-            onClick={() => router.push("/orders/all")}
+            onClick={() => router.push("/orders/all?confirmed=true")}
             className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 transition active:scale-[0.98]"
           >
-            View All Orders <ArrowRight size={18} />
+            View Confirmed Orders <ArrowRight size={18} />
           </button>
         </div>
 
-        {/* TODAY STATS */}
+        {/* TODAY STATS (confirmed only) */}
         <div className="grid md:grid-cols-2 gap-5">
           <StatCard
-            title="Today's Orders"
+            title="Today's Confirmed Orders"
             value={stats.todayOrders}
             icon={CalendarDays}
             tone="blue"
-            badge="Orders placed today"
-            onClick={() => router.push("/orders/all")}
+            badge="Confirmed orders placed today"
+            onClick={() => router.push("/orders/all?confirmed=true")}
           />
           <StatCard
-            title="Today's Revenue"
+            title="Today's Revenue (Confirmed)"
             value={`₹${money(stats.todayRevenue)}`}
             icon={IndianRupee}
             tone="green"
-            badge="Net payable today"
-            onClick={() => router.push("/orders/all")}
+            badge="Net payable (confirmed orders)"
+            onClick={() => router.push("/orders/all?confirmed=true")}
           />
         </div>
 
@@ -263,20 +279,20 @@ export default function OrdersDashboard() {
           ))}
         </div>
 
-        {/* RECENT ORDERS */}
+        {/* RECENT CONFIRMED ORDERS */}
         <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
           <div className="px-6 py-5 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                Recent Orders
+                Recent Confirmed Orders
               </h2>
               <p className="text-sm text-gray-500">
-                Quick access to the latest 6 orders.
+                Latest 6 orders (confirmed only).
               </p>
             </div>
 
             <button
-              onClick={() => router.push("/orders/all")}
+              onClick={() => router.push("/orders/all?confirmed=true")}
               className="text-sm font-semibold text-black hover:opacity-70 transition"
             >
               See all →
@@ -298,37 +314,44 @@ export default function OrdersDashboard() {
                 {recentOrders.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-10 text-center text-gray-500">
-                      No recent orders found.
+                      No confirmed recent orders found.
                     </td>
                   </tr>
                 ) : (
-                  recentOrders.map((o) => (
-                    <tr
-                      key={o._id}
-                      className="hover:bg-black/[0.02] cursor-pointer"
-                      onClick={() => router.push(`/orders/${o._id}`)}
-                    >
-                      <td className="py-4 px-6 font-semibold text-gray-900">
-                        {o.orderNumber || "-"}
-                      </td>
-                      <td className="py-4 px-6 text-gray-700">
-                        {o.customerId?.name || "Unknown"}
-                      </td>
-                      <td className="py-4 px-6 capitalize text-gray-700">
-                        {String(o.fulfillmentStatus || "")
-                          .replace(/_/g, " ")
-                          .trim()}
-                      </td>
-                      <td className="py-4 px-6 font-semibold text-gray-900">
-                        ₹{money(o.finalPayable)}
-                      </td>
-                      <td className="py-4 px-6 text-gray-600">
-                        {o.createdAt
-                          ? new Date(o.createdAt).toLocaleDateString()
-                          : ""}
-                      </td>
-                    </tr>
-                  ))
+                  recentOrders.map((o, idx) => {
+                    const rowKey =
+                      o?._id || o?.id || o?.orderNumber || `recent-${idx}`;
+
+                    return (
+                      <tr
+                        key={String(rowKey)}
+                        className="hover:bg-black/[0.02] cursor-pointer"
+                        onClick={() => router.push(`/orders/${o?._id || o?.id}`)}
+                      >
+                        <td className="py-4 px-6 font-semibold text-gray-900">
+                          {o.orderNumber || "-"}
+                        </td>
+                        <td className="py-4 px-6 text-gray-700">
+                          {o.customerId?.name ||
+                            o.shippingAddressSnapshot?.fullName ||
+                            "Unknown"}
+                        </td>
+                        <td className="py-4 px-6 capitalize text-gray-700">
+                          {String(o.fulfillmentStatus || "")
+                            .replace(/_/g, " ")
+                            .trim()}
+                        </td>
+                        <td className="py-4 px-6 font-semibold text-gray-900">
+                          ₹{money(o.finalPayable)}
+                        </td>
+                        <td className="py-4 px-6 text-gray-600">
+                          {o.createdAt
+                            ? new Date(o.createdAt).toLocaleDateString()
+                            : ""}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

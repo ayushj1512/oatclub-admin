@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Search, Download } from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+const API = process.env.NEXT_PUBLIC_BACKEND_URL; // ✅ UPDATED (was NEXT_PUBLIC_API_URL)
 
 const Card = ({ children, className = "" }) => (
   <div
@@ -28,17 +28,21 @@ export default function OrdersListPage() {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
-  const [status, setStatus] = useState("");
 
-  // ------------------------------------
-  // LOAD ORDERS WITH FILTERS
-  // ------------------------------------
+  // ✅ New status + confirm filters
+  const [status, setStatus] = useState(""); // fulfillmentStatus
+  const [confirmFilter, setConfirmFilter] = useState(""); // "", "confirmed", "not_confirmed"
+
+  /* ------------------------------------
+     ✅ LOAD ORDERS WITH FILTERS (Backend)
+     ------------------------------------ */
   const loadOrders = async () => {
     try {
       setLoading(true);
 
       let url = `${API}/api/orders?`;
 
+      // ✅ Keep your original backend params
       if (search) url += `customerName=${encodeURIComponent(search)}&`;
       if (startDate) url += `startDate=${startDate}&`;
       if (endDate) url += `endDate=${endDate}&`;
@@ -64,11 +68,50 @@ export default function OrdersListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, startDate, endDate, minAmount, maxAmount, paymentMethod, status]);
 
-  const filteredOrders = orders;
+  /* ------------------------------------
+     ✅ CLIENT SIDE FILTERS (Search + Confirmation)
+     ------------------------------------ */
+  const filteredOrders = useMemo(() => {
+    let data = Array.isArray(orders) ? [...orders] : [];
 
-  // ------------------------------------
-  // CSV HELPERS
-  // ------------------------------------
+    // ✅ Confirm filter (client side)
+    if (confirmFilter === "confirmed") {
+      data = data.filter((o) => o?.isConfirmed === true);
+    }
+    if (confirmFilter === "not_confirmed") {
+      data = data.filter((o) => o?.isConfirmed !== true);
+    }
+
+    // ✅ Better search - orderNumber + email + phone + name
+    const q = search.trim().toLowerCase();
+    if (q) {
+      data = data.filter((o) => {
+        const orderNumber = String(o?.orderNumber || "").toLowerCase();
+        const name =
+          String(o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || "")
+            .toLowerCase();
+        const email =
+          String(o?.customerId?.email || o?.shippingAddressSnapshot?.email || "")
+            .toLowerCase();
+        const phone =
+          String(o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || "")
+            .toLowerCase();
+
+        return (
+          orderNumber.includes(q) ||
+          name.includes(q) ||
+          email.includes(q) ||
+          phone.includes(q)
+        );
+      });
+    }
+
+    return data;
+  }, [orders, confirmFilter, search]);
+
+  /* ------------------------------------
+     ✅ CSV HELPERS
+     ------------------------------------ */
   const escapeCSV = (value) => {
     if (value === null || value === undefined) return "";
     const str = String(value);
@@ -90,22 +133,19 @@ export default function OrdersListPage() {
 
   const safe = (v) => (v === null || v === undefined ? "" : v);
 
-  // ------------------------------------
-  // FLATTEN ORDER -> CSV ROWS
-  // ------------------------------------
+  /* ------------------------------------
+     ✅ FLATTEN ORDER -> CSV ROWS
+     ------------------------------------ */
   const buildCsvRows = (ordersArr) => {
     const rows = [];
     for (const order of ordersArr || []) {
-      const orderId = safe(order?._id);
+      const orderId = safe(order?._id || order?.id);
       const orderNumber = safe(order?.orderNumber);
       const orderDate = formatDate(order?.createdAt || order?.orderDate);
 
       const customerName = safe(order?.customerId?.name);
       const customerEmail = safe(order?.customerId?.email);
       const customerPhone = safe(order?.customerId?.phone);
-
-      const ship = order?.shippingAddressSnapshot || {};
-      const bill = order?.billingAddressSnapshot || {};
 
       const subtotal = money(order?.subtotal);
       const discount = money(order?.discount);
@@ -115,6 +155,7 @@ export default function OrdersListPage() {
       const finalPayable = money(order?.finalPayable);
 
       const fulfillmentStatus = safe(order?.fulfillmentStatus);
+      const isConfirmed = order?.isConfirmed === true ? "YES" : "NO";
 
       const items = Array.isArray(order?.items) ? order.items : [];
 
@@ -126,6 +167,7 @@ export default function OrdersListPage() {
           customerName,
           customerEmail,
           customerPhone,
+          isConfirmed,
           fulfillmentStatus,
           subtotal,
           discount,
@@ -150,6 +192,7 @@ export default function OrdersListPage() {
           customerName,
           customerEmail,
           customerPhone,
+          isConfirmed,
           fulfillmentStatus,
           subtotal,
           discount,
@@ -167,9 +210,9 @@ export default function OrdersListPage() {
     return rows;
   };
 
-  // ------------------------------------
-  // EXPORT CSV
-  // ------------------------------------
+  /* ------------------------------------
+     ✅ EXPORT CSV
+     ------------------------------------ */
   const exportToCSV = () => {
     if (!filteredOrders?.length) {
       alert("No orders to export for the current filters.");
@@ -185,6 +228,7 @@ export default function OrdersListPage() {
       "Customer Name",
       "Customer Email",
       "Customer Phone",
+      "Is Confirmed",
       "Fulfillment Status",
       "Subtotal",
       "Discount",
@@ -208,6 +252,7 @@ export default function OrdersListPage() {
           r.customerName,
           r.customerEmail,
           r.customerPhone,
+          r.isConfirmed,
           r.fulfillmentStatus,
           r.subtotal,
           r.discount,
@@ -251,9 +296,9 @@ export default function OrdersListPage() {
     return { count, sum };
   }, [filteredOrders]);
 
-  // ------------------------------------
-  // LOADING UI
-  // ------------------------------------
+  /* ------------------------------------
+     ✅ LOADING UI
+     ------------------------------------ */
   if (loading) {
     return (
       <div className="p-10 flex justify-center">
@@ -265,7 +310,6 @@ export default function OrdersListPage() {
   return (
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
       <div className="max-w-7xl mx-auto space-y-8">
-
         {/* ✅ HEADER */}
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
           <div>
@@ -292,7 +336,7 @@ export default function OrdersListPage() {
               <Search size={18} className="text-gray-400" />
               <input
                 type="text"
-                placeholder="Search customer or order..."
+                placeholder="Search order # / name / email / phone..."
                 className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -364,7 +408,7 @@ export default function OrdersListPage() {
             </div>
 
             {/* Payment Method */}
-            <div className="md:col-span-2">
+            <div>
               <label className="text-sm font-semibold text-gray-700">
                 Payment Method
               </label>
@@ -378,34 +422,89 @@ export default function OrdersListPage() {
                 <option value="razorpay">Razorpay</option>
               </select>
             </div>
+
+            {/* ✅ Confirmation Filter (NEW) */}
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Confirmation
+              </label>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={confirmFilter}
+                onChange={(e) => setConfirmFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="not_confirmed">Not Confirmed</option>
+              </select>
+            </div>
           </div>
 
-          {/* Fulfillment buttons */}
-          <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
-            {[
-              { key: "", label: "All" },
-              { key: "processing", label: "Processing" },
-              { key: "packed", label: "Packed" },
-              { key: "shipped", label: "Shipped" },
-              { key: "out_for_delivery", label: "Out for Delivery" },
-              { key: "delivered", label: "Delivered" },
-              { key: "returned", label: "Returned" },
-              { key: "cancelled", label: "Cancelled" },
-            ].map((s) => (
-              <button
-                key={s.key}
-                onClick={() => setStatus(s.key)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap
-                ${
-                  status === s.key
-                    ? "bg-black text-white shadow-sm"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+         {/* ✅ Fulfillment + Confirmed buttons */}
+{/* ✅ Fulfillment + Confirmed buttons (TOGGLE FIXED) */}
+<div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+  {[
+    { key: "", label: "All", type: "all" },
+
+    // ✅ Fulfillment
+    { key: "processing", label: "Processing", type: "status" },
+    { key: "packed", label: "Packed", type: "status" },
+    { key: "shipped", label: "Shipped", type: "status" },
+    { key: "out_for_delivery", label: "Out for Delivery", type: "status" },
+    { key: "delivered", label: "Delivered", type: "status" },
+    { key: "returned", label: "Returned", type: "status" },
+    { key: "cancelled", label: "Cancelled", type: "status" },
+
+    // ✅ Confirmation
+    { key: "confirmed", label: "Confirmed", type: "confirm" },
+    { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
+  ].map((s) => {
+    const isActive =
+      s.type === "status"
+        ? status === s.key
+        : s.type === "confirm"
+        ? confirmFilter === s.key
+        : status === "" && confirmFilter === "";
+
+    const handleClick = () => {
+      // ✅ ALL resets everything
+      if (s.type === "all") {
+        setStatus("");
+        setConfirmFilter("");
+        return;
+      }
+
+      // ✅ Status toggle logic
+      if (s.type === "status") {
+        setStatus((prev) => (prev === s.key ? "" : s.key));
+        return;
+      }
+
+      // ✅ Confirm toggle logic
+      if (s.type === "confirm") {
+        setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
+        return;
+      }
+    };
+
+    return (
+      <button
+        key={`${s.type}-${s.key || "all"}`}
+        onClick={handleClick}
+        className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap
+        ${
+          isActive
+            ? "bg-black text-white shadow-sm"
+            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+        }`}
+      >
+        {s.label}
+      </button>
+    );
+  })}
+</div>
+
+
         </Card>
 
         {/* ✅ TABLE */}
@@ -417,7 +516,9 @@ export default function OrdersListPage() {
                   <th className="py-4 px-5 text-left font-semibold">Order #</th>
                   <th className="py-4 px-5 text-left font-semibold">Customer</th>
                   <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
+                  <th className="py-4 px-5 text-left font-semibold">
+                    Fulfillment
+                  </th>
                   <th className="py-4 px-5 text-left font-semibold">Amount</th>
                   <th className="py-4 px-5 text-left font-semibold">Date</th>
                   <th className="py-4 px-5 text-left font-semibold">Action</th>
@@ -426,19 +527,30 @@ export default function OrdersListPage() {
 
               <tbody className="divide-y divide-gray-100">
                 {filteredOrders.length > 0 ? (
-                  filteredOrders.map((order) => (
-                    <OrderRow
-                      key={order._id}
-                      order={order}
-                      onUpdated={(updatedOrder) => {
-                        setOrders((prev) =>
-                          prev.map((o) =>
-                            o._id === updatedOrder._id ? updatedOrder : o
-                          )
-                        );
-                      }}
-                    />
-                  ))
+                  filteredOrders.map((order, idx) => {
+                    const rowKey =
+                      order?._id ||
+                      order?.id ||
+                      order?.orderNumber ||
+                      `order-${idx}`;
+
+                    return (
+                      <OrderRow
+                        key={String(rowKey)}
+                        order={order}
+                        onUpdated={(updatedOrder) => {
+                          setOrders((prev) =>
+                            prev.map((o) =>
+                              (o?._id || o?.id) ===
+                              (updatedOrder?._id || updatedOrder?.id)
+                                ? updatedOrder
+                                : o
+                            )
+                          );
+                        }}
+                      />
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-gray-500">

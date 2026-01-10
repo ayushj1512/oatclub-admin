@@ -12,35 +12,44 @@ const money = (n) => {
 
 const getPaymentBadge = (order) => {
   if (order?.paymentMethod === "cod") {
-    return {
-      label: "COD",
-      cls: "bg-gray-100 text-gray-700",
-    };
+    return { label: "COD", cls: "bg-gray-100 text-gray-700" };
   }
 
   if (order?.paymentMethod === "razorpay") {
     if (order?.paymentStatus === "paid") {
-      return {
-        label: "Paid ✅",
-        cls: "bg-green-50 text-green-700",
-      };
+      return { label: "Paid ✅", cls: "bg-green-50 text-green-700" };
     }
     if (order?.paymentStatus === "pending") {
-      return {
-        label: "Pending ⏳",
-        cls: "bg-yellow-50 text-yellow-700",
-      };
+      return { label: "Pending ⏳", cls: "bg-yellow-50 text-yellow-700" };
     }
-    return {
-      label: "Failed ❌",
-      cls: "bg-red-50 text-red-700",
-    };
+    return { label: "Failed ❌", cls: "bg-red-50 text-red-700" };
   }
 
-  return {
-    label: "Unknown",
-    cls: "bg-gray-100 text-gray-700",
-  };
+  return { label: "Unknown", cls: "bg-gray-100 text-gray-700" };
+};
+
+/* ✅ NEW STATUS LIST (CONFIRMED INCLUDED) */
+const NEW_FULFILLMENT_STATUSES = [
+  "confirmed",
+  "processing",
+  "packed",
+  "shipped",
+  "out_for_delivery",
+  "delivered",
+  "returned",
+  "cancelled",
+];
+
+/* ✅ LABELS */
+const STATUS_LABELS = {
+  confirmed: "Confirmed",
+  processing: "Processing",
+  packed: "Packed",
+  shipped: "Shipped",
+  out_for_delivery: "Out for Delivery",
+  delivered: "Delivered",
+  returned: "Returned",
+  cancelled: "Cancelled",
 };
 
 export default function OrderRow({ order, onUpdated }) {
@@ -49,6 +58,12 @@ export default function OrderRow({ order, onUpdated }) {
 
   const pay = getPaymentBadge(order);
   const items = Array.isArray(order?.items) ? order.items : [];
+
+  const orderId = order?._id || order?.id;
+
+  // ✅ if backend is using isConfirmed flag, map to status = confirmed
+  const effectiveStatus =
+    order?.fulfillmentStatus || (order?.isConfirmed ? "confirmed" : "processing");
 
   return (
     <>
@@ -67,7 +82,7 @@ export default function OrderRow({ order, onUpdated }) {
               {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </button>
 
-            {order.orderNumber}
+            {order.orderNumber || "-"}
           </div>
 
           {/* ✅ Mini Item Preview */}
@@ -83,11 +98,22 @@ export default function OrderRow({ order, onUpdated }) {
         {/* Customer */}
         <td className="py-4 px-5">
           <div className="font-medium text-gray-900">
-            {order.customerId?.name || "Unknown"}
+            {order.customerId?.name ||
+              order.shippingAddressSnapshot?.fullName ||
+              "Unknown"}
           </div>
           <div className="text-xs text-gray-500">
-            {order.customerId?.phone || ""}
+            {order.customerId?.phone ||
+              order.shippingAddressSnapshot?.phone ||
+              ""}
           </div>
+
+          {/* ✅ confirmed tag */}
+          {order?.isConfirmed && (
+            <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-100">
+              Confirmed ✅
+            </span>
+          )}
         </td>
 
         {/* Payment Badge */}
@@ -102,8 +128,10 @@ export default function OrderRow({ order, onUpdated }) {
         {/* Fulfillment Dropdown */}
         <td className="py-4 px-5">
           <OrderStatusDropdown
-            orderId={order._id}
-            currentStatus={order.fulfillmentStatus}
+            orderId={orderId}
+            currentStatus={effectiveStatus} // ✅ uses confirmed if needed
+            statuses={NEW_FULFILLMENT_STATUSES} // ✅ if dropdown accepts
+            labels={STATUS_LABELS} // ✅ if dropdown accepts
             onUpdated={(updatedOrder) => {
               if (onUpdated) onUpdated(updatedOrder);
             }}
@@ -123,7 +151,7 @@ export default function OrderRow({ order, onUpdated }) {
         {/* Action */}
         <td className="py-4 px-5">
           <button
-            onClick={() => router.push(`/orders/${order._id}`)}
+            onClick={() => router.push(`/orders/${orderId}`)}
             className="inline-flex items-center gap-1 text-black font-semibold hover:opacity-80 transition"
           >
             View <ArrowRight size={16} />
@@ -132,13 +160,12 @@ export default function OrderRow({ order, onUpdated }) {
       </tr>
 
       {/* ===========================
-          EXPANDED ROW (COMPACT)
+          EXPANDED ROW
       ============================ */}
       {open && (
         <tr className="bg-black/[0.015]">
           <td colSpan={7} className="px-5 pb-4">
             <div className="mt-3 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 space-y-4">
-              
               {/* ✅ COMPACT ITEMS */}
               <div className="space-y-2">
                 <h3 className="font-semibold text-gray-900 text-sm">
@@ -168,9 +195,12 @@ export default function OrderRow({ order, onUpdated }) {
                               .join(", ")
                           : "";
 
+                      // ✅ key fix - always unique
+                      const itemKey = `${orderId}-item-${idx}`;
+
                       return (
                         <div
-                          key={idx}
+                          key={itemKey}
                           className="py-3 flex items-center justify-between gap-3"
                         >
                           {/* left */}
@@ -193,7 +223,6 @@ export default function OrderRow({ order, onUpdated }) {
                                     : "")}
                               </p>
 
-                              {/* ✅ variantId mini */}
                               {v?.variantId ? (
                                 <p className="text-[11px] text-gray-400 truncate mt-0.5">
                                   VariantId: {String(v.variantId).slice(0, 10)}...

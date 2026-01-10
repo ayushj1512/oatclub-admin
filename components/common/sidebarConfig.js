@@ -192,16 +192,19 @@ export const sidebarMenus = {
     { label: "Newsletter Subscribers", href: "/customers/newsletter" },
   ],
 
-  support_tickets: [
-    { label: "Support Dashboard", href: "/support-tickets" },
-    { label: "All Tickets", href: "/support-tickets/all" },
-    { label: "Open Tickets", href: "/support-tickets/open" },
-    { label: "In Progress", href: "/support-tickets/in-progress" },
-    { label: "Resolved", href: "/support-tickets/resolved" },
-    { label: "Closed", href: "/support-tickets/closed" },
-    { label: "Search by Email", href: "/support-tickets/search" },
-    { label: "SLA / Reports", href: "/support-tickets/reports" },
-  ],
+  customer_support: [
+  { label: "Support Dashboard", href: "/customer-support" },
+    { label: "Customer Confirmation", href: "/customer-support/customer-confirmation" },
+  { label: "All Tickets", href: "/customer-support/all" },
+  { label: "Open Tickets", href: "/customer-support/open" },
+  { label: "In Progress", href: "/customer-support/in-progress" },
+  { label: "Resolved", href: "/customer-support/resolved" },
+  { label: "Closed", href: "/customer-support/closed" },
+  { label: "Search by Email", href: "/customer-support/search" },
+  { label: "SLA / Reports", href: "/customer-support/reports" },
+
+],
+
 
   sales: [
     { label: "Sales Dashboard", href: "/sales" },
@@ -237,7 +240,8 @@ wordpress: [{ label: "WP Orders", href: "/wordpress/orders" }],
 export const routeSidebarMap = [
   { prefix: "/superadmin", key: "superadmin" },
 
-  { prefix: "/support-tickets", key: "support_tickets" },
+  { prefix: "/customer-support", key: "customer_support" },
+
   { prefix: "/inventory", key: "inventory" },
   { prefix: "/analytics", key: "analytics" },
   { prefix: "/reels", key: "reels" },

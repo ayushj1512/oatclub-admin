@@ -7,21 +7,31 @@ const useLoginStore = create(
   persist(
     (set, get) => ({
       isLoggedIn: false,
-      admin: null,
+      admin: null, // { _id, username, email, role, fullName, permissions, isActive }
       token: "",
 
+      /* ============================================================
+         ✅ LOGIN
+      ============================================================ */
       login: ({ token, admin }) => {
-        if (typeof window !== "undefined" && token) {
-          localStorage.setItem("adminToken", token); // ✅ compatibility
+        const safeToken = token || "";
+        const safeAdmin = admin || null;
+
+        // ✅ legacy compatibility
+        if (typeof window !== "undefined" && safeToken) {
+          localStorage.setItem("adminToken", safeToken);
         }
 
         set({
-          isLoggedIn: true,
-          admin: admin || null,
-          token: token || "",
+          isLoggedIn: !!safeToken,
+          admin: safeAdmin,
+          token: safeToken,
         });
       },
 
+      /* ============================================================
+         ✅ LOGOUT
+      ============================================================ */
       logout: () => {
         if (typeof window !== "undefined") {
           localStorage.removeItem("adminToken");
@@ -34,23 +44,80 @@ const useLoginStore = create(
         });
       },
 
+      /* ============================================================
+         ✅ SET TOKEN
+      ============================================================ */
       setToken: (token) => {
-        if (typeof window !== "undefined" && token) {
-          localStorage.setItem("adminToken", token);
+        const safeToken = token || "";
+
+        if (typeof window !== "undefined") {
+          if (safeToken) localStorage.setItem("adminToken", safeToken);
+          else localStorage.removeItem("adminToken");
         }
-        set({ token: token || "" });
+
+        set({
+          token: safeToken,
+          isLoggedIn: !!safeToken,
+        });
       },
 
+      /* ============================================================
+         ✅ SET ADMIN (update role/permissions after fetch /me)
+      ============================================================ */
+      setAdmin: (admin) => {
+        set({ admin: admin || null });
+      },
+
+      /* ============================================================
+         ✅ LEGACY TOKEN HYDRATE (Optional)
+         - If Zustand storage lost but localStorage has adminToken
+      ============================================================ */
+      hydrateFromLegacyToken: () => {
+        if (typeof window === "undefined") return;
+
+        const legacy = localStorage.getItem("adminToken");
+        if (legacy && !get().token) {
+          set({
+            token: legacy,
+            isLoggedIn: true,
+          });
+        }
+      },
+
+      /* ============================================================
+         ✅ GETTERS
+      ============================================================ */
       getRole: () => get().admin?.role || "",
       getUsername: () => get().admin?.username || "",
+      getPermissions: () => get().admin?.permissions || [],
+
+      isTokenPresent: () => !!get().token,
+
+      /* ============================================================
+         ✅ HELPERS FOR FRONTEND ROLE-BASED UI
+      ============================================================ */
+      hasRole: (...roles) => {
+        const role = get().admin?.role || "";
+        return roles.includes(role);
+      },
+
+      hasPermission: (perm) => {
+        const list = get().admin?.permissions || [];
+        return list.includes(perm);
+      },
+
+      /* ============================================================
+         ✅ SAFE CHECK: account active?
+      ============================================================ */
+      isActive: () => get().admin?.isActive !== false, // default true
     }),
     {
       name: "miray-admin-session",
 
-      // ✅ correct JSON storage (fix)
+      // ✅ correct JSON storage
       storage: createJSONStorage(() => localStorage),
 
-      // ✅ optional but recommended (only store needed fields)
+      // ✅ store only required fields
       partialize: (state) => ({
         isLoggedIn: state.isLoggedIn,
         admin: state.admin,
