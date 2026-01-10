@@ -4,22 +4,265 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useAdminProductionStore from "@/store/adminProductionStore";
 
+// ✅ Product Store for images (bulk fetch)
+import { useAdminProductStore } from "@/store/adminProductStore";
+
+// ✅ Excel Export libs
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
+
 /**
- * /production
- * Dashboard page:
- * - metrics summary
- * - production queue
- * - filter + search
- * - mark shipped (production done)
+ * ✅ /production Dashboard
+ * - Summary metrics
+ * - Production queue (confirmed only)
+ * - Compact UI (cards)
+ * - Horizontal calendar bar: Today / Yesterday / 7D / 30D / All
+ * - Custom range filter
+ * - Export Excel (.xlsx) with EMBEDDED images ✅
+ * - Uses Product store to resolve images (order snapshot images missing)
+ * - ✅ Uses Backend Proxy for images (fix CORS)
+ * - Action: Mark Packed (processing -> packed)
  */
 
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+
 const STATUS_OPTIONS = [
-  { label: "Processing (Production Queue)", value: "processing" },
-  { label: "Packed", value: "packed" },
+  { label: "Processing (To Produce)", value: "processing" },
+  { label: "Packed (Ready to Ship)", value: "packed" },
   { label: "Shipped", value: "shipped" },
   { label: "Delivered", value: "delivered" },
   { label: "Cancelled", value: "cancelled" },
 ];
+
+const DATE_PRESETS = [
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "7d", label: "Last 7 Days" },
+  { key: "30d", label: "Last 30 Days" },
+  { key: "all", label: "All" },
+];
+
+/* ============================
+   ✅ Date helpers
+============================ */
+const startOfDay = (d) => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
+const endOfDay = (d) => {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+};
+
+const toYYYYMMDD = (d) => {
+  const x = new Date(d);
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, "0");
+  const day = String(x.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const getPresetRange = (key) => {
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const todayEnd = endOfDay(now);
+
+  if (key === "today") return { from: todayStart, to: todayEnd };
+
+  if (key === "yesterday") {
+    const y = new Date(todayStart);
+    y.setDate(y.getDate() - 1);
+    return { from: startOfDay(y), to: endOfDay(y) };
+  }
+
+  if (key === "7d") {
+    const from = new Date(todayStart);
+    from.setDate(from.getDate() - 6);
+    return { from: startOfDay(from), to: todayEnd };
+  }
+
+  if (key === "30d") {
+    const from = new Date(todayStart);
+    from.setDate(from.getDate() - 29);
+    return { from: startOfDay(from), to: todayEnd };
+  }
+
+  return { from: null, to: null }; // all
+};
+
+/* ============================
+   ✅ URL + Proxy Helpers
+============================ */
+
+// ✅ normalize url into absolute (for WP urls mostly)
+const toAbsoluteUrl = (url) => {
+  const u = String(url || "").trim();
+  if (!u) return "";
+
+  // already absolute
+  if (u.startsWith("http://") || u.startsWith("https://")) return u;
+
+  // relative -> attach WP origin if needed (you can change this if WP base is fixed)
+  if (u.startsWith("//")) return `https:${u}`;
+  if (u.startsWith("/")) return `https://mirayfashions.in${u}`;
+
+  // fallback
+  return `https://mirayfashions.in/${u}`;
+};
+
+// ✅ proxy url creator
+const proxifyImage = (url) => {
+  const abs = toAbsoluteUrl(url);
+  if (!abs) return "";
+  return `${BASE_URL}/api/proxy-image?url=${encodeURIComponent(abs)}`;
+};
+
+// ✅ helper: safe product id from populated OR string
+const getProductId = (item) =>
+  String(item?.productId?._id || item?.productId || "");
+
+/* ============================================================
+   ✅ Resolve image from ProductMap using productId
+   ✅ Always return proxy URL (fix CORS)
+============================================================ */
+const resolveItemImage = (item, productMap) => {
+  const pid = getProductId(item);
+  const product = productMap?.[pid];
+
+  const variantId = item?.variant?.variantId
+    ? String(item.variant.variantId)
+    : "";
+
+  // ✅ try variant image from product store
+  if (product && variantId && Array.isArray(product?.variants)) {
+    const v = product.variants.find((x) => String(x?._id) === variantId);
+    if (v?.image) return proxifyImage(v.image);
+  }
+
+  // ✅ fallback product thumbnail / images
+  if (product?.thumbnail) return proxifyImage(product.thumbnail);
+  if (Array.isArray(product?.images) && product.images.length)
+    return proxifyImage(product.images[0]);
+
+  // ✅ fallback snapshot
+  return proxifyImage(
+    item?.variant?.image ||
+      item?.productSnapshot?.thumbnail ||
+      (item?.productSnapshot?.images || [])[0] ||
+      ""
+  );
+};
+
+/* ============================================================
+   ✅ Excel Export With Embedded Images (via Proxy)
+============================================================ */
+async function exportProductionXLSX(
+  orders,
+  productMap,
+  filename = "production.xlsx"
+) {
+  if (!orders?.length) return;
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Production Dashboard";
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet("Production", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+
+  sheet.columns = [
+    { header: "Image", key: "image", width: 16 },
+    { header: "Order#", key: "orderNumber", width: 16 },
+    { header: "Date", key: "date", width: 22 },
+    { header: "Customer", key: "customer", width: 22 },
+    { header: "Phone", key: "phone", width: 16 },
+    { header: "Product", key: "productName", width: 34 },
+    { header: "Size", key: "size", width: 10 },
+    { header: "Color", key: "color", width: 12 },
+    { header: "SKU", key: "sku", width: 18 },
+    { header: "Qty", key: "qty", width: 6 },
+  ];
+
+  const headerRow = sheet.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.height = 18;
+
+  let rowIndex = 2;
+
+  for (const order of orders) {
+    const orderNumber = order?.orderNumber || "";
+    const customer = order?.shippingAddressSnapshot?.fullName || "";
+    const phone = order?.shippingAddressSnapshot?.phone || "";
+    const date = new Date(
+      order?.createdAt || order?.orderDate || Date.now()
+    ).toLocaleString();
+
+    for (const it of order?.items || []) {
+      const title = it?.productSnapshot?.title || "Item";
+
+      // ✅ proxy image url
+      const imageUrl = resolveItemImage(it, productMap);
+
+      const size = it?.selectedSize || "";
+      const color = it?.selectedColor || "";
+      const sku = it?.variant?.sku || it?.productSnapshot?.sku || "";
+      const qty = Number(it?.quantity || 1);
+
+      sheet.addRow({
+        image: "",
+        orderNumber,
+        date,
+        customer,
+        phone,
+        productName: title,
+        size,
+        color,
+        sku,
+        qty,
+      });
+
+      const row = sheet.getRow(rowIndex);
+      row.height = 55;
+      row.alignment = { vertical: "middle" };
+
+      // ✅ embed image (proxy prevents CORS)
+      if (imageUrl) {
+        try {
+          const imgRes = await fetch(imageUrl);
+          const blob = await imgRes.blob();
+          const buffer = await blob.arrayBuffer();
+
+          const ext = blob.type.includes("png") ? "png" : "jpeg";
+
+          const imageId = workbook.addImage({
+            buffer,
+            extension: ext,
+          });
+
+          sheet.addImage(imageId, {
+            tl: { col: 0, row: rowIndex - 1 },
+            ext: { width: 70, height: 70 },
+          });
+        } catch (e) {
+          console.warn("Image embed failed:", imageUrl);
+        }
+      }
+
+      rowIndex++;
+    }
+  }
+
+  const buf = await workbook.xlsx.writeBuffer();
+  const fileBlob = new Blob([buf], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+
+  saveAs(fileBlob, filename);
+}
 
 export default function ProductionDashboardPage() {
   const router = useRouter();
@@ -29,95 +272,169 @@ export default function ProductionDashboardPage() {
     summary,
     loadingQueue,
     loadingSummary,
-    updatingShipped,
     error,
     fulfillmentStatus,
     setFulfillmentStatus,
     fetchProductionQueue,
     fetchProductionSummary,
-    markOrderShipped,
     refreshAll,
     clearError,
+    markOrderPacked,
   } = useAdminProductionStore();
 
-  const [search, setSearch] = useState("");
+  const { fetchProductsByIds } = useAdminProductStore();
 
-  // ✅ On load: summary + queue
+  const [search, setSearch] = useState("");
+  const [datePreset, setDatePreset] = useState("today");
+  const [exporting, setExporting] = useState(false);
+
+  const [rangeFrom, setRangeFrom] = useState(toYYYYMMDD(new Date()));
+  const [rangeTo, setRangeTo] = useState(toYYYYMMDD(new Date()));
+  const [useCustomRange, setUseCustomRange] = useState(false);
+
+  const [productMap, setProductMap] = useState({});
+
   useEffect(() => {
     fetchProductionSummary();
     fetchProductionQueue({ fulfillmentStatus: "processing" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ Filter changes -> fetch queue
   useEffect(() => {
     fetchProductionQueue({ fulfillmentStatus });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fulfillmentStatus]);
 
-  // ✅ local filtered queue
+  // ✅ Build productMap whenever queue changes
+  useEffect(() => {
+    const run = async () => {
+      const ids = Array.from(
+        new Set(
+          (queue || [])
+            .flatMap((o) => (o?.items || []).map((it) => getProductId(it)))
+            .filter(Boolean)
+        )
+      );
+
+      if (!ids.length) return;
+
+      const products = await fetchProductsByIds(ids);
+
+      const map = {};
+      (products || []).forEach((p) => {
+        map[String(p._id)] = p;
+      });
+
+      setProductMap(map);
+    };
+
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue]);
+
+  const activeDateRange = useMemo(() => {
+    if (useCustomRange) {
+      const from = rangeFrom ? startOfDay(new Date(rangeFrom)) : null;
+      const to = rangeTo ? endOfDay(new Date(rangeTo)) : null;
+      return { from, to };
+    }
+    return getPresetRange(datePreset);
+  }, [datePreset, useCustomRange, rangeFrom, rangeTo]);
+
   const filteredQueue = useMemo(() => {
     const q = (queue || []).slice();
-
     const term = String(search || "").trim().toLowerCase();
-    if (!term) return q;
+    const { from, to } = activeDateRange;
 
     return q.filter((o) => {
+      const created = new Date(o?.createdAt || o?.orderDate || Date.now());
+      const inRange = (!from || created >= from) && (!to || created <= to);
+      if (!inRange) return false;
+      if (!term) return true;
+
       const orderNumber = String(o?.orderNumber || "").toLowerCase();
       const name = String(o?.shippingAddressSnapshot?.fullName || "").toLowerCase();
       const phone = String(o?.shippingAddressSnapshot?.phone || "").toLowerCase();
+      const itemsText = (o?.items || [])
+        .map((it) => it?.productSnapshot?.title || "")
+        .join(" ")
+        .toLowerCase();
 
       return (
         orderNumber.includes(term) ||
         name.includes(term) ||
-        phone.includes(term)
+        phone.includes(term) ||
+        itemsText.includes(term)
       );
     });
-  }, [queue, search]);
+  }, [queue, search, activeDateRange]);
 
-  const onMarkShipped = async (orderId) => {
+  const onOpenOrder = (orderId) => {
+    router.push(`/production/order/${orderId}`);
+  };
+
+  const onMarkPacked = async (orderId) => {
     try {
-      await markOrderShipped(orderId);
-      // refresh queue silently
+      await markOrderPacked(orderId);
       await fetchProductionQueue({ fulfillmentStatus });
+      await fetchProductionSummary();
     } catch (e) {
       console.error(e);
     }
   };
 
-  const onOpenOrder = (orderId) => {
-    // ✅ next page we'll create later
-    router.push(`/production/order/${orderId}`);
+  const onExportExcel = async () => {
+    try {
+      setExporting(true);
+      const filename = `production-${fulfillmentStatus}-${toYYYYMMDD(
+        new Date()
+      )}.xlsx`;
+
+      await exportProductionXLSX(filteredQueue, productMap, filename);
+    } catch (e) {
+      console.error("Export error:", e);
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="px-3 md:px-6 py-5 space-y-4 bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold">Production Dashboard</h1>
-          <p className="text-sm text-gray-500">
-            Confirmed orders → Production queue. Production complete → Mark shipped.
+          <h1 className="text-xl md:text-2xl font-semibold text-gray-900">
+            Production
+          </h1>
+          <p className="text-xs text-gray-500">
+            Confirmed orders only • Produce items → Mark Packed
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => refreshAll()}
-            className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50 text-sm"
+            className="px-3 py-2 rounded-xl bg-white text-xs text-gray-800 shadow-sm hover:shadow transition"
           >
             Refresh
+          </button>
+
+          <button
+            onClick={onExportExcel}
+            disabled={exporting || !filteredQueue.length}
+            className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 disabled:opacity-50"
+          >
+            {exporting ? "Exporting..." : "Export Excel"}
           </button>
         </div>
       </div>
 
-      {/* Error */}
       {error ? (
-        <div className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-center justify-between">
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="px-3 py-2 rounded-xl bg-red-50 text-red-700 text-xs flex items-center justify-between">
+          <span>{error}</span>
           <button
             onClick={clearError}
-            className="text-sm px-3 py-1 rounded-md bg-white border hover:bg-gray-50"
+            className="text-xs px-2 py-1 rounded-lg bg-white shadow-sm hover:shadow transition"
           >
             Dismiss
           </button>
@@ -125,7 +442,7 @@ export default function ProductionDashboardPage() {
       ) : null}
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
         <MetricCard
           title="Processing"
           value={summary?.processing}
@@ -140,39 +457,75 @@ export default function ProductionDashboardPage() {
           onClick={() => setFulfillmentStatus("packed")}
           active={fulfillmentStatus === "packed"}
         />
-        <MetricCard
-          title="Shipped"
-          value={summary?.shipped}
-          loading={loadingSummary}
-          onClick={() => setFulfillmentStatus("shipped")}
-          active={fulfillmentStatus === "shipped"}
-        />
-        <MetricCard
-          title="Delivered"
-          value={summary?.delivered}
-          loading={loadingSummary}
-          onClick={() => setFulfillmentStatus("delivered")}
-          active={fulfillmentStatus === "delivered"}
-        />
-        <MetricCard
-          title="Cancelled"
-          value={summary?.cancelled}
-          loading={loadingSummary}
-          onClick={() => setFulfillmentStatus("cancelled")}
-          active={fulfillmentStatus === "cancelled"}
-        />
       </div>
 
       {/* Controls */}
-      <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-        <div className="flex flex-col md:flex-row gap-3 md:items-center">
-          {/* Status Filter */}
-          <div className="flex flex-col">
-            <label className="text-xs text-gray-500 mb-1">Filter Status</label>
+      <div className="flex flex-col gap-3 bg-white rounded-2xl shadow-sm ring-1 ring-black/5 p-3">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          {DATE_PRESETS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => {
+                setUseCustomRange(false);
+                setDatePreset(p.key);
+              }}
+              className={`whitespace-nowrap px-3 py-2 rounded-full text-xs shadow-sm transition ${
+                !useCustomRange && datePreset === p.key
+                  ? "bg-black text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+
+          <button
+            onClick={() => setUseCustomRange((v) => !v)}
+            className={`whitespace-nowrap px-3 py-2 rounded-full text-xs shadow-sm transition ${
+              useCustomRange
+                ? "bg-black text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            Custom Range
+          </button>
+        </div>
+
+        {useCustomRange ? (
+          <div className="flex flex-col md:flex-row gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 w-10">From</span>
+              <input
+                type="date"
+                value={rangeFrom}
+                onChange={(e) => setRangeFrom(e.target.value)}
+                className="px-3 py-2 rounded-xl bg-gray-50 text-xs ring-1 ring-black/5"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 w-10">To</span>
+              <input
+                type="date"
+                value={rangeTo}
+                onChange={(e) => setRangeTo(e.target.value)}
+                className="px-3 py-2 rounded-xl bg-gray-50 text-xs ring-1 ring-black/5"
+              />
+            </div>
+
+            <button className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 md:ml-auto">
+              Apply
+            </button>
+          </div>
+        ) : null}
+
+        <div className="flex flex-col md:flex-row gap-2 md:items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Status</span>
             <select
               value={fulfillmentStatus}
               onChange={(e) => setFulfillmentStatus(e.target.value)}
-              className="px-3 py-2 rounded-lg border bg-white text-sm"
+              className="px-3 py-2 rounded-xl bg-gray-50 text-xs ring-1 ring-black/5"
             >
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -182,174 +535,181 @@ export default function ProductionDashboardPage() {
             </select>
           </div>
 
-          {/* Search */}
-          <div className="flex flex-col">
-            <label className="text-xs text-gray-500 mb-1">Search</label>
+          <div className="flex-1">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Order #, customer name, phone..."
-              className="px-3 py-2 rounded-lg border bg-white text-sm w-full md:w-[320px]"
+              placeholder="Search: order #, name, phone, product..."
+              className="w-full px-3 py-2 rounded-xl bg-gray-50 text-xs ring-1 ring-black/5"
             />
           </div>
-        </div>
 
-        <div className="text-sm text-gray-500">
-          Showing <span className="font-medium">{filteredQueue.length}</span>{" "}
-          orders
-        </div>
-      </div>
-
-      {/* Queue Table */}
-      <div className="rounded-xl border bg-white overflow-hidden">
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <h2 className="text-base font-semibold">
-            Production Queue ({fulfillmentStatus})
-          </h2>
-          {loadingQueue ? (
-            <span className="text-xs text-gray-500">Loading...</span>
-          ) : null}
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="text-left px-4 py-3">Order</th>
-                <th className="text-left px-4 py-3">Customer</th>
-                <th className="text-left px-4 py-3">Items</th>
-                <th className="text-left px-4 py-3">Total</th>
-                <th className="text-left px-4 py-3">Payment</th>
-                <th className="text-left px-4 py-3">Status</th>
-                <th className="text-right px-4 py-3">Action</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {loadingQueue ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                    Loading orders...
-                  </td>
-                </tr>
-              ) : filteredQueue.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                    No orders found.
-                  </td>
-                </tr>
-              ) : (
-                filteredQueue.map((order) => (
-                  <tr
-                    key={order._id}
-                    className="border-t hover:bg-gray-50 cursor-pointer"
-                    onClick={() => onOpenOrder(order._id)}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{order.orderNumber}</div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(order.createdAt || order.orderDate || Date.now()).toLocaleString()}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="font-medium">
-                        {order?.shippingAddressSnapshot?.fullName || "—"}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {order?.shippingAddressSnapshot?.phone || "—"}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="text-xs text-gray-700">
-                        {(order.items || []).slice(0, 2).map((it, idx) => (
-                          <div key={idx}>
-                            {it?.productSnapshot?.title || "Item"} × {it?.quantity || 1}
-                          </div>
-                        ))}
-                        {(order.items || []).length > 2 ? (
-                          <div className="text-gray-500">
-                            +{(order.items || []).length - 2} more
-                          </div>
-                        ) : null}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3 font-medium">
-                      ₹{Number(order.finalPayable || 0).toFixed(0)}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="text-xs">
-                        {String(order.paymentMethod || "").toUpperCase()}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {order.paymentStatus || "pending"}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <StatusPill status={order.fulfillmentStatus} />
-                    </td>
-
-                    <td
-                      className="px-4 py-3 text-right"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {/* Only allow mark shipped if current status is processing/packed */}
-                      {["processing", "packed"].includes(order.fulfillmentStatus) ? (
-                        <button
-                          disabled={updatingShipped}
-                          onClick={() => onMarkShipped(order._id)}
-                          className="px-3 py-2 rounded-lg bg-black text-white text-xs hover:opacity-90 disabled:opacity-50"
-                        >
-                          {updatingShipped ? "Updating..." : "Mark Shipped"}
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <div className="text-xs text-gray-500 md:w-[120px] text-right">
+            {loadingQueue ? "Loading..." : `${filteredQueue.length} orders`}
+          </div>
         </div>
       </div>
 
-      {/* Footer Note */}
-      <div className="text-xs text-gray-500">
-        ✅ Shiprocket booking happens on <b>Confirm Order</b> (not here). Production
-        only marks shipped.
+      {/* Orders */}
+      <div className="space-y-2">
+        {loadingQueue ? (
+          <div className="p-6 text-center text-gray-500 text-sm">
+            Loading orders...
+          </div>
+        ) : filteredQueue.length === 0 ? (
+          <div className="p-6 text-center text-gray-500 text-sm">
+            No orders found in selected filter.
+          </div>
+        ) : (
+          filteredQueue.map((order) => (
+            <OrderCard
+              key={order._id}
+              order={order}
+              productMap={productMap}
+              onOpen={() => onOpenOrder(order._id)}
+              onMarkPacked={() => onMarkPacked(order._id)}
+              canMarkPacked={order.fulfillmentStatus === "processing"}
+            />
+          ))
+        )}
+      </div>
+
+      <div className="text-[11px] text-gray-500">
+        ✅ Images now load via Backend Proxy (fixes WordPress CORS) + Excel export embeds them properly.
       </div>
     </div>
   );
 }
 
-/* -----------------------------
-   Components
------------------------------- */
+/* ------------------------------------------------
+  UI Components
+------------------------------------------------- */
 
 function MetricCard({ title, value, loading, onClick, active }) {
   return (
     <button
       onClick={onClick}
-      className={`p-4 rounded-xl border text-left bg-white hover:bg-gray-50 transition ${
-        active ? "border-black" : "border-gray-200"
+      className={`p-3 rounded-2xl bg-white shadow-sm hover:shadow transition text-left ${
+        active ? "ring-2 ring-black/80" : "ring-1 ring-black/5"
       }`}
     >
-      <div className="text-xs text-gray-500">{title}</div>
-      <div className="text-xl font-semibold mt-1">
+      <div className="text-[11px] text-gray-500">{title}</div>
+      <div className="text-lg font-semibold mt-1 text-gray-900">
         {loading ? "—" : Number(value || 0)}
       </div>
     </button>
   );
 }
 
+function OrderCard({ order, onOpen, onMarkPacked, canMarkPacked, productMap }) {
+  const itemsCount = (order?.items || []).reduce(
+    (sum, it) => sum + Number(it?.quantity || 0),
+    0
+  );
+
+  return (
+    <div
+      className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 hover:shadow transition cursor-pointer"
+      onClick={onOpen}
+    >
+      <div className="px-3 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900 text-sm truncate">
+              {order.orderNumber}
+            </h3>
+            <StatusPill status={order.fulfillmentStatus} />
+            <span className="text-[11px] text-gray-500">• {itemsCount} pcs</span>
+          </div>
+
+          <div className="text-[11px] text-gray-500 truncate mt-0.5">
+            {order?.shippingAddressSnapshot?.fullName || "—"} •{" "}
+            {order?.shippingAddressSnapshot?.phone || "—"} •{" "}
+            {new Date(order.createdAt || order.orderDate || Date.now()).toLocaleString()}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <div className="text-right">
+            <div className="text-sm font-semibold text-gray-900">
+              ₹{Number(order.finalPayable || 0).toFixed(0)}
+            </div>
+            <div className="text-[11px] text-gray-500">
+              {String(order.paymentMethod || "").toUpperCase()} •{" "}
+              {order.paymentStatus || "pending"}
+            </div>
+          </div>
+
+          {canMarkPacked ? (
+            <button
+              onClick={onMarkPacked}
+              className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90"
+            >
+              Mark Packed
+            </button>
+          ) : (
+            <div className="text-xs text-gray-400 px-2">—</div>
+          )}
+        </div>
+      </div>
+
+      <div className="px-3 pb-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {(order.items || []).map((it, idx) => (
+            <ItemRow key={idx} item={it} productMap={productMap} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ItemRow({ item, productMap }) {
+  const title = item?.productSnapshot?.title || "Item";
+  const img = resolveItemImage(item, productMap);
+
+  const qty = Number(item?.quantity || 1);
+  const size = item?.selectedSize || "";
+  const color = item?.selectedColor || "";
+  const sku = item?.variant?.sku || item?.productSnapshot?.sku || "";
+
+  return (
+    <div className="flex gap-2 p-2 rounded-xl bg-gray-50">
+      <div className="w-12 h-12 rounded-xl bg-white overflow-hidden ring-1 ring-black/5 flex items-center justify-center shrink-0">
+        {img ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={img} alt={title} className="w-full h-full object-cover" />
+        ) : (
+          <div className="text-[10px] text-gray-400">No Image</div>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-medium text-gray-900 truncate">
+          {title}
+        </div>
+
+        <div className="text-[11px] text-gray-600 mt-1 flex flex-wrap gap-1">
+          <Tag label={`Qty: ${qty}`} />
+          {size ? <Tag label={`Size: ${size}`} /> : null}
+          {color ? <Tag label={`Color: ${color}`} /> : null}
+          {sku ? <Tag label={`SKU: ${sku}`} /> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Tag({ label }) {
+  return (
+    <span className="px-2 py-1 rounded-full bg-white ring-1 ring-black/5 text-[11px] text-gray-700">
+      {label}
+    </span>
+  );
+}
+
 function StatusPill({ status }) {
   const s = String(status || "processing");
-
   const map = {
     processing: "bg-yellow-100 text-yellow-800",
     packed: "bg-blue-100 text-blue-800",
@@ -363,7 +723,7 @@ function StatusPill({ status }) {
   const cls = map[s] || "bg-gray-100 text-gray-800";
 
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${cls}`}>
+    <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>
       {s.replaceAll("_", " ")}
     </span>
   );

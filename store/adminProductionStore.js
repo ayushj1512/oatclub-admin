@@ -1,29 +1,13 @@
 import { create } from "zustand";
-import axios from "axios";
+import { toast } from "react-hot-toast";
 
-/**
- * ✅ Admin Production Store
- * - Fetch production queue (confirmed + processing by default)
- * - Fetch production summary
- * - Mark order shipped (production completed)
- *
- * Routes expected:
- * GET    {BACKEND}/orders/production/queue?fulfillmentStatus=processing
- * GET    {BACKEND}/orders/production/summary
- * POST   {BACKEND}/orders/production/:id/shipped
- */
-
-// ✅ Backend Base URL from env
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
-
-// ✅ Orders API base
-const API_BASE = `${BACKEND_URL}/api/orders`;
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+const API = `${BASE_URL}/api/orders`; // ✅ IMPORTANT FIX (api prefix)
 
 export const useAdminProductionStore = create((set, get) => ({
-  // -----------------------------
-  // STATE
-  // -----------------------------
+  /* ============================================================
+    STATE
+  ============================================================ */
   queue: [],
   summary: {
     processing: 0,
@@ -33,144 +17,135 @@ export const useAdminProductionStore = create((set, get) => ({
     cancelled: 0,
   },
 
+  fulfillmentStatus: "processing",
+
   loadingQueue: false,
   loadingSummary: false,
   updatingShipped: false,
-
   error: null,
 
-  // default filter
-  fulfillmentStatus: "processing",
-
-  // -----------------------------
-  // ACTIONS
-  // -----------------------------
-
+  /* ============================================================
+    HELPERS
+  ============================================================ */
   setFulfillmentStatus: (status) => set({ fulfillmentStatus: status }),
-
   clearError: () => set({ error: null }),
 
-  /**
-   * ✅ Fetch Production Queue
-   * default: confirmed + processing orders
-   */
-  fetchProductionQueue: async (opts = {}) => {
-    const status = opts.fulfillmentStatus || get().fulfillmentStatus;
-
-    set({ loadingQueue: true, error: null });
-
+  /* ============================================================
+    ✅ FETCH PRODUCTION QUEUE
+    GET /api/orders/production/queue?fulfillmentStatus=processing
+  ============================================================ */
+  fetchProductionQueue: async (params = {}) => {
     try {
-      const res = await axios.get(`${API_BASE}/production/queue`, {
-        params: { fulfillmentStatus: status },
-        withCredentials: true, // ✅ keep if cookies/session auth
+      set({ loadingQueue: true, error: null });
+
+      const status = params.fulfillmentStatus || get().fulfillmentStatus;
+      const query = new URLSearchParams({ fulfillmentStatus: status }).toString();
+
+      const res = await fetch(`${API}/production/queue?${query}`, {
+        credentials: "include",
       });
 
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to fetch production queue");
+
       set({
-        queue: res.data?.orders || [],
+        queue: data.orders || [],
         fulfillmentStatus: status,
-        loadingQueue: false,
       });
 
-      return res.data;
-    } catch (err) {
-      const message =
-        err?.response?.data?.message || err.message || "Queue fetch failed";
-
-      set({
-        loadingQueue: false,
-        error: message,
-      });
-
-      throw err;
+      return data.orders || [];
+    } catch (e) {
+      console.error("❌ fetchProductionQueue error:", e);
+      set({ error: e.message });
+      toast.error(e.message);
+      return [];
+    } finally {
+      set({ loadingQueue: false });
     }
   },
 
-  /**
-   * ✅ Fetch Production Summary
-   * counts of statuses for confirmed orders
-   */
+  /* ============================================================
+    ✅ FETCH PRODUCTION SUMMARY
+    GET /api/orders/production/summary
+  ============================================================ */
   fetchProductionSummary: async () => {
-    set({ loadingSummary: true, error: null });
-
     try {
-      const res = await axios.get(`${API_BASE}/production/summary`, {
-        withCredentials: true,
+      set({ loadingSummary: true, error: null });
+
+      const res = await fetch(`${API}/production/summary`, {
+        credentials: "include",
       });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to fetch production summary");
 
       set({
-        summary: res.data?.summary || get().summary,
-        loadingSummary: false,
+        summary: data.summary || get().summary,
       });
 
-      return res.data;
-    } catch (err) {
-      const message =
-        err?.response?.data?.message || err.message || "Summary fetch failed";
-
-      set({
-        loadingSummary: false,
-        error: message,
-      });
-
-      throw err;
+      return data.summary;
+    } catch (e) {
+      console.error("❌ fetchProductionSummary error:", e);
+      set({ error: e.message });
+      toast.error(e.message);
+      return null;
+    } finally {
+      set({ loadingSummary: false });
     }
   },
 
-  /**
-   * ✅ Mark Order Shipped from Production
-   * - Moves fulfillmentStatus to shipped
-   * - Does NOT book shiprocket (as per your flow)
-   */
+  /* ============================================================
+    ✅ MARK ORDER SHIPPED FROM PRODUCTION
+    POST /api/orders/production/:id/shipped
+  ============================================================ */
   markOrderShipped: async (orderId) => {
-    if (!orderId) throw new Error("orderId missing");
-
-    set({ updatingShipped: true, error: null });
-
     try {
-      const res = await axios.post(
-        `${API_BASE}/production/${orderId}/shipped`,
-        {},
-        { withCredentials: true }
-      );
+      if (!orderId) throw new Error("Order id missing");
 
-      const updatedOrder = res.data?.order;
+      set({ updatingShipped: true, error: null });
 
-      // ✅ Update queue locally if exists
+      const res = await fetch(`${API}/production/${orderId}/shipped`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to mark shipped");
+
+      const updated = data.order;
+
+      // ✅ Update local queue instantly
       set((state) => ({
         queue: (state.queue || []).map((o) =>
-          String(o?._id) === String(orderId) ? updatedOrder : o
+          String(o._id) === String(orderId) ? updated : o
         ),
-        updatingShipped: false,
       }));
 
-      // ✅ Refresh summary silently (optional)
+      toast.success("Order marked shipped ✅");
+
+      // ✅ refresh summary (silent)
       try {
         await get().fetchProductionSummary();
-      } catch (e) {
-        // ignore summary refresh errors
-      }
+      } catch (e) {}
 
-      return res.data;
-    } catch (err) {
-      const message =
-        err?.response?.data?.message || err.message || "Mark shipped failed";
-
-      set({
-        updatingShipped: false,
-        error: message,
-      });
-
-      throw err;
+      return updated;
+    } catch (e) {
+      console.error("❌ markOrderShipped error:", e);
+      set({ error: e.message });
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ updatingShipped: false });
     }
   },
 
-  /**
-   * ✅ Refresh Queue + Summary Together
-   */
+  /* ============================================================
+    ✅ REFRESH ALL (Queue + Summary)
+  ============================================================ */
   refreshAll: async () => {
     await Promise.allSettled([
       get().fetchProductionSummary(),
-      get().fetchProductionQueue(),
+      get().fetchProductionQueue({ fulfillmentStatus: get().fulfillmentStatus }),
     ]);
   },
 }));

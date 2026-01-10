@@ -590,6 +590,40 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
+ fetchProductsByIds: async (ids = []) => {
+  try {
+    // ✅ normalize ids (array OR comma-separated string)
+    ids = Array.isArray(ids)
+      ? ids
+      : typeof ids === "string"
+        ? ids.split(",").map((x) => x.trim())
+        : [];
+
+    // ✅ remove empty + duplicates
+    ids = [...new Set(ids.filter(Boolean))];
+
+    if (!ids.length) return [];
+
+    const res = await fetch(`${API}/by-ids`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ ids }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to fetch products");
+
+    return data.products || [];
+  } catch (e) {
+    console.error("❌ fetchProductsByIds error:", e);
+    toast.error(e.message);
+    return [];
+  }
+},
+
+
+
   updateVariantStock: async (productId, variantId, stock) => {
     try {
       const res = await fetch(`${API}/${productId}/variant-stock`, {
