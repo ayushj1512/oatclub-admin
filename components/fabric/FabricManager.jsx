@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFabricStore } from "@/store/fabricStore";
 import AddEditFabricModal from "@/components/fabric/AddEditFabricModal";
 
 /* ============================================================
-   FABRIC MANAGER COMPONENT
+   FABRIC MANAGER (B/W CLEAN UI)
 ============================================================ */
 export default function FabricManager() {
   const {
@@ -33,7 +33,21 @@ export default function FabricManager() {
   -------------------------------- */
   useEffect(() => {
     fetchFabrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* -------------------------------
+     DERIVED
+  -------------------------------- */
+  const count = fabrics?.length || 0;
+
+  const activeFilterLabel = useMemo(() => {
+    const parts = [];
+    if (filters.q) parts.push(`q: "${filters.q}"`);
+    if (filters.status) parts.push(`status: ${filters.status}`);
+    if (filters.movementStatus) parts.push(`movement: ${filters.movementStatus}`);
+    return parts.length ? parts.join(" • ") : "No filters";
+  }, [filters]);
 
   /* -------------------------------
      MODAL HANDLERS
@@ -61,174 +75,223 @@ export default function FabricManager() {
         await createFabric(payload);
       }
       closeModal();
+      // optional: refresh list if backend mutates fields
+      await fetchFabrics();
     } catch (_) {}
+  };
+
+  const handleReset = async () => {
+    clearFilters();
+    await fetchFabrics();
   };
 
   /* -------------------------------
      RENDER
   -------------------------------- */
   return (
-    <div className="p-6 space-y-6 bg-[#f5f6f8] min-h-screen">
-  {/* ================= HEADER ================= */}
-  <div className="flex items-center justify-between bg-white rounded-xl px-6 py-4 shadow-sm border border-gray-200">
-    <div>
-      <h1 className="text-2xl font-semibold text-gray-900">
-        Fabric Management
-      </h1>
-      <p className="text-sm text-gray-500">
-        Manage fabrics, usage status and availability
-      </p>
-    </div>
+    <div className="min-h-screen bg-white text-black p-4 md:p-6">
+      {/* ================= HEADER ================= */}
+      <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
+        <div className="flex-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Fabric Management
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Manage fabrics, movement status, and availability.
+          </p>
+        </div>
 
-    <button
-      onClick={openCreate}
-      className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow"
-    >
-      + Add Fabric
-    </button>
-  </div>
-
-  {/* ================= FILTERS ================= */}
-  <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-    <div className="flex flex-wrap gap-3">
-      <input
-        placeholder="Search by name, code or category"
-        value={filters.q}
-        onChange={(e) => setFilters({ q: e.target.value })}
-        className="border border-gray-300 focus:border-blue-500 focus:ring-blue-500 px-3 py-2 rounded-lg text-sm w-64 outline-none"
-      />
-
-      <select
-        value={filters.status}
-        onChange={(e) => setFilters({ status: e.target.value })}
-        className="border border-gray-300 focus:border-blue-500 focus:ring-blue-500 px-3 py-2 rounded-lg text-sm outline-none"
-      >
-        <option value="">All Status</option>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-        <option value="discontinued">Discontinued</option>
-      </select>
-
-      <select
-        value={filters.movementStatus}
-        onChange={(e) =>
-          setFilters({ movementStatus: e.target.value })
-        }
-        className="border border-gray-300 focus:border-blue-500 focus:ring-blue-500 px-3 py-2 rounded-lg text-sm outline-none"
-      >
-        <option value="">All Movement</option>
-        <option value="idle">Idle</option>
-        <option value="incoming">Incoming</option>
-        <option value="in_use">In Use</option>
-        <option value="outgoing">Outgoing</option>
-      </select>
-
-      <button
-        onClick={() => {
-          clearFilters();
-          fetchFabrics();
-        }}
-        className="text-sm text-blue-600 hover:underline ml-auto"
-      >
-        Reset Filters
-      </button>
-    </div>
-  </div>
-
-  {/* ================= TABLE ================= */}
-  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-    <table className="w-full text-sm">
-      <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
-        <tr>
-          <th className="p-4 text-left">Name</th>
-          <th className="p-4">Code</th>
-          <th className="p-4">Category</th>
-          <th className="p-4">Unit</th>
-          <th className="p-4">Movement</th>
-          <th className="p-4 text-right">Actions</th>
-        </tr>
-      </thead>
-
-      <tbody className="divide-y divide-gray-200">
-        {loading && (
-          <tr>
-            <td colSpan="6" className="p-6 text-center text-gray-500">
-              Loading fabrics…
-            </td>
-          </tr>
-        )}
-
-        {!loading && fabrics.length === 0 && (
-          <tr>
-            <td colSpan="6" className="p-6 text-center text-gray-400">
-              No fabrics found
-            </td>
-          </tr>
-        )}
-
-        {fabrics.map((f) => (
-          <tr
-            key={f._id}
-            className="hover:bg-gray-50 transition"
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchFabrics()}
+            className="px-3 py-2 rounded-lg border border-black/15 hover:border-black/30 hover:bg-black/5 text-sm"
+            disabled={loading}
           >
-            <td className="p-4 font-medium text-gray-900">
-              {f.name}
-            </td>
-            <td className="p-4 text-gray-600">{f.code}</td>
-            <td className="p-4 text-gray-600">{f.category}</td>
-            <td className="p-4 text-gray-600 uppercase">{f.unit}</td>
+            Refresh
+          </button>
 
-            <td className="p-4">
+          <button
+            onClick={openCreate}
+            className="px-4 py-2 rounded-lg bg-black text-white hover:bg-black/90 text-sm font-medium"
+          >
+            + Add Fabric
+          </button>
+        </div>
+      </div>
+
+      {/* ================= FILTER BAR ================= */}
+      <div className="mt-5 border border-black/10 rounded-2xl p-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 flex-1">
+            <div className="flex-1 min-w-[240px]">
+              <label className="text-xs text-gray-600">Search</label>
+              <input
+                placeholder="Name / code / category"
+                value={filters.q}
+                onChange={(e) => setFilters({ q: e.target.value })}
+                className="mt-1 w-full border border-black/15 rounded-lg px-3 py-2 text-sm outline-none focus:border-black"
+              />
+            </div>
+
+            <div className="min-w-[180px]">
+              <label className="text-xs text-gray-600">Status</label>
               <select
-                value={f.movementStatus}
-                onChange={(e) =>
-                  updateMovementStatus(f._id, e.target.value)
-                }
-                className="border border-gray-300 rounded-md px-2 py-1 text-xs bg-white focus:border-blue-500 outline-none"
+                value={filters.status}
+                onChange={(e) => setFilters({ status: e.target.value })}
+                className="mt-1 w-full border border-black/15 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-black"
               >
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="discontinued">Discontinued</option>
+              </select>
+            </div>
+
+            <div className="min-w-[180px]">
+              <label className="text-xs text-gray-600">Movement</label>
+              <select
+                value={filters.movementStatus}
+                onChange={(e) => setFilters({ movementStatus: e.target.value })}
+                className="mt-1 w-full border border-black/15 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-black"
+              >
+                <option value="">All</option>
                 <option value="idle">Idle</option>
                 <option value="incoming">Incoming</option>
                 <option value="in_use">In Use</option>
                 <option value="outgoing">Outgoing</option>
               </select>
-            </td>
+            </div>
+          </div>
 
-            <td className="p-4 text-right space-x-3">
-              <button
-                onClick={() => openEdit(f)}
-                className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => deleteFabric(f._id)}
-                className="text-red-600 hover:text-red-800 text-xs font-medium"
-              >
-                Delete
-              </button>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
+          <div className="flex items-center justify-between lg:justify-end gap-3">
+            <div className="text-xs text-gray-600">
+              <span className="font-medium text-black">{count}</span> fabrics •{" "}
+              {activeFilterLabel}
+            </div>
 
-  {/* ================= ERROR ================= */}
-  {error && (
-    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-      {error}
+            <button
+              onClick={handleReset}
+              className="text-sm underline underline-offset-4 hover:opacity-80"
+              disabled={loading}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ================= TABLE ================= */}
+      <div className="mt-5 border border-black/10 rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-black text-white">
+              <tr className="text-left">
+                <th className="p-4 font-medium w-[260px]">Name</th>
+                <th className="p-4 font-medium w-[160px]">Code</th>
+                <th className="p-4 font-medium w-[220px]">Category</th>
+                <th className="p-4 font-medium w-[110px]">Unit</th>
+                <th className="p-4 font-medium w-[180px]">Movement</th>
+                <th className="p-4 font-medium text-right w-[160px]">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-black/10">
+              {loading && (
+                <tr>
+                  <td colSpan="6" className="p-6 text-center text-gray-600">
+                    Loading fabrics…
+                  </td>
+                </tr>
+              )}
+
+              {!loading && fabrics.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="p-6 text-center text-gray-500">
+                    No fabrics found
+                  </td>
+                </tr>
+              )}
+
+              {!loading &&
+                fabrics.map((f) => (
+                  <tr key={f._id} className="hover:bg-black/5 transition">
+                    <td className="p-4">
+                      <div className="font-medium">{f.name}</div>
+                      <div className="text-xs text-gray-600 mt-1">
+                        <span className="text-gray-500">ID:</span> {f._id}
+                      </div>
+                    </td>
+
+                    <td className="p-4 text-gray-800">
+                      {f.code || <span className="text-gray-400">—</span>}
+                    </td>
+
+                    <td className="p-4 text-gray-800">
+                      {f.category || <span className="text-gray-400">—</span>}
+                    </td>
+
+                    <td className="p-4 text-gray-800 uppercase">
+                      {f.unit || <span className="text-gray-400">—</span>}
+                    </td>
+
+                    <td className="p-4">
+                      <select
+                        value={f.movementStatus}
+                        onChange={(e) =>
+                          updateMovementStatus(f._id, e.target.value)
+                        }
+                        className="border border-black/15 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-black"
+                      >
+                        <option value="idle">Idle</option>
+                        <option value="incoming">Incoming</option>
+                        <option value="in_use">In Use</option>
+                        <option value="outgoing">Outgoing</option>
+                      </select>
+                    </td>
+
+                    <td className="p-4 text-right space-x-3">
+                      <button
+                        onClick={() => openEdit(f)}
+                        className="text-sm underline underline-offset-4 hover:opacity-80"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteFabric(f._id)}
+                        className="text-sm underline underline-offset-4 text-red-600 hover:opacity-80"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* FOOTER STRIP */}
+        <div className="px-4 py-3 bg-white border-t border-black/10 text-xs text-gray-600 flex items-center justify-between">
+          <div>
+            Showing <span className="font-medium text-black">{count}</span> fabrics
+          </div>
+          <div className="flex items-center gap-2">
+            {error ? (
+              <span className="text-red-600">{error}</span>
+            ) : (
+              <span>—</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ================= ADD / EDIT MODAL ================= */}
+      <AddEditFabricModal
+        open={showModal}
+        onClose={closeModal}
+        onSubmit={handleSubmit}
+        fabric={editingFabric}
+        loading={loading}
+      />
     </div>
-  )}
-
-  {/* ================= ADD / EDIT MODAL ================= */}
-  <AddEditFabricModal
-    open={showModal}
-    onClose={closeModal}
-    onSubmit={handleSubmit}
-    fabric={editingFabric}
-    loading={loading}
-  />
-</div>
-
   );
 }

@@ -42,15 +42,11 @@ export const sidebarMenus = {
   ],
 
   production: [
-    { label: "Production Dashboard", href: "/production" },
-    { label: "Work Orders", href: "/production/work-orders" },
-    { label: "Cutting", href: "/production/cutting" },
-    { label: "Stitching", href: "/production/stitching" },
-    { label: "Tailor Assignment", href: "/production/assignments" },
-    { label: "QC & Finishing", href: "/production/qc" },
-    { label: "Production Reports", href: "/production/reports" },
-    { label: "Materials / Fabrics", href: "/production/materials" },
-  ],
+  { label: "Production Dashboard", href: "/production" },
+  { label: "Fabric", href: "/production/fabric" },
+  { label: "Product Style", href: "/production/style" },
+],
+
 
   accounts: [
     { label: "Accounts Dashboard", href: "/accounts" },

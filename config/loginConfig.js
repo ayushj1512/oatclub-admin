@@ -20,7 +20,7 @@ export const DOMAIN_PERMISSIONS = {
   marketing: "manageMarketing",
 
   customers: "manageCustomers",
-  support: "manageSupport", // ✅ Customer Support
+  support: "manageSupport",
   sales: "manageSales",
 
   analytics: "viewAnalytics",
@@ -29,11 +29,14 @@ export const DOMAIN_PERMISSIONS = {
   tickets: "manageTickets",
   coupons: "manageCoupons",
   wordpress: "manageWordpressOrders",
+
+  // ✅ NEW: warehouse domain (ONLY production access)
+  warehouse: "manageProduction",
 };
 
 // ✅ Default permissions by role (if admin.permissions empty)
 export const ROLE_DEFAULT_PERMS = {
-  superadmin: ["*"], // ✅ full access
+  superadmin: ["*"],
 
   admin: [
     "manageOrders",
@@ -44,12 +47,14 @@ export const ROLE_DEFAULT_PERMS = {
     "viewReports",
   ],
 
-  // ✅ customer care (currently only customer support)
   customer_care: ["manageSupport"],
 
   staff: ["manageOrders", "manageInventory"],
   viewer: ["viewReports", "viewAnalytics"],
   influencer: ["manageMedia", "manageReels"],
+
+  // ✅ NEW: warehouse role (ONLY production allowed)
+  warehouse: ["manageProduction"],
 };
 
 // ✅ permission checker

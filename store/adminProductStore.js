@@ -4,6 +4,55 @@ import { toast } from "react-hot-toast";
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const API = `${BASE_URL}/api/products`;
 
+/* ============================================================
+  Helpers (admin-side payload hygiene)
+  - remove variant.price fields (no longer in schema)
+============================================================ */
+const stripVariantPrices = (payload) => {
+  if (!payload || typeof payload !== "object") return payload;
+
+  const out = { ...payload };
+  if (Array.isArray(out.variants)) {
+    out.variants = out.variants.map((v) => {
+      if (!v || typeof v !== "object") return v;
+      // remove old fields if UI still sends them
+      // eslint-disable-next-line no-unused-vars
+      const { price, compareAtPrice, ...rest } = v;
+      return rest;
+    });
+  }
+  return out;
+};
+
+const normalizeProductPayload = (payload) => {
+  if (!payload || typeof payload !== "object") return payload;
+
+  const out = stripVariantPrices(payload);
+
+  if (out.patternNumber !== undefined) {
+    out.patternNumber = String(out.patternNumber || "").trim();
+  }
+
+  // allow fabrics + avgFabricConsumption to pass (sometimes UI may send as stringified JSON)
+  if (typeof out.fabrics === "string") {
+    try {
+      out.fabrics = JSON.parse(out.fabrics);
+    } catch {
+      // keep as-is if parsing fails
+    }
+  }
+
+  if (typeof out.avgFabricConsumption === "string") {
+    try {
+      out.avgFabricConsumption = JSON.parse(out.avgFabricConsumption);
+    } catch {
+      // keep as-is if parsing fails
+    }
+  }
+
+  return out;
+};
+
 export const useAdminProductStore = create((set, get) => ({
   /* ============================================================
     STATE
@@ -53,9 +102,7 @@ export const useAdminProductStore = create((set, get) => ({
       set({ loading: true, error: null });
 
       const query = new URLSearchParams(params).toString();
-      const res = await fetch(`${API}?${query}`, {
-        credentials: "include",
-      });
+      const res = await fetch(`${API}?${query}`, { credentials: "include" });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch products");
@@ -76,9 +123,7 @@ export const useAdminProductStore = create((set, get) => ({
   },
 
   /* ============================================================
-    ✅ NEW: FETCH PRODUCTS BY CATEGORY (ADMIN)
-    GET /api/products/by-category/:category
-    (category can be slug OR id OR name)
+    ✅ FETCH PRODUCTS BY CATEGORY (ADMIN)
   ============================================================ */
   fetchProductsByCategory: async (categorySlugOrId, params = {}) => {
     try {
@@ -92,9 +137,7 @@ export const useAdminProductStore = create((set, get) => ({
         query ? `?${query}` : ""
       }`;
 
-      const res = await fetch(url, {
-        credentials: "include",
-      });
+      const res = await fetch(url, { credentials: "include" });
 
       const data = await res.json();
       if (!res.ok)
@@ -125,9 +168,7 @@ export const useAdminProductStore = create((set, get) => ({
     try {
       set({ loading: true, error: null });
 
-      const res = await fetch(`${API}/${id}`, {
-        credentials: "include",
-      });
+      const res = await fetch(`${API}/${id}`, { credentials: "include" });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch product");
@@ -144,11 +185,14 @@ export const useAdminProductStore = create((set, get) => ({
 
   /* ============================================================
     CREATE PRODUCT
-    (supports crossSellProducts[])
+    - strips variant price fields
+    - supports patternNumber/fabrics/avgFabricConsumption
   ============================================================ */
   createProduct: async (payload) => {
     try {
       set({ saving: true, error: null });
+
+      payload = normalizeProductPayload(payload);
 
       const res = await fetch(API, {
         method: "POST",
@@ -173,11 +217,14 @@ export const useAdminProductStore = create((set, get) => ({
 
   /* ============================================================
     UPDATE PRODUCT
-    (crossSellProducts safe)
+    - strips variant price fields
+    - supports patternNumber/fabrics/avgFabricConsumption
   ============================================================ */
   updateProduct: async (id, payload) => {
     try {
       set({ saving: true, error: null });
+
+      payload = normalizeProductPayload(payload);
 
       const res = await fetch(`${API}/${id}`, {
         method: "PATCH",
@@ -214,10 +261,7 @@ export const useAdminProductStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Delete failed");
 
-      set({
-        products: get().products.filter((p) => p._id !== id),
-      });
-
+      set({ products: get().products.filter((p) => p._id !== id) });
       toast.success("Product deleted");
     } catch (e) {
       console.error(e);
@@ -242,10 +286,7 @@ export const useAdminProductStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Bulk delete failed");
 
-      set({
-        products: get().products.filter((p) => !ids.includes(p._id)),
-      });
-
+      set({ products: get().products.filter((p) => !ids.includes(p._id)) });
       toast.success("Products deleted");
     } catch (e) {
       console.error(e);
@@ -265,11 +306,14 @@ export const useAdminProductStore = create((set, get) => ({
 
       set({ saving: true });
 
+      // optional: normalize each imported product too
+      const normalized = products.map((p) => normalizeProductPayload(p));
+
       const res = await fetch(`${API}/bulk/import`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ products }),
+        body: JSON.stringify({ products: normalized }),
       });
 
       const data = await res.json();
@@ -301,8 +345,24 @@ export const useAdminProductStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Stock update failed");
 
-      set({ product: data.product });
-      toast.success("Variant stock updated");
+      const updatedProduct = data.product;
+
+      set({ product: updatedProduct });
+
+      set((state) => ({
+        products: state.products.map((p) =>
+          p._id === productId
+            ? {
+                ...p,
+                stock: updatedProduct.stock ?? p.stock,
+                variants: updatedProduct.variants ?? p.variants,
+              }
+            : p
+        ),
+      }));
+
+      toast.success("Variant stock updated ✅");
+      return updatedProduct;
     } catch (e) {
       console.error(e);
       toast.error(e.message);
@@ -424,9 +484,7 @@ export const useAdminProductStore = create((set, get) => ({
       if (!res.ok) throw new Error(data.message || "Price update failed");
 
       set({
-        products: get().products.map((p) =>
-          p._id === id ? { ...p, price } : p
-        ),
+        products: get().products.map((p) => (p._id === id ? { ...p, price } : p)),
       });
 
       toast.success("Price updated ✅");
@@ -490,6 +548,7 @@ export const useAdminProductStore = create((set, get) => ({
           ? { isDraft: true, isActive: true }
           : { isActive: false };
 
+      // NOTE: your API elsewhere uses PATCH; keeping your existing PUT as-is
       const res = await fetch(`${API}/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -501,9 +560,7 @@ export const useAdminProductStore = create((set, get) => ({
       if (!res.ok) throw new Error(data.message || "Status update failed");
 
       set({
-        products: get().products.map((p) =>
-          p._id === id ? { ...p, ...payload } : p
-        ),
+        products: get().products.map((p) => (p._id === id ? { ...p, ...payload } : p)),
       });
 
       toast.success(`Status updated ✅ (${status})`);
@@ -590,73 +647,32 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
- fetchProductsByIds: async (ids = []) => {
-  try {
-    // ✅ normalize ids (array OR comma-separated string)
-    ids = Array.isArray(ids)
-      ? ids
-      : typeof ids === "string"
+  fetchProductsByIds: async (ids = []) => {
+    try {
+      ids = Array.isArray(ids)
+        ? ids
+        : typeof ids === "string"
         ? ids.split(",").map((x) => x.trim())
         : [];
 
-    // ✅ remove empty + duplicates
-    ids = [...new Set(ids.filter(Boolean))];
+      ids = [...new Set(ids.filter(Boolean))];
+      if (!ids.length) return [];
 
-    if (!ids.length) return [];
-
-    const res = await fetch(`${API}/by-ids`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ ids }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Failed to fetch products");
-
-    return data.products || [];
-  } catch (e) {
-    console.error("❌ fetchProductsByIds error:", e);
-    toast.error(e.message);
-    return [];
-  }
-},
-
-
-
-  updateVariantStock: async (productId, variantId, stock) => {
-    try {
-      const res = await fetch(`${API}/${productId}/variant-stock`, {
-        method: "PATCH",
+      const res = await fetch(`${API}/by-ids`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ variantId, stock }),
+        body: JSON.stringify({ ids }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Stock update failed");
+      if (!res.ok) throw new Error(data.message || "Failed to fetch products");
 
-      const updatedProduct = data.product;
-
-      set({ product: updatedProduct });
-
-      set((state) => ({
-        products: state.products.map((p) =>
-          p._id === productId
-            ? {
-                ...p,
-                stock: updatedProduct.stock ?? p.stock,
-                variants: updatedProduct.variants ?? p.variants,
-              }
-            : p
-        ),
-      }));
-
-      toast.success("Variant stock updated ✅");
-      return updatedProduct;
+      return data.products || [];
     } catch (e) {
-      console.error(e);
+      console.error("❌ fetchProductsByIds error:", e);
       toast.error(e.message);
+      return [];
     }
   },
 }));
