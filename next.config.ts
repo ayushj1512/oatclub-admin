@@ -2,10 +2,31 @@
 module.exports = {
   images: {
     remotePatterns: [
-      // ✅ WordPress images (ALL paths)
+      // ✅ WordPress images (ALL paths) - .com
       {
         protocol: "https",
         hostname: "mirayfashions.com",
+        pathname: "/**",
+      },
+
+      // ✅ WordPress images (ALL paths) - www .com (optional but recommended)
+      {
+        protocol: "https",
+        hostname: "www.mirayfashions.com",
+        pathname: "/**",
+      },
+
+      // ✅ WordPress images (ALL paths) - .in ✅ FIXED
+      {
+        protocol: "https",
+        hostname: "mirayfashions.in",
+        pathname: "/**",
+      },
+
+      // ✅ WordPress images (ALL paths) - www .in (optional but recommended)
+      {
+        protocol: "https",
+        hostname: "www.mirayfashions.in",
         pathname: "/**",
       },
 

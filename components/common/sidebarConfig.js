@@ -194,13 +194,14 @@ export const sidebarMenus = {
 
   customer_support: [
   { label: "Support Dashboard", href: "/customer-support" },
+    { label: "Search", href: "/customer-support/search" },
     { label: "Customer Confirmation", href: "/customer-support/customer-confirmation" },
   { label: "All Tickets", href: "/customer-support/all" },
   { label: "Open Tickets", href: "/customer-support/open" },
   { label: "In Progress", href: "/customer-support/in-progress" },
   { label: "Resolved", href: "/customer-support/resolved" },
   { label: "Closed", href: "/customer-support/closed" },
-  { label: "Search by Email", href: "/customer-support/search" },
+
   { label: "SLA / Reports", href: "/customer-support/reports" },
 
 ],

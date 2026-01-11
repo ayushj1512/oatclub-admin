@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "react-hot-toast";
 
@@ -9,11 +9,21 @@ import { useCategoryStore } from "@/store/categorystore";
 import { useAdminProductStore } from "@/store/adminProductStore";
 
 /**
- * ✅ CATEGORY ANALYTICS PAGE (UPDATED WITH REAL CATEGORY PRODUCTS)
+ * ✅ CATEGORY ANALYTICS PAGE
  * -------------------------------------------------
- * ✅ Uses backend route: GET /api/products/by-category/:category
- * ✅ No client-side fishy mapping
- * ✅ Products panel always accurate
+ * Changes requested:
+ * ✅ category slug matching (products sahi aayenge)
+ * ✅ "Download Excel" option added
+ * ✅ Delete functionality removed (UI + handler + store usage)
+ *
+ * Excel export:
+ * - Sheet 1: Categories Summary
+ * - Sheet 2: Category → Products mapping
+ *
+ * Note: Install dependency if not present:
+ *   npm i xlsx
+ * or
+ *   yarn add xlsx
  */
 
 export default function CategoryAnalyticsPage() {
@@ -24,7 +34,6 @@ export default function CategoryAnalyticsPage() {
     categories,
     fetchCategories,
     createCategory,
-    deleteCategory,
     loading: catLoading,
     error: catError,
     successMessage,
@@ -32,9 +41,8 @@ export default function CategoryAnalyticsPage() {
   } = useCategoryStore();
 
   const {
-    products, // ✅ now we will store active category products here
-    fetchProductsByCategory, // ✅ NEW FUNCTION
-    fetchProducts, // keep existing (no breaking)
+    products,
+    fetchProducts,
     loading: prodLoading,
     saving,
     updateCategoriesInline,
@@ -47,9 +55,6 @@ export default function CategoryAnalyticsPage() {
   const [activeCategoryId, setActiveCategoryId] = useState(null);
   const [selectedProductId, setSelectedProductId] = useState(null);
 
-  // ✅ store category products separately (no store override issues)
-  const [activeCategoryProducts, setActiveCategoryProducts] = useState([]);
-
   // Create category modal
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
@@ -60,8 +65,8 @@ export default function CategoryAnalyticsPage() {
    * ============================ */
   useEffect(() => {
     fetchCategories();
-    // ✅ optional: fetchProducts just to keep product cache (not necessary for analytics)
-    // fetchProducts({ limit: 200 });
+    fetchProducts({ limit: 5000 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ============================
@@ -71,7 +76,104 @@ export default function CategoryAnalyticsPage() {
     if (catError) toast.error(catError);
     if (successMessage) toast.success(successMessage);
     return () => clearStatus();
-  }, [catError, successMessage]);
+  }, [catError, successMessage, clearStatus]);
+
+  /* ======================================================
+   * ✅ Lookups for category matching (id, slug, name)
+   * ====================================================== */
+  const categoryLookups = useMemo(() => {
+    const idSet = new Set();
+    const nameToId = {};
+    const slugToId = {};
+
+    (categories || []).forEach((c) => {
+      if (!c || !c._id) return;
+
+      const id = String(c._id);
+      idSet.add(id);
+
+      if (c.name) nameToId[String(c.name).trim().toLowerCase()] = id;
+      if (c.slug) slugToId[String(c.slug).trim().toLowerCase()] = id;
+    });
+
+    return { idSet, nameToId, slugToId };
+  }, [categories]);
+
+  /* ======================================================
+   * ✅ Normalize any category reference to categoryId
+   * Supports:
+   * - string: "featured" (slug) OR "Featured" (name) OR "65.."(id)
+   * - object: { _id } OR { id } OR { slug } OR { name }
+   * ====================================================== */
+  const normalizeCategoryId = useCallback(
+    (cat) => {
+      const { idSet, nameToId, slugToId } = categoryLookups;
+
+      if (!cat) return null;
+
+      // object case
+      if (typeof cat === "object") {
+        const objId = cat._id || cat.id;
+        if (objId) return String(objId);
+
+        const objSlug = cat.slug;
+        if (objSlug) {
+          const key = String(objSlug).trim().toLowerCase();
+          return slugToId[key] || null;
+        }
+
+        const objName = cat.name;
+        if (objName) {
+          const key = String(objName).trim().toLowerCase();
+          return nameToId[key] || null;
+        }
+
+        return null;
+      }
+
+      // string case
+      if (typeof cat === "string") {
+        const raw = cat.trim();
+        if (!raw) return null;
+
+        // already id?
+        if (idSet.has(raw)) return raw;
+
+        const key = raw.toLowerCase();
+
+        // ✅ Prefer slug match
+        if (slugToId[key]) return slugToId[key];
+
+        // fallback: name match
+        if (nameToId[key]) return nameToId[key];
+
+        // last fallback
+        return raw;
+      }
+
+      return null;
+    },
+    [categoryLookups]
+  );
+
+  /* ======================================================
+   * ✅ categoryId -> products map (slug matching included)
+   * ====================================================== */
+  const categoryToProducts = useMemo(() => {
+    const map = {};
+
+    (products || []).forEach((p) => {
+      (p?.categories || []).forEach((cat) => {
+        const id = normalizeCategoryId(cat);
+        if (!id) return;
+
+        if (!map[id]) map[id] = [];
+        map[id].push(p);
+      });
+    });
+
+    return map;
+  }, [products, normalizeCategoryId]);
 
   /* ============================
    * FILTER CATEGORIES BY SEARCH
@@ -80,24 +182,25 @@ export default function CategoryAnalyticsPage() {
     const q = search.trim().toLowerCase();
     if (!q) return categories || [];
     return (categories || []).filter((c) =>
-      (c.name || "").toLowerCase().includes(q)
+      String(c?.name || "").toLowerCase().includes(q)
     );
   }, [categories, search]);
 
   /* ============================
-   * ACTIVE CATEGORY PRODUCTS (REAL)
+   * ACTIVE CATEGORY PRODUCTS
    * ============================ */
   const activeProducts = useMemo(() => {
-    return Array.isArray(activeCategoryProducts) ? activeCategoryProducts : [];
-  }, [activeCategoryProducts]);
+    if (!activeCategoryId) return [];
+    return categoryToProducts[activeCategoryId] || [];
+  }, [activeCategoryId, categoryToProducts]);
 
   /* ============================
-   * SELECTED PRODUCT (from activeProducts only)
+   * SELECTED PRODUCT
    * ============================ */
   const selectedProduct = useMemo(() => {
     if (!selectedProductId) return null;
-    return activeProducts.find((p) => p._id === selectedProductId) || null;
-  }, [selectedProductId, activeProducts]);
+    return (products || []).find((p) => p._id === selectedProductId) || null;
+  }, [selectedProductId, products]);
 
   /* ============================
    * DROPDOWN OPTIONS
@@ -109,6 +212,8 @@ export default function CategoryAnalyticsPage() {
   /* ============================
    * HELPERS
    * ============================ */
+  const getCount = (catId) => categoryToProducts[catId]?.length || 0;
+
   const productThumb = (p) => {
     return (
       p?.thumbnail ||
@@ -117,28 +222,16 @@ export default function CategoryAnalyticsPage() {
     );
   };
 
-  const activeCategoryName = useMemo(() => {
-    if (!activeCategoryId) return "";
-    return categories?.find((c) => c._id === activeCategoryId)?.name || "";
-  }, [activeCategoryId, categories]);
-
-  /* ============================================================
-   * ✅ IMPORTANT:
-   * When adding/removing categories -> we send IDs
-   * Because your backend updateCategoriesInline expects categories[].
-   * ============================================================ */
   const getProductCategoryIds = (p) => {
-    const nameToId = {};
-    (categories || []).forEach((c) => {
-      if (c?.name) nameToId[c.name] = c._id;
-    });
-
     return (p?.categories || [])
-      .map((c) => {
-        if (typeof c === "string") return nameToId[c] || c;
-        return c?._id;
-      })
+      .map((c) => normalizeCategoryId(c))
       .filter(Boolean);
+  };
+
+  const getProductStatus = (p) => {
+    if (p?.isDraft) return "Draft";
+    if (p?.isActive) return "Published";
+    return "Unpublished";
   };
 
   /* ============================
@@ -153,11 +246,8 @@ export default function CategoryAnalyticsPage() {
     try {
       await updateCategoriesInline(selectedProduct._id, [...current, catId]);
       toast.success("Category added ✅");
-
-      // ✅ refresh active category products again for correct view
-      await loadProductsForCategory(activeCategoryId);
     } catch (e) {
-      toast.error(e.message || "Failed");
+      toast.error(e?.message || "Failed");
     }
   };
 
@@ -175,11 +265,8 @@ export default function CategoryAnalyticsPage() {
     try {
       await updateCategoriesInline(selectedProduct._id, next);
       toast.success("Category removed ✅");
-
-      // ✅ refresh active category products again for correct view
-      await loadProductsForCategory(activeCategoryId);
     } catch (e) {
-      toast.error(e.message || "Failed");
+      toast.error(e?.message || "Failed");
     }
   };
 
@@ -196,59 +283,113 @@ export default function CategoryAnalyticsPage() {
       setShowCreate(false);
       fetchCategories();
     } catch (e) {
-      toast.error(e.message || "Create failed");
+      toast.error(e?.message || "Create failed");
     }
   };
 
   /* ============================
-   * DELETE CATEGORY
+   * ✅ DOWNLOAD EXCEL
    * ============================ */
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete category? This may affect products.")) return;
-
+  const handleDownloadExcel = async () => {
     try {
-      await deleteCategory(id);
-      if (activeCategoryId === id) {
-        setActiveCategoryId(null);
-        setSelectedProductId(null);
-        setActiveCategoryProducts([]);
+      if (!categories?.length && !products?.length) {
+        return toast.error("No data to export");
       }
-      fetchCategories();
-      toast.success("Category deleted");
-    } catch (e) {
-      toast.error(e.message || "Delete failed");
-    }
-  };
 
-  /* ============================================================
-   * ✅ NEW: Load Products for Category using real backend route
-   * uses: fetchProductsByCategory(slug OR id OR name)
-   * ============================================================ */
-  const loadProductsForCategory = async (catId) => {
-    if (!catId) return;
+      // Dynamic import so it doesn't run on server / keeps bundle lighter
+      const XLSX = await import("xlsx");
 
-    const cat = categories?.find((c) => c._id === catId);
-    if (!cat) return;
-
-    // ✅ Prefer slug (best stable)
-    const key = cat.slug || cat._id || cat.name;
-    if (!key) return;
-
-    try {
-      const list = await fetchProductsByCategory(key, {
-        page: 1,
-        limit: 5000,
-        // ✅ show all for analytics (admin wants full list)
+      // Sheet 1: Category Summary
+      const summaryRows = (categories || []).map((c) => {
+        const id = String(c?._id || "");
+        return {
+          CategoryId: id,
+          CategoryName: c?.name || "",
+          CategorySlug: c?.slug || "",
+          ParentId: c?.parent?._id || c?.parent || "",
+          ProductCount: getCount(id),
+        };
       });
 
-      setActiveCategoryProducts(Array.isArray(list) ? list : []);
+      // Sheet 2: Category → Products mapping
+      const mappingRows = [];
+      (categories || []).forEach((c) => {
+        const catId = String(c?._id || "");
+        const catProducts = categoryToProducts[catId] || [];
+
+        if (!catProducts.length) {
+          // still add a row so empty categories show up
+          mappingRows.push({
+            CategoryId: catId,
+            CategoryName: c?.name || "",
+            CategorySlug: c?.slug || "",
+            ProductId: "",
+            ProductName: "",
+            ProductSlug: "",
+            Price: "",
+            Status: "",
+          });
+          return;
+        }
+
+        catProducts.forEach((p) => {
+          mappingRows.push({
+            CategoryId: catId,
+            CategoryName: c?.name || "",
+            CategorySlug: c?.slug || "",
+            ProductId: p?._id || "",
+            ProductName: p?.title || p?.name || "",
+            ProductSlug: p?.slug || "",
+            Price: p?.price ?? "",
+            Status: getProductStatus(p),
+          });
+        });
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws1 = XLSX.utils.json_to_sheet(summaryRows);
+      const ws2 = XLSX.utils.json_to_sheet(mappingRows);
+
+      XLSX.utils.book_append_sheet(wb, ws1, "Categories Summary");
+      XLSX.utils.book_append_sheet(wb, ws2, "Category Products");
+
+      const fileArray = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([fileArray], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const fname = `category-analytics_${now.getFullYear()}-${pad(
+        now.getMonth() + 1
+      )}-${pad(now.getDate())}.xlsx`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      toast.success("Excel downloaded ✅");
     } catch (e) {
-      console.error("❌ fetchProductsByCategory error:", e);
-      setActiveCategoryProducts([]);
+      // Most common: xlsx not installed
+      toast.error(
+        e?.message?.includes("Cannot find module")
+          ? "Please install: npm i xlsx"
+          : e?.message || "Failed to export"
+      );
     }
   };
 
   const loading = catLoading || prodLoading;
+
+  const activeCategoryName = useMemo(() => {
+    if (!activeCategoryId) return "";
+    return categories?.find((c) => c._id === activeCategoryId)?.name || "";
+  }, [activeCategoryId, categories]);
 
   /* ============================
    * UI COMPONENTS
@@ -259,9 +400,7 @@ export default function CategoryAnalyticsPage() {
         <div className="min-w-0">
           <div className="font-semibold truncate">{title}</div>
           {subtitle ? (
-            <div className="text-xs text-muted-foreground truncate">
-              {subtitle}
-            </div>
+            <div className="text-xs text-muted-foreground truncate">{subtitle}</div>
           ) : null}
         </div>
         {right ? <div className="shrink-0">{right}</div> : null}
@@ -275,9 +414,7 @@ export default function CategoryAnalyticsPage() {
       {/* HEADER */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Category Analytics
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Category Analytics</h1>
           <p className="text-sm text-muted-foreground">
             Pick a category → see products → edit product categories quickly.
           </p>
@@ -290,6 +427,15 @@ export default function CategoryAnalyticsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+
+          <button
+            className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-sm shadow-sm hover:bg-black/5 active:scale-[0.99]"
+            onClick={handleDownloadExcel}
+            disabled={loading}
+            title="Download Excel (Categories + Category Products)"
+          >
+            Download Excel
+          </button>
 
           <button
             className="rounded-2xl bg-black text-white px-4 py-2 text-sm shadow hover:opacity-90 active:scale-[0.99]"
@@ -307,18 +453,12 @@ export default function CategoryAnalyticsPage() {
           <div className="text-2xl font-semibold">{categories?.length || 0}</div>
         </div>
         <div className="rounded-3xl bg-white shadow-sm border border-black/5 p-4">
-          <div className="text-xs text-muted-foreground">
-            Products in Selected Category
-          </div>
-          <div className="text-2xl font-semibold">
-            {activeCategoryId ? activeProducts.length : 0}
-          </div>
+          <div className="text-xs text-muted-foreground">Total Products</div>
+          <div className="text-2xl font-semibold">{products?.length || 0}</div>
         </div>
         <div className="rounded-3xl bg-white shadow-sm border border-black/5 p-4">
           <div className="text-xs text-muted-foreground">Selected Category</div>
-          <div className="text-base font-semibold truncate">
-            {activeCategoryName || "—"}
-          </div>
+          <div className="text-base font-semibold truncate">{activeCategoryName || "—"}</div>
           <div className="text-xs text-muted-foreground">
             {activeCategoryId ? `${activeProducts.length} products` : "Pick a category"}
           </div>
@@ -348,50 +488,27 @@ export default function CategoryAnalyticsPage() {
                   {/* SELECT */}
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={() => {
                       setActiveCategoryId(c._id);
                       setSelectedProductId(null);
-                      setActiveCategoryProducts([]);
-                      await loadProductsForCategory(c._id);
                     }}
                     className="flex-1 text-left min-w-0"
                   >
-                    <div
-                      className={`font-medium truncate ${
-                        isActive ? "text-white" : "text-black"
-                      }`}
-                    >
+                    <div className={`font-medium truncate ${isActive ? "text-white" : "text-black"}`}>
                       {c.name}
                     </div>
-                    <div
-                      className={`text-xs ${
-                        isActive ? "text-white/70" : "text-muted-foreground"
-                      }`}
-                    >
-                      {isActive ? `${activeProducts.length} products` : "Click to load products"}
+                    <div className={`text-xs ${isActive ? "text-white/70" : "text-muted-foreground"}`}>
+                      {getCount(c._id)} products
                     </div>
                   </button>
 
-                  {/* DELETE */}
-                  <button
-                    type="button"
-                    className={`text-xs px-3 py-1 rounded-full transition ${
-                      isActive
-                        ? "bg-white/10 text-white hover:bg-white/20"
-                        : "bg-red-50 text-red-600 hover:bg-red-100"
-                    }`}
-                    onClick={() => handleDelete(c._id)}
-                  >
-                    Delete
-                  </button>
+                  {/* ✅ DELETE REMOVED */}
                 </div>
               );
             })}
 
             {!filteredCategories.length && (
-              <div className="text-sm text-muted-foreground">
-                No categories found.
-              </div>
+              <div className="text-sm text-muted-foreground">No categories found.</div>
             )}
           </div>
         </Panel>
@@ -399,16 +516,10 @@ export default function CategoryAnalyticsPage() {
         {/* MIDDLE: PRODUCTS IN CATEGORY */}
         <Panel
           title="Products"
-          subtitle={
-            activeCategoryId
-              ? `${activeProducts.length} in ${activeCategoryName}`
-              : "Select a category"
-          }
+          subtitle={activeCategoryId ? `${activeProducts.length} in ${activeCategoryName}` : "Select a category"}
         >
           {!activeCategoryId ? (
-            <div className="text-sm text-muted-foreground">
-              Select a category to view products.
-            </div>
+            <div className="text-sm text-muted-foreground">Select a category to view products.</div>
           ) : (
             <div className="space-y-2 max-h-[68vh] overflow-auto pr-1">
               {activeProducts.map((p) => {
@@ -443,9 +554,7 @@ export default function CategoryAnalyticsPage() {
                       <div className="text-xs text-muted-foreground flex items-center gap-2">
                         <span>₹{p.price}</span>
                         <span className="text-black/20">•</span>
-                        <span>
-                          {p.isDraft ? "Draft" : p.isActive ? "Published" : "Unpublished"}
-                        </span>
+                        <span>{getProductStatus(p)}</span>
                       </div>
                     </button>
 
@@ -462,10 +571,8 @@ export default function CategoryAnalyticsPage() {
                 );
               })}
 
-              {!activeProducts.length && !loading && (
-                <div className="text-sm text-muted-foreground">
-                  No products in this category.
-                </div>
+              {!activeProducts.length && (
+                <div className="text-sm text-muted-foreground">No products in this category.</div>
               )}
             </div>
           )}
@@ -474,17 +581,11 @@ export default function CategoryAnalyticsPage() {
         {/* RIGHT: EDIT PRODUCT CATEGORIES */}
         <Panel
           title="Edit Categories"
-          subtitle={
-            selectedProduct
-              ? "Add/Remove categories for this product"
-              : "Select a product"
-          }
+          subtitle={selectedProduct ? "Add/Remove categories for this product" : "Select a product"}
           right={saving ? <span className="text-xs text-muted-foreground">Saving...</span> : null}
         >
           {!selectedProduct ? (
-            <div className="text-sm text-muted-foreground">
-              Select a product to edit categories.
-            </div>
+            <div className="text-sm text-muted-foreground">Select a product to edit categories.</div>
           ) : (
             <div className="space-y-4">
               <div className="rounded-2xl bg-black/5 p-3 flex items-center gap-3">
@@ -501,9 +602,7 @@ export default function CategoryAnalyticsPage() {
                   <div className="font-medium truncate">
                     {selectedProduct.title || selectedProduct.name}
                   </div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {selectedProduct._id}
-                  </div>
+                  <div className="text-xs text-muted-foreground truncate">{selectedProduct._id}</div>
                 </div>
 
                 <a
@@ -521,7 +620,7 @@ export default function CategoryAnalyticsPage() {
                 <div className="text-sm font-medium mb-2">Current Categories</div>
                 <div className="flex flex-wrap gap-2">
                   {getProductCategoryIds(selectedProduct)
-                    .map((id) => categories.find((x) => x._id === id))
+                    .map((id) => (categories || []).find((x) => x._id === id))
                     .filter(Boolean)
                     .map((c) => (
                       <span
@@ -579,11 +678,7 @@ export default function CategoryAnalyticsPage() {
           <div className="bg-white rounded-3xl w-full max-w-md p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-lg">Create Category</h3>
-              <button
-                type="button"
-                className="text-sm"
-                onClick={() => setShowCreate(false)}
-              >
+              <button type="button" className="text-sm" onClick={() => setShowCreate(false)}>
                 ✕
               </button>
             </div>

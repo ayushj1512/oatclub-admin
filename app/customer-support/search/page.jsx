@@ -1,300 +1,861 @@
-// app/support-tickets/search/page.jsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { Search, Mail, Hash, Ticket, RefreshCcw, AlertCircle, ExternalLink, Loader2, Clock, Image as ImageIcon, User } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { useCustomerSupportLookupStore } from "@/store/customerSupportLookupStore";
+import { useCustomerStore } from "@/store/customerStore";
+import { useOrderStore } from "@/store/orderStore";
+import { useCustomerTicketStore } from "@/store/customerTicketStore";
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "";
-const API_BASE = `${BACKEND}/api/support`;
+/** ✅ MIRAY-000031 formatter */
+const normalizeOrderNumber = (raw, prefix = "MIRAY", pad = 6) => {
+  if (raw === null || raw === undefined) return "";
+  if (Array.isArray(raw)) raw = raw?.[0]?.orderNumber ?? raw?.[0]?.number ?? "";
+  if (typeof raw === "object") raw = raw?.orderNumber ?? raw?.number ?? "";
 
-const safe = (v) => String(v ?? "").trim();
-const upper = (v) => safe(v).toUpperCase();
-const fmtDate = (d) => (d ? new Date(d).toLocaleString() : "-");
+  const s = String(raw).trim();
+  if (!s) return "";
 
-const qs = (params) => {
-  const sp = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    const val = safe(v);
-    if (!val) return;
-    sp.set(k, val);
-  });
-  return sp.toString();
+  const digits = (s.match(/\d+/g) || []).join("");
+  if (!digits) return s.toUpperCase();
+
+  const num = String(parseInt(digits, 10));
+  return `${String(prefix).toUpperCase()}-${num.padStart(pad, "0")}`;
 };
 
-const pill = (status) => {
-  const s = upper(status);
-  const base = "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset";
-  if (s === "OPEN") return `${base} bg-blue-50 text-blue-700 ring-blue-200`;
-  if (s === "IN_PROGRESS") return `${base} bg-amber-50 text-amber-700 ring-amber-200`;
-  if (s === "RESOLVED") return `${base} bg-emerald-50 text-emerald-700 ring-emerald-200`;
-  if (s === "CLOSED") return `${base} bg-gray-100 text-gray-700 ring-gray-200`;
-  return `${base} bg-gray-100 text-gray-700 ring-gray-200`;
+const money = (v) => {
+  if (v === null || v === undefined || v === "") return "";
+  const n = Number(v);
+  if (Number.isFinite(n)) return `₹ ${n.toLocaleString("en-IN")}`;
+  return String(v);
 };
 
-const looksLikeTicketId = (s) => /^MF-[A-Z0-9]{6,}$/i.test(safe(s));
-const looksLikeEmail = (s) => safe(s).includes("@");
+const safe = (v, fallback = "—") =>
+  v === null || v === undefined || v === "" ? fallback : String(v);
 
-export default function Page() {
-  const [mode, setMode] = useState("smart"); // smart | email | ticket
-  const [query, setQuery] = useState("");
-  const [email, setEmail] = useState("");
-  const [ticketId, setTicketId] = useState("");
+/** ✅ Safe id extractor (prevents [object Object]) */
+const getId = (x) => {
+  if (!x) return "";
+  if (typeof x === "string") return x;
+  if (typeof x === "number") return String(x);
+  if (typeof x === "object") return String(x._id || x.id || x.customerId || x.userId || "");
+  return "";
+};
 
-  const [items, setItems] = useState([]);
-  const [single, setSingle] = useState(null);
+export default function CustomerSupportSearch() {
+  const {
+    query,
+    setQuery,
+    runSearch,
+    selectCustomer,
+    selectOrder,
+    selectTicket,
+    matchedCustomers,
+    loading,
+    error,
+    clearAll,
+    clearResults,
 
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+    // ✅ from orchestrator store
+    loadProductsForOrder,
+    orderProducts,
+    orderProductsById,
+  } = useCustomerSupportLookupStore();
 
-  const inflight = useRef(null);
+  const { customer, loadingSingle, error: customerError } = useCustomerStore();
 
-  const effectiveMode = useMemo(() => {
-    if (mode === "email" || mode === "ticket") return mode;
-    const q = safe(query);
-    if (!q) return "smart";
-    if (looksLikeTicketId(q)) return "ticket";
-    if (looksLikeEmail(q)) return "email";
-    return "smart"; // partial name / keyword => admin search endpoint
-  }, [mode, query]);
+  const {
+    orders,
+    order,
+    loading: orderLoading,
+    error: orderError,
+    fetchOrdersByCustomer,
+    clearOrders,
+  } = useOrderStore();
 
-  const canSearch = useMemo(() => {
-    if (mode === "email") return !!safe(email);
-    if (mode === "ticket") return !!safe(ticketId);
-    return !!safe(query);
-  }, [mode, email, ticketId, query]);
+  const {
+    tickets,
+    ticket,
+    loading: ticketLoading,
+    error: ticketError,
+    fetchTicketsByEmail,
+    resetTickets,
+  } = useCustomerTicketStore();
 
-  const fetchSearch = async ({ silent = false } = {}) => {
-    if (!canSearch) return;
-    if (!silent) setLoading(true);
-    setRefreshing(!!silent);
-    setError("");
-    setItems([]);
-    setSingle(null);
+  const [expanded, setExpanded] = useState(false);
 
-    try {
-      if (inflight.current) inflight.current.abort();
-      const ctrl = new AbortController();
-      inflight.current = ctrl;
+  const busy = loading || loadingSingle || orderLoading || ticketLoading;
 
-      const qRaw = safe(query);
-      const qEmail = safe(email).toLowerCase();
-      const qTicket = safe(ticketId);
+  const hasAnyResult = useMemo(
+    () =>
+      Boolean(customer) ||
+      (matchedCustomers?.length || 0) > 0 ||
+      Boolean(order) ||
+      (orders?.length || 0) > 0 ||
+      (tickets?.length || 0) > 0 ||
+      Boolean(ticket),
+    [customer, matchedCustomers, order, orders, tickets, ticket]
+  );
 
-      const url =
-        mode === "email"
-          ? `${API_BASE}/tickets/by-email?${qs({ email: qEmail, page: 1, limit: 50 })}`
-          : mode === "ticket"
-          ? `${API_BASE}/tickets/${encodeURIComponent(qTicket)}`
-          : effectiveMode === "ticket"
-          ? `${API_BASE}/tickets/${encodeURIComponent(qRaw)}`
-          : effectiveMode === "email"
-          ? `${API_BASE}/tickets/by-email?${qs({ email: qRaw.toLowerCase(), page: 1, limit: 50 })}`
-          : `${API_BASE}/tickets/search?${qs({ q: qRaw, page: 1, limit: 50 })}`;
+  // ✅ Your real customer schema (customerId is string like "0079")
+  const customerMongoId = customer?._id || customer?.id || null;
+  const customerEmail = String(customer?.email || query.email || "").trim();
 
-      const res = await fetch(url, { method: "GET", cache: "no-store", signal: ctrl.signal });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.success === false) throw new Error(data?.message || `Failed (${res.status})`);
+  const allErr = error || customerError || orderError || ticketError;
 
-      if (mode === "ticket" || effectiveMode === "ticket") {
-        setSingle(data?.ticket || null);
-      } else {
-        const list = Array.isArray(data?.tickets) ? data.tickets : Array.isArray(data?.items) ? data.items : [];
-        setItems(list);
-      }
-    } catch (e) {
-      if (e?.name === "AbortError") return;
-      setError(e?.message || "Search failed");
-    } finally {
-      if (!silent) setLoading(false);
-      setRefreshing(false);
-    }
+  const loadOrders = async () =>
+    customerMongoId && fetchOrdersByCustomer(customerMongoId);
+
+  const loadTickets = async () =>
+    customerEmail &&
+    fetchTicketsByEmail({
+      email: customerEmail,
+      status: query.ticketStatus || undefined,
+      page: 1,
+      limit: 10,
+    });
+
+  const orderNumberShown =
+    normalizeOrderNumber(order?.orderNumber, "MIRAY", 6) || order?._id;
+
+  // ✅ Your order response uses snapshots
+  const shipping =
+    order?.shippingAddressSnapshot ||
+    order?.shippingAddress ||
+    order?.shipping ||
+    order?.address ||
+    order?.shipment?.address ||
+    null;
+
+  const billing =
+    order?.billingAddressSnapshot ||
+    order?.billingAddress ||
+    order?.billing ||
+    null;
+
+  // ✅ Your order response has customerId as object with { _id, name, email }
+  const customerFromOrder =
+    order?.customerId || order?.customer || order?.user || null;
+
+  const orderEmail =
+    customerFromOrder?.email ||
+    order?.email ||
+    shipping?.email ||
+    billing?.email ||
+    customerEmail ||
+    "";
+
+  const payment = {
+    method: order?.paymentMethod || order?.payment?.method,
+    status: order?.paymentStatus || order?.payment?.status,
+    razorpay: order?.razorpay || order?.payment?.razorpay,
   };
 
-  useEffect(() => {
-    return () => {
-      if (inflight.current) inflight.current.abort();
-    };
-  }, []);
+  // ✅ shipment has nested shiprocket
+  const shipment = order?.shipment || {};
+  const shiprocket = shipment?.shiprocket || {};
+  const trackingUrl = shiprocket?.trackingUrl || "";
+  const awb = shiprocket?.awb || "";
 
-  const onSubmit = (e) => {
-    e.preventDefault();
-    fetchSearch({ silent: false });
+  const items = Array.isArray(order?.items)
+    ? order.items
+    : Array.isArray(order?.orderItems)
+    ? order.orderItems
+    : [];
+
+  // ✅ Your totals fields
+  const totals = {
+    subtotal: order?.subtotal ?? order?.subTotal ?? order?.itemsSubtotal,
+    discount: order?.discount ?? order?.coupon?.discount ?? order?.discountTotal,
+    shipping: order?.shippingFee ?? order?.shippingCost,
+    tax: order?.tax ?? order?.gst,
+    total: order?.finalPayable ?? order?.total ?? order?.grandTotal ?? order?.amount,
   };
 
-  const onClear = () => {
-    setQuery("");
-    setEmail("");
-    setTicketId("");
-    setItems([]);
-    setSingle(null);
-    setError("");
-  };
+  /**
+   * ✅ Product IDs for fetching:
+   * In your order items:
+   * - productId is null
+   * - variant.variantId exists (this is variant id, not product id)
+   * - productSnapshot exists (title, productCode, slug, thumbnail, etc.)
+   *
+   * Therefore:
+   * - We SHOW product details from productSnapshot immediately ✅
+   * - We *optionally* fetch product details if you later add a real productId in schema.
+   */
+  const hasSnapshots = useMemo(
+    () => items.some((it) => Boolean(it?.productSnapshot)),
+    [items]
+  );
+
+  // If you ever add real productId in order items, this will start working automatically
+  const productIds = useMemo(() => {
+    const ids = items
+      .map((it) => getId(it?.productId || it?.product || it?.variant?.productId || it?.variant?.product))
+      .filter(Boolean);
+    return [...new Set(ids)];
+  }, [items]);
+
+  const productsLoaded = (orderProducts?.length || 0) > 0;
+  const canLoadProducts = Boolean(order) && productIds.length > 0; // note: currently false because productId is null
 
   return (
-    <main className="min-h-screen w-full bg-gray-50 text-gray-900">
-      <div className="w-full px-4 md:px-8 py-7">
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-semibold tracking-widest uppercase text-blue-700">Admin • Support</p>
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Search Tickets</h1>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link href="/support-tickets" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
-                Dashboard <ExternalLink className="h-3.5 w-3.5" />
-              </Link>
-              <Link href="/support-tickets/all" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
-                All <ExternalLink className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          </div>
-          <p className="text-sm text-gray-600">Smart search supports: full email, Ticket ID (MF-...), or partial text like “ayushjuneja” (via /tickets/search).</p>
+    <div className="px-4 py-4 md:px-6 md:py-6">
+      {/* Header */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-lg md:text-xl font-semibold tracking-tight">
+            Customer Support
+          </h1>
+          <p className="text-sm text-gray-500">
+            Search customer → then optionally load Orders / Tickets / Product snapshots.
+          </p>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 md:p-5">
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => (setMode("smart"), setItems([]), setSingle(null), setError(""), setEmail(""), setTicketId(""))} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold ring-1 ring-inset transition ${mode === "smart" ? "bg-blue-600 text-white ring-blue-600" : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"}`}>
-              <User className="h-4 w-4" /> Smart
-            </button>
-            <button type="button" onClick={() => (setMode("email"), setItems([]), setSingle(null), setError(""), setQuery(""), setTicketId(""))} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold ring-1 ring-inset transition ${mode === "email" ? "bg-blue-600 text-white ring-blue-600" : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"}`}>
-              <Mail className="h-4 w-4" /> By Email
-            </button>
-            <button type="button" onClick={() => (setMode("ticket"), setItems([]), setSingle(null), setError(""), setQuery(""), setEmail(""))} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold ring-1 ring-inset transition ${mode === "ticket" ? "bg-blue-600 text-white ring-blue-600" : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"}`}>
-              <Ticket className="h-4 w-4" /> By Ticket ID
-            </button>
+        <div className="flex gap-2">
+          <Btn onClick={clearResults} disabled={busy} variant="ghost">
+            Clear
+          </Btn>
+          <Btn onClick={clearAll} disabled={busy} variant="ghost">
+            Reset
+          </Btn>
+        </div>
+      </div>
 
-            <div className="ml-auto flex items-center gap-2">
-              <button type="button" onClick={() => fetchSearch({ silent: true })} disabled={!canSearch} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white transition ${canSearch ? "bg-blue-600 hover:opacity-90" : "bg-gray-300 cursor-not-allowed"}`}>
-                <RefreshCcw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-              </button>
-            </div>
+      {/* Search */}
+      <div className="mt-4 rounded-2xl bg-white/70 p-3 shadow-sm ring-1 ring-black/5 backdrop-blur">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
+          <Input
+            placeholder="Phone"
+            value={query.phone}
+            onChange={(v) => setQuery({ phone: v })}
+          />
+          <Input
+            placeholder="Email"
+            value={query.email}
+            onChange={(v) => setQuery({ email: v })}
+          />
+          <Input
+            placeholder="Name"
+            value={query.name}
+            onChange={(v) => setQuery({ name: v })}
+          />
+
+          {/* ✅ Order number auto-format to MIRAY-000031 */}
+          <Input
+            placeholder="Order No. (MIRAY-000031)"
+            value={query.orderNumber}
+            onChange={(v) => {
+              if (!v) return setQuery({ orderNumber: "" });
+              const hasDigit = /\d/.test(v);
+              setQuery({
+                orderNumber: hasDigit
+                  ? normalizeOrderNumber(v, "MIRAY", 6)
+                  : v.toUpperCase(),
+              });
+            }}
+          />
+
+          <Select
+            value={query.ticketStatus || ""}
+            onChange={(v) => setQuery({ ticketStatus: v })}
+            options={[
+              { label: "Tickets: All", value: "" },
+              { label: "Open", value: "open" },
+              { label: "Pending", value: "pending" },
+              { label: "Resolved", value: "resolved" },
+              { label: "Closed", value: "closed" },
+            ]}
+          />
+
+          <Btn
+            onClick={async () => {
+              clearOrders?.();
+              resetTickets?.();
+              setExpanded(false);
+
+              if (query.orderNumber) {
+                setQuery({
+                  orderNumber: normalizeOrderNumber(query.orderNumber, "MIRAY", 6),
+                });
+              }
+              await runSearch();
+            }}
+            disabled={busy}
+            variant="primary"
+          >
+            {busy ? "Searching…" : "Search"}
+          </Btn>
+        </div>
+
+        {allErr ? (
+          <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-100">
+            {allErr}
           </div>
+        ) : null}
+      </div>
 
-          <form onSubmit={onSubmit} className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 items-end">
-            <div>
-              <label className="text-xs font-semibold text-gray-700">
-                {mode === "smart" ? "Search (email / ticketId / name / keyword)" : mode === "email" ? "Customer Email" : "Ticket ID"}
-              </label>
-              <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
-                {mode === "email" ? <Mail className="h-4 w-4 text-gray-400" /> : mode === "ticket" ? <Hash className="h-4 w-4 text-gray-400" /> : <Search className="h-4 w-4 text-gray-400" />}
-                <input
-                  value={mode === "email" ? email : mode === "ticket" ? ticketId : query}
-                  onChange={(e) => (mode === "email" ? setEmail(e.target.value) : mode === "ticket" ? setTicketId(e.target.value) : setQuery(e.target.value))}
-                  placeholder={mode === "email" ? "customer@email.com" : mode === "ticket" ? "MF-XXXXXXXX" : "ayushjuneja / MF-XXXX / customer@email.com"}
-                  className="w-full bg-transparent text-sm outline-none"
-                />
+      {/* Results */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-4">
+        {/* Customer */}
+        <Card title="Customer">
+          {!hasAnyResult ? <Empty text="No results yet. Search above." /> : null}
+
+          {matchedCustomers?.length > 0 ? (
+            <div className="mt-2 space-y-2">
+              <div className="text-xs text-gray-500">
+                {matchedCustomers.length} matches • select one
               </div>
-              <p className="mt-1 text-[11px] text-gray-500">
-                {mode === "smart" ? (
-                  <>
-                    Auto routes to: <span className="font-semibold">/tickets/by-email</span> (email) · <span className="font-semibold">/tickets/:ticketId</span> (MF-...) · <span className="font-semibold">/tickets/search?q=</span> (text)
-                  </>
-                ) : mode === "email" ? (
-                  <>
-                    Calls: <span className="font-semibold">GET /api/support/tickets/by-email?email=...</span>
-                  </>
-                ) : (
-                  <>
-                    Calls: <span className="font-semibold">GET /api/support/tickets/:ticketId</span>
-                  </>
-                )}
-              </p>
+
+              {matchedCustomers.map((c) => (
+                <button
+                  key={c._id || c.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    clearOrders?.();
+                    resetTickets?.();
+                    setExpanded(false);
+                    await selectCustomer(c);
+                  }}
+                  className="w-full rounded-xl bg-gray-50 px-3 py-2 text-left ring-1 ring-black/5 hover:bg-gray-100 disabled:opacity-60"
+                >
+                  <div className="text-sm font-medium">{c?.name || "—"}</div>
+                  <div className="text-xs text-gray-600">
+                    {c?.email || "—"} • {c?.phone || c?.mobile || "—"}
+                  </div>
+                </button>
+              ))}
             </div>
+          ) : null}
 
-            <button type="submit" disabled={!canSearch || loading} className={`inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition ${!canSearch || loading ? "bg-gray-300 cursor-not-allowed" : "bg-blue-600 hover:opacity-90"}`}>
-              <Search className="h-4 w-4 mr-2" /> Search
-            </button>
+          {customer ? (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3 ring-1 ring-black/5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">{customer?.name || "—"}</div>
+                  <div className="mt-1 text-xs text-gray-700 space-y-1">
+                    <Row k="Email" v={safe(customer?.email)} />
+                    <Row k="Phone" v={safe(customer?.phone)} />
+                    <Row k="Mongo ID" v={safe(customer?._id)} />
+                    <Row k="Customer ID" v={safe(customer?.customerId)} />
+                    {customer?.country ? <Row k="Country" v={customer.country} /> : null}
+                    {customer?.isActive !== undefined ? (
+                      <Row k="Status" v={customer.isActive ? "Active" : "Inactive"} />
+                    ) : null}
+                  </div>
+                </div>
 
-            <button type="button" onClick={onClear} className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 hover:bg-gray-50 transition">
-              Clear
-            </button>
-          </form>
-
-          {error ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 flex items-start gap-2"><AlertCircle className="h-4 w-4 mt-0.5" /> {error}</div> : null}
-          {loading ? <div className="mt-4 flex items-center gap-2 text-sm text-gray-600"><Loader2 className="h-4 w-4 animate-spin" /> Searching…</div> : null}
-        </div>
-
-        {/* Results */}
-        {(mode === "ticket" || effectiveMode === "ticket") ? (
-          <div className="mt-5 rounded-2xl border border-gray-200 bg-white overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
-              <p className="text-sm font-bold text-gray-900">Ticket Result</p>
+                {customer?._id ? (
+                  <a
+                    className="text-xs text-gray-700 underline underline-offset-4 hover:text-black"
+                    href={`/admin/customers/${customer._id}`}
+                  >
+                    Open
+                  </a>
+                ) : null}
+              </div>
             </div>
+          ) : null}
+        </Card>
 
-            {!single ? (
-              <div className="p-6 text-sm text-gray-600">Search a Ticket ID to see details.</div>
-            ) : (
-              <div className="p-5">
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-blue-700">{safe(single.ticketId)}</p>
-                    <p className="mt-1 text-lg font-extrabold text-gray-900">{safe(single.subject) || "(No subject)"}</p>
-                    <p className="mt-1 text-sm text-gray-600">{safe(single.issueType) || "-"}</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600">
-                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1"><Clock className="h-3.5 w-3.5" /> {fmtDate(single.createdAt)}</span>
-                      <span className={pill(single.status)}>{upper(single.status).replaceAll("_", " ")}</span>
-                      {safe(single.orderId) ? <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2.5 py-1">Order: <span className="ml-1 font-semibold">{safe(single.orderId)}</span></span> : null}
-                      {Array.isArray(single.attachments) && single.attachments.length ? <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1"><ImageIcon className="h-3.5 w-3.5" /> {single.attachments.length}</span> : null}
+        {/* Orders */}
+        <Card
+          title="Orders"
+          right={
+            <div className="flex gap-2">
+              <Btn onClick={loadOrders} disabled={busy || !customerMongoId} size="xs">
+                Load
+              </Btn>
+              <Btn
+                onClick={() => {
+                  clearOrders?.();
+                  setExpanded(false);
+                }}
+                disabled={busy || !orders?.length}
+                size="xs"
+                variant="ghost"
+              >
+                Clear
+              </Btn>
+            </div>
+          }
+        >
+          {!orders?.length ? (
+            <Empty text={customer ? "Click Load to fetch orders." : "Search a customer first."} />
+          ) : (
+            <div className="mt-2 space-y-2">
+              {orders.map((o) => (
+                <button
+                  key={o._id}
+                  type="button"
+                  onClick={async () => {
+                    setExpanded(false);
+                    await selectOrder(o);
+                  }}
+                  disabled={busy}
+                  className="w-full rounded-xl bg-white px-3 py-2 text-left shadow-sm ring-1 ring-black/5 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-medium">
+                      {normalizeOrderNumber(o?.orderNumber, "MIRAY", 6) || o?._id || "Order"}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {o?.createdAt ? new Date(o.createdAt).toLocaleDateString() : ""}
                     </div>
                   </div>
 
-                  <Link href={`/support-tickets/${encodeURIComponent(safe(single.ticketId))}`} className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition">
-                    Open Details <ExternalLink className="h-4 w-4 ml-2" />
-                  </Link>
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-gray-200 p-4">
-                  <p className="text-xs font-semibold text-gray-700">Customer Message</p>
-                  <p className="mt-2 text-sm text-gray-800 whitespace-pre-wrap">{safe(single.message) || "-"}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="mt-5 rounded-2xl border border-gray-200 bg-white overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
-              <p className="text-sm font-bold text-gray-900">{mode === "email" || effectiveMode === "email" ? "Email Results" : "Search Results"}</p>
-              <p className="mt-0.5 text-xs text-gray-600">Showing up to 50 tickets.</p>
+                  <div className="mt-1 text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
+                    {o?.paymentStatus ? <Pill text={o.paymentStatus} /> : null}
+                    {o?.fulfillmentStatus ? <Pill text={o.fulfillmentStatus} /> : null}
+                    {o?.finalPayable !== undefined ? (
+                      <span className="text-gray-700">{money(o.finalPayable)}</span>
+                    ) : null}
+                  </div>
+                </button>
+              ))}
             </div>
+          )}
+        </Card>
 
-            {!items.length ? (
-              <div className="p-6 text-sm text-gray-600">{mode === "email" || effectiveMode === "email" ? "Search an email to list tickets." : "Search by name / keyword / ticketId etc."}</div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {items.map((t) => {
-                  const id = safe(t.ticketId);
-                  const atCount = Array.isArray(t.attachments) ? t.attachments.length : 0;
-                  return (
-                    <div key={id || `${safe(t.email)}-${fmtDate(t.createdAt)}`} className="px-4 py-4 hover:bg-gray-50 transition">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-blue-700">{id || "-"}</p>
-                          <p className="text-sm font-bold text-gray-900 line-clamp-1">{safe(t.subject) || "(No subject)"}</p>
-                          <p className="mt-1 text-xs text-gray-600 line-clamp-1">{safe(t.issueType) || "-"}</p>
+        {/* Order Screen - FULL DETAILS */}
+        <Card
+          title="Order"
+          right={
+            <div className="flex items-center gap-2">
+              {order ? (
+                <>
+                  <Btn
+                    size="xs"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => setExpanded((v) => !v)}
+                  >
+                    {expanded ? "Less" : "More"}
+                  </Btn>
+
+                  {/* ⚠️ In your schema, productId is null.
+                      Button will enable automatically once you start storing productId. */}
+                  <Btn
+                    size="xs"
+                    disabled={busy || !canLoadProducts}
+                    onClick={() => loadProductsForOrder?.(order)}
+                  >
+                    {productsLoaded ? "Reload Products" : "Load Products"}
+                  </Btn>
+                </>
+              ) : null}
+
+              {order?._id ? (
+                <a
+                  className="text-xs text-gray-700 underline underline-offset-4 hover:text-black"
+                  href={`/admin/orders/${order._id}`}
+                >
+                  Open
+                </a>
+              ) : null}
+            </div>
+          }
+        >
+          {!order ? (
+            <Empty text="Select an order (or search by order no.)." />
+          ) : (
+            <div className="mt-2 space-y-3">
+              {/* Summary */}
+              <div className="rounded-xl bg-gray-50 p-3 ring-1 ring-black/5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">{orderNumberShown || "Order"}</div>
+                    <div className="mt-1 text-xs text-gray-700 space-y-1">
+                      {order?.orderDate ? (
+                        <Row k="Order Date" v={new Date(order.orderDate).toLocaleString()} />
+                      ) : order?.createdAt ? (
+                        <Row k="Created" v={new Date(order.createdAt).toLocaleString()} />
+                      ) : null}
+
+                      <Row k="Payment" v={safe(payment?.status)} />
+                      <Row k="Method" v={safe(payment?.method)} />
+                      <Row k="Fulfillment" v={safe(order?.fulfillmentStatus)} />
+                      {totals.total !== undefined ? <Row k="Final Payable" v={money(totals.total)} /> : null}
+
+                      {awb ? <Row k="AWB" v={awb} /> : null}
+                      {shipment?.status ? <Row k="Shipment" v={shipment.status} /> : null}
+                      {trackingUrl ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-gray-500">Tracking</span>
+                          <a
+                            className="text-gray-800 underline underline-offset-4 hover:text-black text-right"
+                            href={trackingUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open
+                          </a>
                         </div>
-                        <span className={pill(t.status)}>{upper(t.status).replaceAll("_", " ")}</span>
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
-                        <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1"><Clock className="h-3.5 w-3.5" /> {fmtDate(t.createdAt)}</span>
-                        {atCount ? <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1"><ImageIcon className="h-3.5 w-3.5" /> {atCount}</span> : null}
-                        {safe(t.orderId) ? <span className="text-gray-500">• Order: {safe(t.orderId)}</span> : null}
-                        {safe(t.email) ? <span className="text-gray-500">• {safe(t.email)}</span> : null}
-                      </div>
-
-                      <div className="mt-3">
-                        <Link href={`/support-tickets/${encodeURIComponent(id)}`} className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset transition ${id ? "bg-white text-blue-700 ring-blue-200 hover:bg-blue-50" : "bg-gray-100 text-gray-400 ring-gray-200 pointer-events-none"}`}>
-                          View <ExternalLink className="h-3.5 w-3.5" />
-                        </Link>
-                      </div>
+                      ) : null}
                     </div>
-                  );
-                })}
+                  </div>
+
+                  {order?.adminRemarks ? <Pill text={order.adminRemarks} /> : null}
+                </div>
+
+                {/* Totals (compact) */}
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  {totals.subtotal !== undefined ? <Mini k="Subtotal" v={money(totals.subtotal)} /> : null}
+                  {totals.discount !== undefined ? <Mini k="Discount" v={money(totals.discount)} /> : null}
+                  {order?.coupon?.code ? <Mini k="Coupon" v={order.coupon.code} /> : null}
+                  {order?.shippingFee !== undefined ? <Mini k="Shipping" v={money(order.shippingFee)} /> : null}
+                  {order?.tax !== undefined ? <Mini k="Tax" v={money(order.tax)} /> : null}
+                </div>
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Customer / Address */}
+              {shipping || billing || orderEmail || customerFromOrder ? (
+                <div className="rounded-xl bg-white p-3 ring-1 ring-black/5">
+                  <div className="text-xs font-semibold text-gray-800">Customer / Address</div>
+                  <div className="mt-2 text-xs text-gray-700 space-y-1">
+                    {customerFromOrder?.name ? <Row k="Name" v={customerFromOrder.name} /> : null}
+                    {orderEmail ? <Row k="Email" v={orderEmail} /> : null}
+                    {customerFromOrder?._id ? <Row k="Customer Mongo ID" v={customerFromOrder._id} /> : null}
+
+                    {shipping ? (
+                      <>
+                        <div className="pt-2 text-[11px] font-semibold text-gray-600">Shipping</div>
+                        <Row k="Name" v={safe(shipping?.fullName || shipping?.name)} />
+                        <Row k="Phone" v={safe(shipping?.phone)} />
+                        <Row
+                          k="Address"
+                          v={safe(
+                            [
+                              shipping?.line1,
+                              shipping?.line2,
+                              shipping?.city,
+                              shipping?.state,
+                              shipping?.pincode,
+                              shipping?.country,
+                            ]
+                              .filter(Boolean)
+                              .join(", "),
+                            "—"
+                          )}
+                        />
+                      </>
+                    ) : null}
+
+                    {billing ? (
+                      <>
+                        <div className="pt-2 text-[11px] font-semibold text-gray-600">Billing</div>
+                        <Row k="Name" v={safe(billing?.fullName || billing?.name)} />
+                        <Row k="Phone" v={safe(billing?.phone)} />
+                        <Row
+                          k="Address"
+                          v={safe(
+                            [
+                              billing?.line1,
+                              billing?.line2,
+                              billing?.city,
+                              billing?.state,
+                              billing?.pincode,
+                              billing?.country,
+                            ]
+                              .filter(Boolean)
+                              .join(", "),
+                            "—"
+                          )}
+                        />
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* ✅ Product / Item Details (handles your exact schema) */}
+              {items?.length ? (
+                <div className="rounded-xl bg-white p-3 ring-1 ring-black/5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold text-gray-800">Items / Products</div>
+                    <div className="text-xs text-gray-500">{items.length}</div>
+                  </div>
+
+                  <div className="mt-2 space-y-2">
+                    {(expanded ? items : items.slice(0, 4)).map((it, idx) => {
+                      const snap = it?.productSnapshot || {};
+                      const variant = it?.variant || {};
+                      const qty = it?.quantity ?? it?.qty ?? 1;
+
+                      const title =
+                        snap?.title || it?.name || it?.productName || it?.title || "Item";
+
+                      const productCode = snap?.productCode || "";
+                      const slug = snap?.slug || "";
+                      const thumb = snap?.thumbnail || variant?.image || "";
+                      const sku = variant?.sku || snap?.sku || it?.sku || "";
+                      const size = it?.selectedSize || "";
+                      const color = it?.selectedColor || "";
+
+                      const price = it?.price ?? it?.unitPrice ?? it?.sellingPrice;
+                      const compareAt = it?.compareAtPrice;
+                      const subtotal = it?.subtotal;
+
+                      const variantId = variant?.variantId || "";
+                      const lineId = it?.lineId || "";
+
+                      return (
+                        <div
+                          key={idx}
+                          className="rounded-lg bg-gray-50 p-2 text-xs ring-1 ring-black/5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-medium text-gray-900 truncate">{title}</div>
+                              <div className="mt-1 text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
+                                {productCode ? <span>Code {productCode}</span> : null}
+                                {sku ? <span>SKU {sku}</span> : null}
+                                {size ? <span>Size {size}</span> : null}
+                                {color ? <span>Color {color}</span> : null}
+                                {qty ? <span>Qty {qty}</span> : null}
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <div className="text-gray-800">
+                                {price !== undefined ? money(price) : ""}
+                              </div>
+                              {compareAt !== null && compareAt !== undefined ? (
+                                <div className="text-[11px] text-gray-500">
+                                  MRP {money(compareAt)}
+                                </div>
+                              ) : null}
+                              {subtotal !== undefined ? (
+                                <div className="text-[11px] text-gray-600">
+                                  Subtotal {money(subtotal)}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          {thumb ? (
+                            <div className="mt-2 flex items-center gap-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={thumb}
+                                alt={title}
+                                className="h-12 w-12 rounded-lg object-cover ring-1 ring-black/5"
+                              />
+                              <div className="text-[11px] text-gray-600 break-all">
+                                {slug ? <div>/{slug}</div> : null}
+                                {variantId ? <div>VariantID: {variantId}</div> : null}
+                                {lineId ? <div>LineID: {lineId}</div> : null}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-2 text-[11px] text-gray-500">
+                              {slug ? `/${slug}` : null}
+                              {variantId ? ` • VariantID: ${variantId}` : null}
+                              {lineId ? ` • LineID: ${lineId}` : null}
+                            </div>
+                          )}
+
+                          {/* ✅ Optional: if your admin product store is loaded by IDs in future */}
+                          {productsLoaded && productIds.length ? (
+                            <div className="mt-2 text-[11px] text-gray-600">
+                              {/** If someday you store productId, you can show full admin product data here */}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+
+                    {!expanded && items.length > 4 ? (
+                      <div className="text-xs text-gray-500">+{items.length - 4} more…</div>
+                    ) : null}
+                  </div>
+
+                  {!hasSnapshots ? (
+                    <div className="mt-2 text-[11px] text-gray-500">
+                      Note: productSnapshot not present in items, showing best-effort item fields.
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* Extra raw (optional) */}
+              {expanded ? (
+                <div className="rounded-xl bg-white p-3 ring-1 ring-black/5">
+                  <div className="text-xs font-semibold text-gray-800">More</div>
+                  <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-gray-700">
+                    {order?.customerMessage ? <Mini k="Customer Msg" v={order.customerMessage} /> : null}
+                    {order?.adminRemarks ? <Mini k="Admin Remarks" v={order.adminRemarks} /> : null}
+                    {order?.source ? <Mini k="Source" v={order.source} /> : null}
+                    {shipment?.provider ? <Mini k="Provider" v={shipment.provider} /> : null}
+                    {shiprocket?.courierName ? <Mini k="Courier" v={shiprocket.courierName} /> : null}
+                    {order?.coupon?.finalTotal !== undefined ? (
+                      <Mini k="Coupon Final" v={money(order.coupon.finalTotal)} />
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </Card>
+
+        {/* Tickets */}
+        <Card
+          title="Tickets"
+          right={
+            <div className="flex gap-2">
+              <Btn onClick={loadTickets} disabled={busy || !customerEmail} size="xs">
+                Load
+              </Btn>
+              <Btn
+                onClick={() => resetTickets?.()}
+                disabled={busy || !tickets?.length}
+                size="xs"
+                variant="ghost"
+              >
+                Clear
+              </Btn>
+            </div>
+          }
+        >
+          {!tickets?.length ? (
+            <Empty
+              text={
+                customerEmail
+                  ? "Click Load to fetch tickets."
+                  : "Need customer email (search customer first)."
+              }
+            />
+          ) : (
+            <div className="mt-2 space-y-2">
+              {tickets.map((t) => (
+                <button
+                  key={t.ticketId || t._id}
+                  type="button"
+                  onClick={() => selectTicket?.(t.ticketId || t._id)}
+                  disabled={busy}
+                  className="w-full rounded-xl bg-white px-3 py-2 text-left shadow-sm ring-1 ring-black/5 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-medium">{t.ticketId || t._id}</div>
+                    <div className="text-xs text-gray-500">
+                      {t?.createdAt ? new Date(t.createdAt).toLocaleDateString() : ""}
+                    </div>
+                  </div>
+                  <div className="mt-1 text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
+                    {t?.status ? <Pill text={t.status} /> : null}
+                    {t?.issueType ? <Pill text={t.issueType} /> : null}
+                    {t?.subject ? <span className="text-gray-700">{t.subject}</span> : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {ticket ? (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3 ring-1 ring-black/5">
+              <div className="text-xs font-semibold text-gray-700">Ticket Detail</div>
+              <div className="mt-2 text-xs text-gray-700 space-y-1">
+                <Row k="Ticket" v={safe(ticket.ticketId || ticket._id)} />
+                {ticket?.status ? <Row k="Status" v={ticket.status} /> : null}
+                {ticket?.issueType ? <Row k="Type" v={ticket.issueType} /> : null}
+                {ticket?.message ? <Row k="Message" v={ticket.message} /> : null}
+              </div>
+            </div>
+          ) : null}
+        </Card>
       </div>
-    </main>
+    </div>
+  );
+}
+
+/* ---------------- small UI helpers ---------------- */
+
+function Card({ title, right, children }) {
+  return (
+    <div className="rounded-2xl bg-white/70 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Empty({ text }) {
+  return <div className="mt-3 text-sm text-gray-500">{text}</div>;
+}
+
+function Row({ k, v }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-gray-500">{k}</span>
+      <span className="text-gray-800 text-right">{v}</span>
+    </div>
+  );
+}
+
+function Mini({ k, v }) {
+  return (
+    <div className="rounded-lg bg-gray-50 px-2 py-1 ring-1 ring-black/5">
+      <div className="text-[11px] text-gray-500">{k}</div>
+      <div className="text-xs text-gray-800">{safe(v)}</div>
+    </div>
+  );
+}
+
+function Pill({ text }) {
+  return (
+    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 ring-1 ring-black/5">
+      {text}
+    </span>
+  );
+}
+
+function Btn({ children, onClick, disabled, variant = "default", size = "sm" }) {
+  const base =
+    "inline-flex items-center justify-center rounded-xl font-medium transition disabled:opacity-50 disabled:cursor-not-allowed";
+  const sizes = { xs: "px-2 py-1 text-xs", sm: "px-3 py-2 text-sm" };
+  const variants = {
+    default: "bg-white hover:bg-gray-50 ring-1 ring-black/5",
+    ghost: "bg-transparent hover:bg-gray-50 ring-1 ring-black/5",
+    primary: "bg-black text-white hover:bg-black/90",
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`${base} ${sizes[size]} ${variants[variant]}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Input({ value, onChange, placeholder }) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full rounded-xl bg-white px-3 py-2 text-sm shadow-sm ring-1 ring-black/5 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-black/10"
+    />
+  );
+}
+
+function Select({ value, onChange, options }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-xl bg-white px-3 py-2 text-sm shadow-sm ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-black/10"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }
