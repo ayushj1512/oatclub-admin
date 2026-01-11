@@ -6,7 +6,8 @@ import { useCustomerStore } from "@/store/customerStore";
 import { useOrderStore } from "@/store/orderStore";
 import { useCustomerTicketStore } from "@/store/customerTicketStore";
 
-/** ✅ MIRAY-000031 formatter */
+/* ================= utils ================= */
+
 const normalizeOrderNumber = (raw, prefix = "MIRAY", pad = 6) => {
   if (raw === null || raw === undefined) return "";
   if (Array.isArray(raw)) raw = raw?.[0]?.orderNumber ?? raw?.[0]?.number ?? "";
@@ -25,14 +26,12 @@ const normalizeOrderNumber = (raw, prefix = "MIRAY", pad = 6) => {
 const money = (v) => {
   if (v === null || v === undefined || v === "") return "";
   const n = Number(v);
-  if (Number.isFinite(n)) return `₹ ${n.toLocaleString("en-IN")}`;
-  return String(v);
+  return Number.isFinite(n) ? `₹ ${n.toLocaleString("en-IN")}` : String(v);
 };
 
 const safe = (v, fallback = "—") =>
   v === null || v === undefined || v === "" ? fallback : String(v);
 
-/** ✅ Safe id extractor (prevents [object Object]) */
 const getId = (x) => {
   if (!x) return "";
   if (typeof x === "string") return x;
@@ -40,6 +39,8 @@ const getId = (x) => {
   if (typeof x === "object") return String(x._id || x.id || x.customerId || x.userId || "");
   return "";
 };
+
+/* ================= page ================= */
 
 export default function CustomerSupportSearch() {
   const {
@@ -54,36 +55,24 @@ export default function CustomerSupportSearch() {
     error,
     clearAll,
     clearResults,
-
-    // ✅ from orchestrator store
     loadProductsForOrder,
     orderProducts,
-    orderProductsById,
   } = useCustomerSupportLookupStore();
 
   const { customer, loadingSingle, error: customerError } = useCustomerStore();
-
-  const {
-    orders,
-    order,
-    loading: orderLoading,
-    error: orderError,
-    fetchOrdersByCustomer,
-    clearOrders,
-  } = useOrderStore();
-
+  const { orders, order, loading: orderLoading, error: orderError, clearOrders } = useOrderStore();
   const {
     tickets,
     ticket,
     loading: ticketLoading,
     error: ticketError,
-    fetchTicketsByEmail,
     resetTickets,
   } = useCustomerTicketStore();
 
   const [expanded, setExpanded] = useState(false);
 
   const busy = loading || loadingSingle || orderLoading || ticketLoading;
+  const allErr = error || customerError || orderError || ticketError;
 
   const hasAnyResult = useMemo(
     () =>
@@ -96,28 +85,35 @@ export default function CustomerSupportSearch() {
     [customer, matchedCustomers, order, orders, tickets, ticket]
   );
 
-  // ✅ Your real customer schema (customerId is string like "0079")
   const customerMongoId = customer?._id || customer?.id || null;
   const customerEmail = String(customer?.email || query.email || "").trim();
 
-  const allErr = error || customerError || orderError || ticketError;
+  const handleSearch = async () => {
+    clearOrders?.();
+    resetTickets?.();
+    setExpanded(false);
 
-  const loadOrders = async () =>
-    customerMongoId && fetchOrdersByCustomer(customerMongoId);
+    // always take latest query from store (no stale closures)
+    const store = useCustomerSupportLookupStore.getState();
+    const q = store.query;
 
-  const loadTickets = async () =>
-    customerEmail &&
-    fetchTicketsByEmail({
-      email: customerEmail,
-      status: query.ticketStatus || undefined,
-      page: 1,
-      limit: 10,
-    });
+    const next = {
+      phone: String(q.phone || "").trim(),
+      name: String(q.name || "").trim(),
+      email: String(q.email || "").trim().toLowerCase(),
+      orderNumber: q.orderNumber ? normalizeOrderNumber(q.orderNumber, "MIRAY", 6) : "",
+      ticketStatus: String(q.ticketStatus || "").trim(),
+    };
+
+    store.setQuery(next);
+    await store.runSearch(); // ✅ store now auto-loads orders & tickets
+  };
+
+  /* ===== order detail helpers ===== */
 
   const orderNumberShown =
-    normalizeOrderNumber(order?.orderNumber, "MIRAY", 6) || order?._id;
+    normalizeOrderNumber(order?.orderNumber, "MIRAY", 6) || order?._id || "Order";
 
-  // ✅ Your order response uses snapshots
   const shipping =
     order?.shippingAddressSnapshot ||
     order?.shippingAddress ||
@@ -132,10 +128,7 @@ export default function CustomerSupportSearch() {
     order?.billing ||
     null;
 
-  // ✅ Your order response has customerId as object with { _id, name, email }
-  const customerFromOrder =
-    order?.customerId || order?.customer || order?.user || null;
-
+  const customerFromOrder = order?.customerId || order?.customer || order?.user || null;
   const orderEmail =
     customerFromOrder?.email ||
     order?.email ||
@@ -147,10 +140,8 @@ export default function CustomerSupportSearch() {
   const payment = {
     method: order?.paymentMethod || order?.payment?.method,
     status: order?.paymentStatus || order?.payment?.status,
-    razorpay: order?.razorpay || order?.payment?.razorpay,
   };
 
-  // ✅ shipment has nested shiprocket
   const shipment = order?.shipment || {};
   const shiprocket = shipment?.shiprocket || {};
   const trackingUrl = shiprocket?.trackingUrl || "";
@@ -162,7 +153,6 @@ export default function CustomerSupportSearch() {
     ? order.orderItems
     : [];
 
-  // ✅ Your totals fields
   const totals = {
     subtotal: order?.subtotal ?? order?.subTotal ?? order?.itemsSubtotal,
     discount: order?.discount ?? order?.coupon?.discount ?? order?.discountTotal,
@@ -171,43 +161,38 @@ export default function CustomerSupportSearch() {
     total: order?.finalPayable ?? order?.total ?? order?.grandTotal ?? order?.amount,
   };
 
-  /**
-   * ✅ Product IDs for fetching:
-   * In your order items:
-   * - productId is null
-   * - variant.variantId exists (this is variant id, not product id)
-   * - productSnapshot exists (title, productCode, slug, thumbnail, etc.)
-   *
-   * Therefore:
-   * - We SHOW product details from productSnapshot immediately ✅
-   * - We *optionally* fetch product details if you later add a real productId in schema.
-   */
-  const hasSnapshots = useMemo(
-    () => items.some((it) => Boolean(it?.productSnapshot)),
-    [items]
-  );
-
-  // If you ever add real productId in order items, this will start working automatically
   const productIds = useMemo(() => {
     const ids = items
-      .map((it) => getId(it?.productId || it?.product || it?.variant?.productId || it?.variant?.product))
+      .map((it) =>
+        getId(it?.productId || it?.product || it?.variant?.productId || it?.variant?.product)
+      )
       .filter(Boolean);
     return [...new Set(ids)];
   }, [items]);
 
+  const canLoadProducts = Boolean(order) && productIds.length > 0;
   const productsLoaded = (orderProducts?.length || 0) > 0;
-  const canLoadProducts = Boolean(order) && productIds.length > 0; // note: currently false because productId is null
+
+  const orderHasItems = (o) =>
+    Array.isArray(o?.items)
+      ? o.items.length > 0
+      : Array.isArray(o?.orderItems)
+      ? o.orderItems.length > 0
+      : false;
+
+  const orderItemsForCard = (o) =>
+    Array.isArray(o?.items) ? o.items : Array.isArray(o?.orderItems) ? o.orderItems : [];
+
+  /* ================= UI ================= */
 
   return (
     <div className="px-4 py-4 md:px-6 md:py-6">
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-lg md:text-xl font-semibold tracking-tight">
-            Customer Support
-          </h1>
+          <h1 className="text-lg md:text-xl font-semibold tracking-tight">Customer Support</h1>
           <p className="text-sm text-gray-500">
-            Search customer → then optionally load Orders / Tickets / Product snapshots.
+            Search → customer loads → orders & tickets auto load → select order to see products.
           </p>
         </div>
 
@@ -224,23 +209,10 @@ export default function CustomerSupportSearch() {
       {/* Search */}
       <div className="mt-4 rounded-2xl bg-white/70 p-3 shadow-sm ring-1 ring-black/5 backdrop-blur">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
-          <Input
-            placeholder="Phone"
-            value={query.phone}
-            onChange={(v) => setQuery({ phone: v })}
-          />
-          <Input
-            placeholder="Email"
-            value={query.email}
-            onChange={(v) => setQuery({ email: v })}
-          />
-          <Input
-            placeholder="Name"
-            value={query.name}
-            onChange={(v) => setQuery({ name: v })}
-          />
+          <Input placeholder="Phone" value={query.phone} onChange={(v) => setQuery({ phone: v })} />
+          <Input placeholder="Email" value={query.email} onChange={(v) => setQuery({ email: v })} />
+          <Input placeholder="Name" value={query.name} onChange={(v) => setQuery({ name: v })} />
 
-          {/* ✅ Order number auto-format to MIRAY-000031 */}
           <Input
             placeholder="Order No. (MIRAY-000031)"
             value={query.orderNumber}
@@ -248,9 +220,7 @@ export default function CustomerSupportSearch() {
               if (!v) return setQuery({ orderNumber: "" });
               const hasDigit = /\d/.test(v);
               setQuery({
-                orderNumber: hasDigit
-                  ? normalizeOrderNumber(v, "MIRAY", 6)
-                  : v.toUpperCase(),
+                orderNumber: hasDigit ? normalizeOrderNumber(v, "MIRAY", 6) : v.toUpperCase(),
               });
             }}
           />
@@ -267,22 +237,7 @@ export default function CustomerSupportSearch() {
             ]}
           />
 
-          <Btn
-            onClick={async () => {
-              clearOrders?.();
-              resetTickets?.();
-              setExpanded(false);
-
-              if (query.orderNumber) {
-                setQuery({
-                  orderNumber: normalizeOrderNumber(query.orderNumber, "MIRAY", 6),
-                });
-              }
-              await runSearch();
-            }}
-            disabled={busy}
-            variant="primary"
-          >
+          <Btn onClick={handleSearch} disabled={busy} variant="primary">
             {busy ? "Searching…" : "Search"}
           </Btn>
         </div>
@@ -315,7 +270,7 @@ export default function CustomerSupportSearch() {
                     clearOrders?.();
                     resetTickets?.();
                     setExpanded(false);
-                    await selectCustomer(c);
+                    await selectCustomer(c); // ✅ store will auto-load orders/tickets
                   }}
                   className="w-full rounded-xl bg-gray-50 px-3 py-2 text-left ring-1 ring-black/5 hover:bg-gray-100 disabled:opacity-60"
                 >
@@ -354,6 +309,12 @@ export default function CustomerSupportSearch() {
                   </a>
                 ) : null}
               </div>
+
+              {!!customerMongoId ? (
+                <div className="mt-3 text-[11px] text-gray-500">
+                  Auto: Orders + Tickets loaded for this customer.
+                </div>
+              ) : null}
             </div>
           ) : null}
         </Card>
@@ -363,8 +324,12 @@ export default function CustomerSupportSearch() {
           title="Orders"
           right={
             <div className="flex gap-2">
-              <Btn onClick={loadOrders} disabled={busy || !customerMongoId} size="xs">
-                Load
+              <Btn
+                onClick={() => useOrderStore.getState().fetchOrdersByCustomer?.(customerMongoId)}
+                disabled={busy || !customerMongoId}
+                size="xs"
+              >
+                Reload
               </Btn>
               <Btn
                 onClick={() => {
@@ -381,43 +346,82 @@ export default function CustomerSupportSearch() {
           }
         >
           {!orders?.length ? (
-            <Empty text={customer ? "Click Load to fetch orders." : "Search a customer first."} />
+            <Empty text={customer ? "Orders will appear here (auto loaded)." : "Search a customer first."} />
           ) : (
             <div className="mt-2 space-y-2">
-              {orders.map((o) => (
-                <button
-                  key={o._id}
-                  type="button"
-                  onClick={async () => {
-                    setExpanded(false);
-                    await selectOrder(o);
-                  }}
-                  disabled={busy}
-                  className="w-full rounded-xl bg-white px-3 py-2 text-left shadow-sm ring-1 ring-black/5 hover:bg-gray-50 disabled:opacity-60"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-medium">
-                      {normalizeOrderNumber(o?.orderNumber, "MIRAY", 6) || o?._id || "Order"}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {o?.createdAt ? new Date(o.createdAt).toLocaleDateString() : ""}
-                    </div>
-                  </div>
+              {orders.map((o) => {
+                const its = orderItemsForCard(o);
+                const showInline = orderHasItems(o);
 
-                  <div className="mt-1 text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
-                    {o?.paymentStatus ? <Pill text={o.paymentStatus} /> : null}
-                    {o?.fulfillmentStatus ? <Pill text={o.fulfillmentStatus} /> : null}
-                    {o?.finalPayable !== undefined ? (
-                      <span className="text-gray-700">{money(o.finalPayable)}</span>
+                return (
+                  <div
+                    key={o._id}
+                    className="w-full rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-black/5"
+                  >
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setExpanded(false);
+                        await selectOrder(o);
+                      }}
+                      disabled={busy}
+                      className="w-full text-left hover:opacity-90 disabled:opacity-60"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-medium">
+                          {normalizeOrderNumber(o?.orderNumber, "MIRAY", 6) || o?._id || "Order"}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {o?.createdAt ? new Date(o.createdAt).toLocaleDateString() : ""}
+                        </div>
+                      </div>
+
+                      <div className="mt-1 text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
+                        {o?.paymentStatus ? <Pill text={o.paymentStatus} /> : null}
+                        {o?.fulfillmentStatus ? <Pill text={o.fulfillmentStatus} /> : null}
+                        {o?.finalPayable !== undefined ? (
+                          <span className="text-gray-700">{money(o.finalPayable)}</span>
+                        ) : null}
+                        <span className="text-gray-400">
+                          {showInline ? "• Products inline" : "• Click to view products"}
+                        </span>
+                      </div>
+                    </button>
+
+                    {showInline ? (
+                      <div className="mt-2 space-y-1">
+                        {its.slice(0, 3).map((it, idx) => {
+                          const snap = it?.productSnapshot || {};
+                          const title = snap?.title || it?.name || it?.productName || "Item";
+                          const qty = it?.quantity ?? it?.qty ?? 1;
+                          const price = it?.price ?? it?.unitPrice ?? it?.sellingPrice;
+
+                          return (
+                            <div
+                              key={idx}
+                              className="rounded-lg bg-gray-50 px-2 py-1 text-[11px] text-gray-700 ring-1 ring-black/5 flex items-center justify-between gap-2"
+                            >
+                              <span className="truncate">{title}</span>
+                              <span className="shrink-0 text-gray-600">
+                                Qty {qty}
+                                {price !== undefined ? ` • ${money(price)}` : ""}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {its.length > 3 ? (
+                          <div className="text-[11px] text-gray-500">+{its.length - 3} more…</div>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
-                </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
 
-        {/* Order Screen - FULL DETAILS */}
+        {/* Order */}
         <Card
           title="Order"
           right={
@@ -433,8 +437,6 @@ export default function CustomerSupportSearch() {
                     {expanded ? "Less" : "More"}
                   </Btn>
 
-                  {/* ⚠️ In your schema, productId is null.
-                      Button will enable automatically once you start storing productId. */}
                   <Btn
                     size="xs"
                     disabled={busy || !canLoadProducts}
@@ -464,7 +466,7 @@ export default function CustomerSupportSearch() {
               <div className="rounded-xl bg-gray-50 p-3 ring-1 ring-black/5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold">{orderNumberShown || "Order"}</div>
+                    <div className="text-sm font-semibold">{orderNumberShown}</div>
                     <div className="mt-1 text-xs text-gray-700 space-y-1">
                       {order?.orderDate ? (
                         <Row k="Order Date" v={new Date(order.orderDate).toLocaleString()} />
@@ -498,7 +500,6 @@ export default function CustomerSupportSearch() {
                   {order?.adminRemarks ? <Pill text={order.adminRemarks} /> : null}
                 </div>
 
-                {/* Totals (compact) */}
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   {totals.subtotal !== undefined ? <Mini k="Subtotal" v={money(totals.subtotal)} /> : null}
                   {totals.discount !== undefined ? <Mini k="Discount" v={money(totals.discount)} /> : null}
@@ -508,7 +509,7 @@ export default function CustomerSupportSearch() {
                 </div>
               </div>
 
-              {/* Customer / Address */}
+              {/* Customer/Address */}
               {shipping || billing || orderEmail || customerFromOrder ? (
                 <div className="rounded-xl bg-white p-3 ring-1 ring-black/5">
                   <div className="text-xs font-semibold text-gray-800">Customer / Address</div>
@@ -568,7 +569,7 @@ export default function CustomerSupportSearch() {
                 </div>
               ) : null}
 
-              {/* ✅ Product / Item Details (handles your exact schema) */}
+              {/* Items */}
               {items?.length ? (
                 <div className="rounded-xl bg-white p-3 ring-1 ring-black/5">
                   <div className="flex items-center justify-between">
@@ -600,10 +601,7 @@ export default function CustomerSupportSearch() {
                       const lineId = it?.lineId || "";
 
                       return (
-                        <div
-                          key={idx}
-                          className="rounded-lg bg-gray-50 p-2 text-xs ring-1 ring-black/5"
-                        >
+                        <div key={idx} className="rounded-lg bg-gray-50 p-2 text-xs ring-1 ring-black/5">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <div className="font-medium text-gray-900 truncate">{title}</div>
@@ -617,18 +615,12 @@ export default function CustomerSupportSearch() {
                             </div>
 
                             <div className="text-right shrink-0">
-                              <div className="text-gray-800">
-                                {price !== undefined ? money(price) : ""}
-                              </div>
+                              <div className="text-gray-800">{price !== undefined ? money(price) : ""}</div>
                               {compareAt !== null && compareAt !== undefined ? (
-                                <div className="text-[11px] text-gray-500">
-                                  MRP {money(compareAt)}
-                                </div>
+                                <div className="text-[11px] text-gray-500">MRP {money(compareAt)}</div>
                               ) : null}
                               {subtotal !== undefined ? (
-                                <div className="text-[11px] text-gray-600">
-                                  Subtotal {money(subtotal)}
-                                </div>
+                                <div className="text-[11px] text-gray-600">Subtotal {money(subtotal)}</div>
                               ) : null}
                             </div>
                           </div>
@@ -654,42 +646,12 @@ export default function CustomerSupportSearch() {
                               {lineId ? ` • LineID: ${lineId}` : null}
                             </div>
                           )}
-
-                          {/* ✅ Optional: if your admin product store is loaded by IDs in future */}
-                          {productsLoaded && productIds.length ? (
-                            <div className="mt-2 text-[11px] text-gray-600">
-                              {/** If someday you store productId, you can show full admin product data here */}
-                            </div>
-                          ) : null}
                         </div>
                       );
                     })}
 
                     {!expanded && items.length > 4 ? (
                       <div className="text-xs text-gray-500">+{items.length - 4} more…</div>
-                    ) : null}
-                  </div>
-
-                  {!hasSnapshots ? (
-                    <div className="mt-2 text-[11px] text-gray-500">
-                      Note: productSnapshot not present in items, showing best-effort item fields.
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {/* Extra raw (optional) */}
-              {expanded ? (
-                <div className="rounded-xl bg-white p-3 ring-1 ring-black/5">
-                  <div className="text-xs font-semibold text-gray-800">More</div>
-                  <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-gray-700">
-                    {order?.customerMessage ? <Mini k="Customer Msg" v={order.customerMessage} /> : null}
-                    {order?.adminRemarks ? <Mini k="Admin Remarks" v={order.adminRemarks} /> : null}
-                    {order?.source ? <Mini k="Source" v={order.source} /> : null}
-                    {shipment?.provider ? <Mini k="Provider" v={shipment.provider} /> : null}
-                    {shiprocket?.courierName ? <Mini k="Courier" v={shiprocket.courierName} /> : null}
-                    {order?.coupon?.finalTotal !== undefined ? (
-                      <Mini k="Coupon Final" v={money(order.coupon.finalTotal)} />
                     ) : null}
                   </div>
                 </div>
@@ -703,8 +665,19 @@ export default function CustomerSupportSearch() {
           title="Tickets"
           right={
             <div className="flex gap-2">
-              <Btn onClick={loadTickets} disabled={busy || !customerEmail} size="xs">
-                Load
+              <Btn
+                onClick={() =>
+                  useCustomerTicketStore.getState().fetchTicketsByEmail?.({
+                    email: customerEmail,
+                    status: query.ticketStatus || undefined,
+                    page: 1,
+                    limit: 10,
+                  })
+                }
+                disabled={busy || !customerEmail}
+                size="xs"
+              >
+                Reload
               </Btn>
               <Btn
                 onClick={() => resetTickets?.()}
@@ -721,7 +694,7 @@ export default function CustomerSupportSearch() {
             <Empty
               text={
                 customerEmail
-                  ? "Click Load to fetch tickets."
+                  ? "Tickets will appear here (auto loaded if email exists)."
                   : "Need customer email (search customer first)."
               }
             />
@@ -768,7 +741,7 @@ export default function CustomerSupportSearch() {
   );
 }
 
-/* ---------------- small UI helpers ---------------- */
+/* ================= small UI helpers ================= */
 
 function Card({ title, right, children }) {
   return (

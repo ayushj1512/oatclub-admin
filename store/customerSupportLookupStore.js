@@ -34,6 +34,24 @@ const normalizeOrderNumber = (raw, prefix = "MIRAY", pad = 6) => {
   return `${String(prefix).toUpperCase()}-${padded}`;
 };
 
+const cleanStr = (v) => String(v || "").trim();
+const lower = (v) => cleanStr(v).toLowerCase();
+
+/**
+ * ✅ FIX for "first time empty, second time filled" (zustand async timing)
+ * Wait until condition met or timeout.
+ */
+const waitFor = async (cond, { timeoutMs = 2500, intervalMs = 50 } = {}) => {
+  const started = Date.now();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (cond()) return true;
+    if (Date.now() - started > timeoutMs) return false;
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+};
+
 export const useCustomerSupportLookupStore = create((set, get) => ({
   /* ============================================================
     STATE
@@ -94,29 +112,56 @@ export const useCustomerSupportLookupStore = create((set, get) => ({
       useCustomerTicketStore.getState().resetTicket?.();
       useCustomerTicketStore.getState().resetTickets?.();
     } catch {}
-    // ✅ optional: you may or may not want to reset product store
     try {
       useAdminProductStore.getState().resetProduct?.();
     } catch {}
   },
 
   /* ============================================================
-    INTERNAL: Hydrate only CUSTOMER PROFILE (NO prefetch orders/tickets)
+    INTERNAL: Hydrate CUSTOMER PROFILE + ✅ AUTO LOAD ORDERS/TICKETS
   ============================================================ */
-  _hydrateCustomerProfileOnly: async (customerLike) => {
-    const customerId = getId(customerLike);
-    if (!customerId) throw new Error("Invalid customerId");
+  _hydrateCustomerProfileOnly: async (customerLikeOrId) => {
+  const customerId = getId(customerLikeOrId);
+  if (!customerId) throw new Error("Invalid customerId");
 
-    const customerStore = useCustomerStore.getState();
-    await customerStore.fetchCustomerById(customerId);
+  const customerStore = useCustomerStore.getState();
+  const orderStore = useOrderStore.getState();
+  const ticketStore = useCustomerTicketStore.getState();
 
-    set({ selectedCustomerId: customerId });
-    return customerId;
-  },
+  // ✅ fetch customer detail
+  await customerStore.fetchCustomerById(customerId);
+
+  const loadedCustomer = useCustomerStore.getState().customer;
+  const mongoId = loadedCustomer?._id || loadedCustomer?.id || "";
+
+  if (!mongoId) {
+    throw new Error("Customer loaded but Mongo _id missing (cannot load orders)");
+  }
+
+  set({ selectedCustomerId: customerId });
+
+  // ✅ AUTO: fetch orders strictly by mongoId
+  if (orderStore.fetchOrdersByCustomer) {
+    await orderStore.fetchOrdersByCustomer(mongoId);
+  }
+
+  // ✅ AUTO: fetch tickets
+  const email = String(loadedCustomer?.email || "").trim();
+  if (email && ticketStore.fetchTicketsByEmail) {
+    await ticketStore.fetchTicketsByEmail({
+      email,
+      status: get().query.ticketStatus || undefined,
+      page: 1,
+      limit: 10,
+    });
+  }
+
+  return customerId;
+},
+
 
   /* ============================================================
-    ✅ NEW: Extract product IDs from an order and fetch product details
-    - Call this manually from UI (button click) OR from selectOrder/order search
+    ✅ Extract product IDs from an order and fetch product details
   ============================================================ */
   loadProductsForOrder: async (orderLike) => {
     try {
@@ -168,10 +213,16 @@ export const useCustomerSupportLookupStore = create((set, get) => ({
   },
 
   /* ============================================================
-    RUN SUPPORT SEARCH
+    RUN SUPPORT SEARCH (✅ FIXED first time issue + auto orders)
   ============================================================ */
   runSearch: async () => {
-    const { phone, email, name, orderNumber } = get().query;
+    const q = get().query;
+
+    // ✅ normalize query values once
+    const _phone = cleanStr(q.phone);
+    const _email = lower(q.email);
+    const _name = cleanStr(q.name);
+    const ordRaw = cleanStr(q.orderNumber);
 
     set({
       matchedCustomers: [],
@@ -181,10 +232,15 @@ export const useCustomerSupportLookupStore = create((set, get) => ({
       error: "",
     });
 
-    const _phone = String(phone || "").trim();
-    const _email = String(email || "").trim();
-    const _name = String(name || "").trim();
-    const ordRaw = String(orderNumber || "").trim();
+    // clear downstream stores
+    try {
+      useOrderStore.getState().clearOrder?.();
+      useOrderStore.getState().clearOrders?.();
+    } catch {}
+    try {
+      useCustomerTicketStore.getState().resetTicket?.();
+      useCustomerTicketStore.getState().resetTickets?.();
+    } catch {}
 
     if (!ordRaw && !_phone && !_email && !_name) {
       toast.error("Enter phone / email / name / order no.");
@@ -202,10 +258,15 @@ export const useCustomerSupportLookupStore = create((set, get) => ({
         const ordNo = normalizeOrderNumber(ordRaw, "MIRAY", 6);
 
         // keep query normalized so UI also shows correct format
-        set((s) => ({ query: { ...s.query, orderNumber: ordNo } }));
+        set((s) => ({ query: { ...s.query, email: _email, orderNumber: ordNo } }));
 
         const ord = await orderStore.fetchOrderByNumber(ordNo);
         if (!ord) throw new Error("Order not found");
+
+        // ✅ keep selected order visible (order screen)
+        if (ord?._id && orderStore.fetchOrderById) {
+          await orderStore.fetchOrderById(ord._id);
+        }
 
         const customerId =
           getId(ord?.customer) ||
@@ -215,31 +276,42 @@ export const useCustomerSupportLookupStore = create((set, get) => ({
 
         if (!customerId) throw new Error("Order found but customerId not present on order");
 
+        // ✅ this will also auto-load orders + tickets
         await get()._hydrateCustomerProfileOnly(customerId);
 
-        // keep selected order visible (order screen)
-        if (ord?._id) {
-          orderStore.fetchOrderById?.(ord._id).catch(() => {});
-        }
-
-        // ✅ OPTIONAL:
-        // If you want products to load automatically for order searches, uncomment this:
+        // ✅ OPTIONAL auto products for order search
         // await get().loadProductsForOrder(ord);
 
-        toast.success("Fetched order + customer ✅ (products load manually unless enabled)");
+        toast.success("Fetched order + customer ✅ (orders & tickets auto loaded)");
         return;
       }
 
       // 2) CUSTOMER SEARCH PATH
       const searchValue = _email || _phone || _name;
+
+      // keep email lowercased in UI
+      set((s) => ({ query: { ...s.query, email: _email } }));
+
+      // IMPORTANT:
+      // Some fetchCustomers return nothing and update store async
+      // So we wait for store to populate instead of reading immediately.
+      const beforeLen = (useCustomerStore.getState().customers || []).length;
+
       await customerStore.fetchCustomers({ search: searchValue, limit: 20, page: 1 });
 
-      const list = customerStore.customers || [];
+      // ✅ wait until customers array changes OR has length > 0
+      await waitFor(() => {
+        const cur = useCustomerStore.getState().customers || [];
+        return cur.length !== beforeLen && cur.length > 0;
+      });
+
+      const list = useCustomerStore.getState().customers || [];
       if (!list.length) throw new Error("No customer found for given input");
 
       if (list.length === 1) {
+        // ✅ this will auto-load orders + tickets
         await get()._hydrateCustomerProfileOnly(list[0]);
-        toast.success("Fetched customer ✅ (orders/tickets/products load manually)");
+        toast.success("Fetched customer ✅ (orders & tickets auto loaded)");
         return;
       }
 
@@ -256,14 +328,26 @@ export const useCustomerSupportLookupStore = create((set, get) => ({
   },
 
   /* ============================================================
-    SELECT CUSTOMER (multi-match)
+    SELECT CUSTOMER (multi-match) ✅ NOW auto loads orders/tickets
   ============================================================ */
   selectCustomer: async (customer) => {
     set({ loading: true, error: "" });
     try {
       set({ matchedCustomers: [] });
+
+      // clear downstream for new selection
+      try {
+        useOrderStore.getState().clearOrders?.();
+        useOrderStore.getState().clearOrder?.();
+      } catch {}
+      try {
+        useCustomerTicketStore.getState().resetTickets?.();
+        useCustomerTicketStore.getState().resetTicket?.();
+      } catch {}
+
       await get()._hydrateCustomerProfileOnly(customer);
-      toast.success("Customer loaded ✅");
+
+      toast.success("Customer loaded ✅ (orders & tickets auto loaded)");
     } catch (e) {
       console.error("❌ selectCustomer:", e);
       const msg = e?.message || "Failed to load customer";
@@ -276,7 +360,7 @@ export const useCustomerSupportLookupStore = create((set, get) => ({
 
   /* ============================================================
     SELECT ORDER (load order screen)
-    ✅ Now can also load product details for that order if you want
+    ✅ Now also loads full order if needed
   ============================================================ */
   selectOrder: async (order) => {
     if (!order) return;
