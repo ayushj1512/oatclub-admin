@@ -44,6 +44,7 @@ export default function OrderPrintPanel({
       state: order.shippingAddressSnapshot?.state || "",
     };
 
+    // ✅ ITEMS: include size so invoice/packing templates can show it
     const items =
       (order.items || []).map((it, idx) => {
         const snap = it.productSnapshot || {};
@@ -53,8 +54,16 @@ export default function OrderPrintPanel({
           qty: Number(it.quantity || 0),
           priceIncl: Number(it.price || 0),
           gstRate: 5,
+
+          // ⭐️ NEW
+          size: it.selectedSize || it.size || it.variant?.size || "-",
+          selectedSize: it.selectedSize || it.size || it.variant?.size || "-",
         };
       }) || [];
+
+    // ✅ COUPON / DISCOUNT: order-level
+    const couponCode = order.coupon?.code || "";
+    const discount = Number(order.discount || order.coupon?.discount || 0);
 
     return {
       seller: SELLER,
@@ -73,9 +82,17 @@ export default function OrderPrintPanel({
       items,
 
       totals: {
-        grandTotal: Number(order.finalPayable || 0),
+        // ✅ keep gross numbers correct
         taxable: Number(order.subtotal || 0),
         tax: Number(order.tax || 0),
+
+        // ✅ optional if templates still read it
+        grandTotal: Number(order.finalPayable || 0),
+
+        // ⭐️ NEW (used by updated InvoiceTemplate)
+        discount,
+        couponCode,
+        finalPayable: Number(order.finalPayable || 0),
       },
 
       payment: {
@@ -170,11 +187,17 @@ export default function OrderPrintPanel({
       {/* Preview */}
       <div className="p-6 flex justify-center bg-white">
         {previewTab === "invoice" ? (
-          <div style={{ transform: "scale(0.55)", width: "210mm" }} className="origin-top">
+          <div
+            style={{ transform: "scale(0.55)", width: "210mm" }}
+            className="origin-top"
+          >
             <InvoiceTemplate data={normalized} />
           </div>
         ) : (
-          <div style={{ transform: "scale(0.75)", width: "210mm" }} className="origin-top">
+          <div
+            style={{ transform: "scale(0.75)", width: "210mm" }}
+            className="origin-top"
+          >
             <PackingSlipTemplate data={normalized} />
           </div>
         )}

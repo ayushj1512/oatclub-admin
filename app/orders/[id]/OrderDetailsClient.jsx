@@ -1,5 +1,5 @@
 "use client";
-
+import OrderActionCenter from "@/components/orders/OrderActionCenter";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -70,6 +70,7 @@ export default function OrderDetailsClient({ id }) {
 
   const [remarks, setRemarks] = useState("");
   const [remarksSaving, setRemarksSaving] = useState(false);
+const [trackingUrl, setTrackingUrl] = useState("");
 
   const orderStatusLabel = useMemo(() => {
     if (!order?.fulfillmentStatus) return "";
@@ -110,25 +111,26 @@ export default function OrderDetailsClient({ id }) {
   };
 
   /* ✅ Update tracking */
-  const updateTracking = async () => {
-    if (!order?._id) return;
+const updateTracking = async () => {
+  if (!order?._id) return;
 
-    try {
-      const res = await fetch(`${API}/api/orders/${order._id}/tracking`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackingId, courierName }),
-      });
+  try {
+    const res = await fetch(`${API}/api/orders/${order._id}/tracking`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trackingId, courierName, trackingUrl }),
+    });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) return toast.error(data?.message || "Failed to update tracking");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error(data?.message || "Failed to update tracking");
 
-      toast.success("Tracking updated ✅");
-      await fetchOrderById(order._id);
-    } catch {
-      toast.error("Failed to update tracking");
-    }
-  };
+    toast.success("Tracking updated ✅");
+    await fetchOrderById(order._id);
+  } catch {
+    toast.error("Failed to update tracking");
+  }
+};
+
 
   /* ✅ Update remarks */
   const updateRemarks = async () => {
@@ -153,6 +155,20 @@ export default function OrderDetailsClient({ id }) {
       setRemarksSaving(false);
     }
   };
+
+  useEffect(() => {
+  if (!order) return;
+  setNewStatus(order.fulfillmentStatus || "processing");
+  setTrackingId(order.trackingDetails?.trackingId || "");
+  setCourierName(order.trackingDetails?.courierName || "");
+  setTrackingUrl(
+    order?.shipment?.shiprocket?.trackingUrl ||
+      order?.trackingDetails?.trackingUrl ||
+      ""
+  );
+  setRemarks(order.adminRemarks || "");
+}, [order]);
+
 
   /* ✅ LOADING */
   if (loading)
@@ -410,43 +426,66 @@ export default function OrderDetailsClient({ id }) {
 
 <OrderRmaMention orderId={order._id} />
 
+<OrderActionCenter
+  order={order}
+  trackingId={trackingId}
+  courierName={courierName}
+  trackingUrl={
+    order?.shipment?.shiprocket?.trackingUrl ||
+    order?.trackingDetails?.trackingUrl ||
+    ""
+  }
+  onRefresh={() => fetchOrderById(order._id)}
+/>
 
+      {/* TRACKING */}
+<Card>
+  <h2 className="text-base font-semibold mb-4">Tracking</h2>
 
-        {/* TRACKING */}
-        <Card>
-          <h2 className="text-base font-semibold mb-4">Tracking</h2>
+  <div className="grid md:grid-cols-3 gap-4">
+    <div>
+      <label className="text-xs font-semibold text-gray-600">
+        Tracking ID / AWB
+      </label>
+      <input
+        className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
+        value={trackingId}
+        onChange={(e) => setTrackingId(e.target.value)}
+      />
+    </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-600">
-                Tracking ID / AWB
-              </label>
-              <input
-                className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
-                value={trackingId}
-                onChange={(e) => setTrackingId(e.target.value)}
-              />
-            </div>
+    <div>
+      <label className="text-xs font-semibold text-gray-600">
+        Courier Name
+      </label>
+      <input
+        className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
+        value={courierName}
+        onChange={(e) => setCourierName(e.target.value)}
+      />
+    </div>
 
-            <div>
-              <label className="text-xs font-semibold text-gray-600">
-                Courier Name
-              </label>
-              <input
-                className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
-                value={courierName}
-                onChange={(e) => setCourierName(e.target.value)}
-              />
-            </div>
-          </div>
+    <div>
+      <label className="text-xs font-semibold text-gray-600">
+        Tracking URL
+      </label>
+      <input
+        className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
+        value={trackingUrl}
+        onChange={(e) => setTrackingUrl(e.target.value)}
+        placeholder="https://..."
+      />
+    </div>
+  </div>
 
-          <button
-            onClick={updateTracking}
-            className="mt-4 px-6 py-2.5 rounded-lg bg-black text-white text-sm font-semibold hover:opacity-90 transition"
-          >
-            Save Tracking
-          </button>
-        </Card>
+  <button
+    onClick={updateTracking}
+    className="mt-4 px-6 py-2.5 rounded-lg bg-black text-white text-sm font-semibold hover:opacity-90 transition"
+  >
+    Save Tracking
+  </button>
+</Card>
+
 
         {/* REMARKS */}
         <Card>
