@@ -3,15 +3,39 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Palette, Calculator, Boxes, Truck, Laptop, BarChart3, Users, ShoppingCart,
-  LineChart, FileBarChart, Ticket, TicketPercent, Package, ClipboardList,
-  Images, FileText, Headset, Clapperboard, Sparkles, ArrowUpDown, RefreshCw,
-  Quote, Globe, RotateCcw,
+  Palette,
+  Calculator,
+  Boxes,
+  Truck,
+  Laptop,
+  BarChart3,
+  Users,
+  ShoppingCart,
+  LineChart,
+  FileBarChart,
+  Ticket,
+  TicketPercent,
+  Package,
+  ClipboardList,
+  Images,
+  FileText,
+  Headset,
+  Clapperboard,
+  Sparkles,
+  ArrowUpDown,
+  RefreshCw,
+  Quote,
+  Globe,
+  RotateCcw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import useLoginStore from "@/store/useLoginStore";
-import { ROLE_DEFAULT_PERMS, DOMAIN_PERMISSIONS, hasPermission } from "@/config/loginConfig";
+import {
+  ROLE_DEFAULT_PERMS,
+  DOMAIN_PERMISSIONS,
+  hasPermission,
+} from "@/config/loginConfig";
 
 const QUOTES = [
   { text: "Small progress every day beats big plans someday.", tag: "Consistency" },
@@ -56,7 +80,9 @@ export default function HomeDashboard() {
   // ✅ permissions
   const admin = useLoginStore((s) => s.admin);
   const role = admin?.role || "viewer";
-  const permissions = (admin?.permissions?.length ? admin.permissions : ROLE_DEFAULT_PERMS[role]) || [];
+  const permissions =
+    (admin?.permissions?.length ? admin.permissions : ROLE_DEFAULT_PERMS[role]) ||
+    [];
 
   // ✅ quotes
   const [quote, setQuote] = useState(QUOTES[0]);
@@ -72,7 +98,6 @@ export default function HomeDashboard() {
   };
 
   useEffect(() => {
-    
     pickQuote();
     const t = setInterval(pickQuote, 9000);
     return () => clearInterval(t);
@@ -80,25 +105,33 @@ export default function HomeDashboard() {
 
   // ✅ filter domains by permission
   const allowedDomains = useMemo(() => {
-    return DOMAIN_LIST.filter((d) => hasPermission(permissions, DOMAIN_PERMISSIONS[d.id]));
+    return DOMAIN_LIST.filter((d) =>
+      hasPermission(permissions, DOMAIN_PERMISSIONS[d.id])
+    );
   }, [permissions]);
 
-  // ✅ sorting
-  const [sortBy, setSortBy] = useState("default");
+  // ✅ sorting (default A-Z)
+  const [sortBy, setSortBy] = useState("name_asc");
+
   const sortedDomains = useMemo(() => {
     const arr = [...allowedDomains];
-    if (sortBy === "name_asc") return arr.sort((a, b) => a.name.localeCompare(b.name));
+
+    // default + A-Z both alphabetically
+    if (sortBy === "default" || sortBy === "name_asc") {
+      return arr.sort((a, b) => a.name.localeCompare(b.name));
+    }
     if (sortBy === "name_desc") return arr.sort((a, b) => b.name.localeCompare(a.name));
     return arr;
   }, [allowedDomains, sortBy]);
-console.log("ROLE:", role);
-console.log("PERMS:", permissions);
-console.log("ALLOWED DOMAINS:", allowedDomains);
-console.log("DOMAIN_PERMISSIONS:", DOMAIN_PERMISSIONS);
+
+  console.log("ROLE:", role);
+  console.log("PERMS:", permissions);
+  console.log("ALLOWED DOMAINS:", allowedDomains);
+  console.log("DOMAIN_PERMISSIONS:", DOMAIN_PERMISSIONS);
+
   return (
     <div className="min-h-screen bg-gray-50 px-3 sm:px-6 md:px-8 py-6 sm:py-10">
-      <div className="mx-auto max-w-7xl">
-
+      <div className="mx-auto ">
         {/* Quote Bar */}
         <div className="mb-6">
           <div className="w-full rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-4 sm:px-5 py-4 shadow-sm">
@@ -155,7 +188,8 @@ console.log("DOMAIN_PERMISSIONS:", DOMAIN_PERMISSIONS);
                     onChange={(e) => setSortBy(e.target.value)}
                     className="w-full md:w-auto bg-white border border-gray-200 rounded-2xl px-3 py-3 text-sm outline-none hover:bg-gray-50 shadow-sm"
                   >
-                    <option value="default">Default</option>
+                    {/* Default now means A-Z */}
+                    <option value="default">Default (A → Z)</option>
                     <option value="name_asc">Name (A → Z)</option>
                     <option value="name_desc">Name (Z → A)</option>
                   </select>
@@ -167,13 +201,15 @@ console.log("DOMAIN_PERMISSIONS:", DOMAIN_PERMISSIONS);
 
         {/* Domains */}
         {sortedDomains.length === 0 ? (
-          
           <div className="bg-white border border-gray-200 rounded-2xl p-6 text-center text-gray-600">
             You don’t have access to any modules yet.
-            
           </div>
         ) : (
-          <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          // ✅ responsive auto-fit grid (as many columns as can adjust)
+          <motion.div
+            layout
+            className="grid gap-4 sm:gap-6 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
+          >
             <AnimatePresence initial={false}>
               {sortedDomains.map(({ id, name, icon: Icon, route }) => (
                 <motion.button
