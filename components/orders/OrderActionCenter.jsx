@@ -3,6 +3,7 @@
 import { toast } from "react-hot-toast";
 import { Mail, Send, PackageCheck, Truck, Copy, Loader2 } from "lucide-react";
 import { useEmailStore } from "@/store/emailStore";
+import { useShiprocketStore } from "@/store/ShipRocketStore";
 
 const ActionCard = ({ title, desc, icon: Icon, onClick, loading, disabled }) => (
   <button
@@ -39,10 +40,11 @@ export default function OrderActionCenter({
 }) {
   const orderId = order?._id;
 
-  const { busy, busyKey, sendConfirmationEmail, sendTrackingEmail } =
-    useEmailStore();
+  const { busy, busyKey, sendConfirmationEmail, sendTrackingEmail } = useEmailStore();
+  const { loading: srLoading, bookShiprocketIfMissing } = useShiprocketStore();
 
-  const actionLocked = busy;
+  const isConfirmed = Boolean(order?.isConfirmed); // ✅ only confirmed orders will be booked
+  const actionLocked = busy || srLoading;
 
   const finalTrackingId = String(trackingId || "").trim();
   const finalCourierName = String(courierName || "").trim();
@@ -50,9 +52,12 @@ export default function OrderActionCenter({
     String(trackingUrl || "").trim() ||
     String(order?.shipment?.shiprocket?.trackingUrl || "").trim();
 
-  // ✅ Tracking mail only when ALL 3 are present
   const canSendTrackingMail =
     Boolean(finalTrackingId) && Boolean(finalCourierName) && Boolean(finalTrackingLink);
+
+  const hasShiprocket =
+    Boolean(String(order?.shipment?.shiprocket?.awb || "").trim()) ||
+    Boolean(String(order?.shipment?.shiprocket?.shipmentId || "").trim());
 
   const copy = async (text, label = "Copied") => {
     try {
@@ -89,12 +94,29 @@ export default function OrderActionCenter({
     }
   };
 
+  const handleBookShiprocket = async () => {
+    if (!orderId || actionLocked) return;
+
+    if (!isConfirmed) {
+      return toast.error("Only confirmed orders will be booked ✅");
+    }
+
+    try {
+      const res = await bookShiprocketIfMissing(orderId);
+      if (res?.skipped) toast(res?.message || "Already booked. Skipped ✅", { icon: "ℹ️" });
+      else toast.success(res?.message || "Shiprocket booked ✅");
+      onRefresh?.();
+    } catch (e) {
+      toast.error(e?.message || "Shiprocket booking failed");
+    }
+  };
+
   return (
     <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-5">
       <div className="flex items-center justify-between gap-3 mb-4">
         <h2 className="text-base font-semibold">Action Center</h2>
 
-        {busy ? (
+        {(busy || srLoading) ? (
           <div className="flex items-center gap-2 text-xs font-semibold text-gray-600">
             <Loader2 size={14} className="animate-spin" />
             Working…
@@ -125,16 +147,19 @@ export default function OrderActionCenter({
           disabled={!orderId || actionLocked || !canSendTrackingMail}
         />
 
-        {/* ✅ Shiprocket booking disabled for now */}
         <ActionCard
           title="Book Courier (Shiprocket)"
-          desc="Temporarily disabled."
-          icon={Truck}
-          onClick={() =>
-            toast("Shiprocket booking disabled for now 🚧", { icon: "🚚" })
+          desc={
+            !isConfirmed
+              ? "Only confirmed orders will be booked."
+              : hasShiprocket
+              ? "Already booked (AWB/Shipment ID exists)."
+              : "Auto book only if Shiprocket details are missing."
           }
-          loading={false}
-          disabled={true}
+          icon={Truck}
+          onClick={handleBookShiprocket}
+          loading={srLoading}
+          disabled={!orderId || actionLocked || hasShiprocket || !isConfirmed}
         />
 
         <ActionCard
