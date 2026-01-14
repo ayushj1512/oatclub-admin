@@ -12,6 +12,7 @@ import {
   User,
   Receipt,
   BadgeIndianRupee,
+  ExternalLink,
 } from "lucide-react";
 
 import { toast } from "react-hot-toast";
@@ -20,6 +21,7 @@ import OrderPrintPanel from "@/components/orders/OrderPrintPanel";
 import OrderRmaMention from "../../../components/orders/OrderRma";
 const API = process.env.NEXT_PUBLIC_API_URL;
 
+const STORE_URL = "https://www.mirayfashions.com";
 
 const statusBadgeStyle = (status) => {
   switch (status) {
@@ -240,7 +242,9 @@ const updateTracking = async () => {
                   {items.map((it, idx) => {
                     const snap = it?.productSnapshot || {};
                     const v = it?.variant || {};
-
+const productUrl = it?.productId?._id
+  ? `${STORE_URL}/category/products/name/${it.productId._id}`
+  : "";
                     const size = it?.selectedSize || "-";
                     const color = it?.selectedColor || "-";
                     const sku = v?.sku || snap?.sku || "-";
@@ -256,9 +260,20 @@ const updateTracking = async () => {
                               className="w-12 h-12 rounded-xl object-cover border border-gray-100"
                             />
                             <div>
-                              <p className="font-semibold text-gray-900">
-                                {snap.title || "-"}
-                              </p>
+                             <p className="font-semibold text-gray-900">
+  {snap.title || "-"}
+</p>
+
+{productUrl && (
+  <a
+    href={productUrl}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="text-xs text-blue-600 font-semibold hover:underline inline-flex items-center gap-1 mt-0.5"
+  >
+    View Product <ExternalLink size={13} />
+  </a>
+)}
                               <p className="text-xs text-gray-500">
                                 Code: {snap.productCode || "-"} • SKU: {sku}
                               </p>

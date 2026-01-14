@@ -1,34 +1,40 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, ArrowRight, ExternalLink } from "lucide-react";
 import { useRouter } from "next/navigation";
 import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown";
+
+const BASE_URL = "https://mirayfashions.com";
 
 const money = (n) => {
   const x = Number(n);
   return Number.isFinite(x) ? x : 0;
 };
 
+const slugify = (s = "") =>
+  String(s)
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 const getPaymentBadge = (order) => {
-  if (order?.paymentMethod === "cod") {
+  if (order?.paymentMethod === "cod")
     return { label: "COD", cls: "bg-gray-100 text-gray-700" };
-  }
 
   if (order?.paymentMethod === "razorpay") {
-    if (order?.paymentStatus === "paid") {
+    if (order?.paymentStatus === "paid")
       return { label: "Paid ✅", cls: "bg-green-50 text-green-700" };
-    }
-    if (order?.paymentStatus === "pending") {
+    if (order?.paymentStatus === "pending")
       return { label: "Pending ⏳", cls: "bg-yellow-50 text-yellow-700" };
-    }
     return { label: "Failed ❌", cls: "bg-red-50 text-red-700" };
   }
 
   return { label: "Unknown", cls: "bg-gray-100 text-gray-700" };
 };
 
-/* ✅ NEW STATUS LIST (CONFIRMED INCLUDED) */
 const NEW_FULFILLMENT_STATUSES = [
   "confirmed",
   "processing",
@@ -40,7 +46,6 @@ const NEW_FULFILLMENT_STATUSES = [
   "cancelled",
 ];
 
-/* ✅ LABELS */
 const STATUS_LABELS = {
   confirmed: "Confirmed",
   processing: "Processing",
@@ -52,24 +57,26 @@ const STATUS_LABELS = {
   cancelled: "Cancelled",
 };
 
+/* ✅ FIXED & SAFE PRODUCT URL */
+const buildProductUrl = (item) => {
+  const productId = item?.productId?._id;
+  if (!productId) return "";
+  return `${BASE_URL}/category/products/name/${productId}`;
+};
+
 export default function OrderRow({ order, onUpdated }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  const pay = getPaymentBadge(order);
+  const pay = useMemo(() => getPaymentBadge(order), [order]);
   const items = Array.isArray(order?.items) ? order.items : [];
-
   const orderId = order?._id || order?.id;
 
-  // ✅ if backend is using isConfirmed flag, map to status = confirmed
   const effectiveStatus =
     order?.fulfillmentStatus || (order?.isConfirmed ? "confirmed" : "processing");
 
   return (
     <>
-      {/* ===========================
-          MAIN ROW
-      ============================ */}
       <tr className="hover:bg-black/[0.03] transition">
         {/* Order # */}
         <td className="py-4 px-5 font-semibold text-gray-900">
@@ -78,14 +85,13 @@ export default function OrderRow({ order, onUpdated }) {
               onClick={() => setOpen((v) => !v)}
               className="p-1.5 rounded-lg hover:bg-black/[0.05] transition"
               title="Expand"
+              type="button"
             >
               {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </button>
-
-            {order.orderNumber || "-"}
+            {order?.orderNumber || "-"}
           </div>
 
-          {/* ✅ Mini Item Preview */}
           <p className="text-xs text-gray-500 mt-1">
             {items?.[0]?.productSnapshot?.title
               ? `${items[0].productSnapshot.title}${
@@ -98,17 +104,16 @@ export default function OrderRow({ order, onUpdated }) {
         {/* Customer */}
         <td className="py-4 px-5">
           <div className="font-medium text-gray-900">
-            {order.customerId?.name ||
-              order.shippingAddressSnapshot?.fullName ||
+            {order?.customerId?.name ||
+              order?.shippingAddressSnapshot?.fullName ||
               "Unknown"}
           </div>
           <div className="text-xs text-gray-500">
-            {order.customerId?.phone ||
-              order.shippingAddressSnapshot?.phone ||
+            {order?.customerId?.phone ||
+              order?.shippingAddressSnapshot?.phone ||
               ""}
           </div>
 
-          {/* ✅ confirmed tag */}
           {order?.isConfirmed && (
             <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-100">
               Confirmed ✅
@@ -116,7 +121,7 @@ export default function OrderRow({ order, onUpdated }) {
           )}
         </td>
 
-        {/* Payment Badge */}
+        {/* Payment */}
         <td className="py-4 px-5">
           <span
             className={`px-3 py-1 rounded-full text-xs font-semibold ${pay.cls}`}
@@ -125,27 +130,25 @@ export default function OrderRow({ order, onUpdated }) {
           </span>
         </td>
 
-        {/* Fulfillment Dropdown */}
+        {/* Fulfillment */}
         <td className="py-4 px-5">
           <OrderStatusDropdown
             orderId={orderId}
-            currentStatus={effectiveStatus} // ✅ uses confirmed if needed
-            statuses={NEW_FULFILLMENT_STATUSES} // ✅ if dropdown accepts
-            labels={STATUS_LABELS} // ✅ if dropdown accepts
-            onUpdated={(updatedOrder) => {
-              if (onUpdated) onUpdated(updatedOrder);
-            }}
+            currentStatus={effectiveStatus}
+            statuses={NEW_FULFILLMENT_STATUSES}
+            labels={STATUS_LABELS}
+            onUpdated={(updatedOrder) => onUpdated?.(updatedOrder)}
           />
         </td>
 
         {/* Amount */}
         <td className="py-4 px-5 font-semibold text-gray-900">
-          ₹{money(order.finalPayable)}
+          ₹{money(order?.finalPayable)}
         </td>
 
         {/* Date */}
         <td className="py-4 px-5 text-gray-700">
-          {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ""}
+          {order?.createdAt ? new Date(order.createdAt).toLocaleDateString() : ""}
         </td>
 
         {/* Action */}
@@ -153,20 +156,18 @@ export default function OrderRow({ order, onUpdated }) {
           <button
             onClick={() => router.push(`/orders/${orderId}`)}
             className="inline-flex items-center gap-1 text-black font-semibold hover:opacity-80 transition"
+            type="button"
           >
             View <ArrowRight size={16} />
           </button>
         </td>
       </tr>
 
-      {/* ===========================
-          EXPANDED ROW
-      ============================ */}
       {open && (
         <tr className="bg-black/[0.015]">
           <td colSpan={7} className="px-5 pb-4">
-            <div className="mt-3 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 space-y-4">
-              {/* ✅ COMPACT ITEMS */}
+            <div className="mt-3 bg-white rounded-2xl   px-4 py-4 space-y-4">
+              {/* Items */}
               <div className="space-y-2">
                 <h3 className="font-semibold text-gray-900 text-sm">
                   Items ({items.length})
@@ -195,7 +196,7 @@ export default function OrderRow({ order, onUpdated }) {
                               .join(", ")
                           : "";
 
-                      // ✅ key fix - always unique
+                      const productUrl = buildProductUrl(it);
                       const itemKey = `${orderId}-item-${idx}`;
 
                       return (
@@ -212,9 +213,23 @@ export default function OrderRow({ order, onUpdated }) {
                             />
 
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">
-                                {snap.title || "-"}
-                              </p>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 truncate">
+                                  {snap.title || "-"}
+                                </p>
+
+                                {productUrl ? (
+                                  <a
+                                    href={productUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                                    title="Open product on mirayfashions.com"
+                                  >
+                                    Go to <ExternalLink size={14} />
+                                  </a>
+                                ) : null}
+                              </div>
 
                               <p className="text-xs text-gray-500 truncate">
                                 {variantText ||
@@ -234,10 +249,10 @@ export default function OrderRow({ order, onUpdated }) {
                           {/* right */}
                           <div className="text-right shrink-0">
                             <p className="text-sm font-semibold text-gray-900">
-                              ₹{money(it.price)} × {money(it.quantity)}
+                              ₹{money(it?.price)} × {money(it?.quantity)}
                             </p>
                             <p className="text-xs text-gray-500">
-                              ₹{money(it.subtotal)}
+                              ₹{money(it?.subtotal)}
                             </p>
                           </div>
                         </div>
@@ -247,23 +262,23 @@ export default function OrderRow({ order, onUpdated }) {
                 )}
               </div>
 
-              {/* ✅ COMPACT TOTALS */}
+              {/* Totals */}
               <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2 text-xs text-gray-700">
                 <span className="px-3 py-1 rounded-full bg-gray-100">
-                  Subtotal: <b>₹{money(order.subtotal)}</b>
+                  Subtotal: <b>₹{money(order?.subtotal)}</b>
                 </span>
                 <span className="px-3 py-1 rounded-full bg-gray-100">
-                  Discount: <b>₹{money(order.discount)}</b>
+                  Discount: <b>₹{money(order?.discount)}</b>
                 </span>
                 <span className="px-3 py-1 rounded-full bg-gray-100">
-                  Shipping: <b>₹{money(order.shippingFee)}</b>
+                  Shipping: <b>₹{money(order?.shippingFee)}</b>
                 </span>
                 <span className="px-3 py-1 rounded-full bg-gray-100">
-                  Tax: <b>₹{money(order.tax)}</b>
+                  Tax: <b>₹{money(order?.tax)}</b>
                 </span>
 
                 <span className="ml-auto px-4 py-1 rounded-full bg-black text-white font-semibold">
-                  Final: ₹{money(order.finalPayable)}
+                  Final: ₹{money(order?.finalPayable)}
                 </span>
               </div>
             </div>
