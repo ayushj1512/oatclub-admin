@@ -226,6 +226,12 @@ export const sidebarMenus = {
     { label: "Activity", href: "/superadmin/activity" },
   ],
 
+    collaboration: [
+    { label: "Collaboration Dashboard", href: "/collaboration" },
+    { label: "Add Collaboration", href: "/collaboration/add" },
+  ],
+
+
 wordpress: [{ label: "WP Orders", href: "/wordpress/orders" }],
 };
 
@@ -243,6 +249,7 @@ export const routeSidebarMap = [
   { prefix: "/analytics", key: "analytics" },
   { prefix: "/reels", key: "reels" },
   { prefix: "/marketing", key: "marketing" },
+  { prefix: "/collaboration", key: "collaboration" },
 
   { prefix: "/dashboard", key: "dashboard" },
   { prefix: "/designing", key: "designing" },

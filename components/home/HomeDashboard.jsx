@@ -27,6 +27,7 @@ import {
   Quote,
   Globe,
   RotateCcw,
+  Handshake, // ✅ added for Collaboration
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -72,6 +73,9 @@ const DOMAIN_LIST = [
   { id: "tickets", name: "Tickets / Issues", icon: Ticket, route: "/tickets" },
   { id: "coupons", name: "Coupons", icon: TicketPercent, route: "/coupons" },
   { id: "wordpress", name: "WordPress Orders", icon: Globe, route: "/wordpress" },
+
+  // ✅ Collaboration module added (routes you already have: /collaboration and /collaboration/add)
+  { id: "collaboration", name: "Influencer Collaborations", icon: Handshake, route: "/collaboration" },
 ];
 
 export default function HomeDashboard() {
@@ -226,12 +230,21 @@ export default function HomeDashboard() {
                   <div className="p-4 rounded-xl text-white shadow-md group-hover:scale-110 transition-transform bg-gradient-to-br from-blue-600 to-blue-500">
                     <Icon size={30} />
                   </div>
+
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 mt-4 group-hover:text-blue-700 text-center">
                     {name}
                   </h2>
+
                   {id === "rma" && (
                     <p className="text-xs text-gray-500 mt-1 text-center">
                       View Return / Exchange requests
+                    </p>
+                  )}
+
+                  {/* ✅ small hint for collaboration */}
+                  {id === "collaboration" && (
+                    <p className="text-xs text-gray-500 mt-1 text-center">
+                      Track ongoing influencer collaborations
                     </p>
                   )}
                 </motion.button>
