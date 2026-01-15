@@ -7,10 +7,10 @@ const API = process.env.NEXT_PUBLIC_API_URL || "";
 /* -------------------------------------------------------
    Helpers
 ------------------------------------------------------- */
-const uniq = (arr = []) => [...new Set(arr.map(String))];
+const uniq = (arr = []) => [...new Set((arr || []).map(String))];
 
 /* =======================================================
-   WISHLIST STORE
+   WISHLIST STORE (Admin + User)
 ======================================================= */
 
 export const useWishlistStore = create((set, get) => ({
@@ -18,7 +18,14 @@ export const useWishlistStore = create((set, get) => ({
   firebaseUID: "",
   customerId: null,
 
+  // user wishlist (single)
   productIds: [],
+
+  // admin: all wishlists
+  wishlists: [], // [{ _id, firebaseUID, customerId, productIds, createdAt, updatedAt }, ...]
+  total: 0,
+  page: 1,
+  limit: 20,
 
   loading: false,
   error: "",
@@ -34,11 +41,17 @@ export const useWishlistStore = create((set, get) => ({
       firebaseUID: "",
       customerId: null,
       productIds: [],
+      wishlists: [],
+      total: 0,
+      page: 1,
+      limit: 20,
       loading: false,
       error: "",
     }),
 
-  // ---------------- FETCH ----------------
+  // =======================================================
+  // USER: FETCH SINGLE WISHLIST
+  // =======================================================
   fetchWishlist: async (firebaseUID) => {
     const uid = String(firebaseUID || "");
     if (!uid) return;
@@ -70,7 +83,49 @@ export const useWishlistStore = create((set, get) => ({
     }
   },
 
-  // ---------------- ADD ----------------
+  // =======================================================
+  // ADMIN: FETCH ALL WISHLISTS
+  // GET /api/wishlist?page=1&limit=20
+  // =======================================================
+  fetchAllWishlists: async ({ page = 1, limit = 20 } = {}) => {
+    const p = Math.max(parseInt(page, 10) || 1, 1);
+    const l = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 200);
+
+    set({ loading: true, error: "", page: p, limit: l });
+
+    try {
+      const res = await fetch(`${API}/api/wishlist?page=${p}&limit=${l}`, {
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data?.success === false) {
+        throw new Error(data?.message || "Failed to fetch all wishlists");
+      }
+
+      const list = Array.isArray(data?.wishlists) ? data.wishlists : [];
+
+      set({
+        wishlists: list.map((w) => ({
+          ...w,
+          productIds: uniq(w?.productIds || []),
+        })),
+        total: Number(data?.total || 0),
+        page: Number(data?.page || p),
+        limit: Number(data?.limit || l),
+      });
+    } catch (e) {
+      console.error("❌ fetchAllWishlists:", e);
+      set({ error: e.message || "Failed to load all wishlists" });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  // =======================================================
+  // USER: ADD
+  // =======================================================
   addToWishlist: async ({ productId, customerId }) => {
     const { firebaseUID, productIds } = get();
     if (!firebaseUID || !productId) return;
@@ -81,14 +136,11 @@ export const useWishlistStore = create((set, get) => ({
     });
 
     try {
-      const res = await fetch(
-        `${API}/api/wishlist/firebase/${firebaseUID}/add`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ productId, customerId }),
-        }
-      );
+      const res = await fetch(`${API}/api/wishlist/firebase/${firebaseUID}/add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, customerId }),
+      });
 
       const data = await res.json();
 
@@ -109,7 +161,9 @@ export const useWishlistStore = create((set, get) => ({
     }
   },
 
-  // ---------------- REMOVE ----------------
+  // =======================================================
+  // USER: REMOVE
+  // =======================================================
   removeFromWishlist: async (productId) => {
     const { firebaseUID, productIds } = get();
     if (!firebaseUID || !productId) return;
@@ -147,7 +201,9 @@ export const useWishlistStore = create((set, get) => ({
     }
   },
 
-  // ---------------- CLEAR ----------------
+  // =======================================================
+  // USER: CLEAR
+  // =======================================================
   clearWishlist: async () => {
     const { firebaseUID } = get();
     if (!firebaseUID) return;
@@ -155,10 +211,9 @@ export const useWishlistStore = create((set, get) => ({
     set({ loading: true, error: "" });
 
     try {
-      const res = await fetch(
-        `${API}/api/wishlist/firebase/${firebaseUID}`,
-        { method: "DELETE" }
-      );
+      const res = await fetch(`${API}/api/wishlist/firebase/${firebaseUID}`, {
+        method: "DELETE",
+      });
 
       const data = await res.json();
 
@@ -175,9 +230,18 @@ export const useWishlistStore = create((set, get) => ({
     }
   },
 
-  // ---------------- SELECTORS ----------------
+  // =======================================================
+  // SELECTORS
+  // =======================================================
   isWishlisted: (productId) => {
     const { productIds } = get();
     return productIds.includes(String(productId));
+  },
+
+  // admin helper selector: get wishlist by firebaseUID from wishlists[]
+  getWishlistForUser: (firebaseUID) => {
+    const uid = String(firebaseUID || "");
+    const { wishlists } = get();
+    return wishlists.find((w) => String(w.firebaseUID) === uid) || null;
   },
 }));

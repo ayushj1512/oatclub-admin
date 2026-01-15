@@ -12,14 +12,6 @@ const money = (n) => {
   return Number.isFinite(x) ? x : 0;
 };
 
-const slugify = (s = "") =>
-  String(s)
-    .toLowerCase()
-    .trim()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
 const getPaymentBadge = (order) => {
   if (order?.paymentMethod === "cod")
     return { label: "COD", cls: "bg-gray-100 text-gray-700" };
@@ -57,11 +49,28 @@ const STATUS_LABELS = {
   cancelled: "Cancelled",
 };
 
-/* ✅ FIXED & SAFE PRODUCT URL */
 const buildProductUrl = (item) => {
   const productId = item?.productId?._id;
-  if (!productId) return "";
-  return `${BASE_URL}/category/products/name/${productId}`;
+  return productId ? `${BASE_URL}/category/products/name/${productId}` : "";
+};
+
+const formatOrderDateTime = (value) => {
+  if (!value) return { time: "", date: "" };
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return { time: "", date: "" };
+
+  return {
+    time: d.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }),
+    date: d.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    }),
+  };
 };
 
 export default function OrderRow({ order, onUpdated }) {
@@ -74,6 +83,8 @@ export default function OrderRow({ order, onUpdated }) {
 
   const effectiveStatus =
     order?.fulfillmentStatus || (order?.isConfirmed ? "confirmed" : "processing");
+
+  const dt = useMemo(() => formatOrderDateTime(order?.createdAt), [order?.createdAt]);
 
   return (
     <>
@@ -109,23 +120,19 @@ export default function OrderRow({ order, onUpdated }) {
               "Unknown"}
           </div>
           <div className="text-xs text-gray-500">
-            {order?.customerId?.phone ||
-              order?.shippingAddressSnapshot?.phone ||
-              ""}
+            {order?.customerId?.phone || order?.shippingAddressSnapshot?.phone || ""}
           </div>
 
-          {order?.isConfirmed && (
+          {order?.isConfirmed ? (
             <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-100">
               Confirmed ✅
             </span>
-          )}
+          ) : null}
         </td>
 
         {/* Payment */}
         <td className="py-4 px-5">
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold ${pay.cls}`}
-          >
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${pay.cls}`}>
             {pay.label}
           </span>
         </td>
@@ -146,9 +153,12 @@ export default function OrderRow({ order, onUpdated }) {
           ₹{money(order?.finalPayable)}
         </td>
 
-        {/* Date */}
+        {/* Time (top) + Date (bottom) ✅ minimal */}
         <td className="py-4 px-5 text-gray-700">
-          {order?.createdAt ? new Date(order.createdAt).toLocaleDateString() : ""}
+          <div className="leading-tight">
+            <div className="text-sm font-medium text-gray-900">{dt.time}</div>
+            <div className="text-[11px] text-gray-500">{dt.date}</div>
+          </div>
         </td>
 
         {/* Action */}
@@ -163,10 +173,10 @@ export default function OrderRow({ order, onUpdated }) {
         </td>
       </tr>
 
-      {open && (
+      {open ? (
         <tr className="bg-black/[0.015]">
           <td colSpan={7} className="px-5 pb-4">
-            <div className="mt-3 bg-white rounded-2xl   px-4 py-4 space-y-4">
+            <div className="mt-3 bg-white rounded-2xl px-4 py-4 space-y-4">
               {/* Items */}
               <div className="space-y-2">
                 <h3 className="font-semibold text-gray-900 text-sm">
@@ -180,7 +190,6 @@ export default function OrderRow({ order, onUpdated }) {
                     {items.map((it, idx) => {
                       const snap = it?.productSnapshot || {};
                       const v = it?.variant || {};
-
                       const size = it?.selectedSize || "";
                       const color = it?.selectedColor || "";
 
@@ -210,6 +219,7 @@ export default function OrderRow({ order, onUpdated }) {
                               src={snap.thumbnail || "/placeholder.png"}
                               className="w-10 h-10 rounded-xl object-cover border border-gray-100"
                               alt={snap.title || "Product"}
+                              loading="lazy"
                             />
 
                             <div className="min-w-0">
@@ -233,9 +243,7 @@ export default function OrderRow({ order, onUpdated }) {
 
                               <p className="text-xs text-gray-500 truncate">
                                 {variantText ||
-                                  (v?.sku || snap?.sku
-                                    ? `SKU: ${v?.sku || snap?.sku}`
-                                    : "")}
+                                  (v?.sku || snap?.sku ? `SKU: ${v?.sku || snap?.sku}` : "")}
                               </p>
 
                               {v?.variantId ? (
@@ -251,9 +259,7 @@ export default function OrderRow({ order, onUpdated }) {
                             <p className="text-sm font-semibold text-gray-900">
                               ₹{money(it?.price)} × {money(it?.quantity)}
                             </p>
-                            <p className="text-xs text-gray-500">
-                              ₹{money(it?.subtotal)}
-                            </p>
+                            <p className="text-xs text-gray-500">₹{money(it?.subtotal)}</p>
                           </div>
                         </div>
                       );
@@ -284,7 +290,7 @@ export default function OrderRow({ order, onUpdated }) {
             </div>
           </td>
         </tr>
-      )}
+      ) : null}
     </>
   );
 }
