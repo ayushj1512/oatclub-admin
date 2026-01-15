@@ -14,7 +14,9 @@ export default function AddCollectionForm() {
   const { products, fetchProducts, loading: productLoading } =
     useAdminProductStore();
 
-  const { createCollection, saving } = useAdminCollectionStore();
+  // ✅ include syncCollectionOnProducts
+  const { createCollection, syncCollectionOnProducts, saving } =
+    useAdminCollectionStore();
 
   const [query, setQuery] = useState("");
 
@@ -35,9 +37,7 @@ export default function AddCollectionForm() {
   const filteredProducts = useMemo(() => {
     if (!query.trim()) return products;
     const q = query.toLowerCase();
-    return products.filter((p) =>
-      (p?.title || "").toLowerCase().includes(q)
-    );
+    return products.filter((p) => (p?.title || "").toLowerCase().includes(q));
   }, [products, query]);
 
   /* ---------------- handlers ---------------- */
@@ -53,7 +53,8 @@ export default function AddCollectionForm() {
   const submit = async () => {
     if (!form.name.trim()) return alert("Collection name is required");
 
-    await createCollection({
+    // ✅ 1) create collection
+    const created = await createCollection({
       name: toStr(form.name),
       description: toStr(form.description),
       type: form.type,
@@ -61,13 +62,21 @@ export default function AddCollectionForm() {
       products: form.products,
     });
 
+    // ✅ 2) sync into Product.collections (multi-collection safe)
+    if (created?._id && Array.isArray(form.products) && form.products.length) {
+      await syncCollectionOnProducts({
+        collectionId: created._id,
+        addIds: form.products,
+        removeIds: [],
+      });
+    }
+
     router.push("/products/collections");
   };
 
   return (
     <section className="min-h-screen bg-[#F6F7FB] px-4 py-7 md:px-10 md:py-10">
       <div className="mx-auto max-w-4xl space-y-7">
-
         {/* HEADER */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -95,18 +104,14 @@ export default function AddCollectionForm() {
             <h2 className="text-sm font-semibold text-gray-900">
               Basic details
             </h2>
-            <p className="text-xs text-gray-500">
-              Name, type and visibility
-            </p>
+            <p className="text-xs text-gray-500">Name, type and visibility</p>
           </div>
 
           <div className="grid gap-4">
             <input
               placeholder="Collection name *"
               value={form.name}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, name: e.target.value }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
               className="w-full rounded-xl bg-gray-50 ring-1 ring-gray-200 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-600 outline-none transition"
             />
 
@@ -139,10 +144,7 @@ export default function AddCollectionForm() {
                   type="checkbox"
                   checked={form.isActive}
                   onChange={(e) =>
-                    setForm((p) => ({
-                      ...p,
-                      isActive: e.target.checked,
-                    }))
+                    setForm((p) => ({ ...p, isActive: e.target.checked }))
                   }
                   className="accent-blue-600"
                 />
@@ -166,7 +168,10 @@ export default function AddCollectionForm() {
 
             {/* search */}
             <div className="relative w-64 max-w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={16}
+              />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -187,10 +192,7 @@ export default function AddCollectionForm() {
 
             {filteredProducts.map((p) => {
               const img =
-                p?.images?.[0] ||
-                p?.image ||
-                p?.thumbnail ||
-                "/placeholder.png";
+                p?.images?.[0] || p?.image || p?.thumbnail || "/placeholder.png";
 
               const selected = form.products.includes(p._id);
 
@@ -250,7 +252,8 @@ export default function AddCollectionForm() {
           </div>
 
           <div className="text-xs text-gray-500">
-            Selected <b className="text-gray-900">{form.products.length}</b> products
+            Selected{" "}
+            <b className="text-gray-900">{form.products.length}</b> products
           </div>
         </div>
 

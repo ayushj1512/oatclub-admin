@@ -228,4 +228,53 @@ export const useAdminCollectionStore = create((set, get) => ({
       set({ saving: false });
     }
   },
+
+    /* ============================================================
+     ✅ SYNC COLLECTION ↔ PRODUCT.COLLECTIONS (bulk)
+     - multi-collection safe (uses backend $addToSet / $pull)
+     - addIds: products that should include this collection
+     - removeIds: products that should remove this collection
+  ============================================================ */
+  syncCollectionOnProducts: async ({ collectionId, addIds = [], removeIds = [] }) => {
+    try {
+      set({ saving: true, error: null });
+
+      if (!collectionId) {
+        throw new Error("collectionId is required");
+      }
+
+      const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+      const PRODUCT_API = `${BASE_URL}/api/products`;
+
+      const res = await fetch(`${PRODUCT_API}/bulk/collections/sync`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          collectionId,
+          addIds,
+          removeIds,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to sync collection on products");
+      }
+
+      // Optional: refresh collections so UI shows correct product counts if your API returns updated counts
+      // await get().fetchCollections();
+
+      toast.success("Products synced with collection ✅");
+      return data;
+    } catch (e) {
+      console.error("❌ syncCollectionOnProducts error:", e);
+      toast.error(e.message);
+      set({ error: e.message });
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
 }));
