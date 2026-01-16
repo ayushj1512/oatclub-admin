@@ -33,6 +33,18 @@ const normalizeProductPayload = (payload) => {
     out.patternNumber = String(out.patternNumber || "").trim();
   }
 
+  // ✅ HSN Code hygiene: trim + digits-only (allow empty)
+  // Note: backend will validate too; this prevents avoidable 400s
+  if (out.hsnCode !== undefined) {
+    const hsn = String(out.hsnCode ?? "").trim();
+
+    // if someone enters spaces/dashes etc, keep digits only
+    const digitsOnly = hsn.replace(/[^\d]/g, "");
+
+    // preserve intentional clearing
+    out.hsnCode = hsn === "" ? "" : digitsOnly;
+  }
+
   // allow fabrics + avgFabricConsumption to pass (sometimes UI may send as stringified JSON)
   if (typeof out.fabrics === "string") {
     try {
@@ -52,6 +64,7 @@ const normalizeProductPayload = (payload) => {
 
   return out;
 };
+
 
 export const useAdminProductStore = create((set, get) => ({
   /* ============================================================

@@ -247,8 +247,12 @@ export const useOrderStore = create((set, get) => ({
   /* ============================================================
      CANCEL ORDER
      POST /api/orders/:id/cancel
+     ✅ Updated:
+     - default reason -> cancelled_by_admin
+     - also sends cancelledBy: "admin" (safe/future-proof)
+     - updates local state with adminRemarks
   ============================================================ */
-  cancelOrder: async (orderId, reason) => {
+  cancelOrder: async (orderId, reason = "cancelled_by_admin") => {
     if (!orderId) return false;
 
     get()._start();
@@ -256,7 +260,10 @@ export const useOrderStore = create((set, get) => ({
       const res = await fetch(`${API}/api/orders/${orderId}/cancel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({
+          reason: reason || "cancelled_by_admin",
+          cancelledBy: "admin",
+        }),
       });
 
       const data = await res.json();
@@ -269,6 +276,7 @@ export const useOrderStore = create((set, get) => ({
         const updated = {
           ...current,
           fulfillmentStatus: "cancelled",
+          adminRemarks: "cancelled_by_admin",
           shipment: {
             ...(current.shipment || {}),
             status: "cancelled",
@@ -291,33 +299,32 @@ export const useOrderStore = create((set, get) => ({
    UPDATE ADDRESS (admin)
    PATCH /api/orders/:id/address
 ============================================================ */
-updateOrderAddress: async (orderId, payload) => {
-  if (!orderId) return null;
+  updateOrderAddress: async (orderId, payload) => {
+    if (!orderId) return null;
 
-  get()._start();
-  try {
-    const res = await fetch(`${API}/api/orders/${orderId}/address`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload), // { type: "shipping"|"billing", address: {...} }
-    });
+    get()._start();
+    try {
+      const res = await fetch(`${API}/api/orders/${orderId}/address`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload), // { type: "shipping"|"billing", address: {...} }
+      });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.message);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message);
 
-    const order = get()._normalizeOrder(data);
+      const order = get()._normalizeOrder(data);
 
-    set({ order });
-    get()._syncOrderInList(order);
+      set({ order });
+      get()._syncOrderInList(order);
 
-    get()._success();
-    return order;
-  } catch (e) {
-    get()._error(e);
-    throw e;
-  }
-},
-
+      get()._success();
+      return order;
+    } catch (e) {
+      get()._error(e);
+      throw e;
+    }
+  },
 
   /* ============================================================
      RESET / CLEAR

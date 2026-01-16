@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -20,6 +20,19 @@ const toNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+// ✅ show HSN only for apparels
+const isApparelCategory = (categories) => {
+  const cats = Array.isArray(categories)
+    ? categories
+    : typeof categories === "string"
+    ? categories.split(",")
+    : [];
+
+  return cats
+    .map((c) => String(c || "").trim().toLowerCase())
+    .some((c) => ["apparel", "apparels", "clothing", "garments"].includes(c));
+};
+
 export default function AddProductPage() {
   const router = useRouter();
 
@@ -33,6 +46,9 @@ export default function AddProductPage() {
     price: "",
     compareAtPrice: "",
     categories: [],
+
+    /* ✅ HSN (Apparels) */
+    hsnCode: "62105000",
 
     /* CONTENT */
     shortDescription: "",
@@ -65,6 +81,11 @@ export default function AddProductPage() {
     isDraft: false,
   });
 
+  const showHsnCode = useMemo(
+    () => isApparelCategory(form.categories),
+    [form.categories]
+  );
+
   /* ---------------- LOAD MASTER DATA ---------------- */
   useEffect(() => {
     fetch(`${API}/api/attributes`, { cache: "no-store" })
@@ -90,6 +111,19 @@ export default function AddProductPage() {
       return;
     }
 
+    // ✅ HSN validation only for apparels
+    if (showHsnCode) {
+      const hsn = String(form.hsnCode ?? "").trim();
+      if (!hsn) {
+        alert("HSN Code is required for Apparels");
+        return;
+      }
+      if (!/^\d+$/.test(hsn)) {
+        alert("HSN Code must be numeric only");
+        return;
+      }
+    }
+
     setSaving(true);
 
     const payload = {
@@ -99,6 +133,9 @@ export default function AddProductPage() {
         form.compareAtPrice === "" ? null : toNum(form.compareAtPrice),
 
       categories: form.categories,
+
+      // ✅ include HSN only when apparels
+      ...(showHsnCode ? { hsnCode: String(form.hsnCode ?? "").trim() } : {}),
 
       shortDescription: form.shortDescription,
       description: form.description,
@@ -182,9 +219,7 @@ export default function AddProductPage() {
           <input
             placeholder="Product title"
             value={form.title}
-            onChange={(e) =>
-              setForm((p) => ({ ...p, title: e.target.value }))
-            }
+            onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
             className="input"
           />
 
@@ -192,9 +227,7 @@ export default function AddProductPage() {
             <input
               placeholder="Price"
               value={form.price}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, price: e.target.value }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
               className="input"
             />
             <input
@@ -206,6 +239,41 @@ export default function AddProductPage() {
               className="input"
             />
           </div>
+
+          {/* ✅ HSN Code visible here too (display) */}
+          <div className="bg-white rounded-xl p-6 shadow space-y-3">
+  <div>
+    <h2 className="font-semibold">
+      HSN Code {showHsnCode ? "(Apparels)" : ""}
+    </h2>
+    <p className="text-sm text-gray-500">
+      Default HSN: <span className="font-medium">62105000</span>
+    </p>
+  </div>
+
+  <input
+    placeholder="HSN Code (numeric only)"
+    inputMode="numeric"
+    value={form.hsnCode}
+    onChange={(e) => {
+      const digitsOnly = String(e.target.value || "").replace(/[^\d]/g, "");
+      setForm((p) => ({ ...p, hsnCode: digitsOnly }));
+    }}
+    className="input"
+  />
+
+  {!showHsnCode ? (
+    <p className="text-xs text-gray-500">
+      (Note: This is typically used for apparels. If your category naming is different,
+      update the apparel detection keywords.)
+    </p>
+  ) : (
+    <p className="text-xs text-gray-500">
+      *Only digits allowed.
+    </p>
+  )}
+</div>
+
         </div>
 
         {/* CATEGORIES */}
@@ -216,6 +284,28 @@ export default function AddProductPage() {
             onChange={(next) => setForm((p) => ({ ...p, categories: next }))}
           />
         </div>
+
+        {/* ✅ HSN CODE (Apparels only) */}
+      {showHsnCode && (
+  <div className="bg-white p-6">
+    <div>
+      <h2 className="font-semibold">HSN Code (Apparels)</h2>
+      <p className="text-sm text-gray-500">
+        Default HSN: <span className="font-medium">62105000</span>
+      </p>
+    </div>
+
+    {/* ✅ display only (non-editable) */}
+    <div className="mt-3 w-full rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-800">
+      {form.hsnCode || "62105000"}
+    </div>
+
+    <p className="mt-2 text-xs text-gray-500">
+      *This is shown only when category is Apparel/Apparels/Clothing/Garments.
+    </p>
+  </div>
+)}
+
 
         {/* ✅ IMAGES (FIXED) */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">

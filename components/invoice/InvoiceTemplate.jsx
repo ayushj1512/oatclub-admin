@@ -47,13 +47,29 @@ export default function InvoiceTemplate({ data }) {
     0
   );
 
+  const getHsn = (it) =>
+    String(
+      it?.hsnCode ||
+        it?.productSnapshot?.hsnCode ||
+        it?.product?.hsnCode ||
+        it?.productId?.hsnCode ||
+        "62105000"
+    ).trim() || "62105000";
+
   return (
-    <div id="invoice-root" className="p-10 text-sm bg-white text-black max-w-4xl mx-auto">
+    <div
+      id="invoice-root"
+      className="p-10 text-sm bg-white text-black max-w-4xl mx-auto"
+    >
       {/* ================= LETTERHEAD ================= */}
       <div className="grid grid-cols-2 gap-6 items-start">
         <div className="pr-4">
           {seller?.logo && (
-            <img src={seller.logo} alt={seller.name} className="h-16 mb-2 object-contain" />
+            <img
+              src={seller.logo}
+              alt={seller.name}
+              className="h-16 mb-2 object-contain"
+            />
           )}
 
           <p className="font-semibold mb-1">Dispatch & Return Address</p>
@@ -83,10 +99,13 @@ export default function InvoiceTemplate({ data }) {
           <div className=" p-3 rounded mb-3">
             <p className="font-bold text-lg tracking-wide mb-1">TAX INVOICE</p>
             <p className="text-xs">
-              Invoice No: <span className="font-medium">{invoiceNumber || "-"}</span>
+              Invoice No:{" "}
+              <span className="font-medium">{invoiceNumber || "-"}</span>
             </p>
             <p className="text-xs">Order No: #{orderNumber}</p>
-            <p className="text-xs">Invoice Date: {FORMATTERS.date(orderDate)}</p>
+            <p className="text-xs">
+              Invoice Date: {FORMATTERS.date(orderDate)}
+            </p>
           </div>
 
           {(courier?.awb || courier?.name) && (
@@ -109,52 +128,55 @@ export default function InvoiceTemplate({ data }) {
 
       <div className="border-b mt-2 mb-2" />
 
-<div className="grid grid-cols-2 gap-8 mb-4 text-[11px] leading-snug">
-  {/* BILL TO */}
-  <div>
-    <p className="font-semibold mb-[2px] text-xs">Bill To</p>
-    <p>{billing.fullName || "-"}</p>
-    <p>{billing.line1 || "-"}</p>
-    {billing.line2 ? <p>{billing.line2}</p> : null}
-    <p>
-      {(billing.city || "-")} – {(billing.pincode || "-")}
-    </p>
-    {billing.state ? <p>{billing.state}</p> : null}
-    {billing.phone ? <p>Phone: {billing.phone}</p> : null}
-    {billing.email ? <p>Email: {billing.email}</p> : null}
-  </div>
+      <div className="grid grid-cols-2 gap-8 mb-4 text-[11px] leading-snug">
+        {/* BILL TO */}
+        <div>
+          <p className="font-semibold mb-[2px] text-xs">Bill To</p>
+          <p>{billing.fullName || "-"}</p>
+          <p>{billing.line1 || "-"}</p>
+          {billing.line2 ? <p>{billing.line2}</p> : null}
+          <p>
+            {(billing.city || "-")} – {(billing.pincode || "-")}
+          </p>
+          {billing.state ? <p>{billing.state}</p> : null}
+          {billing.phone ? <p>Phone: {billing.phone}</p> : null}
+          {billing.email ? <p>Email: {billing.email}</p> : null}
+        </div>
 
-  {/* SHIP TO (fallback to billing if missing) */}
-  <div>
-    <p className="font-semibold mb-[2px] text-xs">Ship To</p>
+        {/* SHIP TO */}
+        <div>
+          <p className="font-semibold mb-[2px] text-xs">Ship To</p>
 
-    <p>{shipping.fullName || billing.fullName || "-"}</p>
-    <p>{shipping.line1 || billing.line1 || "-"}</p>
-    {(shipping.line2 || billing.line2) ? <p>{shipping.line2 || billing.line2}</p> : null}
+          <p>{shipping.fullName || billing.fullName || "-"}</p>
+          <p>{shipping.line1 || billing.line1 || "-"}</p>
+          {(shipping.line2 || billing.line2) ? (
+            <p>{shipping.line2 || billing.line2}</p>
+          ) : null}
 
-    <p>
-      {(shipping.city || billing.city || "-")} – {(shipping.pincode || billing.pincode || "-")}
-    </p>
+          <p>
+            {(shipping.city || billing.city || "-")} –{" "}
+            {(shipping.pincode || billing.pincode || "-")}
+          </p>
 
-    {(shipping.state || billing.state) ? <p>{shipping.state || billing.state}</p> : null}
-  </div>
-</div>
+          {(shipping.state || billing.state) ? (
+            <p>{shipping.state || billing.state}</p>
+          ) : null}
+        </div>
+      </div>
 
-
-    <p className="text-[11px] mb-4">
-  <span className="font-semibold">Payment Mode:</span> {payment?.title || "-"}
-  {orderDiscount > 0 && (
-    <>
-      {"  |  "}
-      <span className="font-semibold">
-        Discount {totals.couponCode ? `(${totals.couponCode})` : ""}
-        :
-      </span>{" "}
-      -{FORMATTERS.currency(orderDiscount)}
-    </>
-  )}
-</p>
-
+      <p className="text-[11px] mb-4">
+        <span className="font-semibold">Payment Mode:</span>{" "}
+        {payment?.title || "-"}
+        {orderDiscount > 0 && (
+          <>
+            {"  |  "}
+            <span className="font-semibold">
+              Discount {totals.couponCode ? `(${totals.couponCode})` : ""}:
+            </span>{" "}
+            -{FORMATTERS.currency(orderDiscount)}
+          </>
+        )}
+      </p>
 
       {/* ================= ITEMS ================= */}
       <table className="w-full text-[11px] mb-5 border-collapse">
@@ -179,7 +201,6 @@ export default function InvoiceTemplate({ data }) {
             const qty = Number(it.qty || 0);
             const sub = +(unit * qty).toFixed(2);
 
-            // item-level disc (if present), else allocate order-level disc
             const itemDisc =
               it.discountType === "PERCENT"
                 ? +(sub * (Number(it.discountPct || 0) / 100)).toFixed(2)
@@ -203,6 +224,7 @@ export default function InvoiceTemplate({ data }) {
                 : +((orderDiscount * sub) / baseTotal).toFixed(2);
 
             const total = +(sub - allocatedDisc).toFixed(2);
+            const hsn = getHsn(it);
 
             return (
               <tr key={`${it.sr ?? idx + 1}-main`} className="border-b align-top">
@@ -215,18 +237,24 @@ export default function InvoiceTemplate({ data }) {
                 </td>
 
                 <td className="py-1 whitespace-nowrap">{size}</td>
-                <td className="py-1 whitespace-nowrap">62105000</td>
+                <td className="py-1 whitespace-nowrap">{hsn}</td>
                 <td className="py-1 text-center">{qty}</td>
 
-                <td className="py-1 text-right whitespace-nowrap">{FORMATTERS.currency(unit)}</td>
+                <td className="py-1 text-right whitespace-nowrap">
+                  {FORMATTERS.currency(unit)}
+                </td>
 
                 <td className="py-1 text-right whitespace-nowrap">
-                  {allocatedDisc > 0 ? `-${FORMATTERS.currency(allocatedDisc)}` : "-"}
+                  {allocatedDisc > 0
+                    ? `-${FORMATTERS.currency(allocatedDisc)}`
+                    : "-"}
                 </td>
 
                 <td className="py-1 text-right whitespace-nowrap">{it.gstRate}%</td>
 
-                <td className="py-1 text-right whitespace-nowrap">{FORMATTERS.currency(total)}</td>
+                <td className="py-1 text-right whitespace-nowrap">
+                  {FORMATTERS.currency(total)}
+                </td>
               </tr>
             );
           })}
@@ -256,13 +284,6 @@ export default function InvoiceTemplate({ data }) {
             <span>{FORMATTERS.currency(totalTax)}</span>
           </div>
 
-          {/* {orderDiscount > 0 && (
-            <div className="flex justify-between">
-              <span>Discount {totals.couponCode ? `(${totals.couponCode})` : ""}</span>
-              <span>-{FORMATTERS.currency(orderDiscount)}</span>
-            </div>
-          )} */}
-
           <div className="flex justify-between font-semibold border-t pt-1 mt-1">
             <span>Grand Total</span>
             <span>{FORMATTERS.currency(payable)}</span>
@@ -285,7 +306,8 @@ export default function InvoiceTemplate({ data }) {
       {/* ================= FOOTER ================= */}
       <div className="mt-6 pt-2 border-t text-center text-[10px] leading-snug text-gray-700 print-footer">
         <p className="mt-[2px]">
-          <span className="font-semibold">Registered Address:</span> {seller.address}
+          <span className="font-semibold">Registered Address:</span>{" "}
+          {seller.address}
         </p>
 
         <p className="mt-[2px]">

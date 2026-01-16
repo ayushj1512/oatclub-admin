@@ -25,6 +25,15 @@ const toNum = (v) => {
 const safeImages = (p) =>
   Array.isArray(p?.images) ? p.images.filter(Boolean) : [];
 
+// ✅ show HSN only for apparels (display-only here)
+const isApparelCategory = (categories) => {
+  const cats = Array.isArray(categories) ? categories : [];
+  return cats
+    .map((c) => String(c || "").trim().toLowerCase())
+    .some((c) => ["apparel", "apparels", "clothing", "garments"].includes(c));
+};
+
+
 export default function ProductDetailsPage({ params }) {
   const router = useRouter();
 
@@ -465,84 +474,92 @@ export default function ProductDetailsPage({ params }) {
         </div>
 
         {/* PRICING */}
-        <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <h2 className="text-lg md:text-xl font-semibold">Pricing</h2>
+<div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
+  <div className="flex items-center justify-between flex-wrap gap-4">
+    <h2 className="text-lg md:text-xl font-semibold">Pricing</h2>
 
-            {!editing ? (
-              <div className="text-xs text-gray-500">
-                productCode:{" "}
-                <span className="font-mono">
-                  {product?.productCode || "-"}
-                </span>
-              </div>
-            ) : null}
-          </div>
+    {!editing ? (
+      <div className="text-xs text-gray-500">
+        productCode:{" "}
+        <span className="font-mono">{product?.productCode || "-"}</span>
+      </div>
+    ) : null}
+  </div>
 
-          {editing ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input
-                name="price"
-                value={form.price}
-                onChange={handleChange}
-                className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
-                placeholder="Price"
-              />
-              <input
-                name="compareAtPrice"
-                value={form.compareAtPrice}
-                onChange={handleChange}
-                className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
-                placeholder="Compare at price"
-              />
-              <input
-                name="stock"
-                value={form.stock}
-                onChange={handleChange}
-                className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
-                placeholder="Stock (simple products)"
-              />
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <p className="text-base">
-                <b>Price:</b> ₹{product.price}
-              </p>
-              {product.compareAtPrice != null ? (
-                <p className="text-sm text-gray-600">
-                  <b>Original:</b> ₹{product.compareAtPrice}
-                </p>
-              ) : null}
-              <p className="text-sm text-gray-700">
-                <b>Stock:</b> {product.stock ?? 0} • <b>In stock:</b>{" "}
-                {String(!!product.isInStock)}
-              </p>
-            </div>
-          )}
+  {editing ? (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <input
+        name="price"
+        value={form.price}
+        onChange={handleChange}
+        className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
+        placeholder="Price"
+      />
+      <input
+        name="compareAtPrice"
+        value={form.compareAtPrice}
+        onChange={handleChange}
+        className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
+        placeholder="Compare at price"
+      />
+      <input
+        name="stock"
+        value={form.stock}
+        onChange={handleChange}
+        className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
+        placeholder="Stock (simple products)"
+      />
+    </div>
+  ) : (
+    <div className="space-y-1">
+      <p className="text-base">
+        <b>Price:</b> ₹{product.price}
+      </p>
 
-          {editing ? (
-            <div className="flex items-center gap-6 flex-wrap text-sm">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  name="isInStock"
-                  checked={!!form.isInStock}
-                  onChange={handleChange}
-                />
-                In Stock
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  name="isActive"
-                  checked={!!form.isActive}
-                  onChange={handleChange}
-                />
-                Active (visible)
-              </label>
-            </div>
-          ) : null}
-        </div>
+      {product.compareAtPrice != null ? (
+        <p className="text-sm text-gray-600">
+          <b>Original:</b> ₹{product.compareAtPrice}
+        </p>
+      ) : null}
+
+      <p className="text-sm text-gray-700">
+        <b>Stock:</b> {product.stock ?? 0} • <b>In stock:</b>{" "}
+        {String(!!product.isInStock)}
+      </p>
+
+      {/* ✅ HSN Code (display only, apparels only) */}
+      {isApparelCategory(product?.categories) ? (
+        <p className="text-sm text-gray-700">
+          <b>HSN Code:</b> {product?.hsnCode || "—"}
+        </p>
+      ) : null}
+    </div>
+  )}
+
+  {editing ? (
+    <div className="flex items-center gap-6 flex-wrap text-sm">
+      <label className="inline-flex items-center gap-2">
+        <input
+          type="checkbox"
+          name="isInStock"
+          checked={!!form.isInStock}
+          onChange={handleChange}
+        />
+        In Stock
+      </label>
+      <label className="inline-flex items-center gap-2">
+        <input
+          type="checkbox"
+          name="isActive"
+          checked={!!form.isActive}
+          onChange={handleChange}
+        />
+        Active (visible)
+      </label>
+    </div>
+  ) : null}
+</div>
+
 
         {/* CATEGORIES */}
         <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">

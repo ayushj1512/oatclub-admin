@@ -27,7 +27,8 @@ import {
   Quote,
   Globe,
   RotateCcw,
-  Handshake, // ✅ added for Collaboration
+  Handshake, // ✅ Collaboration
+  Footprints, // ✅ Footwear
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -56,6 +57,10 @@ const DOMAIN_LIST = [
   { id: "production", name: "Production / Tailoring", icon: Ticket, route: "/production" },
   { id: "accounts", name: "Accounts", icon: Calculator, route: "/accounts" },
   { id: "products", name: "Products", icon: Package, route: "/products" },
+
+  // ✅ NEW: Footwear module
+  { id: "footwear", name: "Footwear", icon: Footprints, route: "/footwear" },
+
   { id: "orders", name: "Orders", icon: ClipboardList, route: "/orders" },
   { id: "rma", name: "RMA Requests", icon: RotateCcw, route: "/rma" },
   { id: "media", name: "Media", icon: Images, route: "/media" },
@@ -74,7 +79,7 @@ const DOMAIN_LIST = [
   { id: "coupons", name: "Coupons", icon: TicketPercent, route: "/coupons" },
   { id: "wordpress", name: "WordPress Orders", icon: Globe, route: "/wordpress" },
 
-  // ✅ Collaboration module added (routes you already have: /collaboration and /collaboration/add)
+  // ✅ Collaboration module
   { id: "collaboration", name: "Influencer Collaborations", icon: Handshake, route: "/collaboration" },
 ];
 
@@ -192,7 +197,6 @@ export default function HomeDashboard() {
                     onChange={(e) => setSortBy(e.target.value)}
                     className="w-full md:w-auto bg-white border border-gray-200 rounded-2xl px-3 py-3 text-sm outline-none hover:bg-gray-50 shadow-sm"
                   >
-                    {/* Default now means A-Z */}
                     <option value="default">Default (A → Z)</option>
                     <option value="name_asc">Name (A → Z)</option>
                     <option value="name_desc">Name (Z → A)</option>
@@ -209,7 +213,6 @@ export default function HomeDashboard() {
             You don’t have access to any modules yet.
           </div>
         ) : (
-          // ✅ responsive auto-fit grid (as many columns as can adjust)
           <motion.div
             layout
             className="grid gap-4 sm:gap-6 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
@@ -241,10 +244,16 @@ export default function HomeDashboard() {
                     </p>
                   )}
 
-                  {/* ✅ small hint for collaboration */}
                   {id === "collaboration" && (
                     <p className="text-xs text-gray-500 mt-1 text-center">
                       Track ongoing influencer collaborations
+                    </p>
+                  )}
+
+                  {/* ✅ hint for footwear */}
+                  {id === "footwear" && (
+                    <p className="text-xs text-gray-500 mt-1 text-center">
+                      Manage footwear catalog & variants
                     </p>
                   )}
                 </motion.button>
