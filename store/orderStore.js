@@ -288,6 +288,38 @@ export const useOrderStore = create((set, get) => ({
   },
 
   /* ============================================================
+   UPDATE ADDRESS (admin)
+   PATCH /api/orders/:id/address
+============================================================ */
+updateOrderAddress: async (orderId, payload) => {
+  if (!orderId) return null;
+
+  get()._start();
+  try {
+    const res = await fetch(`${API}/api/orders/${orderId}/address`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload), // { type: "shipping"|"billing", address: {...} }
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message);
+
+    const order = get()._normalizeOrder(data);
+
+    set({ order });
+    get()._syncOrderInList(order);
+
+    get()._success();
+    return order;
+  } catch (e) {
+    get()._error(e);
+    throw e;
+  }
+},
+
+
+  /* ============================================================
      RESET / CLEAR
   ============================================================ */
   clearOrder: () => set({ order: null }),

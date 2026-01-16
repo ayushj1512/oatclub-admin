@@ -19,6 +19,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { useOrderStore } from "@/store/orderStore";
+import EditableAddressCard from "@/components/orders/EditableAddressCard";
 
 const safe = (v) => String(v ?? "").trim();
 const money = (n) => Number(n || 0).toLocaleString("en-IN");
@@ -664,26 +665,22 @@ export default function CustomerConfirmationPage() {
                         </div>
                       </div>
 
-                      {/* addresses (stack on mobile) */}
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                        <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                          <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                            <MapPin size={16} /> Shipping
-                          </div>
-                          <div className="mt-2">
-                            <Address a={ship} />
-                          </div>
-                        </div>
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+  <EditableAddressCard
+    orderId={orderIdStr}
+    type="shipping"
+    address={ship}
+    onRefresh={fetchOrders}
+  />
 
-                        <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                          <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                            <MapPin size={16} /> Billing
-                          </div>
-                          <div className="mt-2">
-                            <Address a={bill} />
-                          </div>
-                        </div>
-                      </div>
+  <EditableAddressCard
+    orderId={orderIdStr}
+    type="billing"
+    address={bill}
+    onRefresh={fetchOrders}
+  />
+</div>
+
 
                       {/* items */}
                       <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">

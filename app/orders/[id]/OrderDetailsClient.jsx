@@ -14,7 +14,7 @@ import {
   BadgeIndianRupee,
   ExternalLink,
 } from "lucide-react";
-
+import EditableAddressCard from "@/components/orders/EditableAddressCard";
 import { toast } from "react-hot-toast";
 import { useOrderStore } from "@/store/orderStore";
 import OrderPrintPanel from "@/components/orders/OrderPrintPanel";
@@ -369,40 +369,22 @@ const productUrl = it?.productId?._id
           </div>
         </Card>
 
-        {/* ADDRESSES */}
-        <div className="grid md:grid-cols-2 gap-5">
-          <Card>
-            <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
-              <MapPin size={18} /> Shipping Address
-            </h2>
-            <div className="text-gray-700 leading-relaxed text-sm space-y-0.5">
-              <p>{order.shippingAddressSnapshot?.fullName || "-"}</p>
-              <p>{order.shippingAddressSnapshot?.line1 || "-"}</p>
-              <p>{order.shippingAddressSnapshot?.line2 || ""}</p>
-              <p>
-                {order.shippingAddressSnapshot?.city || "-"},{" "}
-                {order.shippingAddressSnapshot?.state || "-"} -{" "}
-                {order.shippingAddressSnapshot?.pincode || "-"}
-              </p>
-            </div>
-          </Card>
+       <div className="grid md:grid-cols-2 gap-5">
+  <EditableAddressCard
+    orderId={order._id}
+    type="shipping"
+    address={order.shippingAddressSnapshot}
+    onRefresh={() => fetchOrderById(order._id)}
+  />
 
-          <Card>
-            <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
-              <Receipt size={18} /> Billing Address
-            </h2>
-            <div className="text-gray-700 leading-relaxed text-sm space-y-0.5">
-              <p>{order.billingAddressSnapshot?.fullName || "-"}</p>
-              <p>{order.billingAddressSnapshot?.line1 || "-"}</p>
-              <p>{order.billingAddressSnapshot?.line2 || ""}</p>
-              <p>
-                {order.billingAddressSnapshot?.city || "-"},{" "}
-                {order.billingAddressSnapshot?.state || "-"} -{" "}
-                {order.billingAddressSnapshot?.pincode || "-"}
-              </p>
-            </div>
-          </Card>
-        </div>
+  <EditableAddressCard
+    orderId={order._id}
+    type="billing"
+    address={order.billingAddressSnapshot}
+    onRefresh={() => fetchOrderById(order._id)}
+  />
+</div>
+
 
         {/* STATUS UPDATE */}
         <Card>
