@@ -511,6 +511,39 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
+  updateComparePriceInline: async (id, compareAtPrice) => {
+  try {
+    set({ saving: true });
+
+    const res = await fetch(`${API}/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ compareAtPrice }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Compare price update failed");
+
+    set({
+      products: get().products.map((p) =>
+        p._id === id ? { ...p, compareAtPrice } : p
+      ),
+    });
+
+    toast.success("Compare price updated ✅");
+    return data.product;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
+
+
+
   updateCategoriesInline: async (id, categories) => {
     set({ saving: true });
 

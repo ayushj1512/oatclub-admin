@@ -67,14 +67,22 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
     try {
       setLoading(true);
 
-      // ✅ update backend order status
-      const updatedOrder = await updateOrderStatus(orderId, {
-        fulfillmentStatus: newStatus,
-      });
+      const payload =
+        newStatus === "cancelled"
+          ? {
+              fulfillmentStatus: "cancelled",
+              reason: "cancelled_by_admin",
+              cancelledBy: "admin",
+              adminRemarks: "cancelled_by_admin",
+              customerMessage: "",
+            }
+          : { fulfillmentStatus: newStatus };
+
+      const updatedOrder = await updateOrderStatus(orderId, payload);
 
       if (onUpdated) onUpdated(updatedOrder);
     } catch (err) {
-      alert(err.message || "Failed to update status");
+      alert(err?.message || "Failed to update status");
       setValue(currentStatus);
     } finally {
       setLoading(false);
@@ -89,7 +97,7 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
           value
         )}`}
       >
-        {value.replace(/_/g, " ")}
+        {String(value || "").replace(/_/g, " ")}
 
         {loading ? (
           <Loader2 size={14} className="animate-spin" />

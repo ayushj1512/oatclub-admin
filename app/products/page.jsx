@@ -352,6 +352,90 @@ const toggleAll = () => {
   );
 }
 
+function ComparePriceInlineEditor({ id, value }) {
+  const { updateComparePriceInline, saving } = useAdminProductStore();
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+
+  const save = async () => {
+    // compareAtPrice can be 0/empty (optional), so allow empty => null
+    const num = draft === "" ? null : Number(draft);
+
+    if (num !== null && (Number.isNaN(num) || num < 0)) {
+      alert("Enter valid compare price");
+      return;
+    }
+
+    await updateComparePriceInline(id, num);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="font-medium">
+          {value === null || value === undefined || value === ""
+            ? "-"
+            : `₹${value}`}
+        </span>
+
+        <button
+          className="icon blue"
+          title="Edit Compare Price"
+          onClick={() => setEditing(true)}
+          style={{ width: 30, height: 30 }}
+        >
+          <Pencil size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        className="px-2 py-1 border rounded-md w-[90px] text-sm"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        type="number"
+        min="0"
+      />
+
+      <button
+        onClick={save}
+        disabled={saving}
+        className="icon blue"
+        style={{ width: 30, height: 30 }}
+        title="Save"
+      >
+        {saving ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <Check size={14} />
+        )}
+      </button>
+
+      <button
+        onClick={() => {
+          setDraft(value ?? "");
+          setEditing(false);
+        }}
+        className="icon red"
+        style={{ width: 30, height: 30 }}
+        title="Cancel"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
+
 function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
   const { updateCategoriesInline, saving } = useAdminProductStore();
 
@@ -696,6 +780,10 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
           <Th onClick={() => toggleSort("price")} label="Price" />
         </th>
 
+        <th className="px-4 py-3 border-b border-gray-200">
+  <Th onClick={() => toggleSort("compareAtPrice")} label="Compare" />
+</th>
+
         <th className="px-4 py-3 border-b border-gray-200">Categories</th>
 
         <th className="px-4 py-3 border-b border-gray-200 text-green-700">
@@ -766,6 +854,11 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
             <td className="px-4 py-3">
               <PriceInlineEditor id={p._id} value={p.price} />
             </td>
+
+            {/* Compare Price */}
+<td className="px-4 py-3">
+  <ComparePriceInlineEditor id={p._id} value={p.compareAtPrice} />
+</td>
 
             {/* Categories */}
             <td className="px-4 py-3">
