@@ -65,6 +65,54 @@ const normalizeProductPayload = (payload) => {
   return out;
 };
 
+const normalizeFabricsPayload = (fabrics) => {
+  // allow JSON string
+  if (typeof fabrics === "string") {
+    try {
+      fabrics = JSON.parse(fabrics);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(fabrics)) return [];
+
+  const ROLE_SET = new Set(["main", "lining", "contrast", "padding", "other"]);
+  const UNIT_SET = new Set(["meter", "gram"]);
+
+  const seen = new Set();
+
+  const out = [];
+  for (const f of fabrics) {
+    const fabricCode = String(f?.fabricCode || "").trim();
+    if (!fabricCode) continue;
+
+    const roleRaw = String(f?.role || "main").trim();
+    const role = ROLE_SET.has(roleRaw) ? roleRaw : "main";
+
+    const unitRaw = String(f?.consumption?.unit || "meter").trim();
+    const unit = UNIT_SET.has(unitRaw) ? unitRaw : "meter";
+
+    let value = Number(f?.consumption?.value ?? 0);
+    if (Number.isNaN(value) || value < 0) value = 0;
+
+    const notes = String(f?.notes || "").trim();
+
+    const key = `${fabricCode}__${role}`;
+    if (seen.has(key)) continue; // de-dupe
+    seen.add(key);
+
+    out.push({
+      fabricCode,
+      role,
+      consumption: { value, unit },
+      notes,
+    });
+  }
+
+  return out;
+};
+
 
 export const useAdminProductStore = create((set, get) => ({
   /* ============================================================
@@ -721,4 +769,50 @@ export const useAdminProductStore = create((set, get) => ({
       return [];
     }
   },
+
+    /* ============================================================
+    ✅ UPDATE PRODUCT FABRICS (dedicated route)
+    PATCH /api/products/:id/fabrics
+  ============================================================ */
+  updateProductFabrics: async (id, fabrics) => {
+    try {
+      set({ saving: true, error: null });
+
+      const normalized = normalizeFabricsPayload(fabrics);
+
+      const res = await fetch(`${API}/${id}/fabrics`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ fabrics: normalized }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Fabrics update failed");
+
+      // update single product state if open on edit page
+      if (get().product && String(get().product?._id) === String(id)) {
+        set({ product: data.product });
+      }
+
+      // update product list state (admin grid) if present
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          String(p._id) === String(id)
+            ? { ...p, fabrics: data.product?.fabrics ?? normalized }
+            : p
+        ),
+      }));
+
+      toast.success("Fabrics updated ✅");
+      return data.product;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
 }));

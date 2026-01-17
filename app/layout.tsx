@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import LayoutWrapper from "../components/common/LayoutWrapper";
 import { Poppins } from "next/font/google";
-import { Toaster } from "react-hot-toast"; // ✅ ADD THIS
+import { Toaster } from "react-hot-toast";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -12,8 +12,6 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "Miray Fashion Admin",
   description: "Miray Fashion Admin Dashboard",
-
-  /* ✅ Favicons + Manifest */
   icons: {
     icon: [
       { url: "/favicon.ico" },
@@ -22,7 +20,6 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-touch-icon.png",
   },
-
   manifest: "/site.webmanifest",
 };
 
@@ -30,11 +27,9 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={poppins.className}>
-      <body className="antialiased bg-gray-50 text-gray-900">
-        {/* ✅ TOASTER */}
+    <html lang="en" className={poppins.className} suppressHydrationWarning>
+      <body className="antialiased bg-gray-50 text-gray-900" suppressHydrationWarning>
         <Toaster position="top-right" />
-
         <LayoutWrapper>{children}</LayoutWrapper>
       </body>
     </html>

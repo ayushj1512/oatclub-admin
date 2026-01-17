@@ -183,6 +183,7 @@ export const sidebarMenus = {
     { label: "Influencer / Collabs", href: "/marketing/collabs" },
   ],
 customers: [
+   { label: "Customer Dashboard", href: "/customers/dashboard" },
   { label: "Customer List", href: "/customers" },
   { label: "Customer / Address", href: "/customers/address" }, // ✅ added
   { label: "Abandoned Carts", href: "/customers/carts" },

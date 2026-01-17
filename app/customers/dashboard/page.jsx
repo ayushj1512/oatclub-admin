@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { useAdminProductStore } from "@/store/adminProductStore"; // ✅ use product store
+import { useEffect, useMemo } from "react";
+import { useCustomerStore } from "@/store/customerStore";
 
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -17,30 +16,13 @@ function formatMoney(n) {
   }).format(num);
 }
 
-function formatDate(d) {
-  if (!d) return "—";
-  const dt = new Date(d);
-  if (Number.isNaN(dt.getTime())) return "—";
-  return dt.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "2-digit" });
-}
-
-function Badge({ children, tone = "neutral" }) {
-  const tones = {
-    neutral: "bg-zinc-100 text-zinc-700",
-    good: "bg-emerald-50 text-emerald-700",
-    warn: "bg-amber-50 text-amber-700",
-    bad: "bg-rose-50 text-rose-700",
-  };
-
+function Stat({ label, value, sub }) {
   return (
-    <span
-      className={cx(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
-        tones[tone] || tones.neutral
-      )}
-    >
-      {children}
-    </span>
+    <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5">
+      <div className="text-xs text-zinc-500">{label}</div>
+      <div className="mt-1 text-2xl font-semibold text-zinc-900">{value}</div>
+      {sub ? <div className="mt-1 text-xs text-zinc-500">{sub}</div> : null}
+    </div>
   );
 }
 
@@ -56,369 +38,216 @@ function Card({ title, right, children }) {
   );
 }
 
-function Stat({ label, value, sub }) {
+function ProgressRow({ label, value, total }) {
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <div className="rounded-xl bg-zinc-50 ring-1 ring-zinc-100 px-4 py-3">
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-zinc-900">{value}</div>
-      {sub ? <div className="mt-1 text-xs text-zinc-500">{sub}</div> : null}
-    </div>
-  );
-}
-
-function SkeletonLine({ w = "w-full" }) {
-  return <div className={cx("h-3 rounded bg-zinc-100 animate-pulse", w)} />;
-}
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-full bg-zinc-100 animate-pulse" />
-          <div className="flex-1 space-y-2">
-            <SkeletonLine w="w-56" />
-            <SkeletonLine w="w-40" />
-          </div>
-        </div>
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-sm">
+        <div className="text-zinc-700">{label}</div>
+        <div className="text-zinc-500">{value} ({pct}%)</div>
       </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5 space-y-3">
-          <SkeletonLine w="w-24" />
-          <SkeletonLine w="w-40" />
-          <SkeletonLine w="w-32" />
-        </div>
-        <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5 space-y-3">
-          <SkeletonLine w="w-24" />
-          <SkeletonLine w="w-40" />
-          <SkeletonLine w="w-32" />
-        </div>
-        <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5 space-y-3">
-          <SkeletonLine w="w-24" />
-          <SkeletonLine w="w-40" />
-          <SkeletonLine w="w-32" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5 space-y-3">
-          <SkeletonLine w="w-36" />
-          <SkeletonLine w="w-full" />
-          <SkeletonLine w="w-4/5" />
-          <SkeletonLine w="w-2/3" />
-        </div>
-        <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5 space-y-3">
-          <SkeletonLine w="w-36" />
-          <SkeletonLine w="w-full" />
-          <SkeletonLine w="w-4/5" />
-          <SkeletonLine w="w-2/3" />
-        </div>
+      <div className="h-2 w-full rounded-full bg-zinc-100">
+        <div className="h-2 rounded-full bg-zinc-900" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
 }
 
-export default function CustomerDashboardPage() {
-  const searchParams = useSearchParams();
-
+export default function CustomersDashboardPage() {
   const {
-    customer,
-    loadingSingle,
+    customers,
+    total,
+    loadingList,
     error,
-    setError,
-    fetchCustomerById,
-  } =useAdminProductStore();
-
-  const idFromQuery = searchParams.get("id");
-
-  const [resolvedId, setResolvedId] = useState(idFromQuery || "");
+    fetchAllCustomersForDashboard, // ✅ new helper
+    fetchCustomers, // fallback
+  } = useCustomerStore();
 
   useEffect(() => {
-    // ✅ Resolve ID from query OR localStorage fallback
-    if (idFromQuery) {
-      setResolvedId(idFromQuery);
-      return;
-    }
-
-    // fallback: localStorage
-    try {
-      const fromLS =
-        window.localStorage.getItem("customerMongoId") ||
-        window.localStorage.getItem("customerId") ||
-        "";
-      if (fromLS) setResolvedId(fromLS);
-    } catch {
-      // ignore
-    }
-  }, [idFromQuery]);
-
-  useEffect(() => {
-    if (!resolvedId) return;
-    setError("");
-    fetchCustomerById(resolvedId);
+    // Prefer fetchAllCustomersForDashboard if added, else use fetchCustomers with high limit
+    if (fetchAllCustomersForDashboard) fetchAllCustomersForDashboard();
+    else fetchCustomers({ page: 1, limit: 500 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedId]);
+  }, []);
 
-  const headline = useMemo(() => {
-    if (!customer) return "Customer Dashboard";
-    const name = customer?.name?.trim() || "Guest";
-    const cid = customer?.customerId ? `#${customer.customerId}` : "";
-    return `${name} ${cid}`.trim();
-  }, [customer]);
+  const metrics = useMemo(() => {
+    const list = Array.isArray(customers) ? customers : [];
+    const totalCount = total || list.length;
 
-  const location = useMemo(() => {
-    if (!customer) return "—";
-    const parts = [customer.city, customer.state, customer.country].filter(Boolean).map((s) => String(s).trim()).filter(Boolean);
-    return parts.length ? parts.join(", ") : "—";
-  }, [customer]);
+    let active = 0;
+    let inactive = 0;
 
-  const statusTone = customer?.isActive ? "good" : "bad";
+    const byCountry = new Map();
+    const byAgeGroup = new Map();
+
+    const now = Date.now();
+    const d7 = now - 7 * 24 * 60 * 60 * 1000;
+    const d30 = now - 30 * 24 * 60 * 60 * 1000;
+
+    let new7 = 0;
+    let new30 = 0;
+
+    let totalSpendSum = 0;
+    let ordersSum = 0;
+
+    for (const c of list) {
+      if (c?.isActive) active++;
+      else inactive++;
+
+      const country = (c?.country || "Unknown").trim?.() ? c.country : "Unknown";
+      byCountry.set(country, (byCountry.get(country) || 0) + 1);
+
+      const ag = (c?.ageGroup || "Unknown").trim?.() ? c.ageGroup : "Unknown";
+      byAgeGroup.set(ag, (byAgeGroup.get(ag) || 0) + 1);
+
+      const created = new Date(c?.createdAt || c?.joinedAt || 0).getTime();
+      if (!Number.isNaN(created) && created > 0) {
+        if (created >= d7) new7++;
+        if (created >= d30) new30++;
+      }
+
+      const spend = Number(c?.analytics?.totalSpend || 0);
+      const orders = Number(c?.analytics?.totalOrders || 0);
+      totalSpendSum += spend;
+      ordersSum += orders;
+    }
+
+    const aovOverall = ordersSum > 0 ? Math.round(totalSpendSum / ordersSum) : 0;
+
+    const topCountries = [...byCountry.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
+
+    const ageGroups = [...byAgeGroup.entries()]
+      .sort((a, b) => b[1] - a[1]);
+
+    const topSpenders = [...list]
+      .sort((a, b) => Number(b?.analytics?.totalSpend || 0) - Number(a?.analytics?.totalSpend || 0))
+      .slice(0, 8);
+
+    return {
+      totalCount,
+      active,
+      inactive,
+      topCountries,
+      ageGroups,
+      new7,
+      new30,
+      totalSpendSum,
+      ordersSum,
+      aovOverall,
+      topSpenders,
+    };
+  }, [customers, total]);
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        {/* Header */}
-        <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-zinc-500">
-              Account
-            </div>
-            <h1 className="mt-1 text-2xl font-semibold text-zinc-900">
-              {headline}
-            </h1>
-            <div className="mt-1 text-sm text-zinc-600">
-              {customer?.email ? (
-                <span className="text-zinc-700">{customer.email}</span>
-              ) : (
-                <span className="text-zinc-500">No email on file</span>
-              )}
-              <span className="mx-2 text-zinc-300">•</span>
-              <span className="text-zinc-600">{location}</span>
-            </div>
+      <div className="mx-auto px-4 py-8">
+        <div className="mb-6">
+          <div className="text-xs uppercase tracking-wider text-zinc-500">
+            Customers
           </div>
-
-          <div className="flex items-center gap-2">
-            <Badge tone={statusTone}>
-              {customer?.isActive ? "Active" : "Inactive"}
-            </Badge>
-            <Badge tone="neutral">
-              Joined {formatDate(customer?.joinedAt || customer?.createdAt)}
-            </Badge>
+          <h1 className="mt-1 text-2xl font-semibold text-zinc-900">
+            Customers Dashboard
+          </h1>
+          <div className="mt-1 text-sm text-zinc-600">
+            Overview metrics from <span className="font-mono">/api/customers</span>
           </div>
         </div>
 
-        {/* States */}
-        {loadingSingle ? (
-          <DashboardSkeleton />
+        {loadingList ? (
+          <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5">
+            <div className="text-sm text-zinc-600">Loading customers…</div>
+          </div>
         ) : error ? (
           <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sm font-semibold text-zinc-900">
-                  Something went wrong
-                </div>
-                <div className="mt-1 text-sm text-zinc-600">{error}</div>
-              </div>
-              <button
-                onClick={() => resolvedId && fetchCustomerById(resolvedId)}
-                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 active:scale-[0.99]"
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        ) : !customer ? (
-          <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-100 p-5">
-            <div className="text-sm font-semibold text-zinc-900">
-              No customer loaded
-            </div>
-            <div className="mt-1 text-sm text-zinc-600">
-              Pass an id like <span className="font-mono">/customer/dashboard?id=...</span>{" "}
-              or store it in localStorage as{" "}
-              <span className="font-mono">customerMongoId</span>.
-            </div>
+            <div className="text-sm font-semibold text-zinc-900">Error</div>
+            <div className="mt-1 text-sm text-zinc-600">{error}</div>
           </div>
         ) : (
           <>
-            {/* Top stats */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Stat
-                label="Total Spend"
-                value={formatMoney(customer?.analytics?.totalSpend)}
-                sub="Lifetime"
-              />
-              <Stat
-                label="Total Orders"
-                value={String(customer?.analytics?.totalOrders ?? 0)}
-                sub="Completed"
-              />
-              <Stat
-                label="Avg Order Value"
-                value={formatMoney(customer?.analytics?.avgOrderValue)}
-                sub="Across orders"
-              />
+            {/* KPI Row */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <Stat label="Total Customers" value={String(metrics.totalCount)} sub="All time" />
+              <Stat label="Active" value={String(metrics.active)} sub="isActive = true" />
+              <Stat label="New (7 days)" value={String(metrics.new7)} sub="createdAt / joinedAt" />
+              <Stat label="Overall AOV" value={formatMoney(metrics.aovOverall)} sub="totalSpend / totalOrders" />
             </div>
 
-            {/* Main grid */}
+            {/* Distribution */}
             <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <Card title="Profile">
-                <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 overflow-hidden rounded-full bg-zinc-100 ring-1 ring-zinc-200">
-                    {customer?.profileImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={customer.profileImage}
-                        alt={customer?.name || "Customer"}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-zinc-500">
-                        {(customer?.name?.trim()?.[0] || "G").toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="truncate text-base font-semibold text-zinc-900">
-                      {customer?.name?.trim() || "Guest Customer"}
-                    </div>
-
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-600">
-                      <span className="rounded-lg bg-zinc-50 px-2 py-1 ring-1 ring-zinc-100">
-                        Gender: {customer?.gender || "unknown"}
-                      </span>
-                      <span className="rounded-lg bg-zinc-50 px-2 py-1 ring-1 ring-zinc-100">
-                        Age group: {customer?.ageGroup || "Unknown"}
-                      </span>
-                      <span className="rounded-lg bg-zinc-50 px-2 py-1 ring-1 ring-zinc-100">
-                        DOB: {formatDate(customer?.dateOfBirth)}
-                      </span>
-                    </div>
-
-                    <div className="mt-2 text-xs text-zinc-500">
-                      Customer ID:{" "}
-                      <span className="font-mono text-zinc-700">
-                        {customer?.customerId || "—"}
-                      </span>
-                      <span className="mx-2 text-zinc-300">•</span>
-                      Firebase UID:{" "}
-                      <span className="font-mono text-zinc-700">
-                        {customer?.firebaseUID || "—"}
-                      </span>
-                    </div>
-                  </div>
+              <Card title="Top Countries" right={`Top ${metrics.topCountries.length}`}>
+                <div className="space-y-3">
+                  {metrics.topCountries.length ? (
+                    metrics.topCountries.map(([k, v]) => (
+                      <ProgressRow key={k} label={k} value={v} total={metrics.totalCount} />
+                    ))
+                  ) : (
+                    <div className="text-sm text-zinc-600">No data</div>
+                  )}
                 </div>
               </Card>
 
-              <Card title="Cart & Activity" right="Live snapshot">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Stat
-                    label="Cart Items"
-                    value={String(customer?.cart?.cartCount ?? 0)}
-                    sub={customer?.cart?.activeCartType ? `Type: ${customer.cart.activeCartType}` : undefined}
-                  />
-                  <Stat
-                    label="Abandoned Carts"
-                    value={String(customer?.cart?.abandonedCartCount ?? 0)}
-                    sub={customer?.cart?.lastCartActivityAt ? `Last: ${formatDate(customer.cart.lastCartActivityAt)}` : "Last: —"}
-                  />
-                </div>
-
-                <div className="mt-4 rounded-xl bg-zinc-50 ring-1 ring-zinc-100 px-4 py-3">
-                  <div className="text-xs text-zinc-500">Active Cart</div>
-                  <div className="mt-1 font-mono text-xs text-zinc-700 break-all">
-                    {customer?.cart?.activeCartId || "—"}
-                  </div>
-
-                  <div className="mt-3 text-xs text-zinc-500">Last Abandoned</div>
-                  <div className="mt-1 font-mono text-xs text-zinc-700 break-all">
-                    {customer?.cart?.lastAbandonedCartId || "—"}
-                  </div>
-                </div>
-              </Card>
-
-              <Card title="Preferences">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl bg-zinc-50 ring-1 ring-zinc-100 px-4 py-3">
-                    <div className="text-xs text-zinc-500">Favorite brands</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {(customer?.preferences?.favoriteBrands || []).length ? (
-                        customer.preferences.favoriteBrands.slice(0, 12).map((b, idx) => (
-                          <span
-                            key={`${b}-${idx}`}
-                            className="rounded-full bg-white px-2.5 py-1 text-xs text-zinc-700 ring-1 ring-zinc-200"
-                          >
-                            {b}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-sm text-zinc-600">—</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl bg-zinc-50 ring-1 ring-zinc-100 px-4 py-3">
-                    <div className="text-xs text-zinc-500">Budget range</div>
-                    <div className="mt-2 text-sm font-semibold text-zinc-900">
-                      {formatMoney(customer?.preferences?.budgetRange?.min)}{" "}
-                      <span className="mx-2 text-zinc-300">→</span>
-                      {formatMoney(customer?.preferences?.budgetRange?.max)}
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-500">
-                      (If 0 → set it from preferences)
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-xl bg-zinc-50 ring-1 ring-zinc-100 px-4 py-3">
-                  <div className="text-xs text-zinc-500">Categories</div>
-                  <div className="mt-1 text-sm text-zinc-700">
-                    {(customer?.preferences?.categories || []).length
-                      ? `${customer.preferences.categories.length} selected`
-                      : "—"}
-                  </div>
-                  <div className="mt-1 text-xs text-zinc-500">
-                    (Showing count only; populate names by API if needed)
-                  </div>
-                </div>
-              </Card>
-
-              <Card title="More Analytics">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <Stat
-                    label="Wishlist"
-                    value={String(customer?.analytics?.wishlistCount ?? 0)}
-                  />
-                  <Stat
-                    label="Coupon Uses"
-                    value={String(customer?.analytics?.couponUses ?? 0)}
-                  />
-                  <Stat
-                    label="Credits Earned"
-                    value={String(customer?.analytics?.creditsEarned ?? 0)}
-                  />
-                </div>
-
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-zinc-50 ring-1 ring-zinc-100 px-4 py-3">
-                  <div className="text-xs text-zinc-500">
-                    Last updated: {formatDate(customer?.updatedAt)}
-                  </div>
-                  <button
-                    onClick={() => resolvedId && fetchCustomerById(resolvedId)}
-                    className="rounded-xl bg-white px-3 py-2 text-sm font-medium text-zinc-900 ring-1 ring-zinc-200 hover:bg-zinc-50 active:scale-[0.99]"
-                  >
-                    Refresh
-                  </button>
+              <Card title="Age Groups" right={`${metrics.ageGroups.length} groups`}>
+                <div className="space-y-3">
+                  {metrics.ageGroups.length ? (
+                    metrics.ageGroups.slice(0, 8).map(([k, v]) => (
+                      <ProgressRow key={k} label={k} value={v} total={metrics.totalCount} />
+                    ))
+                  ) : (
+                    <div className="text-sm text-zinc-600">No data</div>
+                  )}
                 </div>
               </Card>
             </div>
 
-            {/* Footer hint */}
-            <div className="mt-8 text-xs text-zinc-500">
-              Tip: If you want this dashboard to work without query params, save the
-              Mongo id in <span className="font-mono">localStorage.customerMongoId</span>{" "}
-              after login/checkout.
+            {/* Top Spenders */}
+            <div className="mt-6">
+              <Card title="Top Spenders" right="By analytics.totalSpend">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-zinc-500">
+                        <th className="py-2 pr-4">Customer</th>
+                        <th className="py-2 pr-4">Email</th>
+                        <th className="py-2 pr-4">Country</th>
+                        <th className="py-2 pr-4">Orders</th>
+                        <th className="py-2 pr-4">Spend</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {metrics.topSpenders.map((c) => (
+                        <tr key={c?._id || c?.customerId}>
+                          <td className="py-3 pr-4 font-medium text-zinc-900">
+                            {c?.name || "—"}
+                          </td>
+                          <td className="py-3 pr-4 text-zinc-600">{c?.email || "—"}</td>
+                          <td className="py-3 pr-4 text-zinc-600">{c?.country || "—"}</td>
+                          <td className="py-3 pr-4 text-zinc-600">
+                            {String(c?.analytics?.totalOrders ?? 0)}
+                          </td>
+                          <td className="py-3 pr-4 font-semibold text-zinc-900">
+                            {formatMoney(c?.analytics?.totalSpend)}
+                          </td>
+                        </tr>
+                      ))}
+                      {!metrics.topSpenders.length ? (
+                        <tr>
+                          <td className="py-4 text-zinc-600" colSpan={5}>
+                            No spenders found
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 text-xs text-zinc-500">
+                  Note: metrics depend on fields like <span className="font-mono">analytics.totalSpend</span>,{" "}
+                  <span className="font-mono">analytics.totalOrders</span>,{" "}
+                  <span className="font-mono">createdAt</span>.
+                </div>
+              </Card>
             </div>
           </>
         )}

@@ -219,6 +219,62 @@ fetchAllAddresses: async () => {
   }
 },
 
+// inside store...
+fetchAllCustomersForDashboard: async (params = {}) => {
+  if (!API) return;
+
+  set({ loadingList: true, error: "" });
+
+  try {
+    // 1) first call (get pages info)
+    const url = new URL(`${API}/api/customers`);
+    // try bigger limit for fewer calls
+    const firstParams = { page: 1, limit: 200, ...params };
+
+    Object.entries(firstParams).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
+    });
+
+    const res1 = await fetch(url.toString(), { cache: "no-store" });
+    const data1 = await res1.json();
+    if (!res1.ok) throw new Error(data1?.message || "Failed to load customers");
+
+    const items1 = data1?.items || [];
+    const totalPages = data1?.pages || 1;
+
+    // 2) fetch remaining pages (if any)
+    let all = [...items1];
+    if (totalPages > 1) {
+      const pageFetches = [];
+      for (let p = 2; p <= totalPages; p++) {
+        const u = new URL(`${API}/api/customers`);
+        Object.entries({ ...firstParams, page: p }).forEach(([k, v]) => {
+          if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, String(v));
+        });
+        pageFetches.push(fetch(u.toString(), { cache: "no-store" }).then((r) => r.json().then((j) => ({ r, j }))));
+      }
+
+      const rest = await Promise.all(pageFetches);
+      rest.forEach(({ r, j }) => {
+        if (r.ok) all.push(...(j?.items || []));
+      });
+    }
+
+    set({
+      customers: all,
+      total: data1?.total || all.length,
+      page: 1,
+      pages: totalPages,
+    });
+  } catch (err) {
+    console.error("❌ fetchAllCustomersForDashboard:", err);
+    set({ error: err.message || "Failed to load customers" });
+  } finally {
+    set({ loadingList: false });
+  }
+},
+
+
 
   /* ----------------------------------------------------
      RESET SINGLE CUSTOMER (on unmount)
