@@ -1,23 +1,29 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useAddressStore } from "@/store/addressStore";
 import { MapPin, Star, Loader2, Trash2 } from "lucide-react";
 
+const safe = (v) => String(v ?? "").trim();
+
 export default function AddressSection({ firebaseUID, customerId }) {
+  const uid = useMemo(() => safe(firebaseUID), [firebaseUID]);
+  const cid = useMemo(() => safe(customerId), [customerId]);
+
   const {
     addresses,
     loading,
     error,
-    fetchAddressesByFirebaseUID,
+    fetchAddressesBoth, // ✅ NEW: fetch from customerId + firebaseUID and merge
     deleteAddress,
   } = useAddressStore();
 
   useEffect(() => {
-    if (firebaseUID) {
-      fetchAddressesByFirebaseUID(firebaseUID);
+    // ✅ fetch from BOTH (if present) and merge/dedupe in store
+    if (cid || uid) {
+      fetchAddressesBoth({ customerId: cid, firebaseUID: uid });
     }
-  }, [firebaseUID, fetchAddressesByFirebaseUID]);
+  }, [cid, uid, fetchAddressesBoth]);
 
   const card =
     "bg-white rounded-xl border border-gray-200 shadow-sm p-6 hover:shadow-md transition-all";
@@ -66,9 +72,7 @@ export default function AddressSection({ firebaseUID, customerId }) {
                 )}
               </div>
 
-              <p className="font-semibold text-gray-900">
-                {addr.fullName}
-              </p>
+              <p className="font-semibold text-gray-900">{addr.fullName}</p>
               <p className="text-sm text-gray-700">{addr.phone}</p>
 
               <p className="text-xs text-gray-600 mt-2 leading-relaxed">
@@ -89,7 +93,7 @@ export default function AddressSection({ firebaseUID, customerId }) {
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() =>
-                    deleteAddress(addr._id, firebaseUID)
+                    deleteAddress(addr._id, { customerId: cid, firebaseUID: uid })
                   }
                   className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700"
                 >

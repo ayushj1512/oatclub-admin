@@ -11,13 +11,16 @@ export const useAddressStore = create((set, get) => ({
   /* ---------------- STATE ---------------- */
   addresses: [],
   activeAddress: null,
-
+allAddresses: [],
+loadingAll: false,
+errorAll: "",
   loading: false,
   error: "",
 
   /* ---------------- HELPERS ---------------- */
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
+clearAllAddresses: () => set({ allAddresses: [], loadingAll: false, errorAll: "" }),
 
   clearError: () => set({ error: "" }),
   clearAddresses: () =>
@@ -194,31 +197,125 @@ export const useAddressStore = create((set, get) => ({
      DELETE ADDRESS
      DELETE /api/addresses/:id
   ------------------------------------------------------- */
-  deleteAddress: async (addressId, firebaseUID) => {
-    if (!addressId) return;
+  deleteAddress: async (addressId, { customerId, firebaseUID } = {}) => {
+  if (!addressId) return;
 
-    set({ loading: true, error: "" });
+  set({ loading: true, error: "" });
 
-    try {
-      const res = await fetch(`${API}/api/addresses/${addressId}`, {
-        method: "DELETE",
-      });
+  try {
+    const res = await fetch(`${API}/api/addresses/${addressId}`, {
+      method: "DELETE",
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (!res.ok || data?.success === false) {
-        throw new Error(data?.message || "Failed to delete address");
-      }
-
-      if (firebaseUID) {
-        await get().fetchAddressesByFirebaseUID(firebaseUID);
-      }
-    } catch (err) {
-      console.error("❌ deleteAddress:", err);
-      set({ error: err.message || "Failed to delete address" });
-      throw err;
-    } finally {
-      set({ loading: false });
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.message || "Failed to delete address");
     }
-  },
+
+    // ✅ refresh from both sources
+    await get().fetchAddressesBoth({ customerId, firebaseUID });
+  } catch (err) {
+    console.error("❌ deleteAddress:", err);
+    set({ error: err.message || "Failed to delete address" });
+    throw err;
+  } finally {
+    set({ loading: false });
+  }
+},
+
+/* -------------------------------------------------------
+   FETCH ALL ADDRESSES (ADMIN / INTERNAL)
+   GET /api/addresses
+------------------------------------------------------- */
+fetchAllAddresses: async () => {
+  if (!API) return;
+
+  set({ loadingAll: true, errorAll: "" });
+
+  try {
+    const res = await fetch(`${API}/api/addresses`, { cache: "no-store" });
+    const data = await res.json();
+
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.message || "Failed to load all addresses");
+    }
+
+    set({
+      allAddresses: Array.isArray(data?.data) ? data.data : [],
+    });
+  } catch (err) {
+    console.error("❌ fetchAllAddresses:", err);
+    set({ errorAll: err.message || "Failed to load all addresses" });
+  } finally {
+    set({ loadingAll: false });
+  }
+},
+
+
+
+
+  /* -------------------------------------------------------
+   FETCH ADDRESSES (BOTH: customerId + firebaseUID)
+   - Fetch from both endpoints (if provided)
+   - Merge + de-duplicate by _id
+------------------------------------------------------- */
+fetchAddressesBoth: async ({ customerId, firebaseUID }) => {
+  const cid = String(customerId ?? "").trim();
+  const uid = String(firebaseUID ?? "").trim();
+
+  if (!cid && !uid) return;
+
+  set({ loading: true, error: "" });
+
+  try {
+    const requests = [];
+
+    if (cid) {
+      requests.push(
+        fetch(`${API}/api/addresses/customer/${cid}`, { cache: "no-store" })
+          .then(async (r) => {
+            const j = await r.json();
+            if (!r.ok || j?.success === false) throw new Error(j?.message || "CustomerId fetch failed");
+            return Array.isArray(j?.data) ? j.data : [];
+          })
+      );
+    }
+
+    if (uid) {
+      requests.push(
+        fetch(`${API}/api/addresses/firebase/${uid}`, { cache: "no-store" })
+          .then(async (r) => {
+            const j = await r.json();
+            if (!r.ok || j?.success === false) throw new Error(j?.message || "FirebaseUID fetch failed");
+            return Array.isArray(j?.data) ? j.data : [];
+          })
+      );
+    }
+
+    const results = await Promise.all(requests);
+    const merged = results.flat();
+
+    // ✅ de-duplicate by _id
+    const map = new Map();
+    for (const a of merged) {
+      if (a?._id) map.set(a._id, a);
+    }
+
+    // ✅ optional: sort defaults first
+    const finalList = Array.from(map.values()).sort((a, b) => {
+      const aScore = (a.isDefaultShipping ? 2 : 0) + (a.isDefaultBilling ? 1 : 0);
+      const bScore = (b.isDefaultShipping ? 2 : 0) + (b.isDefaultBilling ? 1 : 0);
+      return bScore - aScore;
+    });
+
+    set({ addresses: finalList });
+  } catch (err) {
+    console.error("❌ fetchAddressesBoth:", err);
+    set({ error: err.message || "Failed to load addresses" });
+  } finally {
+    set({ loading: false });
+  }
+},
+
 }));

@@ -13,7 +13,9 @@ export const useCustomerStore = create((set, get) => ({
   total: 0,
   page: 1,
   pages: 1,
-
+addresses: [],
+addressesTotal: 0,
+loadingAddresses: false,
   customer: null,
 
   loadingList: false,
@@ -24,6 +26,7 @@ export const useCustomerStore = create((set, get) => ({
 
   /* ---------------- HELPERS ---------------- */
   setError: (msg = "") => set({ error: msg }),
+clearAddresses: () => set({ addresses: [], addressesTotal: 0 }),
 
   /* ----------------------------------------------------
      FETCH ALL CUSTOMERS (ADMIN LIST)
@@ -186,6 +189,36 @@ export const useCustomerStore = create((set, get) => ({
       set({ saving: false });
     }
   },
+
+  /* ----------------------------------------------------
+   FETCH ALL ADDRESSES (ADMIN)
+   GET /api/addresses
+---------------------------------------------------- */
+fetchAllAddresses: async () => {
+  if (!API) return;
+
+  set({ loadingAddresses: true, error: "" });
+
+  try {
+    const res = await fetch(`${API}/api/addresses`, { cache: "no-store" });
+    const data = await res.json();
+
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.message || "Failed to load addresses");
+    }
+
+    set({
+      addresses: Array.isArray(data?.data) ? data.data : [],
+      addressesTotal: data?.count ?? (Array.isArray(data?.data) ? data.data.length : 0),
+    });
+  } catch (err) {
+    console.error("❌ fetchAllAddresses:", err);
+    set({ error: err.message || "Failed to load addresses" });
+  } finally {
+    set({ loadingAddresses: false });
+  }
+},
+
 
   /* ----------------------------------------------------
      RESET SINGLE CUSTOMER (on unmount)

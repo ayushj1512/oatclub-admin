@@ -180,22 +180,16 @@ export const sidebarMenus = {
     { label: "WhatsApp Broadcasts", href: "/marketing/whatsapp" },
     { label: "Influencer / Collabs", href: "/marketing/collabs" },
   ],
-
 customers: [
   { label: "Customer List", href: "/customers" },
+  { label: "Customer / Address", href: "/customers/address" }, // ✅ added
   { label: "Abandoned Carts", href: "/customers/carts" },
   { label: "Tickets & Support", href: "/customers/support" },
   { label: "Newsletter Subscribers", href: "/customers/newsletter" },
   { label: "Wishlist", href: "/customers/wishlist" }, // ✅ added
 ],
-customers: [
-  { label: "Customer List", href: "/customers" },  
-  { label: "Wishlist", href: "/customers/wishlist" }, // ✅ added
-  { label: "Abandoned Carts", href: "/customers/carts" },
-  { label: "Tickets & Support", href: "/customers/support" },
-  { label: "Newsletter Subscribers", href: "/customers/newsletter" },
 
-],
+
 
 
   customer_support: [

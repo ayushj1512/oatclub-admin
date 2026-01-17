@@ -24,76 +24,53 @@ const safe = (v) => String(v ?? "").trim();
    CUSTOMER DETAIL PAGE
 ============================================================ */
 export default function CustomerDetailPage() {
-  /* ----------------------------------------------------------
-     ROUTE PARAM
-  ---------------------------------------------------------- */
-  const { id } = useParams(); // customerId from URL
+  const params = useParams();
 
-  /* ----------------------------------------------------------
-     GLOBAL CUSTOMER (ZUSTAND)
-  ---------------------------------------------------------- */
+  // ✅ safe route id (string | string[])
+  const routeId = useMemo(() => {
+    const raw = params?.id;
+    return safe(Array.isArray(raw) ? raw[0] : raw);
+  }, [params]);
+
   const { customer } = useCustomerStore();
 
-  /* ----------------------------------------------------------
-     DERIVED KEYS (SAFE)
-  ---------------------------------------------------------- */
   const customerEmail = useMemo(
     () => safe(customer?.email).toLowerCase(),
-    [customer]
+    [customer?.email]
   );
 
   const customerUID = useMemo(
     () => safe(customer?.firebaseUID),
-    [customer]
+    [customer?.firebaseUID]
   );
 
-  /* ----------------------------------------------------------
-     RENDER
-  ---------------------------------------------------------- */
+  // ✅ IMPORTANT: use mongo _id if present, else fallback to routeId
+  const customerMongoId = useMemo(
+    () => safe(customer?._id) || routeId,
+    [customer?._id, routeId]
+  );
+
   return (
     <div className="p-8 space-y-10">
-      {/* ======================================================
-         CUSTOMER HEADER (PROFILE / BASIC INFO)
-      ====================================================== */}
-      <CustomerSection customerId={id} />
+      <CustomerSection customerId={routeId} />
 
-      {/* ======================================================
-         ABANDONED CARTS
-         - Uses firebaseUID + email internally
-      ====================================================== */}
       <AbandonedCartsSection
-        customerId={customer?._id}
-        customerEmail={customer?.email}
-        customerUID={customer?.firebaseUID}
+        customerId={customerMongoId}
+        customerEmail={customerEmail}
+        customerUID={customerUID}
       />
 
-      {/* ======================================================
-         WISHLIST
-      ====================================================== */}
-      <WishlistSection
-        firebaseUID={customer?.firebaseUID}
-        customerId={customer?._id}
-      />
+      <WishlistSection firebaseUID={customerUID} customerId={customerMongoId} />
 
-      {/* ======================================================
-         ADDRESSES
-      ====================================================== */}
+      {/* ✅ key forces remount when id/uid changes */}
       <AddressSection
-        firebaseUID={customer?.firebaseUID}
-        customerId={customer?._id}
+        key={`${customerMongoId}-${customerUID}`}
+        firebaseUID={customerUID}
+        customerId={customerMongoId}
       />
 
-      {/* ======================================================
-         ORDERS
-         - Shows last 3
-         - Expandable + search inside component
-      ====================================================== */}
-      <OrderSection customerId={customer?._id} />
+      <OrderSection customerId={customerMongoId} />
 
-      {/* ======================================================
-         SUPPORT TICKETS
-         - Loaded by customer email
-      ====================================================== */}
       <SupportTicketSection customerEmail={customerEmail} />
     </div>
   );
