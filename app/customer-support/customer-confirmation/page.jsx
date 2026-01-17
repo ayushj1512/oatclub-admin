@@ -269,36 +269,44 @@ export default function CustomerConfirmationPage() {
     }
   };
 
-  const handleCancel = async (orderId) => {
-    try {
-      setLocalError(null);
-      setSuccessMsg("");
+ const handleCancel = async (orderId) => {
+  try {
+    setLocalError(null);
+    setSuccessMsg("");
 
-      const ok = window.confirm("Are you sure you want to cancel this order?");
-      if (!ok) return;
+    const ok = window.confirm("Are you sure you want to cancel this order?");
+    if (!ok) return;
 
-      setActionLoading((p) => ({ ...p, cancelId: orderId }));
+    setActionLoading((p) => ({ ...p, cancelId: orderId }));
 
-      if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
+    if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
 
-      const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fulfillmentStatus: "cancelled" }),
-      });
+    const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fulfillmentStatus: "cancelled",
+        reason: "cancelled_by_admin",     // ✅ IMPORTANT
+        cancelledBy: "admin",             // ✅ IMPORTANT
+        adminRemarks: "cancelled_by_admin", // ✅ helps fallback logic
+        customerMessage: "",              // ✅ ensure customer msg not set
+      }),
+    });
 
-      if (!res.ok) throw new Error((await res.text()) || "Cancel failed");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || "Cancel failed");
 
-      setSuccessMsg("❌ Order Cancelled!");
-      await fetchOrders();
-    } catch (e) {
-      setLocalError(e?.message || "Cancel failed");
-    } finally {
-      setActionLoading((p) => ({ ...p, cancelId: null }));
-      setTimeout(() => setSuccessMsg(""), 2500);
-    }
-  };
+    setSuccessMsg("❌ Order Cancelled (Admin)!");
+    await fetchOrders();
+  } catch (e) {
+    setLocalError(e?.message || "Cancel failed");
+  } finally {
+    setActionLoading((p) => ({ ...p, cancelId: null }));
+    setTimeout(() => setSuccessMsg(""), 2500);
+  }
+};
+
 
   return (
    <div className="min-h-screen bg-gray-50 px-2 sm:px-6 py-3 sm:py-6">

@@ -253,47 +253,55 @@ export const useOrderStore = create((set, get) => ({
      - updates local state with adminRemarks
   ============================================================ */
   cancelOrder: async (orderId, reason = "cancelled_by_admin") => {
-    if (!orderId) return false;
+  if (!orderId) return false;
 
-    get()._start();
-    try {
-      const res = await fetch(`${API}/api/orders/${orderId}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reason: reason || "cancelled_by_admin",
-          cancelledBy: "admin",
-        }),
-      });
+  get()._start();
+  try {
+    const res = await fetch(`${API}/api/orders/${orderId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fulfillmentStatus: "cancelled",
+        reason: reason || "cancelled_by_admin",   // ✅ explicit
+        cancelledBy: "admin",                     // ✅ extra safety
+        adminRemarks: "cancelled_by_admin",       // ✅ helps your pickCancelReason fallback
+        // customerMessage: ""                    // optional
+      }),
+    });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || "Cancel failed");
 
-      // ✅ update local order + list
+    // ✅ use server as source of truth (IMPORTANT)
+    const serverOrder = data?.order;
+
+    if (serverOrder) {
+      set({ order: serverOrder });
+      get()._syncOrderInList(serverOrder);
+    } else {
+      // fallback (shouldn't happen)
       const current = get().order;
-
       if (current && String(current._id) === String(orderId)) {
         const updated = {
           ...current,
           fulfillmentStatus: "cancelled",
           adminRemarks: "cancelled_by_admin",
-          shipment: {
-            ...(current.shipment || {}),
-            status: "cancelled",
-          },
+          customerMessage: "", // ✅ clear customer side msg
+          shipment: { ...(current.shipment || {}), status: "cancelled" },
         };
-
         set({ order: updated });
         get()._syncOrderInList(updated);
       }
-
-      get()._success();
-      return true;
-    } catch (e) {
-      get()._error(e);
-      throw e;
     }
-  },
+
+    get()._success();
+    return true;
+  } catch (e) {
+    get()._error(e);
+    throw e;
+  }
+},
+
 
   /* ============================================================
    UPDATE ADDRESS (admin)
