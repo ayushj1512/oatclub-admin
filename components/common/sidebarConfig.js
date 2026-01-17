@@ -43,8 +43,10 @@ export const sidebarMenus = {
 
   production: [
   { label: "Production Dashboard", href: "/production" },
+    { label: "Pattern Number", href: "/production/pattern-number" },
   { label: "Fabric", href: "/production/fabric" },
   { label: "Product Style", href: "/production/style" },
+  
 ],
 
 
