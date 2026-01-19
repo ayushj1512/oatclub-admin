@@ -198,6 +198,18 @@ const productsWithMissingVariantIds = useMemo(() => {
     setSelectedIds(new Set());
   };
 
+  const handleBulkStatusChange = async (nextStatus) => {
+  const ids = Array.from(selectedIds);
+  if (!ids.length) return;
+
+  if (!confirm(`Change status of ${ids.length} products to "${nextStatus}"?`))
+    return;
+
+  await bulkStatus(ids, nextStatus); // ✅ new store action
+  clearSelection();
+};
+
+
   useEffect(() => {
     loadCategories();
   }, []);
@@ -351,6 +363,91 @@ const toggleAll = () => {
     </div>
   );
 }
+
+function TitleInlineEditor({ id, value }) {
+  const { updateTitleInline, saving } = useAdminProductStore();
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+
+  const save = async () => {
+    const next = String(draft || "").trim();
+    if (!next) {
+      alert("Enter valid title");
+      return;
+    }
+
+    await updateTitleInline(id, next);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setDraft(value ?? "");
+    setEditing(false);
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === "Enter") save();
+    if (e.key === "Escape") cancel();
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="font-medium text-gray-900">{value ?? "-"}</span>
+
+        <button
+          className="icon blue"
+          title="Edit Title"
+          onClick={() => setEditing(true)}
+          style={{ width: 30, height: 30 }}
+        >
+          <Pencil size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        className="px-2 py-1 border rounded-md w-[260px] text-sm"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onKeyDown}
+        autoFocus
+      />
+
+      <button
+        onClick={save}
+        disabled={saving}
+        className="icon blue"
+        style={{ width: 30, height: 30 }}
+        title="Save"
+      >
+        {saving ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <Check size={14} />
+        )}
+      </button>
+
+      <button
+        onClick={cancel}
+        className="icon red"
+        style={{ width: 30, height: 30 }}
+        title="Cancel"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
 
 function ComparePriceInlineEditor({ id, value }) {
   const { updateComparePriceInline, saving } = useAdminProductStore();
@@ -656,14 +753,15 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
         </select>
 
         {/* Bulk Bar */}
-        <BulkBar
-          selectedCount={selectedCount}
-          saving={saving}
-          onPublish={() => handleBulkPublish(true)}
-          onUnpublish={() => handleBulkPublish(false)}
-          onDelete={handleBulkDelete}
-          onClear={clearSelection}
-        />
+<BulkBar
+  selectedCount={selectedCount}
+  saving={saving}
+  onPublish={() => handleBulkPublish(true)}
+  onUnpublish={() => handleBulkPublish(false)}
+  onDelete={handleBulkDelete}
+  onClear={clearSelection}
+  onChangeStatus={handleBulkStatusChange} // ✅ NEW
+/>
       </div>
 
  <div className="flex flex-wrap items-end gap-4">
@@ -842,7 +940,8 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
                   alt=""
                 />
                 <div className="flex flex-col leading-tight">
-                  <span className="font-medium text-gray-900">{p.title}</span>
+                <TitleInlineEditor id={p._id} value={p.title} />
+
                   <span className="text-xs text-gray-400">
                     {p.productType || "-"} • {p.sku || "-"}
                   </span>
@@ -1090,7 +1189,15 @@ function PublishToggle({ value, onChange, loading }) {
   );
 }
 
-function BulkBar({ selectedCount, saving, onPublish, onUnpublish, onDelete, onClear }) {
+function BulkBar({
+  selectedCount,
+  saving,
+  onPublish,
+  onUnpublish,
+  onDelete,
+  onClear,
+  onChangeStatus, // ✅ NEW
+}) {
   if (!selectedCount) return null;
 
   return (
@@ -1099,58 +1206,46 @@ function BulkBar({ selectedCount, saving, onPublish, onUnpublish, onDelete, onCl
         {selectedCount} selected
       </span>
 
+      {/* ✅ Bulk status dropdown */}
+      <select
+        disabled={saving}
+        defaultValue=""
+        onChange={(e) => {
+          const val = e.target.value;
+          if (!val) return;
+          onChangeStatus(val);
+          e.target.value = "";
+        }}
+        className="select text-sm font-semibold"
+        title="Change status"
+      >
+        <option value="">Change Status…</option>
+        <option value="published">Published</option>
+        <option value="draft">Draft</option>
+        <option value="unpublished">Unpublished</option>
+      </select>
+
+      {/* existing buttons */}
       <button disabled={saving} onClick={onPublish} className="btn btn-primary">
-        {saving ? <Loader2 size={16} className="animate-spin" /> : null}
         Publish
       </button>
 
       <button disabled={saving} onClick={onUnpublish} className="btn btn-dark">
-        {saving ? <Loader2 size={16} className="animate-spin" /> : null}
         Unpublish
       </button>
 
       <button disabled={saving} onClick={onDelete} className="btn btn-danger">
-        {saving ? <Loader2 size={16} className="animate-spin" /> : null}
         Delete
       </button>
 
       <button disabled={saving} onClick={onClear} className="btn btn-muted">
         Clear
       </button>
-
-      <style jsx>{`
-        .btn {
-          padding: 10px 14px;
-          border-radius: 12px;
-          font-weight: 800;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .btn-primary {
-          background: #2563eb;
-          color: white;
-        }
-        .btn-dark {
-          background: #111827;
-          color: white;
-        }
-        .btn-danger {
-          background: #dc2626;
-          color: white;
-        }
-        .btn-muted {
-          background: #e5e7eb;
-          color: #111827;
-        }
-        button:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-      `}</style>
     </div>
   );
 }
+
+
 
 function StatusDropdown({ value, onChange, loading }) {
   const styles = {

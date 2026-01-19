@@ -10,8 +10,8 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Miray Fashion Admin",
-  description: "Miray Fashion Admin Dashboard",
+  title: "Miray Fashions Admin",
+  description: "Miray Fashions Admin Dashboard",
   icons: {
     icon: [
       { url: "/favicon.ico" },

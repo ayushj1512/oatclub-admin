@@ -590,8 +590,6 @@ export const useAdminProductStore = create((set, get) => ({
   }
 },
 
-
-
   updateCategoriesInline: async (id, categories) => {
     set({ saving: true });
 
@@ -666,6 +664,90 @@ export const useAdminProductStore = create((set, get) => ({
       set({ saving: false });
     }
   },
+
+    /* ============================================================
+    ✅ FETCH ALL PRODUCTS (ADMIN) - loads all pages and merges
+    Uses limit=250 (backend cap), fetches page-by-page internally
+  ============================================================ */
+  /* ============================================================
+  ✅ FETCH ALL PRODUCTS (ADMIN) - robust pagination
+  Handles backend hard-cap (always returns 50) even if you send 250/100000
+============================================================ */
+fetchAllProducts: async (params = {}) => {
+  try {
+    set({ loading: true, error: null });
+
+    const REQUEST_LIMIT = 250; // what we request (backend may still return 50)
+    let page = 1;
+
+    const merged = [];
+    const seen = new Set();
+
+    let totalFromApi = 0;
+    let pagesFromApi = 0;
+
+    const MAX_PAGES = 2000;
+
+    while (page <= MAX_PAGES) {
+      const query = new URLSearchParams({
+        ...params,
+        page: String(page),
+        limit: String(REQUEST_LIMIT),
+      }).toString();
+
+      const res = await fetch(`${API}?${query}`, { credentials: "include" });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.message || "Failed to fetch products");
+
+      const list = Array.isArray(data.products) ? data.products : [];
+
+      totalFromApi = Number(data.total || totalFromApi || 0);
+      pagesFromApi = Number(data.pages || pagesFromApi || 0);
+
+      // ✅ if empty page => finished
+      if (list.length === 0) break;
+
+      // ✅ merge unique
+      let added = 0;
+      for (const p of list) {
+        const id = String(p?._id || "").trim();
+        if (!id) continue;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        merged.push(p);
+        added += 1;
+      }
+
+      // ✅ if nothing new added => backend repeating same data => stop
+      if (added === 0) break;
+
+      // ✅ if pages are provided, rely on them
+      if (pagesFromApi && page >= pagesFromApi) break;
+
+      page += 1;
+    }
+
+    set({
+      products: merged,
+      page: 1,
+      limit: REQUEST_LIMIT,
+      total: totalFromApi || merged.length,
+      pages: pagesFromApi || 1,
+    });
+
+    return merged;
+  } catch (e) {
+    console.error(e);
+    set({ error: e.message });
+    toast.error(e.message);
+    return [];
+  } finally {
+    set({ loading: false });
+  }
+},
+
+
 
   applyBulkPricingRule: ({ mode, field, value }) => {
     const { products, bulkSelectedIds, bulkPriceDraft } = get();
@@ -769,6 +851,35 @@ export const useAdminProductStore = create((set, get) => ({
       return [];
     }
   },
+
+  bulkStatus: async (ids, status) => {
+  set({ saving: true });
+  try {
+    // ✅ backend endpoint (recommended)
+    const res = await fetch(`${API}/api/products/bulk-status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ ids, status }), // published|draft|unpublished
+    });
+
+    if (!res.ok) throw new Error("Failed bulk status update");
+
+    // ✅ optimistic update for UI
+    set((state) => ({
+      products: (state.products || []).map((p) => {
+        if (!ids.includes(p._id)) return p;
+
+        if (status === "published") return { ...p, isActive: true, isDraft: false };
+        if (status === "draft") return { ...p, isActive: true, isDraft: true };
+        return { ...p, isActive: false }; // unpublished
+      }),
+    }));
+  } finally {
+    set({ saving: false });
+  }
+},
+
 
     /* ============================================================
     ✅ UPDATE PRODUCT FABRICS (dedicated route)

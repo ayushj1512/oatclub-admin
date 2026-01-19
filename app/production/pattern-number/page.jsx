@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useAdminProductStore } from "@/store/adminProductStore";
 
@@ -8,6 +8,7 @@ import { useAdminProductStore } from "@/store/adminProductStore";
 const safeArr = (v) => (Array.isArray(v) ? v : []);
 const str = (v) => (v == null ? "" : String(v));
 const t = (v) => str(v).trim();
+const clamp = (n, min, max) => Math.max(min, Math.min(n, max));
 
 const flatVariants = (p) => {
   const productId = t(p?._id);
@@ -25,7 +26,6 @@ const flatVariants = (p) => {
 
   const variants = safeArr(p?.variants);
 
-  // If no variants, we still return one row (simple product)
   if (!variants.length) {
     return [
       {
@@ -38,13 +38,12 @@ const flatVariants = (p) => {
         images: uniqImages,
         variantId: "",
         sku: t(p?.sku),
-        patternNumber: t(p?.patternNumber), // backward compatible only
+        patternNumber: t(p?.patternNumber),
         isSimple: true,
       },
     ];
   }
 
-  // Variable product: one row per variant
   return variants.map((v) => ({
     rowId: `${productId}__${t(v?._id)}`,
     productId,
@@ -60,24 +59,48 @@ const flatVariants = (p) => {
   }));
 };
 
-const clamp = (n, min, max) => Math.max(min, Math.min(n, max));
-
-/* ---------------- Component ---------------- */
 export default function ProductionStylesPage() {
-  const { products, loading, saving, fetchProducts, updateProduct } =
-    useAdminProductStore();
+  const {
+    products,
+    total,
+    loading,
+    saving,
+    updateProduct,
+    fetchAllProducts,
+  } = useAdminProductStore();
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
-
-  // productId -> image index (so all variant rows for same product share image nav)
   const [imgIdx, setImgIdx] = useState({});
-
-  // edits: rowId -> { patternNumber }
   const [edits, setEdits] = useState({});
+  const [loadingAll, setLoadingAll] = useState(false);
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const loadAll = async () => {
+    if (typeof fetchAllProducts !== "function") {
+      toast.error("fetchAllProducts() missing in adminProductStore");
+      return;
+    }
+
+    setLoadingAll(true);
+    try {
+      await fetchAllProducts();
+    } catch {
+      // store already toasts
+    } finally {
+      if (mountedRef.current) setLoadingAll(false);
+    }
+  };
 
   useEffect(() => {
-    fetchProducts({ page: 1, limit: 50 });
+    loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -88,24 +111,37 @@ export default function ProductionStylesPage() {
     const c = t(category).toLowerCase();
 
     return safeArr(allRows).filter((r) => {
+      const pc = t(r.productCode).toLowerCase();
+      const title = t(r.title).toLowerCase();
+      const slug = t(r.slug).toLowerCase();
+      const sku = t(r.sku).toLowerCase();
+      const pattern = t(r.patternNumber).toLowerCase();
+
       const matchSearch =
         !s ||
-        r.productCode.toLowerCase().includes(s) ||
-        r.title.toLowerCase().includes(s) ||
-        r.slug.toLowerCase().includes(s) ||
-        r.sku.toLowerCase().includes(s) ||
-        r.patternNumber.toLowerCase().includes(s);
+        pc.includes(s) ||
+        title.includes(s) ||
+        slug.includes(s) ||
+        sku.includes(s) ||
+        pattern.includes(s);
 
-      const cats = safeArr(r.categories).map((x) => x.toLowerCase());
+      const cats = safeArr(r.categories).map((x) => t(x).toLowerCase());
       const matchCat = !c || cats.some((x) => x.includes(c));
 
       return matchSearch && matchCat;
     });
   }, [allRows, search, category]);
 
+  const totalProducts = useMemo(() => {
+    const apiTotal = Number(total || 0);
+    return apiTotal > 0 ? apiTotal : safeArr(products).length;
+  }, [total, products]);
+
+  const totalRows = useMemo(() => safeArr(allRows).length, [allRows]);
+
   const getRowPattern = (r) => {
     const v = edits[r.rowId]?.patternNumber;
-    return v != null ? v : r.patternNumber;
+    return v != null ? v : t(r.patternNumber);
   };
 
   const patchRowPattern = (rowId, patternNumber) =>
@@ -146,12 +182,9 @@ export default function ProductionStylesPage() {
     if (!productId) return;
 
     const patternNumber = t(getRowPattern(row));
-    // if mandatory:
-    // if (!patternNumber) return toast.error("Pattern number is required");
 
     try {
       if (row.isSimple) {
-        // simple product safety fallback
         await updateProduct(productId, { patternNumber });
       } else {
         await updateProduct(productId, {
@@ -159,23 +192,29 @@ export default function ProductionStylesPage() {
         });
       }
       toast.success("Saved ✅");
-    } catch {
-      // keep silent like your current behavior
-    }
+    } catch {}
   };
+
+  const isBusy = loading || loadingAll;
 
   return (
     <div className="min-h-screen bg-white text-black">
-      {/* Top Bar */}
       <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-black/10">
         <div className="p-4 md:p-5 flex flex-col md:flex-row md:items-center gap-3">
-          <div className="min-w-[240px]">
+          <div className="min-w-[280px]">
             <div className="text-lg font-semibold tracking-tight">
               Production / Styles
             </div>
             <div className="text-[11px] text-gray-600 mt-1">
-              {loading ? "Loading…" : `${filteredRows.length} rows`}
+              {isBusy
+                ? "Loading…"
+                : `Products: ${totalProducts} • Total rows: ${totalRows} • Showing: ${filteredRows.length}`}
             </div>
+            {!isBusy && (
+              <div className="text-[11px] text-gray-500 mt-1">
+                Debug: products loaded = {safeArr(products).length}
+              </div>
+            )}
           </div>
 
           <div className="flex-1" />
@@ -186,6 +225,7 @@ export default function ProductionStylesPage() {
               placeholder="Search product code / product name / slug / sku / pattern…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              // ✅ allow typing even while loading
             />
             <input
               className="px-3 py-2 bg-gray-50 border border-black/10 focus:border-black outline-none w-full md:w-56"
@@ -195,16 +235,15 @@ export default function ProductionStylesPage() {
             />
             <button
               className="px-3 py-2 bg-black text-white hover:bg-black/90 disabled:opacity-50"
-              onClick={() => fetchProducts({ page: 1, limit: 50 })}
-              disabled={loading}
+              onClick={loadAll}
+              disabled={isBusy}
             >
-              Refresh
+              {loadingAll ? "Refreshing…" : "Refresh All"}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Table */}
       <div className="p-4 md:p-6">
         <div className="overflow-x-auto">
           <table className="min-w-[1400px] w-full text-sm">
@@ -221,7 +260,7 @@ export default function ProductionStylesPage() {
             </thead>
 
             <tbody className="divide-y divide-black/5">
-              {loading ? (
+              {isBusy ? (
                 <tr>
                   <td className="p-6 text-gray-600" colSpan={7}>
                     Loading...
@@ -239,20 +278,17 @@ export default function ProductionStylesPage() {
 
                   return (
                     <tr key={row.rowId} className="align-top hover:bg-gray-50">
-                      {/* Product Code */}
                       <td className="p-3">
                         <div className="font-medium">
                           {row.productCode || "—"}
                         </div>
                       </td>
 
-                      {/* Product Name */}
                       <td className="p-3">
                         <div className="font-medium">{row.title || "—"}</div>
                         <div className="text-xs text-gray-500">{row.slug}</div>
                       </td>
 
-                      {/* SKU */}
                       <td className="p-3">
                         <div className="font-medium">{row.sku || "—"}</div>
                         {!row.isSimple && (
@@ -262,15 +298,12 @@ export default function ProductionStylesPage() {
                         )}
                       </td>
 
-                      {/* Image */}
                       <td className="p-3">
                         <div className="flex items-center gap-2">
                           <button
                             className="px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100 border border-black/10 disabled:opacity-50"
                             onClick={() => prevImg(row)}
                             disabled={!images.length}
-                            aria-label="Previous image"
-                            title="Previous image"
                           >
                             ←
                           </button>
@@ -295,8 +328,6 @@ export default function ProductionStylesPage() {
                             className="px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100 border border-black/10 disabled:opacity-50"
                             onClick={() => nextImg(row)}
                             disabled={!images.length}
-                            aria-label="Next image"
-                            title="Next image"
                           >
                             →
                           </button>
@@ -309,7 +340,6 @@ export default function ProductionStylesPage() {
                         )}
                       </td>
 
-                      {/* Category */}
                       <td className="p-3">
                         <div className="flex flex-wrap gap-1">
                           {safeArr(row.categories).length ? (
@@ -329,7 +359,6 @@ export default function ProductionStylesPage() {
                         </div>
                       </td>
 
-                      {/* Pattern Number */}
                       <td className="p-3">
                         <input
                           className="px-3 py-2 bg-gray-50 border border-black/10 focus:border-black outline-none w-full"
@@ -341,7 +370,6 @@ export default function ProductionStylesPage() {
                         />
                       </td>
 
-                      {/* Action */}
                       <td className="p-3">
                         <button
                           className="px-3 py-2 bg-black text-white hover:bg-black/90 w-full disabled:opacity-50"

@@ -4,6 +4,51 @@ import { toast } from "react-hot-toast";
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const API = `${BASE_URL}/api/collections`;
 
+/**
+ * 🔥 IMPORTANT UPDATE (Collection Model changed)
+ * products is now:
+ *  [
+ *    { product: "<productId>", productCode: "ABC123" }
+ *  ]
+ *
+ * So everywhere we were sending productIds[] we must send products[] objects.
+ */
+
+// Normalize for safety (supports old payloads too)
+const normalizeProductsPayload = (products) => {
+  if (!Array.isArray(products)) return [];
+
+  return products
+    .map((p) => {
+      // old style: "productId"
+      if (typeof p === "string") {
+        return { product: p, productCode: "" };
+      }
+
+      // old style: { _id, productCode? } coming from product objects in UI
+      if (p && typeof p === "object" && p._id && !p.product) {
+        return { product: p._id, productCode: p.productCode || "" };
+      }
+
+      // new style: { product, productCode }
+      if (p && typeof p === "object" && p.product) {
+        return { product: p.product, productCode: p.productCode || "" };
+      }
+
+      return null;
+    })
+    .filter(Boolean);
+};
+
+// Helps you build products array from product objects list
+const buildProductsFromProductObjects = (productList = []) =>
+  normalizeProductsPayload(
+    productList.map((p) => ({
+      product: p?._id,
+      productCode: p?.productCode || p?.code || p?.sku || "",
+    }))
+  );
+
 export const useAdminCollectionStore = create((set, get) => ({
   /* ============================================================
      STATE
@@ -75,16 +120,35 @@ export const useAdminCollectionStore = create((set, get) => ({
 
   /* ============================================================
      CREATE COLLECTION
+     ✅ ensures products are in new format
   ============================================================ */
   createCollection: async (payload) => {
     try {
       set({ saving: true, error: null });
 
+      const safePayload = { ...payload };
+
+      // if payload.products exists in any format -> normalize
+      if (safePayload.products) {
+        safePayload.products = normalizeProductsPayload(safePayload.products);
+
+        // ⚠️ Your backend schema has productCode required.
+        // If productCode is missing, backend will fail.
+        const missingCode = safePayload.products.some(
+          (p) => !p.productCode || !p.productCode.trim()
+        );
+        if (missingCode) {
+          throw new Error(
+            "productCode missing for one or more products. Please provide productCode for all products."
+          );
+        }
+      }
+
       const res = await fetch(API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(safePayload),
       });
 
       const data = await res.json();
@@ -108,16 +172,32 @@ export const useAdminCollectionStore = create((set, get) => ({
 
   /* ============================================================
      UPDATE COLLECTION
+     ✅ ensures products are in new format
   ============================================================ */
   updateCollection: async (id, payload) => {
     try {
       set({ saving: true, error: null });
 
+      const safePayload = { ...payload };
+
+      if (safePayload.products) {
+        safePayload.products = normalizeProductsPayload(safePayload.products);
+
+        const missingCode = safePayload.products.some(
+          (p) => !p.productCode || !p.productCode.trim()
+        );
+        if (missingCode) {
+          throw new Error(
+            "productCode missing for one or more products. Please provide productCode for all products."
+          );
+        }
+      }
+
       const res = await fetch(`${API}/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(safePayload),
       });
 
       const data = await res.json();
@@ -167,7 +247,7 @@ export const useAdminCollectionStore = create((set, get) => ({
     }
   },
 
-  /* ================= GET SINGLE (🔥 THIS FIXES YOUR ERROR) ================= */
+  /* ================= GET SINGLE (kept) ================= */
   fetchCollectionById: async (idOrSlug) => {
     try {
       set({ loading: true, error: null });
@@ -194,17 +274,32 @@ export const useAdminCollectionStore = create((set, get) => ({
 
   /* ============================================================
      UPDATE COLLECTION PRODUCTS
-     (Assign / remove products)
+     ✅ NEW FORMAT REQUIRED:
+       products = [{ product, productCode }]
+     ✅ Backward-compatible:
+       if you pass productIds (string[]) it will try, BUT will fail
+       unless productCode is present due to schema required.
   ============================================================ */
-  updateCollectionProducts: async (id, productIds = []) => {
+  updateCollectionProducts: async (id, products = []) => {
     try {
-      set({ saving: true });
+      set({ saving: true, error: null });
+
+      const normalized = normalizeProductsPayload(products);
+
+      const missingCode = normalized.some(
+        (p) => !p.productCode || !p.productCode.trim()
+      );
+      if (missingCode) {
+        throw new Error(
+          "productCode missing for one or more products. Please send products as [{ product, productCode }]."
+        );
+      }
 
       const res = await fetch(`${API}/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ products: productIds }),
+        body: JSON.stringify({ products: normalized }),
       });
 
       const data = await res.json();
@@ -223,19 +318,22 @@ export const useAdminCollectionStore = create((set, get) => ({
     } catch (e) {
       console.error(e);
       toast.error(e.message);
+      set({ error: e.message });
       throw e;
     } finally {
       set({ saving: false });
     }
   },
 
-    /* ============================================================
+  /* ============================================================
      ✅ SYNC COLLECTION ↔ PRODUCT.COLLECTIONS (bulk)
-     - multi-collection safe (uses backend $addToSet / $pull)
-     - addIds: products that should include this collection
-     - removeIds: products that should remove this collection
+     (unchanged - because it's product API based, not collection.products shape)
   ============================================================ */
-  syncCollectionOnProducts: async ({ collectionId, addIds = [], removeIds = [] }) => {
+  syncCollectionOnProducts: async ({
+    collectionId,
+    addIds = [],
+    removeIds = [],
+  }) => {
     try {
       set({ saving: true, error: null });
 
@@ -243,7 +341,6 @@ export const useAdminCollectionStore = create((set, get) => ({
         throw new Error("collectionId is required");
       }
 
-      const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
       const PRODUCT_API = `${BASE_URL}/api/products`;
 
       const res = await fetch(`${PRODUCT_API}/bulk/collections/sync`, {
@@ -262,9 +359,6 @@ export const useAdminCollectionStore = create((set, get) => ({
         throw new Error(data.message || "Failed to sync collection on products");
       }
 
-      // Optional: refresh collections so UI shows correct product counts if your API returns updated counts
-      // await get().fetchCollections();
-
       toast.success("Products synced with collection ✅");
       return data;
     } catch (e) {
@@ -277,4 +371,9 @@ export const useAdminCollectionStore = create((set, get) => ({
     }
   },
 
+  /* ============================================================
+     ✅ UTILITY EXPORTS (optional use in UI)
+     - buildProductsFromProductObjects: pass products list (with _id, productCode/sku)
+  ============================================================ */
+  buildProductsFromProductObjects,
 }));

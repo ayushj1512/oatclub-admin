@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCategoryStore } from "@/store/categorystore";
+import { RefreshCw, Search } from "lucide-react";
 
 export default function CategoryMultiSelect({
   value = [],
@@ -36,9 +37,7 @@ export default function CategoryMultiSelect({
 
     const selectedDefaults = defaults.filter((d) => availableKeys.has(d));
 
-    if (selectedDefaults.length) {
-      onChange(selectedDefaults);
-    }
+    if (selectedDefaults.length) onChange(selectedDefaults);
   }, [categories, value.length, onChange]);
 
   /* ---------------- helpers ---------------- */
@@ -46,6 +45,10 @@ export default function CategoryMultiSelect({
     const set = new Set(value);
     set.has(key) ? set.delete(key) : set.add(key);
     onChange(Array.from(set));
+  };
+
+  const handleRefresh = async () => {
+    await fetchCategories();
   };
 
   /* ---------------- filter categories ---------------- */
@@ -74,16 +77,17 @@ export default function CategoryMultiSelect({
     <div className="space-y-3">
       {/* Selected summary */}
       <div className="flex flex-wrap gap-2">
-        {selected.length ? (
+        {value.length ? (
           value.map((k, idx) => (
             <button
               key={k}
               type="button"
               onClick={() => toggle(k)}
-              className="px-3 py-1 rounded-full text-sm bg-black text-white hover:opacity-80 transition"
+              className="group inline-flex items-center gap-2 rounded-full bg-black/90 px-3 py-1.5 text-sm text-white shadow-sm transition hover:bg-black focus:outline-none focus:ring-2 focus:ring-black/20"
               title="Click to remove"
             >
-              {selected[idx]} ✕
+              <span className="truncate max-w-[180px]">{selected[idx]}</span>
+              <span className="opacity-80 group-hover:opacity-100">✕</span>
             </button>
           ))
         ) : (
@@ -91,20 +95,40 @@ export default function CategoryMultiSelect({
         )}
       </div>
 
-      {/* Search */}
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search categories..."
-        className="w-full rounded-xl border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
-      />
+      {/* Search + Refresh */}
+      <div className="flex items-center gap-2">
+        <div className="relative w-full">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search categories..."
+            className="w-full rounded-2xl bg-gray-50 px-10 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-black/5 transition placeholder:text-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-black/15"
+          />
+        </div>
 
-      {/* Categories as tags */}
-      <div className="rounded-xl border bg-white p-3 max-h-64 overflow-auto">
-        {loading && <p className="text-sm text-gray-500">Loading…</p>}
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={loading}
+          title="Refresh categories"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-50 shadow-sm ring-1 ring-black/5 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-black/15 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw className={`h-4 w-4 text-gray-700 ${loading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      {/* Categories */}
+      <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5">
+        {loading && (
+          <div className="flex items-center gap-2 px-1 py-2">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-gray-400" />
+            <p className="text-sm text-gray-500">Loading categories…</p>
+          </div>
+        )}
 
         {!loading && filtered?.length === 0 && (
-          <p className="text-sm text-gray-500">No categories found</p>
+          <p className="px-1 py-2 text-sm text-gray-500">No categories found</p>
         )}
 
         {!loading && filtered?.length > 0 && (
@@ -118,11 +142,12 @@ export default function CategoryMultiSelect({
                   key={key}
                   type="button"
                   onClick={() => toggle(key)}
-                  className={`px-3 py-1 rounded-full text-sm border transition ${
+                  className={[
+                    "rounded-full px-3 py-1.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-black/15",
                     active
-                      ? "bg-black text-white border-black"
-                      : "bg-gray-100 hover:bg-gray-200 border-gray-200"
-                  }`}
+                      ? "bg-black text-white shadow-sm"
+                      : "bg-gray-100 text-gray-900 hover:bg-gray-200",
+                  ].join(" ")}
                 >
                   {cat.name}
                 </button>
@@ -131,6 +156,11 @@ export default function CategoryMultiSelect({
           </div>
         )}
       </div>
+
+      {/* subtle hint */}
+      <p className="text-xs text-gray-400">
+        Tip: Click a selected chip to remove it. Use refresh to re-fetch latest categories.
+      </p>
     </div>
   );
 }
