@@ -34,14 +34,9 @@ const normalizeProductPayload = (payload) => {
   }
 
   // ✅ HSN Code hygiene: trim + digits-only (allow empty)
-  // Note: backend will validate too; this prevents avoidable 400s
   if (out.hsnCode !== undefined) {
     const hsn = String(out.hsnCode ?? "").trim();
-
-    // if someone enters spaces/dashes etc, keep digits only
     const digitsOnly = hsn.replace(/[^\d]/g, "");
-
-    // preserve intentional clearing
     out.hsnCode = hsn === "" ? "" : digitsOnly;
   }
 
@@ -49,21 +44,36 @@ const normalizeProductPayload = (payload) => {
   if (typeof out.fabrics === "string") {
     try {
       out.fabrics = JSON.parse(out.fabrics);
-    } catch {
-      // keep as-is if parsing fails
-    }
+    } catch {}
   }
 
   if (typeof out.avgFabricConsumption === "string") {
     try {
       out.avgFabricConsumption = JSON.parse(out.avgFabricConsumption);
-    } catch {
-      // keep as-is if parsing fails
-    }
+    } catch {}
+  }
+
+  // ✅ NEW: COLORS hygiene
+  if (out.colors !== undefined) {
+    const list =
+      Array.isArray(out.colors)
+        ? out.colors
+        : typeof out.colors === "string"
+          ? out.colors.split(",")
+          : [];
+
+    out.colors = Array.from(
+      new Set(
+        list
+          .map((c) => String(c || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
   }
 
   return out;
 };
+
 
 const normalizeFabricsPayload = (fabrics) => {
   // allow JSON string

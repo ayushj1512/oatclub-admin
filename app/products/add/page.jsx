@@ -54,6 +54,7 @@ export default function AddProductPage() {
     shortDescription: "",
     description: "",
     tagsText: "",
+colorsText: "", // ✅ NEW
 
     /* MEDIA */
     images: [], // ✅ urls array
@@ -149,6 +150,11 @@ export default function AddProductPage() {
         .map((t) => t.trim().toLowerCase())
         .filter(Boolean),
 
+        colors: form.colorsText
+  .split(",")
+  .map((c) => c.trim().toLowerCase())
+  .filter(Boolean),
+
       attributes: form.attributes,
       variants: form.variants,
 
@@ -192,211 +198,201 @@ export default function AddProductPage() {
   /* ---------------- UI ---------------- */
   return (
     <section className="min-h-screen bg-gray-50 px-6 py-8">
-      <div className="w-full max-w-full mx-auto space-y-8">
-        {/* HEADER */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">Add Product</h1>
-            <p className="text-sm text-gray-600">
-              Create a new product for your store
-            </p>
-          </div>
+  <div className="w-full max-w-full mx-auto space-y-8">
+    {/* HEADER */}
+    <div className="flex items-center justify-between">
+      <div>
+        <h1 className="text-xl font-semibold">Add Product</h1>
+        <p className="text-sm text-gray-600">
+          Create a new product for your store
+        </p>
+      </div>
 
-          <button
-            onClick={saveProduct}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg disabled:opacity-60"
-          >
-            <Save size={16} />
-            {saving ? "Saving…" : "Create"}
-          </button>
-        </div>
-
-        {/* BASIC */}
-        <div className="bg-white rounded-xl p-6 shadow space-y-4">
-          <h2 className="font-semibold">Basic Info</h2>
-
-          <input
-            placeholder="Product title"
-            value={form.title}
-            onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-            className="input"
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              placeholder="Price"
-              value={form.price}
-              onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
-              className="input"
-            />
-            <input
-              placeholder="Compare at price"
-              value={form.compareAtPrice}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, compareAtPrice: e.target.value }))
-              }
-              className="input"
-            />
-          </div>
-
-          {/* ✅ HSN Code visible here too (display) */}
-          <div className="bg-white rounded-xl p-6 shadow space-y-3">
-  <div>
-    <h2 className="font-semibold">
-      HSN Code {showHsnCode ? "(Apparels)" : ""}
-    </h2>
-    <p className="text-sm text-gray-500">
-      Default HSN: <span className="font-medium">62105000</span>
-    </p>
-  </div>
-
-  <input
-    placeholder="HSN Code (numeric only)"
-    inputMode="numeric"
-    value={form.hsnCode}
-    onChange={(e) => {
-      const digitsOnly = String(e.target.value || "").replace(/[^\d]/g, "");
-      setForm((p) => ({ ...p, hsnCode: digitsOnly }));
-    }}
-    className="input"
-  />
-
-  {!showHsnCode ? (
-    <p className="text-xs text-gray-500">
-      (Note: This is typically used for apparels. If your category naming is different,
-      update the apparel detection keywords.)
-    </p>
-  ) : (
-    <p className="text-xs text-gray-500">
-      *Only digits allowed.
-    </p>
-  )}
-</div>
-
-        </div>
-
-        {/* CATEGORIES */}
-        <div className="bg-white rounded-xl p-6 shadow space-y-4">
-          <h2 className="font-semibold">Categories</h2>
-          <CategoryMultiSelect
-            value={form.categories}
-            onChange={(next) => setForm((p) => ({ ...p, categories: next }))}
-          />
-        </div>
-
-        {/* ✅ HSN CODE (Apparels only) */}
-      {showHsnCode && (
-  <div className="bg-white p-6">
-    <div>
-      <h2 className="font-semibold">HSN Code (Apparels)</h2>
-      <p className="text-sm text-gray-500">
-        Default HSN: <span className="font-medium">62105000</span>
-      </p>
+      <button
+        onClick={saveProduct}
+        disabled={saving}
+        className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg disabled:opacity-60"
+      >
+        <Save size={16} />
+        {saving ? "Saving…" : "Create"}
+      </button>
     </div>
 
-    {/* ✅ display only (non-editable) */}
-    <div className="mt-3 w-full rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-800">
-      {form.hsnCode || "62105000"}
-    </div>
+    {/* BASIC */}
+    <div className="bg-white rounded-xl p-6 shadow space-y-4">
+      <h2 className="font-semibold">Basic Info</h2>
 
-    <p className="mt-2 text-xs text-gray-500">
-      *This is shown only when category is Apparel/Apparels/Clothing/Garments.
-    </p>
-  </div>
-)}
+      <input
+        placeholder="Product title"
+        value={form.title}
+        onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
+        className="input"
+      />
 
-
-        {/* ✅ IMAGES (FIXED) */}
-        <div className="bg-white rounded-xl p-6 shadow space-y-4">
-          <h2 className="font-semibold">Product Images</h2>
-
-          <ProductImagesEditor
-            value={form.images} // ✅ correct prop
-            folder="miray/products" // ✅ cloudinary folder
-            onChange={(urls) => {
-              // ✅ thumbnail always first
-              setForm((p) => ({
-                ...p,
-                images: urls,
-                thumbnail: urls?.[0] || "",
-              }));
-            }}
-          />
-        </div>
-
-        {/* CONTENT */}
-        <ProductContentEditor
-          editable
-          value={{
-            shortDescription: form.shortDescription,
-            description: form.description,
-            tagsText: form.tagsText,
-          }}
-          onChange={(next) => setForm((p) => ({ ...p, ...next }))}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input
+          placeholder="Price"
+          value={form.price}
+          onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
+          className="input"
         />
-
-        {/* ATTRIBUTES */}
-        <AttributeSelector
-          editable
-          value={form.attributes}
-          allAttributes={allAttributes}
-          onChange={(next) => setForm((p) => ({ ...p, attributes: next }))}
-        />
-
-        {/* VARIANTS */}
-        {form.attributes.length > 0 && (
-          <ProductVariantsEditor
-            editable
-            value={form.variants}
-            onChange={(next) => setForm((p) => ({ ...p, variants: next }))}
-          />
-        )}
-
-        {/* CROSS SELL */}
-        <div className="bg-white rounded-xl p-6 shadow space-y-4">
-          <h2 className="font-semibold">Cross-sell Products</h2>
-
-          <CrossSellSelector
-            value={form.crossSellProducts}
-            onChange={(next) =>
-              setForm((p) => ({ ...p, crossSellProducts: next }))
-            }
-          />
-        </div>
-
-        {/* COLLECTIONS (OPTIONAL) */}
-        <div className="bg-white rounded-xl p-6 shadow space-y-4">
-          <h2 className="font-semibold">Collections (Optional)</h2>
-          <p className="text-sm text-gray-500">
-            Assign this product to one or more collections
-          </p>
-
-          <CollectionMultiSelect
-            collections={collections}
-            value={form.collections}
-            onChange={(next) => setForm((p) => ({ ...p, collections: next }))}
-          />
-        </div>
-
-        {/* ADVANCED */}
-        <ProductAdvancedFields
-          value={form}
-          collections={collections}
-          editable
-          onChange={(next) => setForm(next)}
+        <input
+          placeholder="Compare at price"
+          value={form.compareAtPrice}
+          onChange={(e) =>
+            setForm((p) => ({ ...p, compareAtPrice: e.target.value }))
+          }
+          className="input"
         />
       </div>
 
-      <style jsx>{`
-        .input {
-          width: 100%;
-          padding: 0.75rem 1rem;
-          background: #f3f4f6;
-          border-radius: 0.75rem;
-          outline: none;
+      {/* COLORS */}
+      <div className="space-y-1">
+        <input
+          placeholder="Colors (comma-separated) e.g. red, black, navy"
+          value={form.colorsText}
+          onChange={(e) =>
+            setForm((p) => ({ ...p, colorsText: e.target.value }))
+          }
+          className="input"
+        />
+        <p className="text-xs text-gray-500">
+          These colors will be stored at product level for easy selection/filtering.
+        </p>
+      </div>
+
+      {/* HSN */}
+      <div className="space-y-2">
+        <div>
+          <h3 className="font-semibold">
+            HSN Code {showHsnCode ? "(Apparels)" : ""}
+          </h3>
+          <p className="text-sm text-gray-500">
+            Default HSN: <span className="font-medium">62105000</span>
+          </p>
+        </div>
+
+        <input
+          placeholder="HSN Code (numeric only)"
+          inputMode="numeric"
+          value={form.hsnCode}
+          onChange={(e) => {
+            const digitsOnly = String(e.target.value || "").replace(/[^\d]/g, "");
+            setForm((p) => ({ ...p, hsnCode: digitsOnly }));
+          }}
+          className="input"
+          disabled={!showHsnCode}
+        />
+
+        {!showHsnCode ? (
+          <p className="text-xs text-gray-500">
+            (HSN is used for apparels. Enable by selecting Apparel/Clothing category.)
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500">*Only digits allowed.</p>
+        )}
+      </div>
+    </div>
+
+    {/* CATEGORIES */}
+    <div className="bg-white rounded-xl p-6 shadow space-y-4">
+      <h2 className="font-semibold">Categories</h2>
+      <CategoryMultiSelect
+        value={form.categories}
+        onChange={(next) => setForm((p) => ({ ...p, categories: next }))}
+      />
+    </div>
+
+    {/* IMAGES */}
+    <div className="bg-white rounded-xl p-6 shadow space-y-4">
+      <h2 className="font-semibold">Product Images</h2>
+
+      <ProductImagesEditor
+        value={form.images}
+        folder="miray/products"
+        onChange={(urls) => {
+          setForm((p) => ({
+            ...p,
+            images: urls,
+            thumbnail: urls?.[0] || "",
+          }));
+        }}
+      />
+    </div>
+
+    {/* CONTENT */}
+    <ProductContentEditor
+      editable
+      value={{
+        shortDescription: form.shortDescription,
+        description: form.description,
+        tagsText: form.tagsText,
+      }}
+      onChange={(next) => setForm((p) => ({ ...p, ...next }))}
+    />
+
+    {/* ATTRIBUTES */}
+    <AttributeSelector
+      editable
+      value={form.attributes}
+      allAttributes={allAttributes}
+      onChange={(next) => setForm((p) => ({ ...p, attributes: next }))}
+    />
+
+    {/* VARIANTS */}
+    {form.attributes.length > 0 && (
+      <ProductVariantsEditor
+        editable
+        value={form.variants}
+        onChange={(next) => setForm((p) => ({ ...p, variants: next }))}
+      />
+    )}
+
+    {/* CROSS SELL */}
+    <div className="bg-white rounded-xl p-6 shadow space-y-4">
+      <h2 className="font-semibold">Cross-sell Products</h2>
+
+      <CrossSellSelector
+        value={form.crossSellProducts}
+        onChange={(next) =>
+          setForm((p) => ({ ...p, crossSellProducts: next }))
         }
-      `}</style>
-    </section>
+      />
+    </div>
+
+    {/* COLLECTIONS */}
+    <div className="bg-white rounded-xl p-6 shadow space-y-4">
+      <h2 className="font-semibold">Collections (Optional)</h2>
+      <p className="text-sm text-gray-500">
+        Assign this product to one or more collections
+      </p>
+
+      <CollectionMultiSelect
+        collections={collections}
+        value={form.collections}
+        onChange={(next) => setForm((p) => ({ ...p, collections: next }))}
+      />
+    </div>
+
+    {/* ADVANCED */}
+    <ProductAdvancedFields
+      value={form}
+      collections={collections}
+      editable
+      onChange={(next) => setForm(next)}
+    />
+  </div>
+
+  <style jsx>{`
+    .input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: #f3f4f6;
+      border-radius: 0.75rem;
+      outline: none;
+    }
+  `}</style>
+</section>
+
   );
 }

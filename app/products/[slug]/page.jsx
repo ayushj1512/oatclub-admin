@@ -42,6 +42,7 @@ export default function ProductDetailsPage({ params }) {
 
   const [collections, setCollections] = useState([]);
   const [product, setProduct] = useState(null);
+const [variantsDirty, setVariantsDirty] = useState(false);
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -65,6 +66,7 @@ export default function ProductDetailsPage({ params }) {
     shortDescription: "",
     description: "",
     tagsText: "",
+colorsText: "", // ✅ NEW
 
     attributes: [],
     variants: [],
@@ -100,6 +102,7 @@ export default function ProductDetailsPage({ params }) {
       if (!res.ok) throw new Error(data?.message || "Failed to load product");
 
       setProduct(data);
+setVariantsDirty(false);
 
       /* ---------------- IMAGES ---------------- */
       const imgs = safeImages(data);
@@ -132,6 +135,7 @@ export default function ProductDetailsPage({ params }) {
         shortDescription: toStr(data?.shortDescription),
         description: toStr(data?.description),
         tagsText: Array.isArray(data?.tags) ? data.tags.join(", ") : "",
+colorsText: Array.isArray(data?.colors) ? data.colors.join(", ") : "",
 
         /* ATTRIBUTES */
         attributes: Array.isArray(data?.attributes)
@@ -154,6 +158,7 @@ export default function ProductDetailsPage({ params }) {
               attributes: Array.isArray(v?.attributes) ? v.attributes : [],
               weight: toNum(v?.weight),
               barcode: v?.barcode || "",
+              patternNumber: String(v?.patternNumber || "").trim(),
               compareAtPrice: v?.compareAtPrice ?? "",
             }))
           : [],
@@ -255,86 +260,85 @@ export default function ProductDetailsPage({ params }) {
         }));
 
       /* ================= CLEAN VARIANTS ================= */
-      const cleanedVariants = Array.isArray(form.variants)
-        ? form.variants.map((v) => ({
-            _id: v?._id,
-            sku: v?.sku || "",
-            price: toNum(v?.price),
-            compareAtPrice:
-              v?.compareAtPrice === "" ? null : toNum(v?.compareAtPrice),
-            stock: toNum(v?.stock),
-            isInStock: Boolean(v?.isInStock ?? true),
-            weight: toNum(v?.weight),
-            barcode: v?.barcode || "",
-            attributes: Array.isArray(v?.attributes) ? v.attributes : [],
-          }))
-        : [];
+    const cleanedVariants = Array.isArray(form.variants)
+  ? form.variants.map((v) => ({
+      _id: v?._id,
+      sku: v?.sku || "",
+      barcode: v?.barcode || "",
+      weight: toNum(v?.weight),
+      attributes: Array.isArray(v?.attributes) ? v.attributes : [],
+      patternNumber: String(v?.patternNumber || "").trim(),
+    }))
+  : [];
+
 
       /* ================= BUILD PAYLOAD ================= */
-      const payload = {
-        /* BASIC */
-        title: form.title,
-        price: toNum(form.price),
-        compareAtPrice:
-          form.compareAtPrice === "" ? null : toNum(form.compareAtPrice),
+     const payload = {
+  /* BASIC */
+  title: form.title,
+  price: toNum(form.price),
+  compareAtPrice: form.compareAtPrice === "" ? null : toNum(form.compareAtPrice),
 
-        /* CATEGORIES */
-        categories: Array.isArray(form.categories)
-          ? form.categories.filter(Boolean)
-          : [],
+  /* CATEGORIES */
+  categories: Array.isArray(form.categories) ? form.categories.filter(Boolean) : [],
 
-        /* INVENTORY */
-        stock: toNum(form.stock),
-        isInStock: Boolean(form.isInStock),
-        isActive: Boolean(form.isActive),
+  /* INVENTORY */
+  isActive: Boolean(form.isActive),
 
-        /* CONTENT */
-        shortDescription: form.shortDescription || "",
-        description: form.description || "",
+  /* CONTENT */
+  shortDescription: form.shortDescription || "",
+  description: form.description || "",
 
-        fabrics: Array.isArray(form.fabrics) ? form.fabrics : [],
+  fabrics: Array.isArray(form.fabrics) ? form.fabrics : [],
 
-        /* ✅ MEDIA */
-        images: Array.isArray(form.images) ? form.images.filter(Boolean) : [],
-        thumbnail: form.images?.[0] || "", // ✅ always sync
+  /* ✅ MEDIA */
+  images: Array.isArray(form.images) ? form.images.filter(Boolean) : [],
+  thumbnail: form.images?.[0] || "",
 
-        /* TAGS */
-        tags: toStr(form.tagsText)
-          .split(",")
-          .map((t) => t.trim().toLowerCase())
-          .filter(Boolean),
+  /* TAGS */
+  tags: toStr(form.tagsText)
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean),
 
-        /* ATTRIBUTES + VARIANTS */
-        attributes: cleanedAttributes,
-        variants: cleanedVariants,
+  colors: Array.from(
+    new Set(
+      toStr(form.colorsText)
+        .split(",")
+        .map((c) => c.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  ),
 
-        /* CROSS SELL */
-        crossSellProducts: Array.isArray(form.crossSellProducts)
-          ? form.crossSellProducts.filter(Boolean)
-          : [],
+  /* ATTRIBUTES */
+  attributes: cleanedAttributes,
 
-        /* ADVANCED */
-        highlights: Array.isArray(form.highlights) ? form.highlights : [],
-        collections: Array.isArray(form.collections) ? form.collections : [],
+  // ✅ IMPORTANT: variants only if user changed variants
+  ...(variantsDirty ? { variants: cleanedVariants } : {}),
 
-        /* SHIPPING */
-        weight: toNum(form.weight),
-        dimensions: form.dimensions || {
-          length: 0,
-          width: 0,
-          height: 0,
-          unit: "cm",
-        },
+  /* CROSS SELL */
+  crossSellProducts: Array.isArray(form.crossSellProducts)
+    ? form.crossSellProducts.filter(Boolean)
+    : [],
 
-        /* SEO */
-        metaTitle: form.metaTitle || "",
-        metaDescription: form.metaDescription || "",
-        keywords: Array.isArray(form.keywords) ? form.keywords : [],
+  /* ADVANCED */
+  highlights: Array.isArray(form.highlights) ? form.highlights : [],
+  collections: Array.isArray(form.collections) ? form.collections : [],
 
-        /* PUBLISHING */
-        isFeatured: Boolean(form.isFeatured),
-        isDraft: Boolean(form.isDraft),
-      };
+  /* SHIPPING */
+  weight: toNum(form.weight),
+  dimensions: form.dimensions || { length: 0, width: 0, height: 0, unit: "cm" },
+
+  /* SEO */
+  metaTitle: form.metaTitle || "",
+  metaDescription: form.metaDescription || "",
+  keywords: Array.isArray(form.keywords) ? form.keywords : [],
+
+  /* PUBLISHING */
+  isFeatured: Boolean(form.isFeatured),
+  isDraft: Boolean(form.isDraft),
+};
+
 
       const res = await fetch(`${BACKEND}/api/products/${product._id}`, {
         method: "PUT",
@@ -344,6 +348,7 @@ export default function ProductDetailsPage({ params }) {
 
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.message || "Update failed");
+console.log("PAYLOAD COLORS:", payload.colors, payload);
 
       alert("Product updated successfully ✅");
       setEditing(false);
@@ -502,13 +507,7 @@ export default function ProductDetailsPage({ params }) {
         className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
         placeholder="Compare at price"
       />
-      <input
-        name="stock"
-        value={form.stock}
-        onChange={handleChange}
-        className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
-        placeholder="Stock (simple products)"
-      />
+      
     </div>
   ) : (
     <div className="space-y-1">
@@ -538,15 +537,6 @@ export default function ProductDetailsPage({ params }) {
 
   {editing ? (
     <div className="flex items-center gap-6 flex-wrap text-sm">
-      <label className="inline-flex items-center gap-2">
-        <input
-          type="checkbox"
-          name="isInStock"
-          checked={!!form.isInStock}
-          onChange={handleChange}
-        />
-        In Stock
-      </label>
       <label className="inline-flex items-center gap-2">
         <input
           type="checkbox"
@@ -613,6 +603,44 @@ export default function ProductDetailsPage({ params }) {
             }))
           }
         />
+
+        {/* colors */}
+
+        {/* COLORS */}
+<div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
+  <h2 className="text-lg md:text-xl font-semibold">Colors</h2>
+
+  {!editing ? (
+    <div className="flex flex-wrap gap-2">
+      {Array.isArray(product?.colors) && product.colors.length ? (
+        product.colors.map((c) => (
+          <span
+            key={c}
+            className="px-3 py-1 bg-gray-200 rounded-full text-xs"
+          >
+            {c}
+          </span>
+        ))
+      ) : (
+        <p className="text-sm text-gray-600">No colors set</p>
+      )}
+    </div>
+  ) : (
+    <div className="space-y-2">
+      <input
+        name="colorsText"
+        value={form.colorsText}
+        onChange={handleChange}
+        placeholder="Comma-separated colors e.g. red, black, navy"
+        className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
+      />
+      <p className="text-xs text-gray-500">
+        Stored at product level for easy selection/filtering.
+      </p>
+    </div>
+  )}
+</div>
+
 
         {/* FABRICS */}
         <ProductFabricAssignment
@@ -688,10 +716,13 @@ export default function ProductDetailsPage({ params }) {
 
         {/* VARIANTS */}
         <ProductVariantsEditor
-          value={editing ? form.variants : product.variants}
-          editable={editing}
-          onChange={(next) => setForm((p) => ({ ...p, variants: next }))}
-        />
+  value={editing ? form.variants : product.variants}
+  editable={editing}
+  onChange={(next) => {
+    setVariantsDirty(true);
+    setForm((p) => ({ ...p, variants: next }));
+  }}
+/>
 
         {/* CROSS SELL */}
         <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">

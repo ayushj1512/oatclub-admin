@@ -51,28 +51,46 @@ export default function AddCollectionForm() {
   };
 
   const submit = async () => {
-    if (!form.name.trim()) return alert("Collection name is required");
+  if (!form.name.trim()) return alert("Collection name is required");
 
-    // ✅ 1) create collection
-    const created = await createCollection({
-      name: toStr(form.name),
-      description: toStr(form.description),
-      type: form.type,
-      isActive: Boolean(form.isActive),
-      products: form.products,
+  // build products payload with productCode
+  const selectedProducts = (form.products || []).map((id) => {
+    const p = products.find((x) => x._id === id);
+
+    return {
+      productId: id,
+      productCode: p?.productCode || p?.sku || p?.code || "",
+    };
+  });
+
+  // validate locally (better error than store throw)
+  const missing = selectedProducts.filter((p) => !p.productCode);
+  if (missing.length) {
+    return alert(
+      `productCode missing for ${missing.length} selected product(s). Please add productCode/SKU in product data.`
+    );
+  }
+
+  const created = await createCollection({
+    name: toStr(form.name),
+    description: toStr(form.description),
+    type: form.type,
+    isActive: Boolean(form.isActive),
+    products: selectedProducts, // ✅ now includes productCode
+  });
+
+  // keep your sync logic same (it needs ids)
+  if (created?._id && form.products.length) {
+    await syncCollectionOnProducts({
+      collectionId: created._id,
+      addIds: form.products,
+      removeIds: [],
     });
+  }
 
-    // ✅ 2) sync into Product.collections (multi-collection safe)
-    if (created?._id && Array.isArray(form.products) && form.products.length) {
-      await syncCollectionOnProducts({
-        collectionId: created._id,
-        addIds: form.products,
-        removeIds: [],
-      });
-    }
+  router.push("/products/collections");
+};
 
-    router.push("/products/collections");
-  };
 
   return (
     <section className="min-h-screen bg-[#F6F7FB] px-4 py-7 md:px-10 md:py-10">
