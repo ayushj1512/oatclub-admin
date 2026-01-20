@@ -109,6 +109,7 @@ export const sidebarMenus = {
 
   // ✅ NEW PAGE ADDED
   { label: "Category Analytics", href: "/products/category-analytics" },
+  { label: "Bestsellers", href: "/products/bestseller" },
 
   { label: "Size Charts", href: "/products/size-charts" },
   { label: "Attributes", href: "/products/attributes" },
