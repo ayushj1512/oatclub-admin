@@ -127,6 +127,7 @@ export const sidebarMenus = {
   orders: [
     { label: "Orders Dashboard", href: "/orders" },
     { label: "All Orders", href: "/orders/all" },
+    { label: "Order Analytics", href: "/orders/report" },
 
     // Status Buckets
     { label: "Pending Orders", href: "/orders/pending" },
