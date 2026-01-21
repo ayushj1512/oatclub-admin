@@ -140,7 +140,7 @@ export const sidebarMenus = {
 
     // ✅ UPDATED: RMA now points to /rma
     { label: "RMA Requests", href: "/rma" },
-
+ { label: "RMA Requests", href: "/orders/report" },
     // Other Tools
     { label: "Order Tags", href: "/orders/tags" },
   ],
