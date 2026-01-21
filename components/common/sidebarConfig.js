@@ -42,13 +42,10 @@ export const sidebarMenus = {
   ],
 
   production: [
-  { label: "Production Dashboard", href: "/production" },
+    { label: "Production Dashboard", href: "/production" },
     { label: "Pattern Number", href: "/production/pattern-number" },
-  { label: "Fabric", href: "/production/fabric" },
-  { label: "Product Style", href: "/production/style" },
-  
-],
-
+    { label: "Fabric", href: "/production/fabric" },
+  ],
 
   accounts: [
     { label: "Accounts Dashboard", href: "/accounts" },
@@ -100,33 +97,32 @@ export const sidebarMenus = {
   ],
 
   products: [
-  { label: "Product Dashboard", href: "/products" },
-  { label: "Add New Product", href: "/products/add" },
-  { label: "Manage Products", href: "/products/manage" },
-  { label: "Analytics", href: "/products/analytics" },
+    { label: "Product Dashboard", href: "/products" },
+    { label: "Add New Product", href: "/products/add" },
+    { label: "Manage Products", href: "/products/manage" },
+    { label: "Analytics", href: "/products/analytics" },
 
-  { label: "Categories", href: "/products/category" },
+    { label: "Categories", href: "/products/category" },
 
-  // ✅ NEW PAGE ADDED
-  { label: "Category Analytics", href: "/products/category-analytics" },
-  { label: "Bestsellers", href: "/products/bestseller" },
+    // ✅ NEW PAGE ADDED
+    { label: "Category Analytics", href: "/products/category-analytics" },
+    { label: "Bestsellers", href: "/products/bestseller" },
 
-  { label: "Size Charts", href: "/products/size-charts" },
-  { label: "Attributes", href: "/products/attributes" },
-  { label: "Variants", href: "/products/variants" },
-  { label: "Collections", href: "/products/collections" },
-  { label: "Fabric", href: "/products/fabric" },
-  { label: "Bulk Import", href: "/products/bulk-import" },
-  { label: "Bulk Export", href: "/products/bulk-export" },
-  { label: "Media Library", href: "/media" },
-  { label: "Inventory Sync", href: "/products/inventory-sync" },
-  { label: "Price Updates", href: "/products/pricing" },
-  { label: "Offers & Discounts", href: "/products/offers" },
-  { label: "SEO Manager", href: "/products/seo" },
-  { label: "Reviews & Ratings", href: "/products/reviews" },
-  { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
-],
-
+    { label: "Size Charts", href: "/products/size-charts" },
+    { label: "Attributes", href: "/products/attributes" },
+    { label: "Variants", href: "/products/variants" },
+    { label: "Collections", href: "/products/collections" },
+    { label: "Fabric", href: "/products/fabric" },
+    { label: "Bulk Import", href: "/products/bulk-import" },
+    { label: "Bulk Export", href: "/products/bulk-export" },
+    { label: "Media Library", href: "/media" },
+    { label: "Inventory Sync", href: "/products/inventory-sync" },
+    { label: "Price Updates", href: "/products/pricing" },
+    { label: "Offers & Discounts", href: "/products/offers" },
+    { label: "SEO Manager", href: "/products/seo" },
+    { label: "Reviews & Ratings", href: "/products/reviews" },
+    { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
+  ],
 
   orders: [
     { label: "Orders Dashboard", href: "/orders" },
@@ -150,9 +146,7 @@ export const sidebarMenus = {
   ],
 
   // ✅ OPTIONAL: Separate RMA menu group (if you want sidebar items when on /rma)
-  rma: [
-    { label: "RMA Requests", href: "/rma" },
-  ],
+  rma: [{ label: "RMA Requests", href: "/rma" }],
 
   coupons: [
     { label: "Coupons Dashboard", href: "/coupons" },
@@ -183,35 +177,32 @@ export const sidebarMenus = {
     { label: "WhatsApp Broadcasts", href: "/marketing/whatsapp" },
     { label: "Influencer / Collabs", href: "/marketing/collabs" },
   ],
-customers: [
-  { label: "Customer Dashboard", href: "/customers/dashboard" },
-  { label: "Customer List", href: "/customers" },
-  { label: "Customer / Address", href: "/customers/address" }, // ✅ added
-  { label: "Cart Adds", href: "/customers/cart-adds" }, // ✅ added
-  // { label: "Abandoned Carts", href: "/customers/carts" }, // ❌ removed
-  { label: "Tickets & Support", href: "/customers/support" },
-  { label: "Newsletter Subscribers", href: "/customers/newsletter" },
-  { label: "Wishlist", href: "/customers/wishlist" }, // ✅ added
-],
-
-
-
-
+  customers: [
+    { label: "Customer Dashboard", href: "/customers/dashboard" },
+    { label: "Customer List", href: "/customers" },
+    { label: "Customer / Address", href: "/customers/address" }, // ✅ added
+    { label: "Cart Adds", href: "/customers/cart-adds" }, // ✅ added
+    // { label: "Abandoned Carts", href: "/customers/carts" }, // ❌ removed
+    { label: "Tickets & Support", href: "/customers/support" },
+    { label: "Newsletter Subscribers", href: "/customers/newsletter" },
+    { label: "Wishlist", href: "/customers/wishlist" }, // ✅ added
+  ],
 
   customer_support: [
-  { label: "Support Dashboard", href: "/customer-support" },
+    { label: "Support Dashboard", href: "/customer-support" },
     { label: "Search", href: "/customer-support/search" },
-    { label: "Customer Confirmation", href: "/customer-support/customer-confirmation" },
-  { label: "All Tickets", href: "/customer-support/all" },
-  { label: "Open Tickets", href: "/customer-support/open" },
-  { label: "In Progress", href: "/customer-support/in-progress" },
-  { label: "Resolved", href: "/customer-support/resolved" },
-  { label: "Closed", href: "/customer-support/closed" },
+    {
+      label: "Customer Confirmation",
+      href: "/customer-support/customer-confirmation",
+    },
+    { label: "All Tickets", href: "/customer-support/all" },
+    { label: "Open Tickets", href: "/customer-support/open" },
+    { label: "In Progress", href: "/customer-support/in-progress" },
+    { label: "Resolved", href: "/customer-support/resolved" },
+    { label: "Closed", href: "/customer-support/closed" },
 
-  { label: "SLA / Reports", href: "/customer-support/reports" },
-
-],
-
+    { label: "SLA / Reports", href: "/customer-support/reports" },
+  ],
 
   sales: [
     { label: "Sales Dashboard", href: "/sales" },
@@ -236,13 +227,12 @@ customers: [
     { label: "Activity", href: "/superadmin/activity" },
   ],
 
-    collaboration: [
+  collaboration: [
     { label: "Collaboration Dashboard", href: "/collaboration" },
     { label: "Add Collaboration", href: "/collaboration/add" },
   ],
 
-
-wordpress: [{ label: "WP Orders", href: "/wordpress/orders" }],
+  wordpress: [{ label: "WP Orders", href: "/wordpress/orders" }],
 };
 
 // ------------------------------

@@ -687,7 +687,7 @@ fetchAllProducts: async (params = {}) => {
   try {
     set({ loading: true, error: null });
 
-    const REQUEST_LIMIT = 250; // what we request (backend may still return 50)
+    const REQUEST_LIMIT = 250;
     let page = 1;
 
     const merged = [];
@@ -707,7 +707,6 @@ fetchAllProducts: async (params = {}) => {
 
       const res = await fetch(`${API}?${query}`, { credentials: "include" });
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.message || "Failed to fetch products");
 
       const list = Array.isArray(data.products) ? data.products : [];
@@ -715,24 +714,20 @@ fetchAllProducts: async (params = {}) => {
       totalFromApi = Number(data.total || totalFromApi || 0);
       pagesFromApi = Number(data.pages || pagesFromApi || 0);
 
-      // ✅ if empty page => finished
       if (list.length === 0) break;
 
-      // ✅ merge unique
       let added = 0;
       for (const p of list) {
         const id = String(p?._id || "").trim();
-        if (!id) continue;
-        if (seen.has(id)) continue;
+        if (!id || seen.has(id)) continue;
         seen.add(id);
         merged.push(p);
         added += 1;
       }
 
-      // ✅ if nothing new added => backend repeating same data => stop
       if (added === 0) break;
 
-      // ✅ if pages are provided, rely on them
+      if (totalFromApi && merged.length >= totalFromApi) break;
       if (pagesFromApi && page >= pagesFromApi) break;
 
       page += 1;
@@ -741,7 +736,6 @@ fetchAllProducts: async (params = {}) => {
     set({
       products: merged,
       page: 1,
-      limit: REQUEST_LIMIT,
       total: totalFromApi || merged.length,
       pages: pagesFromApi || 1,
     });
@@ -756,6 +750,7 @@ fetchAllProducts: async (params = {}) => {
     set({ loading: false });
   }
 },
+
 
 
 
