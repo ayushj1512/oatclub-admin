@@ -246,7 +246,7 @@ export default function BestsellerManagerPage() {
 }
 
 /* ---------------- clean white/black/grey UI (light borders) ---------------- */
-const page = { padding: 14, maxWidth: 980, margin: "0 auto", background: "#fff", color: "#111" };
+const page = { padding: 14, margin: "0 auto", background: "#fff", color: "#111" };
 
 const top = {
   display: "flex",
