@@ -675,6 +675,56 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
+
+  /* ============================================================
+  INLINE TITLE UPDATE (grid)
+============================================================ */
+updateTitleInline: async (id, title) => {
+  try {
+    set({ saving: true });
+
+    const next = String(title || "").trim();
+    if (!next) {
+      toast.error("Title is required");
+      return;
+    }
+
+    const res = await fetch(`${API}/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ title: next }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Title update failed");
+
+    // ✅ update list (admin grid)
+    set((state) => ({
+      products: (state.products || []).map((p) =>
+        p._id === id ? { ...p, title: next } : p
+      ),
+    }));
+
+    // ✅ update currently opened product (edit page) if same id
+    if (get().product?._id === id) {
+      set((state) => ({
+        product: state.product ? { ...state.product, title: next } : state.product,
+      }));
+    }
+
+    toast.success("Title updated ✅");
+    return data.product;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
+
+
     /* ============================================================
     ✅ FETCH ALL PRODUCTS (ADMIN) - loads all pages and merges
     Uses limit=250 (backend cap), fetches page-by-page internally
