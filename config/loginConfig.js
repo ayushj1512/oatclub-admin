@@ -30,22 +30,20 @@ export const DOMAIN_PERMISSIONS = {
   coupons: "manageCoupons",
   wordpress: "manageWordpressOrders",
 
-  // ✅ NEW: warehouse domain (ONLY production access)
+  // ✅ warehouse domain (ONLY production access)
   warehouse: "manageProduction",
 };
+
+// ✅ All permission keys used across the app (no "*")
+export const ALL_PERMISSIONS = Array.from(new Set(Object.values(DOMAIN_PERMISSIONS)));
 
 // ✅ Default permissions by role (if admin.permissions empty)
 export const ROLE_DEFAULT_PERMS = {
   superadmin: ["*"],
 
-  admin: [
-    "manageOrders",
-    "manageProducts",
-    "manageCustomers",
-    "manageSupport",
-    "viewAnalytics",
-    "viewReports",
-  ],
+  // ✅ Admin gets everything EXCEPT superadmin ("*")
+  // (superadmin-only actions should be role-guarded, not permission-guarded)
+  admin: [...ALL_PERMISSIONS],
 
   customer_care: ["manageSupport"],
 
@@ -53,7 +51,7 @@ export const ROLE_DEFAULT_PERMS = {
   viewer: ["viewReports", "viewAnalytics"],
   influencer: ["manageMedia", "manageReels"],
 
-  // ✅ NEW: warehouse role (ONLY production allowed)
+  // ✅ warehouse role (ONLY production allowed)
   warehouse: ["manageProduction"],
 };
 

@@ -13,7 +13,6 @@ import {
   Filter,
   RefreshCw,
   Clock,
-  UserRound,
   Hash,
   AtSign,
   CheckCircle2,
@@ -23,60 +22,54 @@ import {
   KeyRound,
   Pencil,
   Plus,
-  ToggleLeft,
   ToggleRight,
 } from "lucide-react";
 
 const SESSION_KEY = "miray_superadmin_unlocked";
-const ACTIVITY_KEY = "miray_superadmin_user_activity"; // same key you already use
-const PIN_ACTIVITY_KEY = "miray_superadmin_vault_activity"; // optional vault events
+const ACTIVITY_KEY = "miray_superadmin_user_activity";
+const PIN_ACTIVITY_KEY = "miray_superadmin_vault_activity";
 
-function cx(...a) {
-  return a.filter(Boolean).join(" ");
-}
+const cx = (...a) => a.filter(Boolean).join(" ");
 
-function safeJsonParse(s, fallback) {
+const safeJsonParse = (s, fallback) => {
   try {
     return JSON.parse(s);
   } catch {
     return fallback;
   }
-}
+};
 
-function fmtDate(iso) {
+const fmtDate = (iso) => {
   if (!iso) return "—";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
-}
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+};
 
-function normalizeAction(a) {
-  const action = String(a?.action || a?.type || "UNKNOWN").toUpperCase();
+const ACTION_MAP = {
+  // panel
+  CREATED_ADMIN_USER: { label: "Created User", icon: Plus, tone: "blue" },
+  UPDATED_ADMIN_USER: { label: "Updated User", icon: Pencil, tone: "blue" },
+  DELETED_ADMIN_USER: { label: "Deleted User", icon: Trash2, tone: "red" },
+  TOGGLED_ACTIVE: { label: "Toggled Active", icon: ToggleRight, tone: "amber" },
+  UPDATED_PASSWORD: { label: "Password Updated", icon: KeyRound, tone: "amber" },
+  UNLOCKED_USER: { label: "Unlocked User", icon: Unlock, tone: "emerald" },
 
-  // simple mapping for nicer badges/icons
-  const map = {
-    CREATED_USER: { label: "Created User", icon: Plus, tone: "blue" },
-    UPDATED_USER: { label: "Updated User", icon: Pencil, tone: "blue" },
-    DELETED_USER: { label: "Deleted User", icon: Trash2, tone: "red" },
-    TOGGLED_ACTIVE: { label: "Toggled Active", icon: ToggleRight, tone: "amber" },
-    UPDATED_PASSWORD: { label: "Password Updated", icon: KeyRound, tone: "amber" },
+  // legacy (older keys)
+  CREATED_USER: { label: "Created User", icon: Plus, tone: "blue" },
+  UPDATED_USER: { label: "Updated User", icon: Pencil, tone: "blue" },
+  DELETED_USER: { label: "Deleted User", icon: Trash2, tone: "red" },
 
-    VAULT_UNLOCKED: { label: "Vault Unlocked", icon: Unlock, tone: "emerald" },
-    VAULT_LOCKED: { label: "Vault Locked", icon: Lock, tone: "gray" },
-    VAULT_NAV_FAIL: { label: "Vault Navigation Failed", icon: AlertTriangle, tone: "red" },
-    VAULT_WRONG_PIN: { label: "Wrong PIN", icon: AlertTriangle, tone: "red" },
-  };
+  // vault
+  VAULT_UNLOCKED: { label: "Vault Unlocked", icon: Unlock, tone: "emerald" },
+  VAULT_LOCKED: { label: "Vault Locked", icon: Lock, tone: "gray" },
+  VAULT_NAV_FAIL: { label: "Vault Navigation Failed", icon: AlertTriangle, tone: "red" },
+  VAULT_WRONG_PIN: { label: "Wrong PIN", icon: AlertTriangle, tone: "red" },
+};
 
-  return map[action] || { label: action.replaceAll("_", " "), icon: Activity, tone: "gray" };
-}
-
-function toneClasses(tone) {
+const toneClasses = (tone) => {
   switch (tone) {
     case "emerald":
-      return {
-        pill: "bg-emerald-50 text-emerald-800 border-emerald-200",
-        dot: "bg-emerald-500",
-      };
+      return { pill: "bg-emerald-50 text-emerald-800 border-emerald-200", dot: "bg-emerald-500" };
     case "red":
       return { pill: "bg-red-50 text-red-800 border-red-200", dot: "bg-red-500" };
     case "amber":
@@ -86,26 +79,48 @@ function toneClasses(tone) {
     default:
       return { pill: "bg-white text-gray-800 border-gray-200", dot: "bg-gray-400" };
   }
-}
+};
+
+const normalize = (entry) => {
+  const action = String(entry?.action || entry?.type || "UNKNOWN").toUpperCase();
+  const info = ACTION_MAP[action] || {
+    label: action.replaceAll("_", " "),
+    icon: Activity,
+    tone: "gray",
+  };
+  return { action, info };
+};
+
+const readLogs = (tab) => {
+  const panel = safeJsonParse(localStorage.getItem(ACTIVITY_KEY) || "[]", []);
+  const vault = safeJsonParse(localStorage.getItem(PIN_ACTIVITY_KEY) || "[]", []);
+
+  const tag = (arr, source) => (Array.isArray(arr) ? arr : []).map((x) => ({ ...x, __source: source }));
+
+  const combined =
+    tab === "panel"
+      ? tag(panel, "panel")
+      : tab === "vault"
+      ? tag(vault, "vault")
+      : [...tag(panel, "panel"), ...tag(vault, "vault")];
+
+  combined.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+  return combined;
+};
 
 export default function SuperAdminActivityPage() {
   const router = useRouter();
 
   const [ready, setReady] = useState(false);
-  const [items, setItems] = useState([]);
   const [tab, setTab] = useState("panel"); // panel | vault | all
-
   const [q, setQ] = useState("");
   const [tone, setTone] = useState(""); // "" | blue | amber | red | emerald | gray
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // gate
   useEffect(() => {
     const ok = sessionStorage.getItem(SESSION_KEY) === "1";
-    if (!ok) {
-      router.replace("/superadmin");
-      return;
-    }
+    if (!ok) return router.replace("/superadmin");
     setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -113,21 +128,7 @@ export default function SuperAdminActivityPage() {
   const load = () => {
     setLoading(true);
     try {
-      const panel = safeJsonParse(localStorage.getItem(ACTIVITY_KEY) || "[]", []);
-      const vault = safeJsonParse(localStorage.getItem(PIN_ACTIVITY_KEY) || "[]", []);
-
-      const normalize = (arr, source) =>
-        (Array.isArray(arr) ? arr : []).map((x) => ({ ...x, __source: source }));
-
-      const combined =
-        tab === "panel"
-          ? normalize(panel, "panel")
-          : tab === "vault"
-          ? normalize(vault, "vault")
-          : [...normalize(panel, "panel"), ...normalize(vault, "vault")];
-
-      combined.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
-      setItems(combined);
+      setItems(readLogs(tab));
     } finally {
       setLoading(false);
     }
@@ -143,22 +144,21 @@ export default function SuperAdminActivityPage() {
     const qq = String(q || "").trim().toLowerCase();
     return items.filter((it) => {
       const meta = it?.meta || {};
-      const { tone: t } = normalizeAction(it);
+      const { info } = normalize(it);
 
-      if (tone && t !== tone) return false;
-
+      if (tone && info.tone !== tone) return false;
       if (!qq) return true;
 
       const hay = [
         it.action,
         it.type,
         it.userId,
-        it.name,
-        meta.username,
-        meta.role,
-        meta.isActive !== undefined ? String(meta.isActive) : "",
         it.__source,
         it.at,
+        meta.username,
+        meta.email,
+        meta.role,
+        meta.isActive !== undefined ? String(meta.isActive) : "",
       ]
         .filter(Boolean)
         .join(" ")
@@ -183,14 +183,12 @@ export default function SuperAdminActivityPage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 relative overflow-hidden">
-      {/* blue/white background */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute -top-40 -left-40 w-[520px] h-[520px] bg-blue-600/15 blur-[110px] rounded-full" />
         <div className="absolute -bottom-44 -right-44 w-[620px] h-[620px] bg-sky-400/15 blur-[120px] rounded-full" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(37,99,235,0.10)_1px,transparent_0)] [background-size:22px_22px] opacity-40" />
       </div>
 
-      {/* ✅ Full width: no max-w container */}
       <div className="px-5 py-10 relative">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -213,7 +211,7 @@ export default function SuperAdminActivityPage() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white border border-gray-200 hover:bg-gray-50 transition"
             >
               <ArrowLeft size={16} />
-              Back to Manage
+              Back
             </button>
 
             <button
@@ -234,25 +232,23 @@ export default function SuperAdminActivityPage() {
           </div>
         </div>
 
-        {/* Tabs + Filters */}
+        {/* Controls */}
         <div className="mt-6 rounded-3xl bg-white/80 backdrop-blur border border-blue-100 shadow-sm p-4 md:p-5">
           <div className="flex flex-col lg:flex-row lg:items-end gap-3">
-            {/* Tabs */}
             <div className="flex items-center gap-2">
-              <TabButton active={tab === "panel"} onClick={() => setTab("panel")}>
+              <Tab active={tab === "panel"} onClick={() => setTab("panel")}>
                 Panel
-              </TabButton>
-              <TabButton active={tab === "vault"} onClick={() => setTab("vault")}>
+              </Tab>
+              <Tab active={tab === "vault"} onClick={() => setTab("vault")}>
                 Vault
-              </TabButton>
-              <TabButton active={tab === "all"} onClick={() => setTab("all")}>
+              </Tab>
+              <Tab active={tab === "all"} onClick={() => setTab("all")}>
                 All
-              </TabButton>
+              </Tab>
             </div>
 
             <div className="flex-1" />
 
-            {/* Search */}
             <div className="w-full lg:w-[520px]">
               <label className="text-sm font-semibold text-gray-800 block mb-2">Search</label>
               <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-2xl px-3 py-2">
@@ -260,13 +256,12 @@ export default function SuperAdminActivityPage() {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search action, userId, username, role, source..."
+                  placeholder="Search action, userId, username, email..."
                   className="w-full outline-none bg-transparent text-sm"
                 />
               </div>
             </div>
 
-            {/* Tone filter */}
             <div className="w-full lg:w-56">
               <label className="text-sm font-semibold text-gray-800 block mb-2">Filter</label>
               <div className="flex items-center gap-2">
@@ -294,7 +289,7 @@ export default function SuperAdminActivityPage() {
               Showing: <b>{filtered.length}</b> / <b>{items.length}</b>
             </span>
             <span className="text-xs text-gray-500">
-              Logs are stored in <b>this browser</b> (localStorage).
+              Stored in <b>this browser</b> (localStorage)
             </span>
           </div>
         </div>
@@ -317,13 +312,14 @@ export default function SuperAdminActivityPage() {
             <div className="divide-y divide-gray-100">
               <AnimatePresence initial={false}>
                 {filtered.map((a, idx) => {
-                  const info = normalizeAction(a);
+                  const { info } = normalize(a);
                   const C = toneClasses(info.tone);
                   const Icon = info.icon;
 
                   const userId = a?.userId || "—";
-                  const username = a?.meta?.username || "";
-                  const role = a?.meta?.role || "";
+                  const username = a?.meta?.username;
+                  const email = a?.meta?.email;
+                  const role = a?.meta?.role;
                   const isActive = a?.meta?.isActive;
 
                   return (
@@ -332,13 +328,18 @@ export default function SuperAdminActivityPage() {
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 8 }}
-                      transition={{ duration: 0.18 }}
+                      transition={{ duration: 0.16 }}
                       className="p-4 md:p-5 hover:bg-blue-50/40 transition"
                     >
                       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={cx("inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full border", C.pill)}>
+                            <span
+                              className={cx(
+                                "inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full border",
+                                C.pill
+                              )}
+                            >
                               <span className={cx("w-2 h-2 rounded-full", C.dot)} />
                               <Icon size={14} />
                               <span className="font-semibold">{info.label}</span>
@@ -352,13 +353,19 @@ export default function SuperAdminActivityPage() {
                           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-700">
                             <span className="inline-flex items-center gap-2">
                               <Hash size={14} className="text-gray-500" />
-                              <b className="font-semibold">{userId}</b>
+                              <b>{userId}</b>
                             </span>
 
                             {username ? (
-                              <span className="inline-flex items-center gap-2 text-gray-700">
+                              <span className="inline-flex items-center gap-2">
                                 <AtSign size={14} className="text-gray-500" />
-                                <span className="font-semibold">@{username}</span>
+                                <b>@{username}</b>
+                              </span>
+                            ) : null}
+
+                            {email ? (
+                              <span className="text-xs px-2 py-1 rounded-full border border-gray-200 bg-white text-gray-700">
+                                {email}
                               </span>
                             ) : null}
 
@@ -382,20 +389,11 @@ export default function SuperAdminActivityPage() {
                               </span>
                             ) : null}
                           </div>
-
-                          {a?.name ? (
-                            <div className="mt-2 text-sm text-gray-600 inline-flex items-center gap-2">
-                              <UserRound size={14} className="text-gray-500" />
-                              <span>{a.name}</span>
-                            </div>
-                          ) : null}
                         </div>
 
-                        <div className="text-xs text-gray-500">
-                          <div className="inline-flex items-center gap-2">
-                            <Clock size={14} className="text-gray-500" />
-                            <span>{fmtDate(a.at)}</span>
-                          </div>
+                        <div className="text-xs text-gray-500 inline-flex items-center gap-2">
+                          <Clock size={14} />
+                          <span>{fmtDate(a.at)}</span>
                         </div>
                       </div>
                     </motion.div>
@@ -406,30 +404,26 @@ export default function SuperAdminActivityPage() {
           )}
         </div>
 
-        {/* Footer hint */}
         <div className="mt-6 text-xs text-gray-500">
-          Want vault events here too? Save them to localStorage key: <b>{PIN_ACTIVITY_KEY}</b> (same format:{" "}
-          {"{ action, at, userId?, meta? }"}).
+          Vault events are optional. If you log them, store to <b>{PIN_ACTIVITY_KEY}</b> with fields{" "}
+          <b>{"{ action, at, userId?, meta? }"}</b>.
         </div>
       </div>
     </div>
   );
 }
 
-function TabButton({ active, onClick, children }) {
+function Tab({ active, onClick, children }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cx(
         "px-4 py-2 rounded-2xl border text-sm font-semibold transition",
-        active
-          ? "bg-blue-600 text-white border-blue-600"
-          : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+        active ? "bg-blue-600 text-white border-blue-600" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
       )}
     >
       {children}
     </button>
   );
 }
-    

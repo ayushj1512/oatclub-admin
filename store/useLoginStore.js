@@ -3,11 +3,14 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+const TOKEN_KEY_PRIMARY = "admin_token"; // ✅ used by adminPanel.store.js
+const TOKEN_KEY_LEGACY = "adminToken";   // optional backward compatibility
+
 const useLoginStore = create(
   persist(
     (set, get) => ({
       isLoggedIn: false,
-      admin: null, // { _id, username, email, role, fullName, permissions, isActive }
+      admin: null,
       token: "",
 
       /* ============================================================
@@ -17,9 +20,14 @@ const useLoginStore = create(
         const safeToken = token || "";
         const safeAdmin = admin || null;
 
-        // ✅ legacy compatibility
-        if (typeof window !== "undefined" && safeToken) {
-          localStorage.setItem("adminToken", safeToken);
+        if (typeof window !== "undefined") {
+          if (safeToken) {
+            localStorage.setItem(TOKEN_KEY_PRIMARY, safeToken); // ✅ IMPORTANT
+            localStorage.setItem(TOKEN_KEY_LEGACY, safeToken);  // optional
+          } else {
+            localStorage.removeItem(TOKEN_KEY_PRIMARY);
+            localStorage.removeItem(TOKEN_KEY_LEGACY);
+          }
         }
 
         set({
@@ -34,7 +42,8 @@ const useLoginStore = create(
       ============================================================ */
       logout: () => {
         if (typeof window !== "undefined") {
-          localStorage.removeItem("adminToken");
+          localStorage.removeItem(TOKEN_KEY_PRIMARY);
+          localStorage.removeItem(TOKEN_KEY_LEGACY);
         }
 
         set({
@@ -51,8 +60,13 @@ const useLoginStore = create(
         const safeToken = token || "";
 
         if (typeof window !== "undefined") {
-          if (safeToken) localStorage.setItem("adminToken", safeToken);
-          else localStorage.removeItem("adminToken");
+          if (safeToken) {
+            localStorage.setItem(TOKEN_KEY_PRIMARY, safeToken); // ✅ IMPORTANT
+            localStorage.setItem(TOKEN_KEY_LEGACY, safeToken);  // optional
+          } else {
+            localStorage.removeItem(TOKEN_KEY_PRIMARY);
+            localStorage.removeItem(TOKEN_KEY_LEGACY);
+          }
         }
 
         set({
@@ -62,25 +76,22 @@ const useLoginStore = create(
       },
 
       /* ============================================================
-         ✅ SET ADMIN (update role/permissions after fetch /me)
+         ✅ SET ADMIN
       ============================================================ */
-      setAdmin: (admin) => {
-        set({ admin: admin || null });
-      },
+      setAdmin: (admin) => set({ admin: admin || null }),
 
       /* ============================================================
-         ✅ LEGACY TOKEN HYDRATE (Optional)
-         - If Zustand storage lost but localStorage has adminToken
+         ✅ HYDRATE FROM LOCALSTORAGE
       ============================================================ */
       hydrateFromLegacyToken: () => {
         if (typeof window === "undefined") return;
 
-        const legacy = localStorage.getItem("adminToken");
-        if (legacy && !get().token) {
-          set({
-            token: legacy,
-            isLoggedIn: true,
-          });
+        const t =
+          localStorage.getItem(TOKEN_KEY_PRIMARY) ||
+          localStorage.getItem(TOKEN_KEY_LEGACY);
+
+        if (t && !get().token) {
+          set({ token: t, isLoggedIn: true });
         }
       },
 
@@ -90,34 +101,15 @@ const useLoginStore = create(
       getRole: () => get().admin?.role || "",
       getUsername: () => get().admin?.username || "",
       getPermissions: () => get().admin?.permissions || [],
-
       isTokenPresent: () => !!get().token,
 
-      /* ============================================================
-         ✅ HELPERS FOR FRONTEND ROLE-BASED UI
-      ============================================================ */
-      hasRole: (...roles) => {
-        const role = get().admin?.role || "";
-        return roles.includes(role);
-      },
-
-      hasPermission: (perm) => {
-        const list = get().admin?.permissions || [];
-        return list.includes(perm);
-      },
-
-      /* ============================================================
-         ✅ SAFE CHECK: account active?
-      ============================================================ */
-      isActive: () => get().admin?.isActive !== false, // default true
+      hasRole: (...roles) => roles.includes(get().admin?.role || ""),
+      hasPermission: (perm) => (get().admin?.permissions || []).includes(perm),
+      isActive: () => get().admin?.isActive !== false,
     }),
     {
       name: "miray-admin-session",
-
-      // ✅ correct JSON storage
       storage: createJSONStorage(() => localStorage),
-
-      // ✅ store only required fields
       partialize: (state) => ({
         isLoggedIn: state.isLoggedIn,
         admin: state.admin,
