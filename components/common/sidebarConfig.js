@@ -179,15 +179,16 @@ export const sidebarMenus = {
     { label: "Influencer / Collabs", href: "/marketing/collabs" },
   ],
   customers: [
-    { label: "Customer Dashboard", href: "/customers/dashboard" },
-    { label: "Customer List", href: "/customers" },
-    { label: "Customer / Address", href: "/customers/address" }, // ✅ added
-    { label: "Cart Adds", href: "/customers/cart-adds" }, // ✅ added
-    // { label: "Abandoned Carts", href: "/customers/carts" }, // ❌ removed
-    { label: "Tickets & Support", href: "/customers/support" },
-    { label: "Newsletter Subscribers", href: "/customers/newsletter" },
-    { label: "Wishlist", href: "/customers/wishlist" }, // ✅ added
-  ],
+  { label: "Customer Dashboard", href: "/customers/dashboard" },
+  { label: "Customer List", href: "/customers" },
+  { label: "Customer / Address", href: "/customers/address" }, // ✅ added
+  { label: "Cart Adds", href: "/customers/cart-adds" }, // ✅ added
+  { label: "Tickets & Support", href: "/customers/support" },
+  { label: "Newsletter Subscribers", href: "/customers/newsletter" },
+  { label: "Wishlist", href: "/customers/wishlist" }, // ✅ added
+  { label: "Analytics", href: "/customers/analytics" }, // ✅ NEW
+],
+
 
   customer_support: [
     { label: "Support Dashboard", href: "/customer-support" },

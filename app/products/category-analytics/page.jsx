@@ -41,12 +41,13 @@ export default function CategoryAnalyticsPage() {
   } = useCategoryStore();
 
   const {
-    products,
-    fetchProducts,
-    loading: prodLoading,
-    saving,
-    updateCategoriesInline,
-  } = useAdminProductStore();
+  products,
+  fetchAllProducts,
+  loading: prodLoading,
+  saving,
+  updateCategoriesInline,
+} = useAdminProductStore();
+
 
   /* ============================
    * UI STATE
@@ -65,7 +66,7 @@ export default function CategoryAnalyticsPage() {
    * ============================ */
   useEffect(() => {
     fetchCategories();
-    fetchProducts({ limit: 5000 });
+    fetchAllProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
