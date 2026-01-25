@@ -6,6 +6,7 @@ import { useOrderStore } from "@/store/orderStore";
 
 // ✅ Use ONLY these components
 import CouponAnalytics from "@/components/orders/reports/CouponAnalytics";
+import DailyOrderReport from "@/components/orders/reports/DailyOrderReport";
 import OrdersCountBarChart from "@/components/orders/reports/OrdersCountBarChart";
 import OrderStatsCards from "@/components/orders/reports/OrderStatsCards";
 import OrderStatusPieChart from "@/components/orders/reports/OrderStatusPieChart";
@@ -38,7 +39,7 @@ export default function OrderReportPage() {
     paymentMethod: "",
     paymentStatus: "",
     fulfillmentStatus: "",
-    isConfirmed: "", // "true" | "false" | ""
+    isConfirmed: "",
   });
 
   const onChange = (k) => (e) => setFilters((s) => ({ ...s, [k]: e.target.value }));
@@ -103,7 +104,11 @@ export default function OrderReportPage() {
             <div style={styles.subTitle}>Frontend-only analytics • Filter locally • Export/Charts via components</div>
           </div>
 
-          <button onClick={fetchOrders} disabled={loading} style={{ ...styles.btn, ...(loading ? styles.btnDisabled : {}) }}>
+          <button
+            onClick={fetchOrders}
+            disabled={loading}
+            style={{ ...styles.btn, ...(loading ? styles.btnDisabled : {}) }}
+          >
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
@@ -199,6 +204,9 @@ export default function OrderReportPage() {
           </div>
         </div>
 
+        {/* ✅ Daily Report must receive orders */}
+        <DailyOrderReport orders={filteredOrders} excludeStatuses={["cancelled", "rto"]} />
+
         {/* KPIs */}
         <OrderStatsCards orders={filteredOrders} />
         <OrderValueStatsCards orders={filteredOrders} excludeCancelled />
@@ -224,115 +232,24 @@ export default function OrderReportPage() {
   Simple sober styles
 ------------------------- */
 const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "#f8fafc",
-    padding: 16,
-  },
-  container: {
-
-    margin: "0 auto",
-  },
-  header: {
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: 12,
-    flexWrap: "wrap",
-    marginBottom: 12,
-  },
-  title: {
-    margin: 0,
-    fontSize: 24,
-    fontWeight: 900,
-    color: "#0f172a",
-  },
-  subTitle: {
-    marginTop: 6,
-    fontSize: 13,
-    color: "#475569",
-  },
-  btn: {
-    border: "1px solid rgba(15,23,42,0.12)",
-    background: "#ffffff",
-    color: "#0f172a",
-    padding: "10px 12px",
-    borderRadius: 10,
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-  btnDisabled: {
-    opacity: 0.6,
-    cursor: "not-allowed",
-  },
-  filtersCard: {
-    border: "1px solid rgba(15,23,42,0.10)",
-    borderRadius: 12,
-    background: "#ffffff",
-    padding: 12,
-  },
-  filtersGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: 10,
-  },
-  field: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: 800,
-    color: "#334155",
-  },
-  input: {
-    height: 38,
-    borderRadius: 10,
-    border: "1px solid rgba(15,23,42,0.12)",
-    padding: "0 10px",
-    outline: "none",
-    background: "#fff",
-    color: "#0f172a",
-  },
-  select: {
-    height: 38,
-    borderRadius: 10,
-    border: "1px solid rgba(15,23,42,0.12)",
-    padding: "0 10px",
-    outline: "none",
-    background: "#fff",
-    color: "#0f172a",
-  },
-  metaRow: {
-    marginTop: 10,
-    display: "flex",
-    gap: 10,
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-  },
-  metaText: {
-    fontSize: 12,
-    color: "#64748b",
-  },
-  error: {
-    fontSize: 12,
-    color: "#b91c1c",
-    fontWeight: 700,
-  },
-  grid2: {
-    marginTop: 12,
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: 12,
-  },
-  footerNote: {
-    marginTop: 12,
-    fontSize: 12,
-    color: "#64748b",
-  },
+  page: { minHeight: "100vh", background: "#f8fafc", padding: 16 },
+  container: { margin: "0 auto" },
+  header: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 },
+  title: { margin: 0, fontSize: 24, fontWeight: 900, color: "#0f172a" },
+  subTitle: { marginTop: 6, fontSize: 13, color: "#475569" },
+  btn: { border: "1px solid rgba(15,23,42,0.12)", background: "#ffffff", color: "#0f172a", padding: "10px 12px", borderRadius: 10, fontWeight: 800, cursor: "pointer" },
+  btnDisabled: { opacity: 0.6, cursor: "not-allowed" },
+  filtersCard: { border: "1px solid rgba(15,23,42,0.10)", borderRadius: 12, background: "#ffffff", padding: 12 },
+  filtersGrid: { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 },
+  field: { display: "flex", flexDirection: "column", gap: 6 },
+  label: { fontSize: 12, fontWeight: 800, color: "#334155" },
+  input: { height: 38, borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", padding: "0 10px", outline: "none", background: "#fff", color: "#0f172a" },
+  select: { height: 38, borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", padding: "0 10px", outline: "none", background: "#fff", color: "#0f172a" },
+  metaRow: { marginTop: 10, display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" },
+  metaText: { fontSize: 12, color: "#64748b" },
+  error: { fontSize: 12, color: "#b91c1c", fontWeight: 700 },
+  grid2: { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 },
+  footerNote: { marginTop: 12, fontSize: 12, color: "#64748b" },
 };
 
-/* Responsive */
 styles._jsx = undefined;
