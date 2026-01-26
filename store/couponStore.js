@@ -1,7 +1,14 @@
 import { create } from "zustand";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
-// Example: VITE_API_URL = "http://localhost:5000"
+
+// --- helpers (match backend normalization) ---
+const normEmail = (v) => (v ? String(v).trim().toLowerCase() : null);
+const normPhone = (v) => {
+  if (!v) return null;
+  const digits = String(v).replace(/\D/g, "");
+  return digits.length ? digits : null;
+};
 
 export const useCouponStore = create((set, get) => ({
   coupons: [],
@@ -9,13 +16,19 @@ export const useCouponStore = create((set, get) => ({
   error: null,
   success: null,
 
-  // ✅ Fetch all coupons
+  // ✅ Fetch all coupons (Admin)
+  // Supports filters: type, isActive, influencerId, visibility
   fetchCoupons: async (filters = {}) => {
     try {
       set({ loading: true, error: null });
 
-      const query = new URLSearchParams(filters).toString();
-      const res = await fetch(`${API}/api/coupons?${query}`, {
+      // remove empty/undefined filters
+      const cleanFilters = Object.fromEntries(
+        Object.entries(filters).filter(([_, v]) => v !== undefined && v !== null && String(v).trim() !== "")
+      );
+
+      const query = new URLSearchParams(cleanFilters).toString();
+      const res = await fetch(`${API}/api/coupons${query ? `?${query}` : ""}`, {
         credentials: "include",
       });
 
@@ -28,16 +41,26 @@ export const useCouponStore = create((set, get) => ({
     }
   },
 
-  // ✅ Create coupon
+  // ✅ Create coupon (Admin)
+  // Now supports: visibility ("public" | "private"), targetEmail, targetPhone
   createCoupon: async (payload) => {
     try {
       set({ loading: true, error: null, success: null });
+
+      const cleanPayload = {
+        ...payload,
+        // normalize optional targeting fields
+        targetEmail: payload?.targetEmail ? normEmail(payload.targetEmail) : null,
+        targetPhone: payload?.targetPhone ? normPhone(payload.targetPhone) : null,
+        // default visibility if not provided
+        visibility: payload?.visibility || "public",
+      };
 
       const res = await fetch(`${API}/api/coupons`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(cleanPayload),
       });
 
       const data = await res.json();
@@ -56,16 +79,26 @@ export const useCouponStore = create((set, get) => ({
     }
   },
 
-  // ✅ Update coupon
+  // ✅ Update coupon (Admin)
+  // Supports updating: visibility, targetEmail, targetPhone
   updateCoupon: async (id, payload) => {
     try {
       set({ loading: true, error: null, success: null });
+
+      const cleanPayload = { ...payload };
+
+      if ("targetEmail" in cleanPayload) {
+        cleanPayload.targetEmail = cleanPayload.targetEmail ? normEmail(cleanPayload.targetEmail) : null;
+      }
+      if ("targetPhone" in cleanPayload) {
+        cleanPayload.targetPhone = cleanPayload.targetPhone ? normPhone(cleanPayload.targetPhone) : null;
+      }
 
       const res = await fetch(`${API}/api/coupons/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(cleanPayload),
       });
 
       const data = await res.json();
@@ -84,7 +117,7 @@ export const useCouponStore = create((set, get) => ({
     }
   },
 
-  // ✅ Delete coupon
+  // ✅ Delete coupon (Admin)
   deleteCoupon: async (id) => {
     try {
       set({ loading: true, error: null, success: null });
