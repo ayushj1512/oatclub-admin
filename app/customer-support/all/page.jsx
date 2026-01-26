@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Search, RefreshCcw, Filter, Clock, AlertCircle, ExternalLink, Mail, Image as ImageIcon, Loader2 } from "lucide-react";
+import StatusDropdown from "@/components/customer-support/StatusDropdown";
+import { Search, RefreshCcw, Filter, Clock, AlertCircle, ExternalLink, Mail, Image as ImageIcon, Loader2, Phone } from "lucide-react";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 const API_BASE = `${BACKEND}/api/support`;
@@ -11,7 +12,6 @@ const STATUS = ["ALL", "OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
 const ISSUE_TYPES = ["All", "Order Issue", "Delivery / Shipment", "Exchange / Return", "Payment / Refund", "Product / Quality", "Other"];
 
 const safe = (v) => String(v ?? "").trim();
-const upper = (v) => safe(v).toUpperCase();
 const fmtDate = (d) => (d ? new Date(d).toLocaleString() : "-");
 
 const qs = (params) => {
@@ -22,16 +22,6 @@ const qs = (params) => {
     sp.set(k, val);
   });
   return sp.toString();
-};
-
-const pill = (status) => {
-  const s = upper(status);
-  const base = "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset";
-  if (s === "OPEN") return `${base} bg-blue-50 text-blue-700 ring-blue-200`;
-  if (s === "IN_PROGRESS") return `${base} bg-amber-50 text-amber-700 ring-amber-200`;
-  if (s === "RESOLVED") return `${base} bg-emerald-50 text-emerald-700 ring-emerald-200`;
-  if (s === "CLOSED") return `${base} bg-gray-100 text-gray-700 ring-gray-200`;
-  return `${base} bg-gray-100 text-gray-700 ring-gray-200`;
 };
 
 export default function Page() {
@@ -97,9 +87,7 @@ export default function Page() {
 
   useEffect(() => {
     fetchList({ silent: false });
-    return () => {
-      if (inflight.current) inflight.current.abort();
-    };
+    return () => { if (inflight.current) inflight.current.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -115,18 +103,8 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRefresh, pollMs, appliedKey]);
 
-  const onSubmit = (e) => {
-    e.preventDefault();
-    setPage(1);
-  };
-
-  const onClear = () => {
-    setStatus("ALL");
-    setIssueType("All");
-    setQ("");
-    setEmail("");
-    setPage(1);
-  };
+  const onSubmit = (e) => { e.preventDefault(); setPage(1); };
+  const onClear = () => { setStatus("ALL"); setIssueType("All"); setQ(""); setEmail(""); setPage(1); };
 
   return (
     <main className="min-h-screen w-full bg-gray-50 text-gray-900">
@@ -136,15 +114,11 @@ export default function Page() {
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">All Support Tickets</h1>
             <div className="flex flex-wrap items-center gap-2">
-              <Link href="/support-tickets" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
-                Dashboard <ExternalLink className="h-3.5 w-3.5" />
-              </Link>
-              <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:opacity-80 transition">
-                Back to Admin <ExternalLink className="h-4 w-4" />
-              </Link>
+              <Link href="/customer-support" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">Dashboard <ExternalLink className="h-3.5 w-3.5" /></Link>
+              <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:opacity-80 transition">Back to Admin <ExternalLink className="h-4 w-4" /></Link>
             </div>
           </div>
-          <p className="text-sm text-gray-600">Full list + realtime polling. Click View to open details page.</p>
+          <p className="text-sm text-gray-600">Full list + realtime polling. Change status directly from the table.</p>
         </div>
 
         <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 md:p-5">
@@ -158,43 +132,26 @@ export default function Page() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => fetchList({ silent: true })} className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition">
-                <RefreshCcw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-              </button>
-              <label className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700">
-                <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className="h-4 w-4 accent-blue-600" /> Auto refresh
-              </label>
-              <select value={pollMs} onChange={(e) => setPollMs(Number(e.target.value))} className="h-9 rounded-full border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 outline-none">
-                <option value={5000}>5s</option><option value={7000}>7s</option><option value={10000}>10s</option><option value={15000}>15s</option>
-              </select>
+              <button type="button" onClick={() => fetchList({ silent: true })} className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition"><RefreshCcw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh</button>
+              <label className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700"><input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className="h-4 w-4 accent-blue-600" /> Auto refresh</label>
+              <select value={pollMs} onChange={(e) => setPollMs(Number(e.target.value))} className="h-9 rounded-full border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 outline-none"><option value={5000}>5s</option><option value={7000}>7s</option><option value={10000}>10s</option><option value={15000}>15s</option></select>
             </div>
           </div>
 
           <form onSubmit={onSubmit} className="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
             <div className="lg:col-span-5">
               <label className="text-xs font-semibold text-gray-700">Search</label>
-              <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
-                <Search className="h-4 w-4 text-gray-400" />
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search subject/message…" className="w-full bg-transparent text-sm outline-none" />
-              </div>
+              <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2"><Search className="h-4 w-4 text-gray-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search subject/message…" className="w-full bg-transparent text-sm outline-none" /></div>
             </div>
 
             <div className="lg:col-span-3">
               <label className="text-xs font-semibold text-gray-700">Issue type</label>
-              <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
-                <Filter className="h-4 w-4 text-gray-400" />
-                <select value={issueType} onChange={(e) => (setIssueType(e.target.value), setPage(1))} className="w-full bg-transparent text-sm outline-none">
-                  {ISSUE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
+              <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2"><Filter className="h-4 w-4 text-gray-400" /><select value={issueType} onChange={(e) => (setIssueType(e.target.value), setPage(1))} className="w-full bg-transparent text-sm outline-none">{ISSUE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
             </div>
 
             <div className="lg:col-span-3">
               <label className="text-xs font-semibold text-gray-700">Email (optional)</label>
-              <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
-                <Mail className="h-4 w-4 text-gray-400" />
-                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="customer@email.com" className="w-full bg-transparent text-sm outline-none" />
-              </div>
+              <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2"><Mail className="h-4 w-4 text-gray-400" /><input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="customer@email.com" className="w-full bg-transparent text-sm outline-none" /></div>
             </div>
 
             <div className="lg:col-span-1 flex gap-2">
@@ -218,13 +175,14 @@ export default function Page() {
             <div className="p-6 text-sm text-gray-600">No tickets found.</div>
           ) : (
             <div className="overflow-auto">
-              <table className="min-w-[980px] w-full text-sm">
+              <table className="min-w-[1180px] w-full text-sm">
                 <thead className="bg-white sticky top-0">
                   <tr className="text-left text-xs text-gray-600 border-b border-gray-200">
                     <th className="px-4 py-3 font-semibold">Ticket</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
                     <th className="px-4 py-3 font-semibold">Customer</th>
                     <th className="px-4 py-3 font-semibold">Email</th>
+                    <th className="px-4 py-3 font-semibold">Mobile</th>
                     <th className="px-4 py-3 font-semibold">Issue</th>
                     <th className="px-4 py-3 font-semibold">Subject</th>
                     <th className="px-4 py-3 font-semibold">Created</th>
@@ -236,21 +194,19 @@ export default function Page() {
                   {items.map((t) => {
                     const id = safe(t?.ticketId);
                     const atCount = Array.isArray(t?.attachments) ? t.attachments.length : 0;
+                    const phone = safe(t?.phone);
                     return (
                       <tr key={id || `${safe(t?.email)}-${fmtDate(t?.createdAt)}`} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-xs font-semibold text-blue-700">{id || "-"}</td>
-                        <td className="px-4 py-3"><span className={pill(t?.status)}>{upper(t?.status).replaceAll("_", " ")}</span></td>
+                        <td className="px-4 py-3"><StatusDropdown ticketId={id} value={t?.status} adminNotes={t?.adminNotes} /></td>
                         <td className="px-4 py-3">{safe(t?.name) || "-"}</td>
                         <td className="px-4 py-3">{safe(t?.email) || "-"}</td>
+                        <td className="px-4 py-3 text-xs text-gray-800">{phone ? <span className="inline-flex items-center gap-1"><Phone className="h-3.5 w-3.5 text-gray-400" /> {phone}</span> : "-"}</td>
                         <td className="px-4 py-3">{safe(t?.issueType) || "-"}</td>
                         <td className="px-4 py-3 max-w-[360px]"><span className="line-clamp-1">{safe(t?.subject) || "-"}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-600"><span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {fmtDate(t?.createdAt)}</span></td>
-                        <td className="px-4 py-3 text-xs text-gray-700">{atCount ? <span className="inline-flex items-center gap-1"><ImageIcon className="h-3.5 w-3.5" /> {atCount}</span> : "-"}</td>
-                        <td className="px-4 py-3">
-                          <Link href={id ? `/support-tickets/${encodeURIComponent(id)}` : "#"} className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ring-1 ring-inset ${id ? "bg-white text-blue-700 ring-blue-200 hover:bg-blue-50" : "bg-gray-100 text-gray-400 ring-gray-200 pointer-events-none"}`}>
-                            View <ExternalLink className="h-3.5 w-3.5" />
-                          </Link>
-                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-700">{atCount ? <span className="inline-flex items-center gap-1"><Image as ImageIcon className="h-3.5 w-3.5" /> {atCount}</span> : "-"}</td>
+                        <td className="px-4 py-3"><Link href={id ? `/customer-support/${encodeURIComponent(id)}` : "#"} className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ring-1 ring-inset ${id ? "bg-white text-blue-700 ring-blue-200 hover:bg-blue-50" : "bg-gray-100 text-gray-400 ring-gray-200 pointer-events-none"}`}>View <ExternalLink className="h-3.5 w-3.5" /></Link></td>
                       </tr>
                     );
                   })}

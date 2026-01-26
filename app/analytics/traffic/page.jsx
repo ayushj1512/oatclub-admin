@@ -259,7 +259,7 @@ export default async function AnalyticsTrafficPage() {
           icon={MessageCircle}
           label="Support Tickets (last 200)"
           value={formatInt(ticketsCount)}
-          href="/support-tickets/all"
+          href="/customer-support/all"
           hint={supportRes.ok ? "From /api/support?limit=200" : "Not available"}
         />
       </div>

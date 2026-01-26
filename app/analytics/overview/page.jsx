@@ -264,7 +264,7 @@ export default async function AnalyticsOverviewPage() {
           icon={Ticket}
           label="Support Tickets"
           value={formatInt(ticketsTotal)}
-          href="/support-tickets/all"
+          href="/customer-support/all"
         />
       </div>
 

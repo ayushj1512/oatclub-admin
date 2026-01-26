@@ -1,4 +1,4 @@
-// app/support-tickets/closed/page.jsx
+// app/customer-support/closed/page.jsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -134,10 +134,10 @@ export default function Page() {
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Closed Tickets</h1>
             <div className="flex flex-wrap items-center gap-2">
-              <Link href="/support-tickets" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
+              <Link href="/customer-support" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
                 Dashboard <ExternalLink className="h-3.5 w-3.5" />
               </Link>
-              <Link href="/support-tickets/all" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
+              <Link href="/customer-support/all" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
                 All <ExternalLink className="h-3.5 w-3.5" />
               </Link>
               <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:opacity-80 transition">
@@ -274,7 +274,7 @@ export default function Page() {
                         <td className="px-4 py-3 text-xs text-gray-700">{atCount ? <span className="inline-flex items-center gap-1"><ImageIcon className="h-3.5 w-3.5" /> {atCount}</span> : "-"}</td>
                         <td className="px-4 py-3">
                           <Link
-                            href={id ? `/support-tickets/${encodeURIComponent(id)}` : "#"}
+                            href={id ? `/customer-support/${encodeURIComponent(id)}` : "#"}
                             className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ring-1 ring-inset ${id ? "bg-white text-blue-700 ring-blue-200 hover:bg-blue-50" : "bg-gray-100 text-gray-400 ring-gray-200 pointer-events-none"}`}
                           >
                             View <ExternalLink className="h-3.5 w-3.5" />

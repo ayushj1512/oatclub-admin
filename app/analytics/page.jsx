@@ -239,7 +239,7 @@ export default async function AnalyticsPage() {
           icon={Ticket}
           label="Tickets"
           value={formatInt(ticketsTotal)}
-          href="/support-tickets/all"
+          href="/customer-support/all"
         />
       </div>
 

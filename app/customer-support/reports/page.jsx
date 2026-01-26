@@ -1,4 +1,4 @@
-// app/support-tickets/reports/page.jsx
+// app/customer-support/reports/page.jsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -166,7 +166,7 @@ export default function Page() {
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Reports</h1>
             <div className="flex flex-wrap items-center gap-2">
-              <Link href="/support-tickets" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
+              <Link href="/customer-support" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
                 Dashboard <ExternalLink className="h-3.5 w-3.5" />
               </Link>
               <button
@@ -302,7 +302,7 @@ export default function Page() {
                                 <ImageIcon className="h-3.5 w-3.5" /> {atCount}
                               </span>
                             ) : null}
-                            <Link href={`/support-tickets/${encodeURIComponent(id)}`} className="ml-auto inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
+                            <Link href={`/customer-support/${encodeURIComponent(id)}`} className="ml-auto inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
                               Open <ExternalLink className="h-3.5 w-3.5" />
                             </Link>
                           </div>

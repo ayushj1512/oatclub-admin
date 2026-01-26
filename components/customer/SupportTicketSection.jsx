@@ -59,7 +59,7 @@ export default function SupportTicketSection({ customerEmail }) {
 
         <div className="flex gap-2">
           <Link
-            href="/support-tickets/search"
+            href="/customer-support/search"
             className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-900 hover:bg-gray-50 transition"
           >
             Open Search <ExternalLink className="h-4 w-4" />
@@ -147,7 +147,7 @@ export default function SupportTicketSection({ customerEmail }) {
                 <div className="flex items-center justify-between md:flex-col md:items-end gap-2">
                   <StatusPill status={t.status} />
                   <Link
-                    href={`/support-tickets/${encodeURIComponent(
+                    href={`/customer-support/${encodeURIComponent(
                       safe(t.ticketId)
                     )}`}
                     className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition"
