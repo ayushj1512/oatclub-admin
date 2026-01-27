@@ -41,11 +41,14 @@ export const sidebarMenus = {
     { label: "Footer Links", href: "/designing/footer" },
   ],
 
-  production: [
-    { label: "Production Dashboard", href: "/production" },
-    { label: "Pattern Number", href: "/production/pattern-number" },
-    { label: "Fabric", href: "/production/fabric" },
-  ],
+production: [
+  { label: "Production Dashboard", href: "/production" },
+  { label: "Pattern Number", href: "/production/pattern-number" },
+  { label: "Fabric", href: "/production/fabric" },
+  { label: "Product Detail", href: "/production/product-detail" },   // ✅ new
+  { label: "Missing Patterns", href: "/production/missing-patterns" }, // ✅ new
+],
+
 
   accounts: [
     { label: "Accounts Dashboard", href: "/accounts" },
