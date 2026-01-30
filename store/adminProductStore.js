@@ -55,25 +55,21 @@ const normalizeProductPayload = (payload) => {
 
   // ✅ NEW: COLORS hygiene
   if (out.colors !== undefined) {
-    const list =
-      Array.isArray(out.colors)
-        ? out.colors
-        : typeof out.colors === "string"
-          ? out.colors.split(",")
-          : [];
+    const list = Array.isArray(out.colors)
+      ? out.colors
+      : typeof out.colors === "string"
+      ? out.colors.split(",")
+      : [];
 
     out.colors = Array.from(
       new Set(
-        list
-          .map((c) => String(c || "").trim().toLowerCase())
-          .filter(Boolean)
+        list.map((c) => String(c || "").trim().toLowerCase()).filter(Boolean)
       )
     );
   }
 
   return out;
 };
-
 
 const normalizeFabricsPayload = (fabrics) => {
   // allow JSON string
@@ -89,7 +85,6 @@ const normalizeFabricsPayload = (fabrics) => {
 
   const ROLE_SET = new Set(["main", "lining", "contrast", "padding", "other"]);
   const UNIT_SET = new Set(["meter", "gram"]);
-
   const seen = new Set();
 
   const out = [];
@@ -123,6 +118,12 @@ const normalizeFabricsPayload = (fabrics) => {
   return out;
 };
 
+// ✅ numeric hygiene for stock endpoints
+const toNonNegInt = (v, fallback = 0) => {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return n;
+};
 
 export const useAdminProductStore = create((set, get) => ({
   /* ============================================================
@@ -377,7 +378,6 @@ export const useAdminProductStore = create((set, get) => ({
 
       set({ saving: true });
 
-      // optional: normalize each imported product too
       const normalized = products.map((p) => normalizeProductPayload(p));
 
       const res = await fetch(`${API}/bulk/import`, {
@@ -402,15 +402,59 @@ export const useAdminProductStore = create((set, get) => ({
   },
 
   /* ============================================================
+    ✅ SIMPLE PRODUCT STOCK UPDATE (NEW)
+    PATCH /api/products/:id/stock   body: { stock }
+  ============================================================ */
+  updateProductStock: async (productId, stock) => {
+    try {
+      const nextStock = toNonNegInt(stock, 0);
+
+      const res = await fetch(`${API}/${productId}/stock`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ stock: nextStock }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Stock update failed");
+
+      const updatedProduct = data.product;
+
+      // single product (edit page)
+      if (get().product?._id === productId) set({ product: updatedProduct });
+
+      // list update
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          p._id === productId
+            ? { ...p, stock: updatedProduct.stock ?? nextStock }
+            : p
+        ),
+      }));
+
+      toast.success("Stock updated ✅");
+      return updatedProduct;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    }
+  },
+
+  /* ============================================================
     VARIANT STOCK UPDATE
+    PATCH /api/products/:id/variant-stock  body:{ variantId, stock }
   ============================================================ */
   updateVariantStock: async (productId, variantId, stock) => {
     try {
+      const nextStock = toNonNegInt(stock, 0);
+
       const res = await fetch(`${API}/${productId}/variant-stock`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ variantId, stock }),
+        body: JSON.stringify({ variantId, stock: nextStock }),
       });
 
       const data = await res.json();
@@ -437,6 +481,7 @@ export const useAdminProductStore = create((set, get) => ({
     } catch (e) {
       console.error(e);
       toast.error(e.message);
+      throw e;
     }
   },
 
@@ -570,35 +615,35 @@ export const useAdminProductStore = create((set, get) => ({
   },
 
   updateComparePriceInline: async (id, compareAtPrice) => {
-  try {
-    set({ saving: true });
+    try {
+      set({ saving: true });
 
-    const res = await fetch(`${API}/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ compareAtPrice }),
-    });
+      const res = await fetch(`${API}/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ compareAtPrice }),
+      });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Compare price update failed");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Compare price update failed");
 
-    set({
-      products: get().products.map((p) =>
-        p._id === id ? { ...p, compareAtPrice } : p
-      ),
-    });
+      set({
+        products: get().products.map((p) =>
+          p._id === id ? { ...p, compareAtPrice } : p
+        ),
+      });
 
-    toast.success("Compare price updated ✅");
-    return data.product;
-  } catch (e) {
-    console.error(e);
-    toast.error(e.message);
-    throw e;
-  } finally {
-    set({ saving: false });
-  }
-},
+      toast.success("Compare price updated ✅");
+      return data.product;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
 
   updateCategoriesInline: async (id, categories) => {
     set({ saving: true });
@@ -650,7 +695,6 @@ export const useAdminProductStore = create((set, get) => ({
           ? { isDraft: true, isActive: true }
           : { isActive: false };
 
-      // NOTE: your API elsewhere uses PATCH; keeping your existing PUT as-is
       const res = await fetch(`${API}/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -675,134 +719,122 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
-
   /* ============================================================
-  INLINE TITLE UPDATE (grid)
-============================================================ */
-updateTitleInline: async (id, title) => {
-  try {
-    set({ saving: true });
-
-    const next = String(title || "").trim();
-    if (!next) {
-      toast.error("Title is required");
-      return;
-    }
-
-    const res = await fetch(`${API}/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ title: next }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Title update failed");
-
-    // ✅ update list (admin grid)
-    set((state) => ({
-      products: (state.products || []).map((p) =>
-        p._id === id ? { ...p, title: next } : p
-      ),
-    }));
-
-    // ✅ update currently opened product (edit page) if same id
-    if (get().product?._id === id) {
-      set((state) => ({
-        product: state.product ? { ...state.product, title: next } : state.product,
-      }));
-    }
-
-    toast.success("Title updated ✅");
-    return data.product;
-  } catch (e) {
-    console.error(e);
-    toast.error(e.message);
-    throw e;
-  } finally {
-    set({ saving: false });
-  }
-},
-
-
-    /* ============================================================
-    ✅ FETCH ALL PRODUCTS (ADMIN) - loads all pages and merges
-    Uses limit=250 (backend cap), fetches page-by-page internally
+    INLINE TITLE UPDATE (grid)
   ============================================================ */
-  /* ============================================================
-  ✅ FETCH ALL PRODUCTS (ADMIN) - robust pagination
-  Handles backend hard-cap (always returns 50) even if you send 250/100000
-============================================================ */
-fetchAllProducts: async (params = {}) => {
-  try {
-    set({ loading: true, error: null });
+  updateTitleInline: async (id, title) => {
+    try {
+      set({ saving: true });
 
-    const REQUEST_LIMIT = 250;
-    let page = 1;
-
-    const merged = [];
-    const seen = new Set();
-
-    let totalFromApi = 0;
-    let pagesFromApi = 0;
-
-    const MAX_PAGES = 2000;
-
-    while (page <= MAX_PAGES) {
-      const query = new URLSearchParams({
-        ...params,
-        page: String(page),
-        limit: String(REQUEST_LIMIT),
-      }).toString();
-
-      const res = await fetch(`${API}?${query}`, { credentials: "include" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to fetch products");
-
-      const list = Array.isArray(data.products) ? data.products : [];
-
-      totalFromApi = Number(data.total || totalFromApi || 0);
-      pagesFromApi = Number(data.pages || pagesFromApi || 0);
-
-      if (list.length === 0) break;
-
-      let added = 0;
-      for (const p of list) {
-        const id = String(p?._id || "").trim();
-        if (!id || seen.has(id)) continue;
-        seen.add(id);
-        merged.push(p);
-        added += 1;
+      const next = String(title || "").trim();
+      if (!next) {
+        toast.error("Title is required");
+        return;
       }
 
-      if (added === 0) break;
+      const res = await fetch(`${API}/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ title: next }),
+      });
 
-      if (totalFromApi && merged.length >= totalFromApi) break;
-      if (pagesFromApi && page >= pagesFromApi) break;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Title update failed");
 
-      page += 1;
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          p._id === id ? { ...p, title: next } : p
+        ),
+      }));
+
+      if (get().product?._id === id) {
+        set((state) => ({
+          product: state.product ? { ...state.product, title: next } : state.product,
+        }));
+      }
+
+      toast.success("Title updated ✅");
+      return data.product;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
     }
+  },
 
-    set({
-      products: merged,
-      page: 1,
-      total: totalFromApi || merged.length,
-      pages: pagesFromApi || 1,
-    });
+  /* ============================================================
+    ✅ FETCH ALL PRODUCTS (ADMIN) - robust pagination
+  ============================================================ */
+  fetchAllProducts: async (params = {}) => {
+    try {
+      set({ loading: true, error: null });
 
-    return merged;
-  } catch (e) {
-    console.error(e);
-    set({ error: e.message });
-    toast.error(e.message);
-    return [];
-  } finally {
-    set({ loading: false });
-  }
-},
+      const REQUEST_LIMIT = 250;
+      let page = 1;
 
+      const merged = [];
+      const seen = new Set();
 
+      let totalFromApi = 0;
+      let pagesFromApi = 0;
 
+      const MAX_PAGES = 2000;
+
+      while (page <= MAX_PAGES) {
+        const query = new URLSearchParams({
+          ...params,
+          page: String(page),
+          limit: String(REQUEST_LIMIT),
+        }).toString();
+
+        const res = await fetch(`${API}?${query}`, { credentials: "include" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to fetch products");
+
+        const list = Array.isArray(data.products) ? data.products : [];
+
+        totalFromApi = Number(data.total || totalFromApi || 0);
+        pagesFromApi = Number(data.pages || pagesFromApi || 0);
+
+        if (list.length === 0) break;
+
+        let added = 0;
+        for (const p of list) {
+          const id = String(p?._id || "").trim();
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          merged.push(p);
+          added += 1;
+        }
+
+        if (added === 0) break;
+
+        if (totalFromApi && merged.length >= totalFromApi) break;
+        if (pagesFromApi && page >= pagesFromApi) break;
+
+        page += 1;
+      }
+
+      set({
+        products: merged,
+        page: 1,
+        total: totalFromApi || merged.length,
+        pages: pagesFromApi || 1,
+      });
+
+      return merged;
+    } catch (e) {
+      console.error(e);
+      set({ error: e.message });
+      toast.error(e.message);
+      return [];
+    } finally {
+      set({ loading: false });
+    }
+  },
 
   applyBulkPricingRule: ({ mode, field, value }) => {
     const { products, bulkSelectedIds, bulkPriceDraft } = get();
@@ -907,36 +939,42 @@ fetchAllProducts: async (params = {}) => {
     }
   },
 
-  bulkStatus: async (ids, status) => {
-  set({ saving: true });
-  try {
-    // ✅ backend endpoint (recommended)
-    const res = await fetch(`${API}/api/products/bulk-status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ ids, status }), // published|draft|unpublished
-    });
+  // ✅ FIXED: wrong url in your code (it was `${API}/api/products/bulk-status`)
+  bulkStatus: async (ids = [], status) => {
+    set({ saving: true });
+    try {
+      const res = await fetch(`${API}/bulk-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids, status }), // published|draft|unpublished
+      });
 
-    if (!res.ok) throw new Error("Failed bulk status update");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed bulk status update");
 
-    // ✅ optimistic update for UI
-    set((state) => ({
-      products: (state.products || []).map((p) => {
-        if (!ids.includes(p._id)) return p;
+      set((state) => ({
+        products: (state.products || []).map((p) => {
+          if (!ids.includes(p._id)) return p;
 
-        if (status === "published") return { ...p, isActive: true, isDraft: false };
-        if (status === "draft") return { ...p, isActive: true, isDraft: true };
-        return { ...p, isActive: false }; // unpublished
-      }),
-    }));
-  } finally {
-    set({ saving: false });
-  }
-},
+          if (status === "published") return { ...p, isActive: true, isDraft: false };
+          if (status === "draft") return { ...p, isActive: true, isDraft: true };
+          return { ...p, isActive: false }; // unpublished
+        }),
+      }));
 
+      toast.success("Bulk status updated ✅");
+      return data;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message || "Bulk status failed");
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
 
-    /* ============================================================
+  /* ============================================================
     ✅ UPDATE PRODUCT FABRICS (dedicated route)
     PATCH /api/products/:id/fabrics
   ============================================================ */
@@ -956,12 +994,10 @@ fetchAllProducts: async (params = {}) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Fabrics update failed");
 
-      // update single product state if open on edit page
       if (get().product && String(get().product?._id) === String(id)) {
         set({ product: data.product });
       }
 
-      // update product list state (admin grid) if present
       set((state) => ({
         products: (state.products || []).map((p) =>
           String(p._id) === String(id)
@@ -980,5 +1016,4 @@ fetchAllProducts: async (params = {}) => {
       set({ saving: false });
     }
   },
-
 }));

@@ -12,6 +12,9 @@ import OrderStatsCards from "@/components/orders/reports/OrderStatsCards";
 import OrderStatusPieChart from "@/components/orders/reports/OrderStatusPieChart";
 import OrderValueStatsCards from "@/components/orders/reports/OrderValueStatsCards";
 
+// ✅ NEW: Product orders analytics (product-wise qty/revenue with 7/15/30 + month)
+import ProductOrderAnalytics from "@/components/orders/reports/ProductOrderAnalytics";
+
 /* -------------------------
   Date helpers (simple)
 ------------------------- */
@@ -204,6 +207,9 @@ export default function OrderReportPage() {
           </div>
         </div>
 
+        {/* ✅ NEW: Product-wise analytics (has its own 7/15/30/month filters) */}
+      
+
         {/* ✅ Daily Report must receive orders */}
         <DailyOrderReport orders={filteredOrders} excludeStatuses={["cancelled", "rto"]} />
 
@@ -216,7 +222,7 @@ export default function OrderReportPage() {
           <OrdersCountBarChart orders={filteredOrders} />
           <OrderStatusPieChart orders={filteredOrders} />
         </div>
-
+  <ProductOrderAnalytics orders={filteredOrders} excludeStatuses={["cancelled", "rto"]} />
         {/* Coupon Analytics */}
         <CouponAnalytics orders={filteredOrders} excludeCancelled />
 
@@ -234,18 +240,61 @@ export default function OrderReportPage() {
 const styles = {
   page: { minHeight: "100vh", background: "#f8fafc", padding: 16 },
   container: { margin: "0 auto" },
-  header: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 },
+  header: {
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+    marginBottom: 12,
+  },
   title: { margin: 0, fontSize: 24, fontWeight: 900, color: "#0f172a" },
   subTitle: { marginTop: 6, fontSize: 13, color: "#475569" },
-  btn: { border: "1px solid rgba(15,23,42,0.12)", background: "#ffffff", color: "#0f172a", padding: "10px 12px", borderRadius: 10, fontWeight: 800, cursor: "pointer" },
+  btn: {
+    border: "1px solid rgba(15,23,42,0.12)",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "10px 12px",
+    borderRadius: 10,
+    fontWeight: 800,
+    cursor: "pointer",
+  },
   btnDisabled: { opacity: 0.6, cursor: "not-allowed" },
-  filtersCard: { border: "1px solid rgba(15,23,42,0.10)", borderRadius: 12, background: "#ffffff", padding: 12 },
+  filtersCard: {
+    border: "1px solid rgba(15,23,42,0.10)",
+    borderRadius: 12,
+    background: "#ffffff",
+    padding: 12,
+  },
   filtersGrid: { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 },
   field: { display: "flex", flexDirection: "column", gap: 6 },
   label: { fontSize: 12, fontWeight: 800, color: "#334155" },
-  input: { height: 38, borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", padding: "0 10px", outline: "none", background: "#fff", color: "#0f172a" },
-  select: { height: 38, borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", padding: "0 10px", outline: "none", background: "#fff", color: "#0f172a" },
-  metaRow: { marginTop: 10, display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" },
+  input: {
+    height: 38,
+    borderRadius: 10,
+    border: "1px solid rgba(15,23,42,0.12)",
+    padding: "0 10px",
+    outline: "none",
+    background: "#fff",
+    color: "#0f172a",
+  },
+  select: {
+    height: 38,
+    borderRadius: 10,
+    border: "1px solid rgba(15,23,42,0.12)",
+    padding: "0 10px",
+    outline: "none",
+    background: "#fff",
+    color: "#0f172a",
+  },
+  metaRow: {
+    marginTop: 10,
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+  },
   metaText: { fontSize: 12, color: "#64748b" },
   error: { fontSize: 12, color: "#b91c1c", fontWeight: 700 },
   grid2: { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 },
