@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Loader2, Search, Download } from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 
-const API = process.env.NEXT_PUBLIC_BACKEND_URL; // ✅ UPDATED (was NEXT_PUBLIC_API_URL)
+const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 const Card = ({ children, className = "" }) => (
   <div
@@ -16,57 +15,65 @@ const Card = ({ children, className = "" }) => (
 );
 
 export default function OrdersListPage() {
-  const router = useRouter();
-
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 🔍 Filters
+  // 🔍 Search (button based)
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+
+  // 🔍 Filters
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
 
-  // ✅ New status + confirm filters
-  const [status, setStatus] = useState(""); // fulfillmentStatus
-  const [confirmFilter, setConfirmFilter] = useState(""); // "", "confirmed", "not_confirmed"
+  // ✅ Status + confirmation
+  const [status, setStatus] = useState("");
+  const [confirmFilter, setConfirmFilter] = useState("");
+
+  const applySearch = useCallback(() => {
+    setSearch(searchInput.trim());
+  }, [searchInput]);
+
+  const clearSearch = useCallback(() => {
+    setSearchInput("");
+    setSearch("");
+  }, []);
 
   /* ------------------------------------
      ✅ LOAD ORDERS WITH FILTERS (Backend)
      ------------------------------------ */
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
 
-      let url = `${API}/api/orders?`;
+      const qs = new URLSearchParams();
+      if (search) qs.set("customerName", search); // keeping your backend param
+      if (startDate) qs.set("startDate", startDate);
+      if (endDate) qs.set("endDate", endDate);
+      if (minAmount) qs.set("minAmount", minAmount);
+      if (maxAmount) qs.set("maxAmount", maxAmount);
+      if (paymentMethod) qs.set("paymentMethod", paymentMethod);
+      if (status) qs.set("fulfillmentStatus", status);
 
-      // ✅ Keep your original backend params
-      if (search) url += `customerName=${encodeURIComponent(search)}&`;
-      if (startDate) url += `startDate=${startDate}&`;
-      if (endDate) url += `endDate=${endDate}&`;
-      if (minAmount) url += `minAmount=${minAmount}&`;
-      if (maxAmount) url += `maxAmount=${maxAmount}&`;
-      if (paymentMethod) url += `paymentMethod=${paymentMethod}&`;
-      if (status) url += `fulfillmentStatus=${status}&`;
-
+      const url = `${API}/api/orders?${qs.toString()}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
 
       setOrders(Array.isArray(data) ? data : data?.orders || []);
-      setLoading(false);
     } catch (err) {
       console.log("Orders Fetch Error:", err);
       setOrders([]);
+    } finally {
       setLoading(false);
     }
-  };
+  }, [search, startDate, endDate, minAmount, maxAmount, paymentMethod, status]);
 
   useEffect(() => {
     loadOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, startDate, endDate, minAmount, maxAmount, paymentMethod, status]);
+  }, [loadOrders]);
 
   /* ------------------------------------
      ✅ CLIENT SIDE FILTERS (Search + Confirmation)
@@ -74,39 +81,29 @@ export default function OrdersListPage() {
   const filteredOrders = useMemo(() => {
     let data = Array.isArray(orders) ? [...orders] : [];
 
-    // ✅ Confirm filter (client side)
-    if (confirmFilter === "confirmed") {
-      data = data.filter((o) => o?.isConfirmed === true);
-    }
-    if (confirmFilter === "not_confirmed") {
+    if (confirmFilter === "confirmed") data = data.filter((o) => o?.isConfirmed === true);
+    if (confirmFilter === "not_confirmed")
       data = data.filter((o) => o?.isConfirmed !== true);
-    }
 
-    // ✅ Better search - orderNumber + email + phone + name
     const q = search.trim().toLowerCase();
-    if (q) {
-      data = data.filter((o) => {
-        const orderNumber = String(o?.orderNumber || "").toLowerCase();
-        const name =
-          String(o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || "")
-            .toLowerCase();
-        const email =
-          String(o?.customerId?.email || o?.shippingAddressSnapshot?.email || "")
-            .toLowerCase();
-        const phone =
-          String(o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || "")
-            .toLowerCase();
+    if (!q) return data;
 
-        return (
-          orderNumber.includes(q) ||
-          name.includes(q) ||
-          email.includes(q) ||
-          phone.includes(q)
-        );
-      });
-    }
+    return data.filter((o) => {
+      const orderNumber = String(o?.orderNumber || "").toLowerCase();
+      const name = String(
+        o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
+      ).toLowerCase();
+      const email = String(
+        o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
+      ).toLowerCase();
+      const phone = String(
+        o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
+      ).toLowerCase();
 
-    return data;
+      return (
+        orderNumber.includes(q) || name.includes(q) || email.includes(q) || phone.includes(q)
+      );
+    });
   }, [orders, confirmFilter, search]);
 
   /* ------------------------------------
@@ -115,15 +112,13 @@ export default function OrdersListPage() {
   const escapeCSV = (value) => {
     if (value === null || value === undefined) return "";
     const str = String(value);
-    const escaped = str.replace(/"/g, '""');
-    return `"${escaped}"`;
+    return `"${str.replace(/"/g, '""')}"`;
   };
 
   const formatDate = (d) => {
     if (!d) return "";
     const dt = new Date(d);
-    if (Number.isNaN(dt.getTime())) return "";
-    return dt.toISOString();
+    return Number.isNaN(dt.getTime()) ? "" : dt.toISOString();
   };
 
   const money = (n) => {
@@ -133,9 +128,6 @@ export default function OrdersListPage() {
 
   const safe = (v) => (v === null || v === undefined ? "" : v);
 
-  /* ------------------------------------
-     ✅ FLATTEN ORDER -> CSV ROWS
-     ------------------------------------ */
   const buildCsvRows = (ordersArr) => {
     const rows = [];
     for (const order of ordersArr || []) {
@@ -210,9 +202,6 @@ export default function OrdersListPage() {
     return rows;
   };
 
-  /* ------------------------------------
-     ✅ EXPORT CSV
-     ------------------------------------ */
   const exportToCSV = () => {
     if (!filteredOrders?.length) {
       alert("No orders to export for the current filters.");
@@ -276,11 +265,10 @@ export default function OrdersListPage() {
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-
     const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+
     link.href = url;
     link.setAttribute("download", `orders-${ts}.csv`);
-
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -289,16 +277,23 @@ export default function OrdersListPage() {
 
   const totals = useMemo(() => {
     const count = filteredOrders.length;
-    const sum = filteredOrders.reduce(
-      (acc, o) => acc + (Number(o?.finalPayable) || 0),
-      0
-    );
+    const sum = filteredOrders.reduce((acc, o) => acc + (Number(o?.finalPayable) || 0), 0);
     return { count, sum };
   }, [filteredOrders]);
 
-  /* ------------------------------------
-     ✅ LOADING UI
-     ------------------------------------ */
+  const chips = [
+    { key: "", label: "All", type: "all" },
+    { key: "processing", label: "Processing", type: "status" },
+    { key: "packed", label: "Packed", type: "status" },
+    { key: "shipped", label: "Shipped", type: "status" },
+    { key: "out_for_delivery", label: "Out for Delivery", type: "status" },
+    { key: "delivered", label: "Delivered", type: "status" },
+    { key: "returned", label: "Returned", type: "status" },
+    { key: "cancelled", label: "Cancelled", type: "status" },
+    { key: "confirmed", label: "Confirmed", type: "confirm" },
+    { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
+  ];
+
   if (loading) {
     return (
       <div className="p-10 flex justify-center">
@@ -310,15 +305,11 @@ export default function OrdersListPage() {
   return (
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* ✅ HEADER */}
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-              All Orders
-            </h1>
-            <p className="text-gray-500 mt-1">
-              View, filter and manage all customer orders.
-            </p>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">All Orders</h1>
+            <p className="text-gray-500 mt-1">View, filter and manage all customer orders.</p>
 
             <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
@@ -331,19 +322,34 @@ export default function OrdersListPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            {/* Search Input */}
+            {/* Search */}
             <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 w-full md:w-80">
               <Search size={18} className="text-gray-400" />
               <input
                 type="text"
                 placeholder="Search order # / name / email / phone..."
                 className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && applySearch()}
               />
             </div>
 
-            {/* Export */}
+            <button
+              onClick={applySearch}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-gray-200 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition"
+            >
+              <Search size={18} />
+              Search
+            </button>
+
+            <button
+              onClick={clearSearch}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-200 active:scale-[0.98] transition"
+            >
+              Clear
+            </button>
+
             <button
               onClick={exportToCSV}
               className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
@@ -354,13 +360,11 @@ export default function OrdersListPage() {
           </div>
         </div>
 
-        {/* ✅ FILTERS */}
+        {/* FILTERS */}
         <Card>
           <div className="grid md:grid-cols-4 gap-5">
             <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Start Date
-              </label>
+              <label className="text-sm font-semibold text-gray-700">Start Date</label>
               <input
                 type="date"
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
@@ -370,9 +374,7 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">
-                End Date
-              </label>
+              <label className="text-sm font-semibold text-gray-700">End Date</label>
               <input
                 type="date"
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
@@ -382,9 +384,7 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Min Amount
-              </label>
+              <label className="text-sm font-semibold text-gray-700">Min Amount</label>
               <input
                 type="number"
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
@@ -395,9 +395,7 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Max Amount
-              </label>
+              <label className="text-sm font-semibold text-gray-700">Max Amount</label>
               <input
                 type="number"
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
@@ -407,11 +405,8 @@ export default function OrdersListPage() {
               />
             </div>
 
-            {/* Payment Method */}
             <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Payment Method
-              </label>
+              <label className="text-sm font-semibold text-gray-700">Payment Method</label>
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={paymentMethod}
@@ -423,11 +418,8 @@ export default function OrdersListPage() {
               </select>
             </div>
 
-            {/* ✅ Confirmation Filter (NEW) */}
             <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Confirmation
-              </label>
+              <label className="text-sm font-semibold text-gray-700">Confirmation</label>
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={confirmFilter}
@@ -440,74 +432,44 @@ export default function OrdersListPage() {
             </div>
           </div>
 
-         {/* ✅ Fulfillment + Confirmed buttons */}
-{/* ✅ Fulfillment + Confirmed buttons (TOGGLE FIXED) */}
-<div className="mt-6 flex gap-2 overflow-x-auto pb-1">
-  {[
-    { key: "", label: "All", type: "all" },
+          <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+            {chips.map((s) => {
+              const isActive =
+                s.type === "status"
+                  ? status === s.key
+                  : s.type === "confirm"
+                  ? confirmFilter === s.key
+                  : status === "" && confirmFilter === "";
 
-    // ✅ Fulfillment
-    { key: "processing", label: "Processing", type: "status" },
-    { key: "packed", label: "Packed", type: "status" },
-    { key: "shipped", label: "Shipped", type: "status" },
-    { key: "out_for_delivery", label: "Out for Delivery", type: "status" },
-    { key: "delivered", label: "Delivered", type: "status" },
-    { key: "returned", label: "Returned", type: "status" },
-    { key: "cancelled", label: "Cancelled", type: "status" },
+              const onClick = () => {
+                if (s.type === "all") {
+                  setStatus("");
+                  setConfirmFilter("");
+                  return;
+                }
+                if (s.type === "status") setStatus((prev) => (prev === s.key ? "" : s.key));
+                if (s.type === "confirm")
+                  setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
+              };
 
-    // ✅ Confirmation
-    { key: "confirmed", label: "Confirmed", type: "confirm" },
-    { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
-  ].map((s) => {
-    const isActive =
-      s.type === "status"
-        ? status === s.key
-        : s.type === "confirm"
-        ? confirmFilter === s.key
-        : status === "" && confirmFilter === "";
-
-    const handleClick = () => {
-      // ✅ ALL resets everything
-      if (s.type === "all") {
-        setStatus("");
-        setConfirmFilter("");
-        return;
-      }
-
-      // ✅ Status toggle logic
-      if (s.type === "status") {
-        setStatus((prev) => (prev === s.key ? "" : s.key));
-        return;
-      }
-
-      // ✅ Confirm toggle logic
-      if (s.type === "confirm") {
-        setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
-        return;
-      }
-    };
-
-    return (
-      <button
-        key={`${s.type}-${s.key || "all"}`}
-        onClick={handleClick}
-        className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap
-        ${
-          isActive
-            ? "bg-black text-white shadow-sm"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        }`}
-      >
-        {s.label}
-      </button>
-    );
-  })}
-</div>
-
-
+              return (
+                <button
+                  key={`${s.type}-${s.key || "all"}`}
+                  onClick={onClick}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${
+                    isActive
+                      ? "bg-black text-white shadow-sm"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
         </Card>
 
-        {/* ✅ TABLE */}
+        {/* TABLE */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -516,9 +478,7 @@ export default function OrdersListPage() {
                   <th className="py-4 px-5 text-left font-semibold">Order #</th>
                   <th className="py-4 px-5 text-left font-semibold">Customer</th>
                   <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">
-                    Fulfillment
-                  </th>
+                  <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
                   <th className="py-4 px-5 text-left font-semibold">Amount</th>
                   <th className="py-4 px-5 text-left font-semibold">Date</th>
                   <th className="py-4 px-5 text-left font-semibold">Action</th>
@@ -526,13 +486,10 @@ export default function OrdersListPage() {
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-                {filteredOrders.length > 0 ? (
+                {filteredOrders.length ? (
                   filteredOrders.map((order, idx) => {
                     const rowKey =
-                      order?._id ||
-                      order?.id ||
-                      order?.orderNumber ||
-                      `order-${idx}`;
+                      order?._id || order?.id || order?.orderNumber || `order-${idx}`;
 
                     return (
                       <OrderRow
@@ -541,8 +498,7 @@ export default function OrdersListPage() {
                         onUpdated={(updatedOrder) => {
                           setOrders((prev) =>
                             prev.map((o) =>
-                              (o?._id || o?.id) ===
-                              (updatedOrder?._id || updatedOrder?.id)
+                              (o?._id || o?.id) === (updatedOrder?._id || updatedOrder?.id)
                                 ? updatedOrder
                                 : o
                             )
