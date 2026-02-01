@@ -57,7 +57,7 @@ export default function OrdersListPage() {
       if (maxAmount) qs.set("maxAmount", maxAmount);
       if (paymentMethod) qs.set("paymentMethod", paymentMethod);
       if (status) qs.set("fulfillmentStatus", status);
-if (confirmFilter) qs.set("confirmFilter", confirmFilter);
+      if (confirmFilter) qs.set("confirmFilter", confirmFilter);
       const url = `${API}/api/orders?${qs.toString()}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
@@ -169,35 +169,57 @@ if (confirmFilter) qs.set("confirmFilter", confirmFilter);
           finalPayable,
           itemIndex: "",
           itemTitle: "",
+          itemProductCode: "",
+          itemSku: "",     // ✅ NEW
+          itemSize: "",    // ✅ NEW
           itemQuantity: "",
           itemPrice: "",
         });
+
         continue;
       }
 
-      items.forEach((item, idx) => {
-        const snap = item?.productSnapshot || {};
-        rows.push({
-          orderId,
-          orderNumber,
-          orderDate,
-          customerName,
-          customerEmail,
-          customerPhone,
-          isConfirmed,
-          fulfillmentStatus,
-          subtotal,
-          discount,
-          shippingFee,
-          tax,
-          totalAmount,
-          finalPayable,
-          itemIndex: idx + 1,
-          itemTitle: safe(snap?.title),
-          itemQuantity: money(item?.quantity),
-          itemPrice: money(item?.price),
-        });
-      });
+     items.forEach((item, idx) => {
+  const snap = item?.productSnapshot || {};
+
+  const itemProductCode = safe(snap?.productCode || ""); // ✅ ADD THIS
+
+  // ✅ size from selectedSize (new) OR fallback from attributes (old orders)
+  const attrs = Array.isArray(item?.variant?.attributes) ? item.variant.attributes : [];
+  const attrSize =
+    attrs.find((a) => String(a?.key || "").toLowerCase() === "size")?.value ||
+    attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")?.value ||
+    "";
+
+  const itemSku = safe(item?.variant?.sku || snap?.sku || "");
+  const itemSize = safe(item?.selectedSize || attrSize || "");
+
+  rows.push({
+    orderId,
+    orderNumber,
+    orderDate,
+    customerName,
+    customerEmail,
+    customerPhone,
+    isConfirmed,
+    fulfillmentStatus,
+    subtotal,
+    discount,
+    shippingFee,
+    tax,
+    totalAmount,
+    finalPayable,
+    itemIndex: idx + 1,
+    itemTitle: safe(snap?.title),
+    itemProductCode, // ✅ NOW OK
+    itemSku,
+    itemSize,
+    itemQuantity: money(item?.quantity),
+    itemPrice: money(item?.price),
+  });
+});
+
+
     }
     return rows;
   };
@@ -227,9 +249,13 @@ if (confirmFilter) qs.set("confirmFilter", confirmFilter);
       "Final Payable",
       "Item #",
       "Item Title",
+      "Product Code",
+      "Item SKU",      // ✅ NEW
+      "Item Size",     // ✅ NEW
       "Item Quantity",
       "Item Price",
     ];
+
 
     const csvLines = [
       headers.map(escapeCSV).join(","),
@@ -251,6 +277,9 @@ if (confirmFilter) qs.set("confirmFilter", confirmFilter);
           r.finalPayable,
           r.itemIndex,
           r.itemTitle,
+          r.itemProductCode,
+          r.itemSku,      // ✅ NEW
+          r.itemSize,     // ✅ NEW
           r.itemQuantity,
           r.itemPrice,
         ]
@@ -282,27 +311,27 @@ if (confirmFilter) qs.set("confirmFilter", confirmFilter);
   }, [filteredOrders]);
 
   const chips = [
-  { key: "", label: "All", type: "all" },
+    { key: "", label: "All", type: "all" },
 
-  // Fulfillment statuses
-  { key: "processing", label: "Processing", type: "status" },
-  { key: "packed", label: "Packed", type: "status" },
-  { key: "picked", label: "Picked", type: "status" },
-  { key: "shipped", label: "Shipped", type: "status" },
-  { key: "out_for_delivery", label: "Out for Delivery", type: "status" },
-  { key: "delivered", label: "Delivered", type: "status" },
+    // Fulfillment statuses
+    { key: "processing", label: "Processing", type: "status" },
+    { key: "packed", label: "Packed", type: "status" },
+    { key: "picked", label: "Picked", type: "status" },
+    { key: "shipped", label: "Shipped", type: "status" },
+    { key: "out_for_delivery", label: "Out for Delivery", type: "status" },
+    { key: "delivered", label: "Delivered", type: "status" },
 
-  { key: "return_requested", label: "Return Requested", type: "status" },
-  { key: "exchange_requested", label: "Exchange Requested", type: "status" },
-  { key: "returned", label: "Returned", type: "status" },
+    { key: "return_requested", label: "Return Requested", type: "status" },
+    { key: "exchange_requested", label: "Exchange Requested", type: "status" },
+    { key: "returned", label: "Returned", type: "status" },
 
-  { key: "rto", label: "RTO", type: "status" },
-  { key: "cancelled", label: "Cancelled", type: "status" },
+    { key: "rto", label: "RTO", type: "status" },
+    { key: "cancelled", label: "Cancelled", type: "status" },
 
-  // Confirmation filters
-  { key: "confirmed", label: "Confirmed", type: "confirm" },
-  { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
-];
+    // Confirmation filters
+    { key: "confirmed", label: "Confirmed", type: "confirm" },
+    { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
+  ];
 
 
   if (loading) {
@@ -450,8 +479,8 @@ if (confirmFilter) qs.set("confirmFilter", confirmFilter);
                 s.type === "status"
                   ? status === s.key
                   : s.type === "confirm"
-                  ? confirmFilter === s.key
-                  : status === "" && confirmFilter === "";
+                    ? confirmFilter === s.key
+                    : status === "" && confirmFilter === "";
 
               const onClick = () => {
                 if (s.type === "all") {
@@ -468,11 +497,10 @@ if (confirmFilter) qs.set("confirmFilter", confirmFilter);
                 <button
                   key={`${s.type}-${s.key || "all"}`}
                   onClick={onClick}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${
-                    isActive
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${isActive
                       ? "bg-black text-white shadow-sm"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                    }`}
                 >
                   {s.label}
                 </button>
