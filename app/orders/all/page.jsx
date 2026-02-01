@@ -315,7 +315,7 @@ if (confirmFilter) qs.set("confirmFilter", confirmFilter);
 
   return (
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className=" mx-auto space-y-8">
         {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
           <div>
