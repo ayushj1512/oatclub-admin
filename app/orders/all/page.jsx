@@ -57,7 +57,7 @@ export default function OrdersListPage() {
       if (maxAmount) qs.set("maxAmount", maxAmount);
       if (paymentMethod) qs.set("paymentMethod", paymentMethod);
       if (status) qs.set("fulfillmentStatus", status);
-
+if (confirmFilter) qs.set("confirmFilter", confirmFilter);
       const url = `${API}/api/orders?${qs.toString()}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
@@ -282,17 +282,28 @@ export default function OrdersListPage() {
   }, [filteredOrders]);
 
   const chips = [
-    { key: "", label: "All", type: "all" },
-    { key: "processing", label: "Processing", type: "status" },
-    { key: "packed", label: "Packed", type: "status" },
-    { key: "shipped", label: "Shipped", type: "status" },
-    { key: "out_for_delivery", label: "Out for Delivery", type: "status" },
-    { key: "delivered", label: "Delivered", type: "status" },
-    { key: "returned", label: "Returned", type: "status" },
-    { key: "cancelled", label: "Cancelled", type: "status" },
-    { key: "confirmed", label: "Confirmed", type: "confirm" },
-    { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
-  ];
+  { key: "", label: "All", type: "all" },
+
+  // Fulfillment statuses
+  { key: "processing", label: "Processing", type: "status" },
+  { key: "packed", label: "Packed", type: "status" },
+  { key: "picked", label: "Picked", type: "status" },
+  { key: "shipped", label: "Shipped", type: "status" },
+  { key: "out_for_delivery", label: "Out for Delivery", type: "status" },
+  { key: "delivered", label: "Delivered", type: "status" },
+
+  { key: "return_requested", label: "Return Requested", type: "status" },
+  { key: "exchange_requested", label: "Exchange Requested", type: "status" },
+  { key: "returned", label: "Returned", type: "status" },
+
+  { key: "rto", label: "RTO", type: "status" },
+  { key: "cancelled", label: "Cancelled", type: "status" },
+
+  // Confirmation filters
+  { key: "confirmed", label: "Confirmed", type: "confirm" },
+  { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
+];
+
 
   if (loading) {
     return (
@@ -415,6 +426,7 @@ export default function OrdersListPage() {
                 <option value="">All</option>
                 <option value="cod">Cash on Delivery</option>
                 <option value="razorpay">Razorpay</option>
+                <option value="exchange">Exchange</option>
               </select>
             </div>
 

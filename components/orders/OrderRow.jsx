@@ -12,45 +12,69 @@ const money = (n) => {
   return Number.isFinite(x) ? x : 0;
 };
 
+// ✅ Payment badge updated: supports exchange + refund_pending + not_applicable
 const getPaymentBadge = (order) => {
-  if (order?.paymentMethod === "cod")
-    return { label: "COD", cls: "bg-gray-100 text-gray-700" };
+  const pm = String(order?.paymentMethod || "").toLowerCase();
+  const ps = String(order?.paymentStatus || "").toLowerCase();
 
-  if (order?.paymentMethod === "razorpay") {
-    if (order?.paymentStatus === "paid")
-      return { label: "Paid ✅", cls: "bg-green-50 text-green-700" };
-    if (order?.paymentStatus === "pending")
-      return { label: "Pending ⏳", cls: "bg-yellow-50 text-yellow-700" };
-    return { label: "Failed ❌", cls: "bg-red-50 text-red-700" };
+  // Exchange orders (no money movement)
+  if (pm === "exchange") {
+    return { label: "Exchange", cls: "bg-blue-50 text-blue-700 border border-blue-100" };
   }
 
-  return { label: "Unknown", cls: "bg-gray-100 text-gray-700" };
+  // COD
+  if (pm === "cod") {
+    return { label: "COD", cls: "bg-gray-100 text-gray-700 border border-gray-200" };
+  }
+
+  // Razorpay (or other online)
+  if (pm === "razorpay") {
+    if (ps === "paid") return { label: "Paid ✅", cls: "bg-green-50 text-green-700 border border-green-100" };
+    if (ps === "pending") return { label: "Pending ⏳", cls: "bg-yellow-50 text-yellow-700 border border-yellow-100" };
+    if (ps === "refund_pending") return { label: "Refund Pending ⏳", cls: "bg-orange-50 text-orange-700 border border-orange-100" };
+    if (ps === "refunded") return { label: "Refunded ✅", cls: "bg-emerald-50 text-emerald-700 border border-emerald-100" };
+    return { label: "Failed ❌", cls: "bg-red-50 text-red-700 border border-red-100" };
+  }
+
+  // Payment not applicable (safety)
+  if (ps === "not_applicable") {
+    return { label: "N/A", cls: "bg-gray-50 text-gray-600 border border-gray-200" };
+  }
+
+  return { label: "Unknown", cls: "bg-gray-100 text-gray-700 border border-gray-200" };
 };
 
-const NEW_FULFILLMENT_STATUSES = [
-  "confirmed",
+// ✅ Full fulfillment statuses (from your schema)
+const FULFILLMENT_STATUSES = [
   "processing",
   "packed",
+  "picked",
   "shipped",
   "out_for_delivery",
   "delivered",
+  "return_requested",
+  "exchange_requested",
   "returned",
   "cancelled",
+  "rto",
 ];
 
 const STATUS_LABELS = {
-  confirmed: "Confirmed",
   processing: "Processing",
   packed: "Packed",
+  picked: "Picked",
   shipped: "Shipped",
   out_for_delivery: "Out for Delivery",
   delivered: "Delivered",
+  return_requested: "Return Requested",
+  exchange_requested: "Exchange Requested",
   returned: "Returned",
   cancelled: "Cancelled",
+  rto: "RTO",
 };
 
 const buildProductUrl = (item) => {
-  const productId = item?.productId?._id;
+  const productId = item?.productId?._id || item?.productId; // ✅ supports populated or raw id
   return productId ? `${BASE_URL}/category/products/name/${productId}` : "";
 };
 
@@ -96,12 +120,15 @@ export default function OrderRow({ order, onUpdated }) {
   const items = Array.isArray(order?.items) ? order.items : [];
   const orderId = order?._id || order?.id;
 
-  const effectiveStatus =
-    order?.fulfillmentStatus || (order?.isConfirmed ? "confirmed" : "processing");
+  // ✅ Effective status: use fulfillmentStatus; fallback to processing
+  const effectiveStatus = order?.fulfillmentStatus || "processing";
 
-  const dt = useMemo(() => formatOrderDateTime(order?.createdAt), [order?.createdAt]);
+  const dt = useMemo(
+    () => formatOrderDateTime(order?.createdAt || order?.orderDate),
+    [order?.createdAt, order?.orderDate]
+  );
 
-  // ✅ Only billing snapshot
+  // ✅ Only billing snapshot (fallback shipping)
   const bill = order?.billingAddressSnapshot || order?.shippingAddressSnapshot || null;
   const couponLabel = useMemo(() => getCouponLabel(order), [order]);
 
@@ -124,11 +151,20 @@ export default function OrderRow({ order, onUpdated }) {
 
           <p className="text-xs text-gray-500 mt-1">
             {items?.[0]?.productSnapshot?.title
-              ? `${items[0].productSnapshot.title}${
-                  items.length > 1 ? ` +${items.length - 1} more` : ""
-                }`
+              ? `${items[0].productSnapshot.title}${items.length > 1 ? ` +${items.length - 1} more` : ""}`
               : "No items"}
           </p>
+
+          {/* ✅ Confirmation badge (kept separate from fulfillment) */}
+          {order?.isConfirmed ? (
+            <span className="mt-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-100">
+              Confirmed ✅
+            </span>
+          ) : (
+            <span className="mt-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-50 text-gray-700 border border-gray-200">
+              Not Confirmed
+            </span>
+          )}
         </td>
 
         {/* Customer */}
@@ -139,19 +175,19 @@ export default function OrderRow({ order, onUpdated }) {
           <div className="text-xs text-gray-500">
             {order?.customerId?.phone || order?.shippingAddressSnapshot?.phone || ""}
           </div>
-
-          {order?.isConfirmed ? (
-            <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-100">
-              Confirmed ✅
-            </span>
-          ) : null}
+          <div className="text-xs text-gray-500">
+            {order?.customerId?.email || order?.shippingAddressSnapshot?.email || ""}
+          </div>
         </td>
 
         {/* Payment */}
         <td className="py-4 px-5">
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${pay.cls}`}>
+          <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${pay.cls}`}>
             {pay.label}
           </span>
+
+          {/* ✅ Optional: show paymentStatus if you want more clarity */}
+         
         </td>
 
         {/* Fulfillment */}
@@ -159,16 +195,14 @@ export default function OrderRow({ order, onUpdated }) {
           <OrderStatusDropdown
             orderId={orderId}
             currentStatus={effectiveStatus}
-            statuses={NEW_FULFILLMENT_STATUSES}
+            statuses={FULFILLMENT_STATUSES}
             labels={STATUS_LABELS}
             onUpdated={(updatedOrder) => onUpdated?.(updatedOrder)}
           />
         </td>
 
         {/* Amount */}
-        <td className="py-4 px-5 font-semibold text-gray-900">
-          ₹{money(order?.finalPayable)}
-        </td>
+        <td className="py-4 px-5 font-semibold text-gray-900">₹{money(order?.finalPayable)}</td>
 
         {/* Time + Date */}
         <td className="py-4 px-5 text-gray-700">
@@ -194,35 +228,28 @@ export default function OrderRow({ order, onUpdated }) {
         <tr className="bg-black/[0.015]">
           <td colSpan={7} className="px-5 pb-4">
             <div className="mt-3 bg-white rounded-2xl px-4 py-4 space-y-4">
-              {/* ✅ Billing + Coupon only */}
+              {/* Billing + Coupon */}
               <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-xs font-semibold text-gray-700">Billing Address</div>
 
-                    <div className="text-sm text-gray-900 mt-1">
-                      {bill?.fullName || "-"}
-                    </div>
+                    <div className="text-sm text-gray-900 mt-1">{bill?.fullName || "-"}</div>
 
                     <div className="text-xs text-gray-600 mt-0.5">
                       {bill?.phone || ""}
                       {bill?.email ? ` • ${bill.email}` : ""}
                     </div>
 
-                    <div className="text-xs text-gray-600 mt-1">
-                      {formatAddress(bill) || "—"}
-                    </div>
+                    <div className="text-xs text-gray-600 mt-1">{formatAddress(bill) || "—"}</div>
                   </div>
 
                   <div className="shrink-0">
                     <div className="text-xs font-semibold text-gray-700">Coupon</div>
-                    <div className="mt-1 text-sm text-gray-900 font-semibold">
-                      {couponLabel || "—"}
-                    </div>
+                    <div className="mt-1 text-sm text-gray-900 font-semibold">{couponLabel || "—"}</div>
+
                     {order?.discount ? (
-                      <div className="text-xs text-gray-600 mt-0.5">
-                        Discount: ₹{money(order.discount)}
-                      </div>
+                      <div className="text-xs text-gray-600 mt-0.5">Discount: ₹{money(order.discount)}</div>
                     ) : (
                       <div className="text-xs text-gray-500 mt-0.5">No discount</div>
                     )}
@@ -232,9 +259,7 @@ export default function OrderRow({ order, onUpdated }) {
 
               {/* Items */}
               <div className="space-y-2">
-                <h3 className="font-semibold text-gray-900 text-sm">
-                  Items ({items.length})
-                </h3>
+                <h3 className="font-semibold text-gray-900 text-sm">Items ({items.length})</h3>
 
                 {items.length === 0 ? (
                   <p className="text-xs text-gray-500">No items</p>
@@ -262,10 +287,7 @@ export default function OrderRow({ order, onUpdated }) {
                       const itemKey = `${orderId}-item-${idx}`;
 
                       return (
-                        <div
-                          key={itemKey}
-                          className="py-3 flex items-center justify-between gap-3"
-                        >
+                        <div key={itemKey} className="py-3 flex items-center justify-between gap-3">
                           {/* left */}
                           <div className="flex items-center gap-3 min-w-0">
                             <img
@@ -295,8 +317,7 @@ export default function OrderRow({ order, onUpdated }) {
                               </div>
 
                               <p className="text-xs text-gray-500 truncate">
-                                {variantText ||
-                                  (v?.sku || snap?.sku ? `SKU: ${v?.sku || snap?.sku}` : "")}
+                                {variantText || (v?.sku || snap?.sku ? `SKU: ${v?.sku || snap?.sku}` : "")}
                               </p>
 
                               {v?.variantId ? (
