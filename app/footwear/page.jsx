@@ -1,10 +1,27 @@
 "use client"
 
-import useAdminFootwearStore from "@/store/adminFootwearStore"
+import { useEffect } from "react"
+import { useAdminFootwearStore } from "@/store/adminFootwearStore"
 
 export default function FootwearDashboard() {
+  const {
+    items,
+    total,
+    loading,
+    fetchList,
+  } = useAdminFootwearStore()
 
-  const { stats, products } = useAdminFootwearStore()
+  useEffect(() => {
+    fetchList()
+  }, [fetchList])
+
+  // derived stats (adjust later if backend adds real stats)
+  const stats = {
+    totalProducts: total,
+    ordersToday: 0,
+    revenue: 0,
+    customers: 0,
+  }
 
   return (
     <div className="min-h-screen bg-[#f4f4f4] text-black p-6">
@@ -22,12 +39,10 @@ export default function FootwearDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-
         <StatCard title="Total Products" value={stats.totalProducts} />
         <StatCard title="Orders Today" value={stats.ordersToday} />
         <StatCard title="Revenue" value={`₹${stats.revenue}`} />
         <StatCard title="Customers" value={stats.customers} />
-
       </div>
 
       {/* Products */}
@@ -36,19 +51,21 @@ export default function FootwearDashboard() {
           Products
         </h2>
 
-        {products.length === 0 ? (
+        {loading ? (
+          <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+            Loading products...
+          </div>
+        ) : items.length === 0 ? (
           <div className="text-gray-500 bg-white rounded-2xl p-10 text-center shadow-sm">
             No products added yet
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-
-            {products.map((product) => (
+            {items.map((product) => (
               <div
-                key={product.id}
+                key={product._id}
                 className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition"
               >
-
                 <div className="h-32 bg-gray-100 rounded-xl mb-4 flex items-center justify-center text-gray-400">
                   Image
                 </div>
@@ -66,11 +83,9 @@ export default function FootwearDashboard() {
                 </button>
               </div>
             ))}
-
           </div>
         )}
       </div>
-
     </div>
   )
 }
