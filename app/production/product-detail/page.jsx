@@ -7,7 +7,7 @@ import { useAdminProductStore } from "@/store/adminProductStore";
 const pad6 = (v) => {
   const digits = String(v ?? "").trim().replace(/[^\d]/g, "");
   if (!digits) return "";
-  return digits.slice(-6).padStart(6, "0"); // "00026" -> "000026"
+  return digits.slice(-6).padStart(6, "0");
 };
 const arr = (v) => (Array.isArray(v) ? v : []);
 const dedupe = (list) => {
@@ -83,6 +83,36 @@ const Box = ({ title, children }) => (
   </div>
 );
 
+/* ---------------- Header Images ---------------- */
+// ✅ Increase size here (single place):
+const HEADER_IMG_CLASS = "h-40 w-40 md:h-50 md:w-50"; // bigger
+function HeaderImageStrip({ imgs, onOpen }) {
+  if (!imgs?.length) return null;
+  return (
+    <div className="mt-3">
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {imgs.map((src, i) => (
+          <button
+            key={`${src}-${i}`}
+            type="button"
+            onClick={() => onOpen(i)}
+            className="shrink-0 rounded-2xl overflow-hidden bg-gray-100/70 ring-1 ring-black/5 hover:opacity-95"
+            title="Open preview"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={src}
+              alt={`header-product-${i + 1}`}
+              className={`${HEADER_IMG_CLASS} object-contain`}
+              loading="lazy"
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Lightbox ---------------- */
 function Lightbox({ open, images, index, onClose, onPrev, onNext }) {
   if (!open) return null;
@@ -111,7 +141,12 @@ function Lightbox({ open, images, index, onClose, onPrev, onNext }) {
           </div>
 
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={`preview-${index + 1}`} className="w-full h-full object-contain rounded-2xl" draggable={false} />
+          <img
+            src={src}
+            alt={`preview-${index + 1}`}
+            className="w-full h-full object-contain rounded-2xl"
+            draggable={false}
+          />
 
           {images.length > 1 ? (
             <>
@@ -153,7 +188,6 @@ export default function ProductDetailScreen() {
   const [lbIndex, setLbIndex] = useState(0);
 
   const code6 = useMemo(() => pad6(codeInput), [codeInput]);
-
   const p = product;
 
   const imgs = useMemo(() => {
@@ -252,9 +286,12 @@ export default function ProductDetailScreen() {
               <div className="space-y-1">
                 <div className="text-xs text-gray-500">Product</div>
                 <div className="text-lg md:text-xl font-semibold">{p.title}</div>
+
+                {/* ✅ Images below title (bigger) */}
+                <HeaderImageStrip imgs={imgs} onOpen={openLightbox} />
+
                 <div className="text-xs text-gray-500">
-                  Code:{" "}
-                  <span className="font-semibold text-gray-900">{pad6(p.productCode)}</span>
+                  Code: <span className="font-semibold text-gray-900">{pad6(p.productCode)}</span>
                   <span className="mx-2">•</span>
                   <span className="font-mono">{p._id}</span>
                 </div>
@@ -293,7 +330,9 @@ export default function ProductDetailScreen() {
                   k="Dimensions"
                   v={
                     p.dimensions
-                      ? `${p.dimensions.length ?? 0}×${p.dimensions.width ?? 0}×${p.dimensions.height ?? 0} ${p.dimensions.unit || "cm"}`
+                      ? `${p.dimensions.length ?? 0}×${p.dimensions.width ?? 0}×${p.dimensions.height ?? 0} ${
+                          p.dimensions.unit || "cm"
+                        }`
                       : "—"
                   }
                 />
@@ -369,7 +408,10 @@ export default function ProductDetailScreen() {
 
               <Card title="Pricing / Tax">
                 <KV k="Price" v={money(p.price, p.currency)} />
-                <KV k="Compare" v={p.compareAtPrice == null ? "—" : money(p.compareAtPrice, p.currency)} />
+                <KV
+                  k="Compare"
+                  v={p.compareAtPrice == null ? "—" : money(p.compareAtPrice, p.currency)}
+                />
                 <KV k="Currency" v={p.currency || "INR"} />
                 <KV k="Tax Class" v={p.taxClass || "standard"} />
               </Card>
@@ -380,17 +422,22 @@ export default function ProductDetailScreen() {
                 <KV k="isInStock" v={String(!!p.isInStock)} />
               </Card>
 
-              {/* ✅ Variants include Pattern Number */}
-              <Card title={`Variants (${arr(p.variants).length})`} right={<span className="text-xs text-gray-500">includes patternNumber</span>}>
+              <Card
+                title={`Variants (${arr(p.variants).length})`}
+                right={<span className="text-xs text-gray-500">includes patternNumber</span>}
+              >
                 {arr(p.variants).length ? (
                   <div className="space-y-3">
                     {p.variants.map((v, idx) => {
                       const m = getVariantAttrMap(v);
-                      const size = m.size || m["Size".toLowerCase()] || "";
+                      const size = m.size || "";
                       const color = m.color || "";
 
                       return (
-                        <div key={v?._id || idx} className="rounded-2xl bg-gray-50/70 ring-1 ring-black/5 p-4">
+                        <div
+                          key={v?._id || idx}
+                          className="rounded-2xl bg-gray-50/70 ring-1 ring-black/5 p-4"
+                        >
                           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
                             <div className="space-y-1">
                               <div className="text-sm font-semibold">
@@ -486,29 +533,8 @@ export default function ProductDetailScreen() {
               </Card>
             </div>
 
-            {/* Right */}
+            {/* Right (kept short: removed Images card) */}
             <div className="space-y-4">
-              <Card title={`Images (${imgs.length})`} right={<span className="text-xs text-gray-500">Click to preview</span>}>
-                {imgs.length ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {imgs.map((src, i) => (
-                      <button
-                        key={`${src}-${i}`}
-                        type="button"
-                        onClick={() => openLightbox(i)}
-                        className="text-left rounded-2xl overflow-hidden bg-gray-100/70 ring-1 ring-black/5 hover:opacity-95"
-                        title="Open preview"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={src} alt={`product-${i + 1}`} className="w-full h-50 object-contain" loading="lazy" />
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-gray-500">No images</div>
-                )}
-              </Card>
-
               <Card title="Analytics">
                 <KV k="Views" v={String(p.analytics?.views ?? 0)} />
                 <KV k="Purchases" v={String(p.analytics?.purchases ?? 0)} />

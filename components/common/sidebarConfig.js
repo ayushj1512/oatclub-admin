@@ -43,13 +43,16 @@ export const sidebarMenus = {
 
 production: [
   { label: "Production Dashboard", href: "/production" },
-    { label: "Packed Orders", href: "/production/packed" },
+  { label: "Packed Orders", href: "/production/packed" },
+
+  { label: "Sampling", href: "/production/sampling" }, // ✅ NEW
 
   { label: "Pattern Number", href: "/production/pattern-number" },
   { label: "Fabric", href: "/production/fabric" },
   { label: "Product Detail", href: "/production/product-detail" },   // ✅ new
   { label: "Missing Patterns", href: "/production/missing-patterns" }, // ✅ new
 ],
+
 
 
   accounts: [

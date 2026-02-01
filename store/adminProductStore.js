@@ -1016,4 +1016,44 @@ export const useAdminProductStore = create((set, get) => ({
       set({ saving: false });
     }
   },
+
+  updateSamplingStatus: async (productId, isSamplingDone) => {
+  try {
+    set({ saving: true });
+
+    const res = await fetch(`${API}/${productId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ isSamplingDone: !!isSamplingDone }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Sampling update failed");
+
+    const updated = data.product;
+
+    // single product
+    if (get().product?._id === productId) set({ product: updated });
+
+    // list update
+    set((state) => ({
+      products: (state.products || []).map((p) =>
+        p._id === productId
+          ? { ...p, isSamplingDone: !!updated?.isSamplingDone }
+          : p
+      ),
+    }));
+
+    toast.success(updated.isSamplingDone ? "Sampling Done ✅" : "Sampling Undo ↩️");
+    return updated;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
+
 }));
