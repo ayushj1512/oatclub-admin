@@ -57,13 +57,8 @@ production: [
 
   accounts: [
     { label: "Accounts Dashboard", href: "/accounts" },
-    { label: "Transactions", href: "/accounts/transactions" },
-    { label: "Payouts", href: "/accounts/payouts" },
-    { label: "Invoice Management", href: "/accounts/invoices" },
-    { label: "GST Reports", href: "/accounts/gst" },
-    { label: "Vendor Ledger", href: "/accounts/vendor-ledger" },
-    { label: "COD Reconciliation", href: "/accounts/cod" },
-    { label: "Refunds Ledger", href: "/accounts/refunds" },
+    { label: "Sales", href: "/accounts/sales" },
+  
   ],
 
   inventory: [
