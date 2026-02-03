@@ -94,6 +94,47 @@ export const useAdminProductionStore = create((set, get) => ({
     }
   },
 
+
+  markOrderPacked: async (orderId) => {
+    try {
+      if (!orderId) throw new Error("Order id missing");
+
+      set({ updatingPacked: true, error: null });
+
+      const res = await fetch(`${API}/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ fulfillmentStatus: "packed" }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to mark packed");
+
+      const updated = data.order;
+
+      // ✅ update queue instantly
+      set((state) => ({
+        queue: (state.queue || []).map((o) =>
+          String(o._id) === String(orderId) ? updated : o
+        ),
+      }));
+
+      toast.success("Order marked packed ✅");
+
+      // ✅ refresh summary silently
+      get().fetchProductionSummary().catch(() => {});
+      return updated;
+    } catch (e) {
+      console.error("❌ markOrderPacked error:", e);
+      set({ error: e.message });
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ updatingPacked: false });
+    }
+  },
+
   /* ============================================================
     ✅ MARK ORDER SHIPPED FROM PRODUCTION
     POST /api/orders/production/:id/shipped

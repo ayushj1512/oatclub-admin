@@ -45,8 +45,6 @@ export const useOrderStore = create((set, get) => ({
      NORMALIZERS
   ========================= */
   _normalizeOrders: (data) => (Array.isArray(data) ? data : data?.orders || []),
-
-  // Backend usually returns: { message, order }, but some routes may return order directly
   _normalizeOrder: (data) => data?.order ?? data ?? null,
 
   _syncOrderInList: (updatedOrder) => {
@@ -174,8 +172,6 @@ export const useOrderStore = create((set, get) => ({
     if (!orderId) return null;
 
     const data = await get()._patch(`/api/orders/${orderId}/status`, payload);
-
-    // ✅ IMPORTANT: backend returns { message, order }
     const order = get()._normalizeOrder(data);
 
     set({ order });
@@ -208,37 +204,69 @@ export const useOrderStore = create((set, get) => ({
   },
 
   /**
-   * Cancel order via status endpoint (your backend expects PATCH /status)
-   * Sends extra fields to help server infer admin cancel reason safely.
+   * ✅ Cancel order (Admin)
+   * Router: POST /api/orders/:id/cancel
    */
-  // ✅ Cancel order (Admin)
-// - Uses PATCH /status (server returns { message, order })
-// - Sends clean payload (no undefined)
-// - Uses server order as source of truth
-cancelOrder: async (orderId, reason = "cancelled_by_admin") => {
-  if (!orderId) return false;
+  cancelOrder: async (orderId, reason = "cancelled_by_admin") => {
+    if (!orderId) return null;
 
-  const payload = {
-    fulfillmentStatus: "cancelled",
-    reason: reason || "cancelled_by_admin",
-    cancelledBy: "admin",
-    adminRemarks: "cancelled_by_admin",
-  };
+    const payload = {
+      reason: reason || "cancelled_by_admin",
+      cancelledBy: "admin",
+      adminRemarks: "cancelled_by_admin",
+    };
 
-  // _patch() already strips undefined + handles errors
-  const data = await get()._patch(`/api/orders/${orderId}/status`, payload);
+    const data = await get()._post(`/api/orders/${orderId}/cancel`, payload);
+    const order = get()._normalizeOrder(data);
 
-  // ✅ normalize correctly (supports {order} or direct order)
-  const order = get()._normalizeOrder(data);
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+    }
 
-  if (order?._id) {
-    set({ order });
-    get()._syncOrderInList(order);
-  }
+    return order;
+  },
 
-  return true;
-},
+  /**
+   * ✅ Confirm order (Admin / COD)
+   * Router: POST /api/orders/:id/confirm
+   */
+  confirmOrder: async (orderId) => {
+    if (!orderId) return null;
 
+    const data = await get()._post(`/api/orders/${orderId}/confirm`, {});
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+    }
+
+    return order;
+  },
+
+  /**
+   * ✅ Manual Shiprocket booking (only if missing)
+   * Router: POST /api/orders/:id/shiprocket/book
+   * Backend already checks: not parent + confirmed + packed + prepaid paid
+   */
+  bookShiprocketIfMissing: async (orderId) => {
+    if (!orderId) return null;
+
+    const data = await get()._post(`/api/orders/${orderId}/shiprocket/book`, {});
+    const order = get()._normalizeOrder(data);
+
+    // some responses may return { success, ... } without order
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+    } else {
+      // fallback: refresh order
+      await get().fetchOrderById(orderId);
+    }
+
+    return data;
+  },
 
   /* =========================
      RESET

@@ -125,6 +125,24 @@ const toNonNegInt = (v, fallback = 0) => {
   return n;
 };
 
+// ✅ Variant size helpers (API is size-based now)
+const normalizeSize = (v) => String(v || "").trim().toUpperCase();
+
+const getVariantSize = (variant) => {
+  if (!variant) return "";
+  if (variant.size) return String(variant.size);
+
+  const attrs = Array.isArray(variant.attributes) ? variant.attributes : [];
+  const hit = attrs.find(
+    (a) =>
+      String(a?.key || "").trim().toLowerCase() === "size" ||
+      String(a?.key || "").trim().toLowerCase() === "sizes"
+  );
+
+  return hit?.value ? String(hit.value) : "";
+};
+
+
 export const useAdminProductStore = create((set, get) => ({
   /* ============================================================
     STATE
@@ -426,11 +444,16 @@ export const useAdminProductStore = create((set, get) => ({
 
       // list update
       set((state) => ({
-        products: (state.products || []).map((p) =>
-          p._id === productId
-            ? { ...p, stock: updatedProduct.stock ?? nextStock }
-            : p
-        ),
+       products: (state.products || []).map((p) =>
+  p._id === productId
+    ? {
+        ...p,
+        stock: updatedProduct.stock ?? nextStock,
+        isInStock: updatedProduct.isInStock ?? p.isInStock,
+      }
+    : p
+),
+
       }));
 
       toast.success("Stock updated ✅");
@@ -446,44 +469,57 @@ export const useAdminProductStore = create((set, get) => ({
     VARIANT STOCK UPDATE
     PATCH /api/products/:id/variant-stock  body:{ variantId, stock }
   ============================================================ */
-  updateVariantStock: async (productId, variantId, stock) => {
-    try {
-      const nextStock = toNonNegInt(stock, 0);
+  /* ============================================================
+  ✅ VARIANT STOCK UPDATE (UPDATED)
+  PATCH /api/products/:id/variant-stock  body:{ size, stock }
+============================================================ */
+updateVariantStock: async (productId, size, stock) => {
+  try {
+    const nextStock = toNonNegInt(stock, 0);
+    const targetSize = normalizeSize(size);
 
-      const res = await fetch(`${API}/${productId}/variant-stock`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ variantId, stock: nextStock }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Stock update failed");
-
-      const updatedProduct = data.product;
-
-      set({ product: updatedProduct });
-
-      set((state) => ({
-        products: state.products.map((p) =>
-          p._id === productId
-            ? {
-                ...p,
-                stock: updatedProduct.stock ?? p.stock,
-                variants: updatedProduct.variants ?? p.variants,
-              }
-            : p
-        ),
-      }));
-
-      toast.success("Variant stock updated ✅");
-      return updatedProduct;
-    } catch (e) {
-      console.error(e);
-      toast.error(e.message);
-      throw e;
+    if (!targetSize) {
+      throw new Error("size is required (e.g. 'M')");
     }
-  },
+
+    const res = await fetch(`${API}/${productId}/variant-stock`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ size: targetSize, stock: nextStock }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Stock update failed");
+
+    const updatedProduct = data.product;
+
+    // ✅ update single product (edit page)
+    if (get().product?._id === productId) set({ product: updatedProduct });
+
+    // ✅ update product list (grid)
+    set((state) => ({
+      products: (state.products || []).map((p) =>
+        p._id === productId
+          ? {
+              ...p,
+              stock: updatedProduct.stock ?? p.stock,
+              variants: updatedProduct.variants ?? p.variants,
+              isInStock: updatedProduct.isInStock ?? p.isInStock,
+            }
+          : p
+      ),
+    }));
+
+    toast.success(`Variant stock updated ✅ (${targetSize})`);
+    return updatedProduct;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  }
+},
+
 
   /* ============================================================
     ANALYTICS UPDATE

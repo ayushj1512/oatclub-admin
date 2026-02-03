@@ -16,7 +16,7 @@ import {
   CreditCard,
   Tag,
   User,
-  MapPin,
+ 
 } from "lucide-react";
 import { useOrderStore } from "@/store/orderStore";
 import EditableAddressCard from "@/components/orders/EditableAddressCard";
@@ -33,32 +33,6 @@ const Badge = ({ className = "", children }) => (
   </span>
 );
 
-const Address = ({ a = {} }) => {
-  const line1 = safe(a.line1);
-  const line2 = safe(a.line2);
-  const city = safe(a.city);
-  const state = safe(a.state);
-  const pincode = safe(a.pincode);
-  const country = safe(a.country || "India");
-
-  return (
-    <div className="text-sm text-gray-700 leading-relaxed">
-      <div className="font-semibold text-gray-900">{safe(a.fullName) || "-"}</div>
-      <div className="text-xs text-gray-500 mt-1">
-        {safe(a.phone) ? `${a.phone}` : "N/A"} • {safe(a.email) || "N/A"}
-      </div>
-
-      <div className="mt-2 rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm">
-        <div>{[line1, line2].filter(Boolean).join(", ") || "-"}</div>
-        <div>
-          {[city, state].filter(Boolean).join(", ")}
-          {pincode ? ` - ${pincode}` : ""}
-        </div>
-        <div>{country}</div>
-      </div>
-    </div>
-  );
-};
 
 const ItemRow = ({ item = {} }) => {
   const snap = item.productSnapshot || {};
@@ -131,6 +105,9 @@ export default function CustomerConfirmationPage() {
 
   // success msg
   const [successMsg, setSuccessMsg] = useState("");
+
+  const [remarkDrafts, setRemarkDrafts] = useState({}); // { [orderId]: "text" }
+const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false }
 
   // per-order loading (confirm + cancel)
   const [actionLoading, setActionLoading] = useState({
@@ -307,10 +284,42 @@ export default function CustomerConfirmationPage() {
   }
 };
 
+const saveCustomerCareRemark = async (orderIdStr) => {
+  try {
+    setLocalError(null);
+    setSuccessMsg("");
+
+    const remark = String(remarkDrafts?.[orderIdStr] ?? "").trim();
+
+    setRemarkSaving((p) => ({ ...p, [orderIdStr]: true }));
+
+    if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
+
+    const res = await fetch(`${BACKEND_URL}/api/orders/${orderIdStr}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customerSupportRemark: remark }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || "Remark update failed");
+
+    setSuccessMsg("✅ Customer Care Remark Saved!");
+    await fetchOrders();
+  } catch (e) {
+    setLocalError(e?.message || "Remark update failed");
+  } finally {
+    setRemarkSaving((p) => ({ ...p, [orderIdStr]: false }));
+    setTimeout(() => setSuccessMsg(""), 2500);
+  }
+};
+
+
 
   return (
    <div className="min-h-screen bg-gray-50 px-2 sm:px-6 py-3 sm:py-6">
-  <div className="mx-auto max-w-6xl space-y-3 sm:space-y-5">
+  <div className="mx-auto  space-y-3 sm:space-y-5">
     {/* Header */}
     <div className="flex items-start justify-between gap-2">
       <div className="min-w-0">
@@ -512,7 +521,7 @@ export default function CustomerConfirmationPage() {
                     </Badge>
                   </div>
 
-                  <div className="text-[12px] sm:text-sm text-gray-600 mt-1 break-words">
+                  <div className="text-[12px] sm:text-sm text-gray-600 mt-1 wrap-break-word">
                     {safe(ship.fullName) || "Customer"} • {safe(ship.phone) || "N/A"} •{" "}
                     {safe(ship.email) || "N/A"}
                   </div>
@@ -592,7 +601,7 @@ export default function CustomerConfirmationPage() {
                             <div className="font-semibold">
                               {safe(order?.customerId?.name) || safe(ship.fullName) || "-"}
                             </div>
-                            <div className="text-xs text-gray-500 mt-1 break-words">
+                            <div className="text-xs text-gray-500 mt-1 wrap-break-word">
                               {safe(order?.customerId?.email) || safe(ship.email) || "N/A"}
                               {" • "}
                               {safe(ship.phone) || "N/A"}
@@ -689,6 +698,46 @@ export default function CustomerConfirmationPage() {
   />
 </div>
 
+{/* ✅ Customer Care Remark (ADD HERE) */}
+<div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+  <div className="flex items-center justify-between gap-2">
+    <div className="text-sm font-bold text-gray-900">
+      Customer Care Remark
+    </div>
+
+    <button
+      onClick={() => saveCustomerCareRemark(orderIdStr)}
+      disabled={remarkSaving?.[orderIdStr]}
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs sm:text-sm font-semibold hover:bg-blue-700 disabled:opacity-60"
+    >
+      {remarkSaving?.[orderIdStr] ? (
+        <Loader2 size={16} className="animate-spin" />
+      ) : null}
+      Save
+    </button>
+  </div>
+
+  <textarea
+    rows={3}
+    value={
+      remarkDrafts?.[orderIdStr] ??
+      safe(order?.customerSupportRemark) ??
+      ""
+    }
+    onChange={(e) =>
+      setRemarkDrafts((p) => ({
+        ...p,
+        [orderIdStr]: e.target.value,
+      }))
+    }
+    placeholder="Write internal remark for customer care..."
+    className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+  />
+
+  <div className="mt-2 text-[11px] sm:text-xs text-gray-500">
+    Internal note (customer ko nahi dikhega).
+  </div>
+</div>
 
                       {/* items */}
                       <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">

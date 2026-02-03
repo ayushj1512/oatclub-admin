@@ -7,6 +7,9 @@ export const DOMAIN_PERMISSIONS = {
   accounts: "manageAccounts",
   products: "manageProducts",
 
+  // ✅ NEW: Footwear module permission
+  footwear: "manageFootwear",
+
   orders: "manageOrders",
   rma: "manageRMA",
 
@@ -30,12 +33,17 @@ export const DOMAIN_PERMISSIONS = {
   coupons: "manageCoupons",
   wordpress: "manageWordpressOrders",
 
+  // ✅ NEW: Collaboration module permission
+  collaboration: "manageCollaboration",
+
   // ✅ warehouse domain (ONLY production access)
   warehouse: "manageProduction",
 };
 
 // ✅ All permission keys used across the app (no "*")
-export const ALL_PERMISSIONS = Array.from(new Set(Object.values(DOMAIN_PERMISSIONS)));
+export const ALL_PERMISSIONS = Array.from(
+  new Set(Object.values(DOMAIN_PERMISSIONS))
+);
 
 // ✅ Default permissions by role (if admin.permissions empty)
 export const ROLE_DEFAULT_PERMS = {
@@ -45,19 +53,23 @@ export const ROLE_DEFAULT_PERMS = {
   // (superadmin-only actions should be role-guarded, not permission-guarded)
   admin: [...ALL_PERMISSIONS],
 
-  customer_care: ["manageSupport"],
+  customer_care: ["manageSupport" , "manageOrders" ],
 
+  // ✅ staff defaults
   staff: ["manageOrders", "manageInventory"],
+
   viewer: ["viewReports", "viewAnalytics"],
+
+  // ✅ influencer defaults
   influencer: ["manageMedia", "manageReels"],
 
   // ✅ warehouse role (ONLY production allowed)
-  warehouse: ["manageProduction"],
+  warehouse: ["manageProduction","manageOrders"],
 };
 
 // ✅ permission checker
 export const hasPermission = (permissions = [], perm) => {
-  if (!perm) return true;
+  if (!perm) return false; // 🔒 IMPORTANT: if mapping missing, deny by default
   if (permissions.includes("*")) return true;
   return permissions.includes(perm);
 };

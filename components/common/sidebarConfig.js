@@ -46,7 +46,7 @@ production: [
   { label: "Packed Orders", href: "/production/packed" },
 
   { label: "Sampling", href: "/production/sampling" }, // ✅ NEW
-
+ { label: "Stock Update", href: "/production/stock-update" },
   { label: "Pattern Number", href: "/production/pattern-number" },
   { label: "Fabric", href: "/production/fabric" },
   { label: "Product Detail", href: "/production/product-detail" },   // ✅ new
@@ -61,21 +61,12 @@ production: [
   
   ],
 
-  inventory: [
-    { label: "Inventory Dashboard", href: "/inventory" },
-    { label: "All Inventory", href: "/inventory/list" },
-    { label: "Stock Alerts", href: "/inventory/alerts" },
-    { label: "Variants Manager", href: "/inventory/variants" },
-    { label: "Categories Manager", href: "/inventory/categories" },
-    { label: "Bulk Upload", href: "/inventory/bulk-upload" },
-    { label: "Purchase Invoices", href: "/inventory/purchase" },
-    { label: "Stock Movement", href: "/inventory/movements" },
-    { label: "Barcodes Dashboard", href: "/inventory/barcodes" },
-    { label: "Generate Barcode", href: "/inventory/barcodes/generate" },
-    { label: "Barcode Items (Saved)", href: "/inventory/barcodes/items" },
-    { label: "Scan / Lookup", href: "/inventory/barcodes/scan" },
-    { label: "Print Labels", href: "/inventory/barcodes/print" },
-  ],
+inventory: [
+  { label: "Inventory Dashboard", href: "/inventory" },
+  { label: "Stock Update", href: "/inventory/stock-update" },
+  { label: "Reserved Inventory", href: "/inventory/reserved-inventory" }, // ✅ new
+],
+
 
   media: [
     { label: "Media Library", href: "/media" },

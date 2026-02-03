@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useAdminProductionStore from "@/store/adminProductionStore";
+import { useInventoryReservationStore } from "@/store/inventoryReservationStore";
 
 // ✅ Product Store for images (bulk fetch)
 import { useAdminProductStore } from "@/store/adminProductStore";
@@ -156,6 +157,56 @@ const resolveItemImage = (item, productMap) => {
   );
 };
 
+
+// ✅ helper: get variantId from order item (variable product)
+const getVariantIdFromItem = (item) =>
+  String(item?.variant?.variantId || "");
+
+// ✅ safe string id
+const safeId = (v) => String(v?._id || v || "").trim();
+
+// ✅ per-item reserved qty (for that order + product + variant)
+const getReservedQtyForItem = (orderId, item, reservationList) => {
+  const oid = String(orderId || "").trim();
+  if (!oid) return 0;
+
+  const pid = safeId(item?.productId);
+  const vid = getVariantIdFromItem(item); // "" for simple
+
+  return (reservationList || [])
+    .filter((r) => {
+      if (String(r?.status) !== "reserved") return false;
+      if (String(r?.refType) !== "order") return false;
+
+      // ✅ same order
+      if (String(r?.refId) !== oid) return false;
+
+      // ✅ same product
+      if (safeId(r?.productId) !== pid) return false;
+
+      // ✅ same variant (null for simple)
+      const rVid = safeId(r?.variantId); // "" if null
+      if (!vid) return !rVid; // simple item: reservation variantId should be null
+      return rVid === vid;
+    })
+    .reduce((sum, r) => sum + Number(r?.qty || 0), 0);
+};
+
+const getOrderReservationIds = (orderId, reservationList = []) => {
+  const oid = String(orderId || "").trim();
+  if (!oid) return [];
+
+  return (reservationList || [])
+    .filter((r) => {
+      if (!r) return false;
+      if (String(r?.status) !== "reserved") return false;
+      if (String(r?.refType) !== "order") return false;
+      return String(r?.refId) === oid;
+    })
+    .map((r) => String(r?._id || "").trim())
+    .filter(Boolean);
+};
+
 /* ============================================================
    ✅ Excel Export With Embedded Images (via Proxy)
 ============================================================ */
@@ -267,20 +318,35 @@ async function exportProductionXLSX(
 export default function ProductionDashboardPage() {
   const router = useRouter();
 
+  const prodStore = useAdminProductionStore();
+
   const {
-    queue,
-    summary,
-    loadingQueue,
-    loadingSummary,
-    error,
-    fulfillmentStatus,
-    setFulfillmentStatus,
-    fetchProductionQueue,
-    fetchProductionSummary,
-    refreshAll,
-    clearError,
-    markOrderPacked,
-  } = useAdminProductionStore();
+  queue,
+  summary,
+  loadingQueue,
+  loadingSummary,
+  error,
+  fulfillmentStatus,
+  setFulfillmentStatus,
+  fetchProductionQueue,
+  fetchProductionSummary,
+  refreshAll,
+  clearError,
+} = prodStore;
+
+const markPackedFn =
+  prodStore?.markOrderPacked ||
+  prodStore?.markPacked ||
+  prodStore?.markPackedOrder ||
+  prodStore?.updateOrderStatus ||
+  prodStore?.setOrderStatus ||
+  null;
+
+    const {
+    reservations: reservationList,
+    fetchReservations: fetchInventoryReservations,
+    consumeReservation,
+  } = useInventoryReservationStore();
 
   const { fetchProductsByIds } = useAdminProductStore();
 
@@ -332,6 +398,25 @@ export default function ProductionDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue]);
 
+    // ✅ Pull all reserved reservations (order based) so UI can show reserved/partial
+  useEffect(() => {
+    const run = async () => {
+      // if no queue, clear
+      if (!queue?.length) return;
+
+      // fetch only reserved+order
+      // NOTE: if your backend has a lot of data, you can add date range filters later
+    await fetchInventoryReservations({
+  status: "reserved",
+  refType: "order",
+});
+    };
+
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue?.length]);
+
+
   const activeDateRange = useMemo(() => {
     if (useCustomRange) {
       const from = rangeFrom ? startOfDay(new Date(rangeFrom)) : null;
@@ -374,14 +459,56 @@ export default function ProductionDashboardPage() {
   };
 
   const onMarkPacked = async (orderId) => {
-    try {
-      await markOrderPacked(orderId);
-      await fetchProductionQueue({ fulfillmentStatus });
-      await fetchProductionSummary();
-    } catch (e) {
-      console.error(e);
+  try {
+    if (!orderId) return;
+
+    if (!markPackedFn) {
+      console.error("No mark packed function found in production store");
+      return;
     }
-  };
+
+    const isStatusFn =
+      markPackedFn === prodStore.updateOrderStatus ||
+      markPackedFn === prodStore.setOrderStatus;
+
+    if (isStatusFn) {
+      await markPackedFn(orderId, "packed");
+    } else {
+      await markPackedFn(orderId);
+    }
+
+    // ✅ better readable reason (orderNumber preferred)
+    const orderNo = String(
+      (queue || []).find((o) => String(o?._id) === String(orderId))?.orderNumber || ""
+    ).trim();
+
+    const reservationIds = getOrderReservationIds(orderId, reservationList);
+
+    if (reservationIds.length) {
+      for (const rid of reservationIds) {
+        try {
+          await consumeReservation(rid, `Packed from production (${orderNo || orderId})`);
+        } catch (err) {
+          console.error("consumeReservation failed:", rid, err);
+        }
+      }
+    }
+
+    await Promise.allSettled([
+      fetchProductionQueue({ fulfillmentStatus }),
+      fetchProductionSummary(),
+      fetchInventoryReservations({ status: "reserved", refType: "order" }),
+    ]);
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+
+
+
+
+
 
   const onExportExcel = async () => {
     try {
@@ -561,16 +688,20 @@ export default function ProductionDashboardPage() {
             No orders found in selected filter.
           </div>
         ) : (
-          filteredQueue.map((order) => (
-            <OrderCard
-              key={order._id}
-              order={order}
-              productMap={productMap}
-              onOpen={() => onOpenOrder(order._id)}
-              onMarkPacked={() => onMarkPacked(order._id)}
-              canMarkPacked={order.fulfillmentStatus === "processing"}
-            />
-          ))
+                  filteredQueue.map((order, idx) => (
+  <OrderCard
+    key={String(order?._id || order?.orderNumber || `order-${idx}`)}
+    order={order}
+    productMap={productMap}
+    reservationList={reservationList}
+    onOpen={() => onOpenOrder(order._id)}
+    onMarkPacked={() => onMarkPacked(order._id)}
+    canMarkPacked={order.fulfillmentStatus === "processing"}
+  />
+))
+
+
+
         )}
       </div>
 
@@ -601,11 +732,40 @@ function MetricCard({ title, value, loading, onClick, active }) {
   );
 }
 
-function OrderCard({ order, onOpen, onMarkPacked, canMarkPacked, productMap }) {
-  const itemsCount = (order?.items || []).reduce(
+function OrderCard({
+  order,
+  onOpen,
+  onMarkPacked,
+  canMarkPacked,
+  productMap,
+  reservationList = [],
+}) {
+  const items = order?.items || [];
+
+  const itemsCount = items.reduce(
     (sum, it) => sum + Number(it?.quantity || 0),
     0
   );
+
+  // ✅ order is packable ONLY if all items are fully reserved
+  const packCheck = useMemo(() => {
+    let ok = true;
+    let missingText = "";
+
+    for (const it of items) {
+      const req = Number(it?.quantity || 0);
+      const resv = getReservedQtyForItem(order?._id, it, reservationList);
+
+      if (resv < req) {
+        ok = false;
+        const title = it?.productSnapshot?.title || "Item";
+        missingText = `Not fully reserved: ${title} (${resv}/${req})`;
+        break;
+      }
+    }
+
+    return { fullyReserved: ok, reason: missingText };
+  }, [items, order?._id, reservationList]);
 
   return (
     <div
@@ -618,18 +778,25 @@ function OrderCard({ order, onOpen, onMarkPacked, canMarkPacked, productMap }) {
             <h3 className="font-semibold text-gray-900 text-sm truncate">
               {order.orderNumber}
             </h3>
+
             <StatusPill status={order.fulfillmentStatus} />
+
             <span className="text-[11px] text-gray-500">• {itemsCount} pcs</span>
           </div>
 
           <div className="text-[11px] text-gray-500 truncate mt-0.5">
             {order?.shippingAddressSnapshot?.fullName || "—"} •{" "}
             {order?.shippingAddressSnapshot?.phone || "—"} •{" "}
-            {new Date(order.createdAt || order.orderDate || Date.now()).toLocaleString()}
+            {new Date(
+              order.createdAt || order.orderDate || Date.now()
+            ).toLocaleString()}
           </div>
         </div>
 
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="text-right">
             <div className="text-sm font-semibold text-gray-900">
               ₹{Number(order.finalPayable || 0).toFixed(0)}
@@ -643,7 +810,13 @@ function OrderCard({ order, onOpen, onMarkPacked, canMarkPacked, productMap }) {
           {canMarkPacked ? (
             <button
               onClick={onMarkPacked}
-              className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90"
+              disabled={!packCheck.fullyReserved}
+              title={
+                packCheck.fullyReserved
+                  ? "Mark Packed"
+                  : packCheck.reason || "Order not fully reserved"
+              }
+              className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 disabled:opacity-50"
             >
               Mark Packed
             </button>
@@ -655,8 +828,18 @@ function OrderCard({ order, onOpen, onMarkPacked, canMarkPacked, productMap }) {
 
       <div className="px-3 pb-3">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {(order.items || []).map((it, idx) => (
-            <ItemRow key={idx} item={it} productMap={productMap} />
+          {items.map((it, idx) => (
+            <ItemRow
+              key={String(
+                it?._id ||
+                  `${safeId(it?.productId)}-${getVariantIdFromItem(it) || "simple"}-${idx}`
+              )}
+              item={it}
+              productMap={productMap}
+              orderId={order?._id}
+              reservationList={reservationList}
+              
+            />
           ))}
         </div>
       </div>
@@ -664,7 +847,48 @@ function OrderCard({ order, onOpen, onMarkPacked, canMarkPacked, productMap }) {
   );
 }
 
-function ItemRow({ item, productMap }) {
+
+/* ✅ Add this component somewhere in the same file (below StatusPill is fine) */
+function ReservationPill({ requiredQty, reservedQty }) {
+  const req = Number(requiredQty || 0);
+  const resv = Number(reservedQty || 0);
+
+  if (!req) {
+    return (
+      <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">
+        Reserved: —
+      </span>
+    );
+  }
+
+  const pct = Math.min(1, resv / req);
+
+  const label =
+    pct >= 1
+      ? "Reserved ✅"
+      : pct > 0
+      ? `Partial Reserved (${resv}/${req})`
+      : "Not Reserved";
+
+  const cls =
+    pct >= 1
+      ? "bg-green-100 text-green-800"
+      : pct > 0
+      ? "bg-yellow-100 text-yellow-800"
+      : "bg-red-100 text-red-800";
+
+  return (
+    <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+
+
+
+
+function ItemRow({ item, productMap, orderId, reservationList }) {
   const title = item?.productSnapshot?.title || "Item";
   const img = resolveItemImage(item, productMap);
 
@@ -672,6 +896,8 @@ function ItemRow({ item, productMap }) {
   const size = item?.selectedSize || "";
   const color = item?.selectedColor || "";
   const sku = item?.variant?.sku || item?.productSnapshot?.sku || "";
+
+  const reservedQty = getReservedQtyForItem(orderId, item, reservationList);
 
   return (
     <div className="flex gap-2 p-2 rounded-xl bg-gray-50">
@@ -685,8 +911,13 @@ function ItemRow({ item, productMap }) {
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-gray-900 truncate">
-          {title}
+        <div className="flex items-center gap-2">
+          <div className="text-xs font-medium text-gray-900 truncate flex-1">
+            {title}
+          </div>
+
+          {/* ✅ Product-level Reserved */}
+          <ReservationPill requiredQty={qty} reservedQty={reservedQty} />
         </div>
 
         <div className="text-[11px] text-gray-600 mt-1 flex flex-wrap gap-1">
@@ -699,6 +930,7 @@ function ItemRow({ item, productMap }) {
     </div>
   );
 }
+
 
 function Tag({ label }) {
   return (
