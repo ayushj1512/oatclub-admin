@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAdminProductStore } from "@/store/adminProductStore";
-import QuickVariantStockInlineEditor from "@/components/product/QuickVariantStockInlineEditor";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL
 
@@ -884,9 +883,7 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
 
         <th className="px-4 py-3 border-b border-gray-200">Categories</th>
 
-        <th className="px-4 py-3 border-b border-gray-200 text-green-700">
-          <Th onClick={() => toggleSort("stock")} label="Stock" />
-        </th>
+     
 
  <th className="px-4 py-3 border-b border-gray-200 text-blue-700">
   Status
@@ -967,11 +964,6 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
                 allCategories={categories}
               />
             </td>
-
-            {/* Stock */}
-          <td className="px-4 py-3">
-  <QuickVariantStockInlineEditor product={p} />
-</td>
 
 
             {/* Status */}
