@@ -438,204 +438,228 @@ export default function OrdersListPage() {
         </div>
 
         {/* ✅ FILTERS */}
-      <Card>
-  {/* ✅ Filters grid */}
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-    {/* ✅ Quick date (today / yesterday) */}
-    <div>
-      <label className="text-sm font-semibold text-gray-700">Quick Date</label>
-      <select
-        className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-        value={quickDate}
-        onChange={(e) => setQuickDate(e.target.value)}
-      >
-        <option value="">All</option>
-        <option value="today">Today</option>
-        <option value="yesterday">Yesterday</option>
-      </select>
-      <p className="mt-1 text-xs text-gray-500">Selecting this auto-fills start/end date.</p>
-    </div>
+        <Card>
+          <div className="grid md:grid-cols-4 gap-5">
+            {/* ✅ Quick date (today / yesterday) */}
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Quick Date</label>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={quickDate}
+                onChange={(e) => setQuickDate(e.target.value)}
+              >
+                <option value="">All</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">Selecting this auto-fills start/end date.</p>
+            </div>
 
-    <div>
-      <label className="text-sm font-semibold text-gray-700">Start Date</label>
-      <input
-        type="date"
-        className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-        value={startDate}
-        onChange={(e) => {
-          setQuickDate(""); // ✅ manual override
-          setStartDate(e.target.value);
-        }}
-      />
-    </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Start Date</label>
+              <input
+                type="date"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={startDate}
+                onChange={(e) => {
+                  setQuickDate(""); // ✅ manual override
+                  setStartDate(e.target.value);
+                }}
+              />
+            </div>
 
-    <div>
-      <label className="text-sm font-semibold text-gray-700">End Date</label>
-      <input
-        type="date"
-        className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-        value={endDate}
-        onChange={(e) => {
-          setQuickDate(""); // ✅ manual override
-          setEndDate(e.target.value);
-        }}
-      />
-    </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">End Date</label>
+              <input
+                type="date"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={endDate}
+                onChange={(e) => {
+                  setQuickDate(""); // ✅ manual override
+                  setEndDate(e.target.value);
+                }}
+              />
+            </div>
 
-    <div>
-      <label className="text-sm font-semibold text-gray-700">Min Amount</label>
-      <input
-        type="number"
-        className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-        placeholder="₹0"
-        value={minAmount}
-        onChange={(e) => setMinAmount(e.target.value)}
-      />
-    </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Min Amount</label>
+              <input
+                type="number"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                placeholder="₹0"
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
+              />
+            </div>
 
-    <div>
-      <label className="text-sm font-semibold text-gray-700">Max Amount</label>
-      <input
-        type="number"
-        className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-        placeholder="₹5000"
-        value={maxAmount}
-        onChange={(e) => setMaxAmount(e.target.value)}
-      />
-    </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Max Amount</label>
+              <input
+                type="number"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                placeholder="₹5000"
+                value={maxAmount}
+                onChange={(e) => setMaxAmount(e.target.value)}
+              />
+            </div>
 
-    <div>
-      <label className="text-sm font-semibold text-gray-700">Payment Method</label>
-      <select
-        className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-        value={paymentMethod}
-        onChange={(e) => setPaymentMethod(e.target.value)}
-      >
-        <option value="">All</option>
-        <option value="cod">Cash on Delivery</option>
-        <option value="razorpay">Razorpay</option>
-        <option value="exchange">Exchange</option>
-      </select>
-    </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Payment Method</label>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              >
+                <option value="">All</option>
+                <option value="cod">Cash on Delivery</option>
+                <option value="razorpay">Razorpay</option>
+                <option value="exchange">Exchange</option>
+              </select>
+            </div>
 
-    <div>
-      <label className="text-sm font-semibold text-gray-700">Confirmation</label>
-      <select
-        className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-        value={confirmFilter}
-        onChange={(e) => setConfirmFilter(e.target.value)}
-      >
-        <option value="">All</option>
-        <option value="confirmed">Confirmed</option>
-        <option value="not_confirmed">Not Confirmed</option>
-      </select>
-    </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Confirmation</label>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={confirmFilter}
+                onChange={(e) => setConfirmFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="not_confirmed">Not Confirmed</option>
+              </select>
+            </div>
 
-    {/* ✅ Priority dropdown */}
-    <div>
-      <label className="text-sm font-semibold text-gray-700">Priority</label>
-      <select
-        className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-        value={priority}
-        onChange={(e) => setPriority(e.target.value)}
-      >
-        <option value="">All</option>
-        <option value="normal">Normal</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-      </select>
-    </div>
-  </div>
+            {/* ✅ Priority dropdown (same values as chips) */}
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Priority</label>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+              >
+                <option value="">All</option>
+                <option value="normal">Normal</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+          </div>
 
-  {/* ✅ Chips row (wrap into rows, no horizontal scroll) */}
-  <div className="mt-6 flex flex-wrap gap-2">
-    {chips.map((s) => {
-      const isActive =
-        s.type === "status"
-          ? status === s.key
-          : s.type === "confirm"
-          ? confirmFilter === s.key
-          : s.type === "priority"
-          ? priority === s.key
-          : s.type === "quickDate"
-          ? quickDate === s.key
-          : status === "" && confirmFilter === "" && priority === "" && quickDate === "";
+          {/* ✅ Chips row */}
+          <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+            {chips.map((s) => {
+              const isActive =
+                s.type === "status"
+                  ? status === s.key
+                  : s.type === "confirm"
+                  ? confirmFilter === s.key
+                  : s.type === "priority"
+                  ? priority === s.key
+                  : s.type === "quickDate"
+                  ? quickDate === s.key
+                  : status === "" && confirmFilter === "" && priority === "" && quickDate === "";
 
-      const onClick = () => {
-        if (s.type === "all") {
-          setStatus("");
-          setConfirmFilter("");
-          setPriority("");
-          setQuickDate("");
-          return;
-        }
-        if (s.type === "status") setStatus((prev) => (prev === s.key ? "" : s.key));
-        if (s.type === "confirm") setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
-        if (s.type === "priority") setPriority((prev) => (prev === s.key ? "" : s.key));
-        if (s.type === "quickDate") setQuickDate((prev) => (prev === s.key ? "" : s.key));
-      };
+              const onClick = () => {
+                if (s.type === "all") {
+                  setStatus("");
+                  setConfirmFilter("");
+                  setPriority("");
+                  setQuickDate("");
+                  // keeping startDate/endDate as-is (manual). If you want, uncomment:
+                  // setStartDate(""); setEndDate("");
+                  return;
+                }
+                if (s.type === "status") setStatus((prev) => (prev === s.key ? "" : s.key));
+                if (s.type === "confirm") setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
+                if (s.type === "priority") setPriority((prev) => (prev === s.key ? "" : s.key));
+                if (s.type === "quickDate") setQuickDate((prev) => (prev === s.key ? "" : s.key));
+              };
 
-      return (
-        <button
-          key={`${s.type}-${s.key || "all"}`}
-          onClick={onClick}
-          className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${
-            isActive ? "bg-black text-white shadow-sm" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
-        >
-          {s.label}
-        </button>
-      );
-    })}
-  </div>
-</Card>
-
+              return (
+                <button
+                  key={`${s.type}-${s.key || "all"}`}
+                  onClick={onClick}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${
+                    isActive ? "bg-black text-white shadow-sm" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
 
         {/* ✅ TABLE */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
-                <tr>
-                  <th className="py-4 px-5 text-left font-semibold">Order #</th>
-                  <th className="py-4 px-5 text-left font-semibold">Customer</th>
-                  <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Amount</th>
-                  <th className="py-4 px-5 text-left font-semibold">Date</th>
-                  <th className="py-4 px-5 text-left font-semibold">Action</th>
-                </tr>
-              </thead>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+  <div className="overflow-x-auto">
+    <table className="w-full text-sm">
+      <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
+        <tr>
+          <th className="py-4 px-5 text-left font-semibold">Order #</th>
+          <th className="py-4 px-5 text-left font-semibold">Customer</th>
+          <th className="py-4 px-5 text-left font-semibold">Payment</th>
+          <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
+          <th className="py-4 px-5 text-left font-semibold">Amount</th>
+          <th className="py-4 px-5 text-left font-semibold">Date</th>
+          <th className="py-4 px-5 text-left font-semibold">Action</th>
+        </tr>
+      </thead>
 
-              <tbody className="divide-y divide-gray-100">
-                {filteredOrders.length ? (
-                  filteredOrders.map((order, idx) => {
-                    const rowKey = order?._id || order?.id || order?.orderNumber || `order-${idx}`;
-                    return (
-                      <OrderRow
-                        key={String(rowKey)}
-                        order={order}
-                        onUpdated={(updatedOrder) => {
-                          setOrders((prev) =>
-                            prev.map((o) =>
-                              (o?._id || o?.id) === (updatedOrder?._id || updatedOrder?.id) ? updatedOrder : o
-                            )
-                          );
-                        }}
-                      />
+      <tbody className="divide-y divide-gray-100">
+        {filteredOrders.length ? (
+          [...filteredOrders] // ✅ don’t mutate original
+            .sort((a, b) => {
+              // ✅ MIRAY-000177 > MIRAY-000176
+              const getNum = (o) => {
+                const m = String(o?.orderNumber || "").match(/(\d+)$/);
+                return m ? Number(m[1]) : 0;
+              };
+
+              const an = getNum(a);
+              const bn = getNum(b);
+
+              if (bn !== an) return bn - an;
+
+              // fallback: latest created first
+              const ad = new Date(a?.createdAt || a?.orderDate || 0).getTime();
+              const bd = new Date(b?.createdAt || b?.orderDate || 0).getTime();
+              return bd - ad;
+            })
+            .map((order, idx) => {
+              const rowKey =
+                order?._id || order?.id || order?.orderNumber || `order-${idx}`;
+
+              return (
+                <OrderRow
+                  key={String(rowKey)}
+                  order={order}
+                  onUpdated={(updatedOrder) => {
+                    setOrders((prev) =>
+                      prev.map((o) =>
+                        (o?._id || o?.id) ===
+                        (updatedOrder?._id || updatedOrder?.id)
+                          ? updatedOrder
+                          : o
+                      )
                     );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">
-                      No orders found for applied filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  }}
+                />
+              );
+            })
+        ) : (
+          <tr>
+            <td colSpan={7} className="py-12 text-center text-gray-500">
+              No orders found for applied filters.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
+
       </div>
     </section>
   );
