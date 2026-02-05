@@ -52,6 +52,33 @@ const Card = ({ children, className = "" }) => (
   </div>
 );
 
+const PRIORITY_LABELS = {
+  normal: "Normal",
+  medium: "Medium",
+  high: "High",
+};
+
+const PRIORITY_BADGE = {
+  normal: "bg-gray-100 text-gray-700 border border-gray-200",
+  medium: "bg-yellow-50 text-yellow-800 border border-yellow-200",
+  high: "bg-red-50 text-red-700 border border-red-200",
+};
+
+const getPriorityBadge = (order) => {
+  const key = ["normal", "medium", "high"].includes(
+    String(order?.priority).toLowerCase()
+  )
+    ? String(order.priority).toLowerCase()
+    : "normal";
+
+  return {
+    key,
+    label: PRIORITY_LABELS[key],
+    cls: PRIORITY_BADGE[key],
+  };
+};
+
+
 export default function OrderDetailsClient({ id }) {
   const router = useRouter();
 
@@ -79,6 +106,9 @@ const [trackingUrl, setTrackingUrl] = useState("");
     return String(order.fulfillmentStatus).replace(/_/g, " ");
   }, [order?.fulfillmentStatus]);
 
+    const pri = useMemo(() => getPriorityBadge(order), [order?.priority]);
+
+console.log("priority:", order?.priority)
   /* ✅ Load order */
   useEffect(() => {
     if (!id) return;
@@ -203,6 +233,14 @@ const updateTracking = async () => {
             <h1 className="text-2xl font-bold text-gray-900">
               Order #{order.orderNumber}
             </h1>
+          {/* ✅ PRIORITY BADGE (NEW) */}
+<span
+  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${pri.cls} ring-1 ring-black/5`}
+>
+  Priority: {pri.label}
+  
+</span>
+
             <p className="text-sm text-gray-500 mt-0.5">
               Manage customer details, tracking & printing.
             </p>

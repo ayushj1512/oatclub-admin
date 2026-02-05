@@ -27,17 +27,13 @@ import {
   Quote,
   Globe,
   RotateCcw,
-  Handshake, // ✅ Collaboration
-  Footprints, // ✅ Footwear
+  Handshake,
+  Footprints,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import useLoginStore from "@/store/useLoginStore";
-import {
-  ROLE_DEFAULT_PERMS,
-  DOMAIN_PERMISSIONS,
-  hasPermission,
-} from "@/config/loginConfig";
+import { ROLE_DEFAULT_PERMS, DOMAIN_PERMISSIONS, hasPermission } from "@/config/loginConfig";
 
 const QUOTES = [
   { text: "Small progress every day beats big plans someday.", tag: "Consistency" },
@@ -58,10 +54,13 @@ const DOMAIN_LIST = [
   { id: "accounts", name: "Accounts", icon: Calculator, route: "/accounts" },
   { id: "products", name: "Products", icon: Package, route: "/products" },
 
-  // ✅ NEW: Footwear module
   { id: "footwear", name: "Footwear", icon: Footprints, route: "/footwear" },
 
   { id: "orders", name: "Orders", icon: ClipboardList, route: "/orders" },
+
+  // ✅ NEW: Shiprocket
+  { id: "shiprocket", name: "Shiprocket", icon: Package, route: "/shiprocket" },
+
   { id: "rma", name: "RMA Requests", icon: RotateCcw, route: "/rma" },
   { id: "media", name: "Media", icon: Images, route: "/media" },
   { id: "reels", name: "Reels", icon: Clapperboard, route: "/reels" },
@@ -79,21 +78,17 @@ const DOMAIN_LIST = [
   { id: "coupons", name: "Coupons", icon: TicketPercent, route: "/coupons" },
   { id: "wordpress", name: "WordPress Orders", icon: Globe, route: "/wordpress" },
 
-  // ✅ Collaboration module
   { id: "collaboration", name: "Influencer Collaborations", icon: Handshake, route: "/collaboration" },
 ];
 
 export default function HomeDashboard() {
   const router = useRouter();
 
-  // ✅ permissions
   const admin = useLoginStore((s) => s.admin);
   const role = admin?.role || "viewer";
   const permissions =
-    (admin?.permissions?.length ? admin.permissions : ROLE_DEFAULT_PERMS[role]) ||
-    [];
+    (admin?.permissions?.length ? admin.permissions : ROLE_DEFAULT_PERMS[role]) || [];
 
-  // ✅ quotes
   const [quote, setQuote] = useState(QUOTES[0]);
   const lastIdx = useRef(-1);
 
@@ -112,31 +107,18 @@ export default function HomeDashboard() {
     return () => clearInterval(t);
   }, []);
 
-  // ✅ filter domains by permission
   const allowedDomains = useMemo(() => {
-    return DOMAIN_LIST.filter((d) =>
-      hasPermission(permissions, DOMAIN_PERMISSIONS[d.id])
-    );
+    return DOMAIN_LIST.filter((d) => hasPermission(permissions, DOMAIN_PERMISSIONS[d.id]));
   }, [permissions]);
 
-  // ✅ sorting (default A-Z)
   const [sortBy, setSortBy] = useState("name_asc");
 
   const sortedDomains = useMemo(() => {
     const arr = [...allowedDomains];
-
-    // default + A-Z both alphabetically
-    if (sortBy === "default" || sortBy === "name_asc") {
-      return arr.sort((a, b) => a.name.localeCompare(b.name));
-    }
+    if (sortBy === "default" || sortBy === "name_asc") return arr.sort((a, b) => a.name.localeCompare(b.name));
     if (sortBy === "name_desc") return arr.sort((a, b) => b.name.localeCompare(a.name));
     return arr;
   }, [allowedDomains, sortBy]);
-
-  console.log("ROLE:", role);
-  console.log("PERMS:", permissions);
-  console.log("ALLOWED DOMAINS:", allowedDomains);
-  console.log("DOMAIN_PERMISSIONS:", DOMAIN_PERMISSIONS);
 
   return (
     <div className="min-h-screen bg-gray-50 px-3 sm:px-6 md:px-8 py-6 sm:py-10">
@@ -250,10 +232,16 @@ export default function HomeDashboard() {
                     </p>
                   )}
 
-                  {/* ✅ hint for footwear */}
                   {id === "footwear" && (
                     <p className="text-xs text-gray-500 mt-1 text-center">
                       Manage footwear catalog & variants
+                    </p>
+                  )}
+
+                  {/* ✅ Shiprocket hint */}
+                  {id === "shiprocket" && (
+                    <p className="text-xs text-gray-500 mt-1 text-center">
+                      Manage Shiprocket sync, labels & tracking
                     </p>
                   )}
                 </motion.button>

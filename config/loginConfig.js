@@ -11,6 +11,10 @@ export const DOMAIN_PERMISSIONS = {
   footwear: "manageFootwear",
 
   orders: "manageOrders",
+
+  // ✅ NEW: Shiprocket (tie with Orders permission)
+  shiprocket: "manageOrders",
+
   rma: "manageRMA",
 
   media: "manageMedia",
@@ -41,9 +45,7 @@ export const DOMAIN_PERMISSIONS = {
 };
 
 // ✅ All permission keys used across the app (no "*")
-export const ALL_PERMISSIONS = Array.from(
-  new Set(Object.values(DOMAIN_PERMISSIONS))
-);
+export const ALL_PERMISSIONS = Array.from(new Set(Object.values(DOMAIN_PERMISSIONS)));
 
 // ✅ Default permissions by role (if admin.permissions empty)
 export const ROLE_DEFAULT_PERMS = {
@@ -53,7 +55,7 @@ export const ROLE_DEFAULT_PERMS = {
   // (superadmin-only actions should be role-guarded, not permission-guarded)
   admin: [...ALL_PERMISSIONS],
 
-  customer_care: ["manageSupport" , "manageOrders" ],
+  customer_care: ["manageSupport", "manageOrders"],
 
   // ✅ staff defaults
   staff: ["manageOrders", "manageInventory"],
@@ -64,7 +66,7 @@ export const ROLE_DEFAULT_PERMS = {
   influencer: ["manageMedia", "manageReels"],
 
   // ✅ warehouse role (ONLY production allowed)
-  warehouse: ["manageProduction","manageOrders"],
+  warehouse: ["manageProduction", "manageOrders"],
 };
 
 // ✅ permission checker

@@ -21,6 +21,42 @@ const stripUndefinedDeep = (obj) => {
   return obj;
 };
 
+const normalizePriority = (v) => {
+  const p = String(v ?? "").trim().toLowerCase();
+  return ["normal", "medium", "high"].includes(p) ? p : "";
+};
+
+const buildQueryString = (filters = {}) => {
+  const params = new URLSearchParams();
+
+  Object.entries(filters || {}).forEach(([k, v]) => {
+    if (v == null) return;
+
+    // support arrays (ex: status=[..])
+    if (Array.isArray(v)) {
+      v.forEach((x) => {
+        if (x == null || String(x).trim() === "") return;
+        params.append(k, String(x).trim());
+      });
+      return;
+    }
+
+    const s = String(v).trim();
+    if (!s) return;
+
+    if (k === "priority") {
+      const pr = normalizePriority(s);
+      if (pr) params.set("priority", pr);
+      return;
+    }
+
+    params.set(k, s);
+  });
+
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+};
+
 export const useOrderStore = create((set, get) => ({
   /* =========================
      STATE
@@ -120,7 +156,10 @@ export const useOrderStore = create((set, get) => ({
 
   // POST /api/orders
   createOrder: async (payload) => {
-    const data = await get()._post(`/api/orders`, payload);
+    const p = { ...(payload || {}) };
+    if (p.priority != null) p.priority = normalizePriority(p.priority) || "normal";
+
+    const data = await get()._post(`/api/orders`, p);
     const order = get()._normalizeOrder(data);
 
     set((s) => ({
@@ -158,10 +197,10 @@ export const useOrderStore = create((set, get) => ({
     return orders;
   },
 
-  // GET /api/orders?filters
+  // GET /api/orders?filters (supports priority)
   fetchAllOrders: async (filters = {}) => {
-    const qs = new URLSearchParams(filters).toString();
-    const data = await get()._get(`/api/orders${qs ? `?${qs}` : ""}`);
+    const qs = buildQueryString(filters);
+    const data = await get()._get(`/api/orders${qs}`);
     const orders = get()._normalizeOrders(data);
     set({ orders });
     return orders;
@@ -171,7 +210,10 @@ export const useOrderStore = create((set, get) => ({
   updateOrderStatus: async (orderId, payload) => {
     if (!orderId) return null;
 
-    const data = await get()._patch(`/api/orders/${orderId}/status`, payload);
+    const p = { ...(payload || {}) };
+    if (p.priority != null) p.priority = normalizePriority(p.priority) || "normal";
+
+    const data = await get()._patch(`/api/orders/${orderId}/status`, p);
     const order = get()._normalizeOrder(data);
 
     set({ order });
@@ -200,6 +242,28 @@ export const useOrderStore = create((set, get) => ({
 
     set({ order });
     get()._syncOrderInList(order);
+    return order;
+  },
+
+  /**
+   * ✅ Update order (Admin)
+   * Router: PATCH /api/orders/:id
+   */
+  updateOrder: async (orderId, payload) => {
+    if (!orderId) return null;
+
+    const p = { ...(payload || {}) };
+    if (p.priority != null) p.priority = normalizePriority(p.priority) || "normal";
+    if (p.customerSupportRemark != null) p.customerSupportRemark = String(p.customerSupportRemark).trim();
+
+    const data = await get()._patch(`/api/orders/${orderId}`, p);
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+    }
+
     return order;
   },
 
@@ -256,12 +320,10 @@ export const useOrderStore = create((set, get) => ({
     const data = await get()._post(`/api/orders/${orderId}/shiprocket/book`, {});
     const order = get()._normalizeOrder(data);
 
-    // some responses may return { success, ... } without order
     if (order?._id) {
       set({ order });
       get()._syncOrderInList(order);
     } else {
-      // fallback: refresh order
       await get().fetchOrderById(orderId);
     }
 

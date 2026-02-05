@@ -1,33 +1,36 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, ArrowRight, ExternalLink } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
+  ExternalLink,
+  Pencil,
+  Check,
+  X,
+  Loader2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown";
+import OrderPriorityDropdown from "@/components/orders/OrderPriorityDropdown";
 
 const BASE_URL = "https://mirayfashions.com";
+const API = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
-const money = (n) => {
-  const x = Number(n);
-  return Number.isFinite(x) ? x : 0;
-};
+const safe = (v) => (v == null ? "" : String(v));
+const money = (n) =>
+  Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-IN") : "0";
 
-// ✅ Payment badge updated: supports exchange + refund_pending + not_applicable
 const getPaymentBadge = (order) => {
   const pm = String(order?.paymentMethod || "").toLowerCase();
   const ps = String(order?.paymentStatus || "").toLowerCase();
 
-  // Exchange orders (no money movement)
-  if (pm === "exchange") {
+  if (pm === "exchange")
     return { label: "Exchange", cls: "bg-blue-50 text-blue-700 border border-blue-100" };
-  }
-
-  // COD
-  if (pm === "cod") {
+  if (pm === "cod")
     return { label: "COD", cls: "bg-gray-100 text-gray-700 border border-gray-200" };
-  }
 
-  // Razorpay (or other online)
   if (pm === "razorpay") {
     if (ps === "paid") return { label: "Paid ✅", cls: "bg-green-50 text-green-700 border border-green-100" };
     if (ps === "pending") return { label: "Pending ⏳", cls: "bg-yellow-50 text-yellow-700 border border-yellow-100" };
@@ -36,15 +39,12 @@ const getPaymentBadge = (order) => {
     return { label: "Failed ❌", cls: "bg-red-50 text-red-700 border border-red-100" };
   }
 
-  // Payment not applicable (safety)
-  if (ps === "not_applicable") {
+  if (ps === "not_applicable")
     return { label: "N/A", cls: "bg-gray-50 text-gray-600 border border-gray-200" };
-  }
 
   return { label: "Unknown", cls: "bg-gray-100 text-gray-700 border border-gray-200" };
 };
 
-// ✅ Full fulfillment statuses (from your schema)
 const FULFILLMENT_STATUSES = [
   "processing",
   "packed",
@@ -73,16 +73,10 @@ const STATUS_LABELS = {
   rto: "RTO",
 };
 
-const buildProductUrl = (item) => {
-  const productId = item?.productId?._id || item?.productId; // ✅ supports populated or raw id
-  return productId ? `${BASE_URL}/category/products/name/${productId}` : "";
-};
-
 const formatOrderDateTime = (value) => {
   if (!value) return { time: "", date: "" };
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return { time: "", date: "" };
-
   return {
     time: d.toLocaleTimeString(undefined, {
       hour: "2-digit",
@@ -97,14 +91,13 @@ const formatOrderDateTime = (value) => {
   };
 };
 
-// ✅ Address formatter
-const formatAddress = (a) => {
-  if (!a) return "";
-  const parts = [a.line1, a.line2, a.city, a.state, a.pincode, a.country].filter(Boolean);
-  return parts.join(", ");
-};
+const formatAddress = (a) =>
+  a
+    ? [a.line1, a.line2, a.city, a.state, a.pincode, a.country]
+        .filter(Boolean)
+        .join(", ")
+    : "";
 
-// ✅ Coupon label helper (supports null/string/object)
 const getCouponLabel = (order) => {
   const c = order?.coupon;
   if (!c) return "";
@@ -112,30 +105,68 @@ const getCouponLabel = (order) => {
   return c.code || c.couponCode || c.name || c.title || c._id || "";
 };
 
+const buildProductUrl = (item) => {
+  const productId = item?.productId?._id || item?.productId;
+  return productId ? `${BASE_URL}/category/products/name/${productId}` : "";
+};
+
 export default function OrderRow({ order, onUpdated }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  const pay = useMemo(() => getPaymentBadge(order), [order]);
+  const [editingRemark, setEditingRemark] = useState(false);
+  const [remarkDraft, setRemarkDraft] = useState("");
+  const [savingRemark, setSavingRemark] = useState(false);
+
   const items = Array.isArray(order?.items) ? order.items : [];
   const orderId = order?._id || order?.id;
 
-  // ✅ Effective status: use fulfillmentStatus; fallback to processing
-  const effectiveStatus = order?.fulfillmentStatus || "processing";
-
+  const pay = useMemo(() => getPaymentBadge(order), [order]);
+  const effectiveStatus = String(order?.fulfillmentStatus || "processing").toLowerCase();
   const dt = useMemo(
     () => formatOrderDateTime(order?.createdAt || order?.orderDate),
     [order?.createdAt, order?.orderDate]
   );
 
-  // ✅ Only billing snapshot (fallback shipping)
   const bill = order?.billingAddressSnapshot || order?.shippingAddressSnapshot || null;
   const couponLabel = useMemo(() => getCouponLabel(order), [order]);
+  const remarkValue = safe(order?.customerSupportRemark).trim();
+
+  const startRemarkEdit = () => {
+    setRemarkDraft(remarkValue);
+    setEditingRemark(true);
+    setOpen(true);
+  };
+
+  const cancelRemarkEdit = () => {
+    setRemarkDraft(remarkValue);
+    setEditingRemark(false);
+  };
+
+  const saveRemark = async () => {
+    if (!orderId) return;
+    try {
+      setSavingRemark(true);
+      const res = await fetch(`${API}/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerSupportRemark: remarkDraft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Failed to update remark");
+      const updated = data?.order || data;
+      setEditingRemark(false);
+      onUpdated?.(updated);
+    } catch (e) {
+      alert(e?.message || "Remark update failed");
+    } finally {
+      setSavingRemark(false);
+    }
+  };
 
   return (
     <>
       <tr className="hover:bg-black/[0.03] transition">
-        {/* Order # */}
         <td className="py-4 px-5 font-semibold text-gray-900">
           <div className="flex items-center gap-2">
             <button
@@ -151,26 +182,36 @@ export default function OrderRow({ order, onUpdated }) {
 
           <p className="text-xs text-gray-500 mt-1">
             {items?.[0]?.productSnapshot?.title
-              ? `${items[0].productSnapshot.title}${items.length > 1 ? ` +${items.length - 1} more` : ""}`
+              ? `${items[0].productSnapshot.title}${
+                  items.length > 1 ? ` +${items.length - 1} more` : ""
+                }`
               : "No items"}
           </p>
 
-          {/* ✅ Confirmation badge (kept separate from fulfillment) */}
-          {order?.isConfirmed ? (
-            <span className="mt-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-100">
-              Confirmed ✅
-            </span>
-          ) : (
-            <span className="mt-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-50 text-gray-700 border border-gray-200">
-              Not Confirmed
-            </span>
-          )}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {order?.isConfirmed ? (
+              <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-100">
+                Confirmed ✅
+              </span>
+            ) : (
+              <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-50 text-gray-700 border border-gray-200">
+                Not Confirmed
+              </span>
+            )}
+
+            <OrderPriorityDropdown
+              orderId={orderId}
+              currentPriority={order?.priority}
+              onUpdated={(u) => onUpdated?.(u)}
+            />
+          </div>
         </td>
 
-        {/* Customer */}
         <td className="py-4 px-5">
           <div className="font-medium text-gray-900">
-            {order?.customerId?.name || order?.shippingAddressSnapshot?.fullName || "Unknown"}
+            {order?.customerId?.name ||
+              order?.shippingAddressSnapshot?.fullName ||
+              "Unknown"}
           </div>
           <div className="text-xs text-gray-500">
             {order?.customerId?.phone || order?.shippingAddressSnapshot?.phone || ""}
@@ -180,31 +221,26 @@ export default function OrderRow({ order, onUpdated }) {
           </div>
         </td>
 
-        {/* Payment */}
         <td className="py-4 px-5">
           <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${pay.cls}`}>
             {pay.label}
           </span>
-
-          {/* ✅ Optional: show paymentStatus if you want more clarity */}
-         
         </td>
 
-        {/* Fulfillment */}
         <td className="py-4 px-5">
           <OrderStatusDropdown
             orderId={orderId}
             currentStatus={effectiveStatus}
             statuses={FULFILLMENT_STATUSES}
             labels={STATUS_LABELS}
-            onUpdated={(updatedOrder) => onUpdated?.(updatedOrder)}
+            onUpdated={(u) => onUpdated?.(u)}
           />
         </td>
 
-        {/* Amount */}
-        <td className="py-4 px-5 font-semibold text-gray-900">₹{money(order?.finalPayable)}</td>
+        <td className="py-4 px-5 font-semibold text-gray-900">
+          ₹{money(order?.finalPayable)}
+        </td>
 
-        {/* Time + Date */}
         <td className="py-4 px-5 text-gray-700">
           <div className="leading-tight">
             <div className="text-sm font-medium text-gray-900">{dt.time}</div>
@@ -212,15 +248,16 @@ export default function OrderRow({ order, onUpdated }) {
           </div>
         </td>
 
-        {/* Action */}
         <td className="py-4 px-5">
-          <button
-            onClick={() => router.push(`/orders/${orderId}`)}
-            className="inline-flex items-center gap-1 text-black font-semibold hover:opacity-80 transition"
-            type="button"
-          >
-            View <ArrowRight size={16} />
-          </button>
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => router.push(`/orders/${orderId}`)}
+              className="inline-flex items-center gap-1 text-black font-semibold hover:opacity-80 transition"
+              type="button"
+            >
+              View <ArrowRight size={16} />
+            </button>
+          </div>
         </td>
       </tr>
 
@@ -228,28 +265,33 @@ export default function OrderRow({ order, onUpdated }) {
         <tr className="bg-black/[0.015]">
           <td colSpan={7} className="px-5 pb-4">
             <div className="mt-3 bg-white rounded-2xl px-4 py-4 space-y-4">
-              {/* Billing + Coupon */}
               <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold text-gray-700">Billing Address</div>
-
-                    <div className="text-sm text-gray-900 mt-1">{bill?.fullName || "-"}</div>
-
+                    <div className="text-xs font-semibold text-gray-700">
+                      Billing Address
+                    </div>
+                    <div className="text-sm text-gray-900 mt-1">
+                      {bill?.fullName || "-"}
+                    </div>
                     <div className="text-xs text-gray-600 mt-0.5">
                       {bill?.phone || ""}
                       {bill?.email ? ` • ${bill.email}` : ""}
                     </div>
-
-                    <div className="text-xs text-gray-600 mt-1">{formatAddress(bill) || "—"}</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      {formatAddress(bill) || "—"}
+                    </div>
                   </div>
 
                   <div className="shrink-0">
                     <div className="text-xs font-semibold text-gray-700">Coupon</div>
-                    <div className="mt-1 text-sm text-gray-900 font-semibold">{couponLabel || "—"}</div>
-
+                    <div className="mt-1 text-sm text-gray-900 font-semibold">
+                      {couponLabel || "—"}
+                    </div>
                     {order?.discount ? (
-                      <div className="text-xs text-gray-600 mt-0.5">Discount: ₹{money(order.discount)}</div>
+                      <div className="text-xs text-gray-600 mt-0.5">
+                        Discount: ₹{money(order.discount)}
+                      </div>
                     ) : (
                       <div className="text-xs text-gray-500 mt-0.5">No discount</div>
                     )}
@@ -257,9 +299,10 @@ export default function OrderRow({ order, onUpdated }) {
                 </div>
               </div>
 
-              {/* Items */}
               <div className="space-y-2">
-                <h3 className="font-semibold text-gray-900 text-sm">Items ({items.length})</h3>
+                <h3 className="font-semibold text-gray-900 text-sm">
+                  Items ({items.length})
+                </h3>
 
                 {items.length === 0 ? (
                   <p className="text-xs text-gray-500">No items</p>
@@ -270,7 +313,6 @@ export default function OrderRow({ order, onUpdated }) {
                       const v = it?.variant || {};
                       const size = it?.selectedSize || "";
                       const color = it?.selectedColor || "";
-
                       const variantText =
                         size || color
                           ? [size ? `Size: ${size}` : "", color ? `Color: ${color}` : ""]
@@ -288,7 +330,6 @@ export default function OrderRow({ order, onUpdated }) {
 
                       return (
                         <div key={itemKey} className="py-3 flex items-center justify-between gap-3">
-                          {/* left */}
                           <div className="flex items-center gap-3 min-w-0">
                             <img
                               src={snap.thumbnail || "/placeholder.png"}
@@ -302,7 +343,6 @@ export default function OrderRow({ order, onUpdated }) {
                                 <p className="text-sm font-semibold text-gray-900 truncate">
                                   {snap.title || "-"}
                                 </p>
-
                                 {productUrl ? (
                                   <a
                                     href={productUrl}
@@ -317,7 +357,8 @@ export default function OrderRow({ order, onUpdated }) {
                               </div>
 
                               <p className="text-xs text-gray-500 truncate">
-                                {variantText || (v?.sku || snap?.sku ? `SKU: ${v?.sku || snap?.sku}` : "")}
+                                {variantText ||
+                                  (v?.sku || snap?.sku ? `SKU: ${v?.sku || snap?.sku}` : "")}
                               </p>
 
                               {v?.variantId ? (
@@ -328,7 +369,6 @@ export default function OrderRow({ order, onUpdated }) {
                             </div>
                           </div>
 
-                          {/* right */}
                           <div className="text-right shrink-0">
                             <p className="text-sm font-semibold text-gray-900">
                               ₹{money(it?.price)} × {money(it?.quantity)}
@@ -342,7 +382,6 @@ export default function OrderRow({ order, onUpdated }) {
                 )}
               </div>
 
-              {/* Totals */}
               <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2 text-xs text-gray-700">
                 <span className="px-3 py-1 rounded-full bg-gray-100">
                   Subtotal: <b>₹{money(order?.subtotal)}</b>
@@ -356,10 +395,67 @@ export default function OrderRow({ order, onUpdated }) {
                 <span className="px-3 py-1 rounded-full bg-gray-100">
                   Tax: <b>₹{money(order?.tax)}</b>
                 </span>
-
                 <span className="ml-auto px-4 py-1 rounded-full bg-black text-white font-semibold">
                   Final: ₹{money(order?.finalPayable)}
                 </span>
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-gray-700">Remark</div>
+                    {!editingRemark ? (
+                      <div className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">
+                        {remarkValue || "—"}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {!editingRemark ? (
+                    <button
+                      onClick={startRemarkEdit}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:opacity-90 transition"
+                      type="button"
+                    >
+                      <Pencil size={14} /> Edit
+                    </button>
+                  ) : null}
+                </div>
+
+                {editingRemark ? (
+                  <div className="mt-3 space-y-3">
+                    <textarea
+                      value={remarkDraft}
+                      onChange={(e) => setRemarkDraft(e.target.value)}
+                      rows={3}
+                      placeholder="Type remark..."
+                      className="w-full rounded-2xl border border-gray-200 bg-white p-3 text-sm outline-none focus:border-black/20 resize-none"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={cancelRemarkEdit}
+                        disabled={savingRemark}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-100 text-gray-800 text-xs font-semibold hover:bg-gray-200 disabled:opacity-40 transition"
+                        type="button"
+                      >
+                        <X size={14} /> Cancel
+                      </button>
+                      <button
+                        onClick={saveRemark}
+                        disabled={savingRemark}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:opacity-90 disabled:opacity-40 transition"
+                        type="button"
+                      >
+                        {savingRemark ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Check size={14} />
+                        )}{" "}
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </td>

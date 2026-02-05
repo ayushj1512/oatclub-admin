@@ -132,6 +132,7 @@ inventory: [
     // Returns & Exceptions
     { label: "Returned / Cancelled", href: "/orders/returns" },
     { label: "RTO / NDR", href: "/orders/rto" },
+  { label: "Order Remark", href: "/orders/remark" },
 
     // ✅ UPDATED: RMA now points to /rma
     { label: "RMA Requests", href: "/rma" },
@@ -140,7 +141,10 @@ inventory: [
   ],
 
   // ✅ OPTIONAL: Separate RMA menu group (if you want sidebar items when on /rma)
-  rma: [{ label: "RMA Requests", href: "/rma" }],
+rma: [
+  { label: "RMA Requests", href: "/rma" },
+  { label: "Create RMA", href: "/rma/create-rma" }, // ✅ NEW PATH
+],
 
   coupons: [
     { label: "Coupons Dashboard", href: "/coupons" },
@@ -183,21 +187,29 @@ inventory: [
 ],
 
 
-  customer_support: [
-    { label: "Support Dashboard", href: "/customer-support" },
-    { label: "Search", href: "/customer-support/search" },
-    {
-      label: "Customer Confirmation",
-      href: "/customer-support/customer-confirmation",
-    },
-    { label: "All Tickets", href: "/customer-support/all" },
-    { label: "Open Tickets", href: "/customer-support/open" },
-    { label: "In Progress", href: "/customer-support/in-progress" },
-    { label: "Resolved", href: "/customer-support/resolved" },
-    { label: "Closed", href: "/customer-support/closed" },
+customer_support: [
+  { label: "Support Dashboard", href: "/customer-support" },
+  { label: "Search", href: "/customer-support/search" },
 
-    { label: "SLA / Reports", href: "/customer-support/reports" },
-  ],
+  {
+    label: "Customer Confirmation",
+    href: "/customer-support/customer-confirmation",
+  },
+
+  { label: "Order Remark", href: "/customer-support/remark" },
+
+  // ✅ NEW
+  { label: "All Orders", href: "/customer-support/all-orders" },
+
+  { label: "All Tickets", href: "/customer-support/all" },
+  { label: "Open Tickets", href: "/customer-support/open" },
+  { label: "In Progress", href: "/customer-support/in-progress" },
+  { label: "Resolved", href: "/customer-support/resolved" },
+  { label: "Closed", href: "/customer-support/closed" },
+
+  { label: "SLA / Reports", href: "/customer-support/reports" },
+],
+
 
   sales: [
     { label: "Sales Dashboard", href: "/sales" },
@@ -208,6 +220,12 @@ inventory: [
     { label: "Top Products", href: "/sales/top-products" },
     { label: "Top Categories", href: "/sales/top-categories" },
   ],
+
+shiprocket: [
+  { label: "Shiprocket Dashboard", href: "/shiprocket" },
+  { label: "Authentication API", href: "/shiprocket/authentication-api" },
+  { label: "Not Deliverables", href: "/shiprocket/not-deliverables" }, // ✅ NEW
+],
 
   account_user: [
     { label: "Profile", href: "/account/profile" },
@@ -245,6 +263,7 @@ export const routeSidebarMap = [
   { prefix: "/reels", key: "reels" },
   { prefix: "/marketing", key: "marketing" },
   { prefix: "/collaboration", key: "collaboration" },
+  { prefix: "/shiprocket", key: "shiprocket" },
 
   { prefix: "/dashboard", key: "dashboard" },
   { prefix: "/designing", key: "designing" },
