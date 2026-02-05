@@ -202,7 +202,10 @@ export default function OrderRow({ order, onUpdated }) {
             <OrderPriorityDropdown
               orderId={orderId}
               currentPriority={order?.priority}
-              onUpdated={(u) => onUpdated?.(u)}
+            onUpdated={(u) => {
+  const updated = u?.order ?? u;
+  onUpdated?.(updated);
+}}
             />
           </div>
         </td>

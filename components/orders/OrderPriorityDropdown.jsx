@@ -1,4 +1,3 @@
-// components/orders/OrderPriorityDropdown.jsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -24,7 +23,8 @@ export default function OrderPriorityDropdown({
   compact = true,
   disabled = false,
 }) {
-  const updateOrderStatus = useOrderStore((s) => s.updateOrderStatus);
+  // ✅ IMPORTANT: use updateOrder (PATCH /api/orders/:id)
+  const updateOrder = useOrderStore((s) => s.updateOrder);
 
   const [draft, setDraft] = useState(norm(currentPriority));
   const [saving, setSaving] = useState(false);
@@ -45,11 +45,14 @@ export default function OrderPriorityDropdown({
 
     try {
       setSaving(true);
-      const updated = await updateOrderStatus(orderId, { priority: v });
-      onUpdated?.(updated);
+      const updated = await updateOrder(orderId, { priority: v });
+
+      // ✅ normalize (in case backend returns {order: {...}})
+      const finalOrder = updated?.order ?? updated;
+      onUpdated?.(finalOrder);
     } catch (e) {
       alert(e?.message || "Priority update failed");
-      setDraft(norm(currentPriority)); // rollback
+      setDraft(norm(currentPriority));
     } finally {
       setSaving(false);
     }
@@ -70,7 +73,7 @@ export default function OrderPriorityDropdown({
         onChange={(e) => {
           const next = e.target.value;
           setDraft(next);
-          save(next); // ✅ instant update
+          save(next);
         }}
         disabled={disabled || saving}
         className={[
