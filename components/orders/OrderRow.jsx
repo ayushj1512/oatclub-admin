@@ -57,6 +57,7 @@ const FULFILLMENT_STATUSES = [
   "returned",
   "cancelled",
   "rto",
+  "refunded",
 ];
 
 const STATUS_LABELS = {

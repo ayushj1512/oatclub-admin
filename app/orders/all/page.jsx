@@ -360,6 +360,7 @@ export default function OrdersListPage() {
     { key: "returned", label: "Returned", type: "status" },
     { key: "rto", label: "RTO", type: "status" },
     { key: "cancelled", label: "Cancelled", type: "status" },
+{ key: "refunded", label: "Refunded", type: "status" },
 
     // Confirmation filters
     { key: "confirmed", label: "Confirmed", type: "confirm" },
