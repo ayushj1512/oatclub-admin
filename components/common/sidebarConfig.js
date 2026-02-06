@@ -230,6 +230,7 @@ shiprocket: [
     { label: "Manage Users", href: "/superadmin/manage" },
     { label: "Add User", href: "/superadmin/add" },
     { label: "Activity", href: "/superadmin/activity" },
+      { label: "Meta XML Sync", href: "/superadmin/xml-sync" },
   ],
 
   collaboration: [
