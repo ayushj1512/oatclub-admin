@@ -23,23 +23,13 @@ export const sidebarMenus = {
     { label: "Reports Export", href: "/analytics/reports" },
   ],
 
-  designing: [
-    { label: "Design Home", href: "/designing" },
-    { label: "Banners Manager", href: "/designing/banners" },
-    { label: "Homepage Layout", href: "/designing/homepage" },
-
-    // ✅ NEW: Homepage Settings
-    { label: "Homepage Settings", href: "/designing/homepage-settings" },
-    { label: "Hero Banners", href: "/designing/banners" },
-    { label: "Top Categories", href: "/designing/top-categories" },
-    { label: "Homepage Preview", href: "/designing/preview" },
-
-    { label: "Themes & Colors", href: "//themes" },
-    { label: "Collections Editor", href: "/designing/collections" },
-    { label: "Product Badges", href: "/designing/badges" },
-    { label: "Topbar / Announcements", href: "/designing/topbar" },
-    { label: "Footer Links", href: "/designing/footer" },
-  ],
+ designing: [
+  { label: "Design Home", href: "/designing" },
+  { label: "Banners Manager", href: "/designing/banners" },
+  { label: "Top Categories", href: "/designing/top-categories" },
+  { label: "Collections Editor", href: "/designing/collection" },
+]
+,
 
 production: [
   { label: "Production Dashboard", href: "/production" },
@@ -175,16 +165,18 @@ rma: [
     { label: "WhatsApp Broadcasts", href: "/marketing/whatsapp" },
     { label: "Influencer / Collabs", href: "/marketing/collabs" },
   ],
-  customers: [
+ customers: [
   { label: "Customer Dashboard", href: "/customers/dashboard" },
   { label: "Customer List", href: "/customers" },
-  { label: "Customer / Address", href: "/customers/address" }, // ✅ added
-  { label: "Cart Adds", href: "/customers/cart-adds" }, // ✅ added
+  { label: "Customer / Address", href: "/customers/address" },
+  { label: "Cart Adds", href: "/customers/cart-adds" },
+  { label: "Abandoned Carts", href: "/customers/abandoned-carts" }, // ✅ added
   { label: "Tickets & Support", href: "/customers/support" },
   { label: "Newsletter Subscribers", href: "/customers/newsletter" },
-  { label: "Wishlist", href: "/customers/wishlist" }, // ✅ added
-  { label: "Analytics", href: "/customers/analytics" }, // ✅ NEW
+  { label: "Wishlist", href: "/customers/wishlist" },
+  { label: "Analytics", href: "/customers/analytics" },
 ],
+
 
 
 customer_support: [
