@@ -140,7 +140,7 @@ export default function Page() {
               <Link href="/customer-support/all" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">
                 All <ExternalLink className="h-3.5 w-3.5" />
               </Link>
-              <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:opacity-80 transition">
+              <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:opacity-80 transition">
                 Back to Admin <ExternalLink className="h-4 w-4" />
               </Link>
             </div>

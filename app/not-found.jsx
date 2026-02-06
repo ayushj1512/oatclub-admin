@@ -145,7 +145,7 @@ export default function NotFound() {
                   </Link>
 
                   <Link
-                    href="/dashboard"
+                    href="/"
                     className="inline-flex items-center justify-center rounded-2xl border border-gray-200 bg-white px-6 py-3 text-gray-900 transition hover:bg-gray-50"
                   >
                     Go to Dashboard

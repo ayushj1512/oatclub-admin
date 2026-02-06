@@ -48,7 +48,7 @@ export default function Page() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/customer-support" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ring-1 ring-inset bg-white text-gray-900 ring-gray-200 hover:bg-gray-50 transition"><ArrowLeft className="h-4 w-4" /> Back</Link>
-            <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">Admin <ExternalLink className="h-4 w-4" /></Link>
+            <Link href="/" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ring-1 ring-inset bg-white text-blue-700 ring-blue-200 hover:bg-blue-50 transition">Admin <ExternalLink className="h-4 w-4" /></Link>
           </div>
         </div>
 

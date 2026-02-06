@@ -288,7 +288,7 @@ export default function CustomerSupportDashboard() {
 
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Customer Support</h1>
-            <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:opacity-80">
+            <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:opacity-80">
               Back to Admin <ExternalLink className="h-4 w-4" />
             </Link>
           </div>
