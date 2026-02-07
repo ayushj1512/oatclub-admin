@@ -58,13 +58,19 @@ const normalizeProductPayload = (payload) => {
     const list = Array.isArray(out.colors)
       ? out.colors
       : typeof out.colors === "string"
-      ? out.colors.split(",")
-      : [];
+        ? out.colors.split(",")
+        : [];
 
     out.colors = Array.from(
       new Set(
-        list.map((c) => String(c || "").trim().toLowerCase()).filter(Boolean)
-      )
+        list
+          .map((c) =>
+            String(c || "")
+              .trim()
+              .toLowerCase(),
+          )
+          .filter(Boolean),
+      ),
     );
   }
 
@@ -126,7 +132,10 @@ const toNonNegInt = (v, fallback = 0) => {
 };
 
 // ✅ Variant size helpers (API is size-based now)
-const normalizeSize = (v) => String(v || "").trim().toUpperCase();
+const normalizeSize = (v) =>
+  String(v || "")
+    .trim()
+    .toUpperCase();
 
 const getVariantSize = (variant) => {
   if (!variant) return "";
@@ -135,13 +144,16 @@ const getVariantSize = (variant) => {
   const attrs = Array.isArray(variant.attributes) ? variant.attributes : [];
   const hit = attrs.find(
     (a) =>
-      String(a?.key || "").trim().toLowerCase() === "size" ||
-      String(a?.key || "").trim().toLowerCase() === "sizes"
+      String(a?.key || "")
+        .trim()
+        .toLowerCase() === "size" ||
+      String(a?.key || "")
+        .trim()
+        .toLowerCase() === "sizes",
   );
 
   return hit?.value ? String(hit.value) : "";
 };
-
 
 export const useAdminProductStore = create((set, get) => ({
   /* ============================================================
@@ -444,16 +456,15 @@ export const useAdminProductStore = create((set, get) => ({
 
       // list update
       set((state) => ({
-       products: (state.products || []).map((p) =>
-  p._id === productId
-    ? {
-        ...p,
-        stock: updatedProduct.stock ?? nextStock,
-        isInStock: updatedProduct.isInStock ?? p.isInStock,
-      }
-    : p
-),
-
+        products: (state.products || []).map((p) =>
+          p._id === productId
+            ? {
+                ...p,
+                stock: updatedProduct.stock ?? nextStock,
+                isInStock: updatedProduct.isInStock ?? p.isInStock,
+              }
+            : p,
+        ),
       }));
 
       toast.success("Stock updated ✅");
@@ -473,53 +484,52 @@ export const useAdminProductStore = create((set, get) => ({
   ✅ VARIANT STOCK UPDATE (UPDATED)
   PATCH /api/products/:id/variant-stock  body:{ size, stock }
 ============================================================ */
-updateVariantStock: async (productId, size, stock) => {
-  try {
-    const nextStock = toNonNegInt(stock, 0);
-    const targetSize = normalizeSize(size);
+  updateVariantStock: async (productId, size, stock) => {
+    try {
+      const nextStock = toNonNegInt(stock, 0);
+      const targetSize = normalizeSize(size);
 
-    if (!targetSize) {
-      throw new Error("size is required (e.g. 'M')");
+      if (!targetSize) {
+        throw new Error("size is required (e.g. 'M')");
+      }
+
+      const res = await fetch(`${API}/${productId}/variant-stock`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ size: targetSize, stock: nextStock }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Stock update failed");
+
+      const updatedProduct = data.product;
+
+      // ✅ update single product (edit page)
+      if (get().product?._id === productId) set({ product: updatedProduct });
+
+      // ✅ update product list (grid)
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          p._id === productId
+            ? {
+                ...p,
+                stock: updatedProduct.stock ?? p.stock,
+                variants: updatedProduct.variants ?? p.variants,
+                isInStock: updatedProduct.isInStock ?? p.isInStock,
+              }
+            : p,
+        ),
+      }));
+
+      toast.success(`Variant stock updated ✅ (${targetSize})`);
+      return updatedProduct;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
     }
-
-    const res = await fetch(`${API}/${productId}/variant-stock`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ size: targetSize, stock: nextStock }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Stock update failed");
-
-    const updatedProduct = data.product;
-
-    // ✅ update single product (edit page)
-    if (get().product?._id === productId) set({ product: updatedProduct });
-
-    // ✅ update product list (grid)
-    set((state) => ({
-      products: (state.products || []).map((p) =>
-        p._id === productId
-          ? {
-              ...p,
-              stock: updatedProduct.stock ?? p.stock,
-              variants: updatedProduct.variants ?? p.variants,
-              isInStock: updatedProduct.isInStock ?? p.isInStock,
-            }
-          : p
-      ),
-    }));
-
-    toast.success(`Variant stock updated ✅ (${targetSize})`);
-    return updatedProduct;
-  } catch (e) {
-    console.error(e);
-    toast.error(e.message);
-    throw e;
-  }
-},
-
+  },
 
   /* ============================================================
     ANALYTICS UPDATE
@@ -562,7 +572,7 @@ updateVariantStock: async (productId, size, stock) => {
 
       set({
         products: get().products.map((p) =>
-          p._id === id ? (updated ? updated : { ...p, ...payload }) : p
+          p._id === id ? (updated ? updated : { ...p, ...payload }) : p,
         ),
       });
 
@@ -600,16 +610,18 @@ updateVariantStock: async (productId, size, stock) => {
 
           const data = await res.json();
           if (!res.ok) throw new Error(data.message || `Failed for ${id}`);
-        })
+        }),
       );
 
       set({
         products: get().products.map((p) =>
-          ids.includes(p._id) ? { ...p, ...payload } : p
+          ids.includes(p._id) ? { ...p, ...payload } : p,
         ),
       });
 
-      toast.success(publish ? "Products Published ✅" : "Products Unpublished ✅");
+      toast.success(
+        publish ? "Products Published ✅" : "Products Unpublished ✅",
+      );
     } catch (e) {
       console.error(e);
       toast.error(e.message || "Bulk publish failed");
@@ -636,7 +648,9 @@ updateVariantStock: async (productId, size, stock) => {
       if (!res.ok) throw new Error(data.message || "Price update failed");
 
       set({
-        products: get().products.map((p) => (p._id === id ? { ...p, price } : p)),
+        products: get().products.map((p) =>
+          p._id === id ? { ...p, price } : p,
+        ),
       });
 
       toast.success("Price updated ✅");
@@ -662,11 +676,12 @@ updateVariantStock: async (productId, size, stock) => {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Compare price update failed");
+      if (!res.ok)
+        throw new Error(data.message || "Compare price update failed");
 
       set({
         products: get().products.map((p) =>
-          p._id === id ? { ...p, compareAtPrice } : p
+          p._id === id ? { ...p, compareAtPrice } : p,
         ),
       });
 
@@ -698,7 +713,8 @@ updateVariantStock: async (productId, size, stock) => {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Failed to update categories");
+      if (!res.ok)
+        throw new Error(data?.message || "Failed to update categories");
 
       const updatedProduct = data?.product;
 
@@ -706,7 +722,7 @@ updateVariantStock: async (productId, size, stock) => {
         products: state.products.map((p) =>
           p._id === id
             ? { ...p, categories: updatedProduct?.categories || categories }
-            : p
+            : p,
         ),
       }));
 
@@ -728,8 +744,8 @@ updateVariantStock: async (productId, size, stock) => {
         status === "published"
           ? { isDraft: false, isActive: true }
           : status === "draft"
-          ? { isDraft: true, isActive: true }
-          : { isActive: false };
+            ? { isDraft: true, isActive: true }
+            : { isActive: false };
 
       const res = await fetch(`${API}/${id}`, {
         method: "PUT",
@@ -742,7 +758,9 @@ updateVariantStock: async (productId, size, stock) => {
       if (!res.ok) throw new Error(data.message || "Status update failed");
 
       set({
-        products: get().products.map((p) => (p._id === id ? { ...p, ...payload } : p)),
+        products: get().products.map((p) =>
+          p._id === id ? { ...p, ...payload } : p,
+        ),
       });
 
       toast.success(`Status updated ✅ (${status})`);
@@ -780,13 +798,15 @@ updateVariantStock: async (productId, size, stock) => {
 
       set((state) => ({
         products: (state.products || []).map((p) =>
-          p._id === id ? { ...p, title: next } : p
+          p._id === id ? { ...p, title: next } : p,
         ),
       }));
 
       if (get().product?._id === id) {
         set((state) => ({
-          product: state.product ? { ...state.product, title: next } : state.product,
+          product: state.product
+            ? { ...state.product, title: next }
+            : state.product,
         }));
       }
 
@@ -828,7 +848,8 @@ updateVariantStock: async (productId, size, stock) => {
 
         const res = await fetch(`${API}?${query}`, { credentials: "include" });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Failed to fetch products");
+        if (!res.ok)
+          throw new Error(data.message || "Failed to fetch products");
 
         const list = Array.isArray(data.products) ? data.products : [];
 
@@ -890,8 +911,10 @@ updateVariantStock: async (productId, size, stock) => {
       let next = base;
 
       if (mode === "set") next = Number(value);
-      if (mode === "inc_pct") next = Math.round(base * (1 + Number(value) / 100));
-      if (mode === "dec_pct") next = Math.round(base * (1 - Number(value) / 100));
+      if (mode === "inc_pct")
+        next = Math.round(base * (1 + Number(value) / 100));
+      if (mode === "dec_pct")
+        next = Math.round(base * (1 - Number(value) / 100));
       if (mode === "inc_amt") next = base + Number(value);
       if (mode === "dec_amt") next = base - Number(value);
 
@@ -951,8 +974,8 @@ updateVariantStock: async (productId, size, stock) => {
       ids = Array.isArray(ids)
         ? ids
         : typeof ids === "string"
-        ? ids.split(",").map((x) => x.trim())
-        : [];
+          ? ids.split(",").map((x) => x.trim())
+          : [];
 
       ids = [...new Set(ids.filter(Boolean))];
       if (!ids.length) return [];
@@ -993,8 +1016,10 @@ updateVariantStock: async (productId, size, stock) => {
         products: (state.products || []).map((p) => {
           if (!ids.includes(p._id)) return p;
 
-          if (status === "published") return { ...p, isActive: true, isDraft: false };
-          if (status === "draft") return { ...p, isActive: true, isDraft: true };
+          if (status === "published")
+            return { ...p, isActive: true, isDraft: false };
+          if (status === "draft")
+            return { ...p, isActive: true, isDraft: true };
           return { ...p, isActive: false }; // unpublished
         }),
       }));
@@ -1038,7 +1063,7 @@ updateVariantStock: async (productId, size, stock) => {
         products: (state.products || []).map((p) =>
           String(p._id) === String(id)
             ? { ...p, fabrics: data.product?.fabrics ?? normalized }
-            : p
+            : p,
         ),
       }));
 
@@ -1054,42 +1079,100 @@ updateVariantStock: async (productId, size, stock) => {
   },
 
   updateSamplingStatus: async (productId, isSamplingDone) => {
-  try {
-    set({ saving: true });
+    try {
+      set({ saving: true });
 
-    const res = await fetch(`${API}/${productId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ isSamplingDone: !!isSamplingDone }),
-    });
+      const res = await fetch(`${API}/${productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ isSamplingDone: !!isSamplingDone }),
+      });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Sampling update failed");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Sampling update failed");
 
-    const updated = data.product;
+      const updated = data.product;
 
-    // single product
-    if (get().product?._id === productId) set({ product: updated });
+      // single product
+      if (get().product?._id === productId) set({ product: updated });
 
-    // list update
-    set((state) => ({
-      products: (state.products || []).map((p) =>
-        p._id === productId
-          ? { ...p, isSamplingDone: !!updated?.isSamplingDone }
-          : p
-      ),
-    }));
+      // list update
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          p._id === productId
+            ? { ...p, isSamplingDone: !!updated?.isSamplingDone }
+            : p,
+        ),
+      }));
 
-    toast.success(updated.isSamplingDone ? "Sampling Done ✅" : "Sampling Undo ↩️");
-    return updated;
-  } catch (e) {
-    console.error(e);
-    toast.error(e.message);
-    throw e;
-  } finally {
-    set({ saving: false });
-  }
-},
+      toast.success(
+        updated.isSamplingDone ? "Sampling Done ✅" : "Sampling Undo ↩️",
+      );
+      return updated;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
 
+  updateProductColorsOnly: async (productId, colors) => {
+    try {
+      set({ saving: true, error: null });
+
+      const list = Array.isArray(colors)
+        ? colors
+        : typeof colors === "string"
+          ? colors.split(",")
+          : [];
+
+      const normalized = Array.from(
+        new Set(
+          list
+            .map((c) =>
+              String(c || "")
+                .trim()
+                .toLowerCase(),
+            )
+            .filter(Boolean),
+        ),
+      );
+
+      const res = await fetch(`${API}/${productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ colors: normalized }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Colors update failed");
+
+      const updated = data.product;
+
+      // edit page
+      if (get().product?._id === productId) set({ product: updated });
+
+      // grid list
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          p._id === productId
+            ? { ...p, colors: updated.colors ?? normalized }
+            : p,
+        ),
+      }));
+
+      toast.success("Colors updated ✅");
+      return updated;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
 }));

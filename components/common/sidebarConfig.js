@@ -80,33 +80,34 @@ inventory: [
     { label: "Comments / Moderation", href: "/blogs/comments" },
   ],
 
-  products: [
-    { label: "Product Dashboard", href: "/products" },
-    { label: "Add New Product", href: "/products/add" },
-    { label: "Manage Products", href: "/products/manage" },
-    { label: "Analytics", href: "/products/analytics" },
+ products: [
+  { label: "Product Dashboard", href: "/products" },
+  { label: "Add New Product", href: "/products/add" },
+  { label: "Manage Products", href: "/products/manage" },
+  { label: "Analytics", href: "/products/analytics" },
+  { label: "Categories", href: "/products/category" },
+  { label: "Category Analytics", href: "/products/category-analytics" },
+  { label: "Bestsellers", href: "/products/bestseller" },
+  { label: "Size Charts", href: "/products/size-charts" },
+  { label: "Attributes", href: "/products/attributes" },
+  { label: "Variants", href: "/products/variants" },
+  { label: "Collections", href: "/products/collections" },
+  { label: "Fabric", href: "/products/fabric" },
 
-    { label: "Categories", href: "/products/category" },
+  // ✅ NEW: Product Colors
+  { label: "Product Colors", href: "/products/colors" },
 
-    // ✅ NEW PAGE ADDED
-    { label: "Category Analytics", href: "/products/category-analytics" },
-    { label: "Bestsellers", href: "/products/bestseller" },
+  { label: "Bulk Import", href: "/products/bulk-import" },
+  { label: "Bulk Export", href: "/products/bulk-export" },
+  { label: "Media Library", href: "/media" },
+  { label: "Inventory Sync", href: "/products/inventory-sync" },
+  { label: "Price Updates", href: "/products/pricing" },
+  { label: "Offers & Discounts", href: "/products/offers" },
+  { label: "SEO Manager", href: "/products/seo" },
+  { label: "Reviews & Ratings", href: "/products/reviews" },
+  { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
+],
 
-    { label: "Size Charts", href: "/products/size-charts" },
-    { label: "Attributes", href: "/products/attributes" },
-    { label: "Variants", href: "/products/variants" },
-    { label: "Collections", href: "/products/collections" },
-    { label: "Fabric", href: "/products/fabric" },
-    { label: "Bulk Import", href: "/products/bulk-import" },
-    { label: "Bulk Export", href: "/products/bulk-export" },
-    { label: "Media Library", href: "/media" },
-    { label: "Inventory Sync", href: "/products/inventory-sync" },
-    { label: "Price Updates", href: "/products/pricing" },
-    { label: "Offers & Discounts", href: "/products/offers" },
-    { label: "SEO Manager", href: "/products/seo" },
-    { label: "Reviews & Ratings", href: "/products/reviews" },
-    { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
-  ],
 
   orders: [
     { label: "Orders Dashboard", href: "/orders" },
