@@ -5,53 +5,68 @@ import toast from "react-hot-toast";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
+const str = (v) => (v == null ? "" : String(v));
+const dedupeById = (prev = [], next = []) => {
+  const map = new Map();
+  for (const x of prev) {
+    const id = str(x?._id);
+    if (id) map.set(id, x);
+  }
+  for (const x of next) {
+    const id = str(x?._id);
+    if (id) map.set(id, x);
+  }
+  return Array.from(map.values());
+};
+
 export const useAdminMediaStore = create((set, get) => ({
-  /* ================= STATE ================= */
   items: [],
   total: 0,
   page: 1,
   pages: 1,
   loading: false,
   uploading: false,
+  loadingMore: false,
   q: "",
   type: "",
 
-  /* ================= FETCH ================= */
-  fetchMedia: async ({ page = 1 } = {}) => {
-    set({ loading: true });
+  fetchMedia: async ({ page = 1, limit = 48, append = false } = {}) => {
+    const key = append ? "loadingMore" : "loading";
+    set({ [key]: true });
 
     try {
-      const { q, type } = get();
+      const { q, type, items: prevItems } = get();
 
       const params = new URLSearchParams({
         page: String(page),
-        limit: "48",
-        q,
-        type,
+        limit: String(limit),
       });
 
-      const res = await fetch(`${API}/api/media?${params}`);
+      if (q) params.set("q", q);
+      if (type) params.set("type", type);
+
+      const res = await fetch(`${API}/api/media?${params}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Fetch failed");
 
       const data = await res.json();
+      const nextItems = Array.isArray(data?.items) ? data.items : [];
 
       set({
-        items: Array.isArray(data.items) ? data.items : [],
-        total: data.total || 0,
-        page: data.page || 1,
-        pages: data.pages || 1,
+        items: append ? dedupeById(prevItems, nextItems) : nextItems,
+        total: Number(data?.total || 0),
+        page: Number(data?.page || page),
+        pages: Number(data?.pages || 1),
       });
     } catch (err) {
       console.error(err);
       toast.error("Failed to load media");
-      set({ items: [] });
+      if (!append) set({ items: [] });
     } finally {
-      set({ loading: false });
+      set({ [key]: false });
     }
   },
 
-  /* ================= UPLOAD ================= */
-  uploadMedia: async ({ files, folder }) => {
+  uploadMedia: async ({ files, folder } = {}) => {
     if (!files || files.length === 0) return;
 
     set({ uploading: true });
@@ -61,15 +76,11 @@ export const useAdminMediaStore = create((set, get) => ({
       Array.from(files).forEach((f) => form.append("files", f));
       if (folder) form.append("folder", folder);
 
-      const res = await fetch(`${API}/api/media/upload`, {
-        method: "POST",
-        body: form,
-      });
-
+      const res = await fetch(`${API}/api/media/upload`, { method: "POST", body: form });
       if (!res.ok) throw new Error("Upload failed");
 
       toast.success("Media uploaded successfully");
-      await get().fetchMedia({ page: 1 });
+      await get().fetchMedia({ page: 1, append: false });
     } catch (err) {
       console.error(err);
       toast.error("Upload failed");
@@ -78,29 +89,24 @@ export const useAdminMediaStore = create((set, get) => ({
     }
   },
 
-  /* ================= DELETE ================= */
   deleteMedia: async (id) => {
     if (!id) return;
-
-    const ok = confirm("Delete this media?");
-    if (!ok) return;
+    if (!confirm("Delete this media?")) return;
 
     try {
-      const res = await fetch(`${API}/api/media/${id}`, {
-        method: "DELETE",
-      });
-
+      const res = await fetch(`${API}/api/media/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
 
       toast.success("Media deleted");
-      get().fetchMedia({ page: get().page });
+      const { page, q, type } = get();
+      await get().fetchMedia({ page: Math.max(1, page), append: false, q, type });
     } catch (err) {
       console.error(err);
       toast.error("Delete failed");
     }
   },
 
-  /* ================= FILTERS ================= */
-  setQuery: (q) => set({ q }),
-  setType: (type) => set({ type }),
+  setQuery: (q) => set({ q: str(q), page: 1 }),
+  setType: (type) => set({ type: str(type), page: 1 }),
+  resetFilters: () => set({ q: "", type: "", page: 1 }),
 }));
