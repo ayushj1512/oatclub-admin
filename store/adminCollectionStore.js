@@ -175,52 +175,63 @@ export const useAdminCollectionStore = create((set, get) => ({
      ✅ ensures products are in new format
   ============================================================ */
   updateCollection: async (id, payload) => {
-    try {
-      set({ saving: true, error: null });
+  try {
+    set({ saving: true, error: null });
 
-      const safePayload = { ...payload };
+    const safePayload = { ...payload };
 
-      if (safePayload.products) {
-        safePayload.products = normalizeProductsPayload(safePayload.products);
+    // ✅ Only validate/normalize products IF products key is explicitly sent
+    // This allows "name only" updates without failing on missing productCode.
+    if (Object.prototype.hasOwnProperty.call(safePayload, "products")) {
+      const normalized = normalizeProductsPayload(safePayload.products);
 
-        const missingCode = safePayload.products.some(
-          (p) => !p.productCode || !p.productCode.trim()
+      // If caller passes products: undefined/null -> treat as "don't update products"
+      // so we remove the key entirely to avoid backend required validations.
+      if (!normalized.length) {
+        delete safePayload.products;
+      } else {
+        const missingCodeItem = normalized.find(
+          (p) => !p?.productCode || !String(p.productCode).trim()
         );
-        if (missingCode) {
+        if (missingCodeItem) {
           throw new Error(
-            "productCode missing for one or more products. Please provide productCode for all products."
+            `productCode missing for product: ${String(
+              missingCodeItem.product || ""
+            )}. Please provide productCode for all products.`
           );
         }
+        safePayload.products = normalized;
       }
-
-      const res = await fetch(`${API}/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(safePayload),
-      });
-
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.message || "Failed to update collection");
-
-      set((state) => ({
-        collection: data.collection,
-        collections: state.collections.map((c) =>
-          c._id === id ? data.collection : c
-        ),
-      }));
-
-      toast.success("Collection updated successfully");
-      return data.collection;
-    } catch (e) {
-      console.error(e);
-      toast.error(e.message);
-      throw e;
-    } finally {
-      set({ saving: false });
     }
-  },
+
+    const res = await fetch(`${API}/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(safePayload),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to update collection");
+
+    set((state) => ({
+      collection: data.collection,
+      collections: state.collections.map((c) =>
+        String(c._id) === String(id) ? data.collection : c
+      ),
+    }));
+
+    toast.success("Collection updated successfully");
+    return data.collection;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
+
 
   /* ============================================================
      DELETE COLLECTION
