@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, ChevronDown } from "lucide-react";
 import { useOrderStore } from "@/store/orderStore";
 
-/* ✅ UPDATED STATUS LIST (includes refunded) */
+/* ✅ UPDATED STATUS LIST (added pickup_initiated before returned/refunded) */
 const STATUS_OPTIONS = [
   { value: "processing", label: "Processing" },
   { value: "packed", label: "Packed" },
@@ -15,14 +15,17 @@ const STATUS_OPTIONS = [
 
   { value: "return_requested", label: "Return Requested" },
   { value: "exchange_requested", label: "Exchange Requested" },
+
+  { value: "pickup_initiated", label: "Pickup Initiated" }, // ✅ NEW (reverse pickup)
+
   { value: "returned", label: "Returned" },
-  { value: "refunded", label: "Refunded" }, // ✅ NEW
+  { value: "refunded", label: "Refunded" }, // ✅ already
 
   { value: "rto", label: "RTO" },
   { value: "cancelled", label: "Cancelled" },
 ];
 
-/* ✅ STATUS BADGE COLORS (includes refunded) */
+/* ✅ STATUS BADGE COLORS (added pickup_initiated) */
 const statusStyle = (status) => {
   switch (status) {
     case "processing":
@@ -43,10 +46,13 @@ const statusStyle = (status) => {
     case "exchange_requested":
       return "bg-pink-50 text-pink-700 ring-1 ring-pink-200";
 
+    case "pickup_initiated":
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200"; // ✅ NEW
+
     case "returned":
       return "bg-orange-100 text-orange-800 ring-1 ring-orange-200";
     case "refunded":
-      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"; // ✅ NEW
+      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
 
     case "rto":
       return "bg-gray-200 text-gray-800 ring-1 ring-gray-300";
@@ -60,11 +66,9 @@ const statusStyle = (status) => {
 
 export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated }) {
   const { updateOrderStatus } = useOrderStore();
-
   const [loading, setLoading] = useState(false);
   const [value, setValue] = useState(currentStatus || "processing");
 
-  // ✅ keep UI in sync if parent re-renders with new status
   useEffect(() => {
     setValue(currentStatus || "processing");
   }, [currentStatus]);
@@ -78,7 +82,6 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
 
       let payload = { fulfillmentStatus: newStatus };
 
-      // ✅ Cancel needs extra fields
       if (newStatus === "cancelled") {
         payload = {
           fulfillmentStatus: "cancelled",
@@ -89,13 +92,12 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
         };
       }
 
-      // ✅ Refunded usually also marks paymentStatus as refunded (safe extra)
       if (newStatus === "refunded") {
         payload = { fulfillmentStatus: "refunded", paymentStatus: "refunded" };
       }
 
       const updatedOrder = await updateOrderStatus(orderId, payload);
-      if (onUpdated) onUpdated(updatedOrder);
+      onUpdated?.(updatedOrder);
     } catch (err) {
       alert(err?.message || "Failed to update status");
       setValue(currentStatus || "processing");
@@ -106,12 +108,25 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
 
   return (
     <div className="relative inline-flex items-center">
-      <div className={`px-3 py-1 rounded-full text-xs font-semibold capitalize flex items-center gap-2 ${statusStyle(value)}`}>
+      <div
+        className={`px-3 py-1 rounded-full text-xs font-semibold capitalize flex items-center gap-2 ${statusStyle(
+          value
+        )}`}
+      >
         {String(value || "").replace(/_/g, " ")}
-        {loading ? <Loader2 size={14} className="animate-spin" /> : <ChevronDown size={14} className="opacity-60" />}
+        {loading ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <ChevronDown size={14} className="opacity-60" />
+        )}
       </div>
 
-      <select value={value} disabled={loading} onChange={handleChange} className="absolute inset-0 opacity-0 cursor-pointer">
+      <select
+        value={value}
+        disabled={loading}
+        onChange={handleChange}
+        className="absolute inset-0 opacity-0 cursor-pointer"
+      >
         {STATUS_OPTIONS.map((s) => (
           <option key={s.value} value={s.value}>
             {s.label}

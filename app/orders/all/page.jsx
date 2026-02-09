@@ -12,16 +12,24 @@ const IST_OFFSET = "+05:30";
    ✅ Small UI helpers
 --------------------------------------------- */
 const Card = ({ children, className = "" }) => (
-  <div className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-6 ${className}`}>{children}</div>
+  <div
+    className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-6 ${className}`}
+  >
+    {children}
+  </div>
 );
 
 /* ---------------------------------------------
    ✅ IST-safe date helpers
-   Why: "YYYY-MM-DD" is ambiguous; backend often parses it as UTC.
-   Fix: send startAt/endAt with +05:30, so "yesterday" counts correctly in IST.
 --------------------------------------------- */
 const ymdInTZ = (date = new Date(), timeZone = IST_TZ) => {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
   const y = parts.find((p) => p.type === "year")?.value || "1970";
   const m = parts.find((p) => p.type === "month")?.value || "01";
   const d = parts.find((p) => p.type === "day")?.value || "01";
@@ -36,7 +44,6 @@ const yesterdayYMD_IST = () => {
   return ymdInTZ(d, IST_TZ);
 };
 
-// Convert YYYY-MM-DD to ISO range with IST offset
 const istStartISO = (ymd) => (ymd ? `${ymd}T00:00:00.000${IST_OFFSET}` : "");
 const istEndISO = (ymd) => (ymd ? `${ymd}T23:59:59.999${IST_OFFSET}` : "");
 
@@ -48,8 +55,8 @@ const norm = (v) => String(v ?? "").trim().toLowerCase();
 --------------------------------------------- */
 const escapeCSV = (value) => {
   if (value === null || value === undefined) return "";
-  const str = String(value);
-  return `"${str.replace(/"/g, '""')}"`;
+  const s = String(value);
+  return `"${s.replace(/"/g, '""')}"`;
 };
 
 const formatDateISO = (d) => {
@@ -116,8 +123,6 @@ export default function OrdersListPage() {
 
   /* ---------------------------------------------
      ✅ Fetch orders with backend filters (IST-correct)
-     NOTE: Backend should read startAt/endAt (ISO with +05:30).
-     Backward compat: we also send startDate/endDate as before.
   --------------------------------------------- */
   const loadOrders = useCallback(async () => {
     try {
@@ -127,7 +132,6 @@ export default function OrdersListPage() {
 
       if (search) qs.set("customerName", search);
 
-      // ✅ Date range: send both (for safety), but backend should use startAt/endAt
       if (startDate) {
         qs.set("startDate", startDate);
         qs.set("startAt", istStartISO(startDate));
@@ -165,7 +169,7 @@ export default function OrdersListPage() {
   }, [loadOrders]);
 
   /* ---------------------------------------------
-     ✅ Client-side filters (confirm + priority + search fallback)
+     ✅ Client-side filters
   --------------------------------------------- */
   const filteredOrders = useMemo(() => {
     let data = Array.isArray(orders) ? [...orders] : [];
@@ -214,7 +218,29 @@ export default function OrdersListPage() {
       const items = Array.isArray(order?.items) ? order.items : [];
 
       if (!items.length) {
-        rows.push({ orderId, orderNumber, orderDate, customerName, customerEmail, customerPhone, isConfirmed, fulfillmentStatus, subtotal, discount, shippingFee, tax, totalAmount, finalPayable, itemIndex: "", itemTitle: "", itemProductCode: "", itemSku: "", itemSize: "", itemQuantity: "", itemPrice: "" });
+        rows.push({
+          orderId,
+          orderNumber,
+          orderDate,
+          customerName,
+          customerEmail,
+          customerPhone,
+          isConfirmed,
+          fulfillmentStatus,
+          subtotal,
+          discount,
+          shippingFee,
+          tax,
+          totalAmount,
+          finalPayable,
+          itemIndex: "",
+          itemTitle: "",
+          itemProductCode: "",
+          itemSku: "",
+          itemSize: "",
+          itemQuantity: "",
+          itemPrice: "",
+        });
         continue;
       }
 
@@ -222,11 +248,36 @@ export default function OrdersListPage() {
         const snap = item?.productSnapshot || {};
         const itemProductCode = safe(snap?.productCode || "");
         const attrs = Array.isArray(item?.variant?.attributes) ? item.variant.attributes : [];
-        const attrSize = attrs.find((a) => String(a?.key || "").toLowerCase() === "size")?.value || attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")?.value || "";
+        const attrSize =
+          attrs.find((a) => String(a?.key || "").toLowerCase() === "size")?.value ||
+          attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")?.value ||
+          "";
         const itemSku = safe(item?.variant?.sku || snap?.sku || "");
         const itemSize = safe(item?.selectedSize || attrSize || "");
 
-        rows.push({ orderId, orderNumber, orderDate, customerName, customerEmail, customerPhone, isConfirmed, fulfillmentStatus, subtotal, discount, shippingFee, tax, totalAmount, finalPayable, itemIndex: idx + 1, itemTitle: safe(snap?.title), itemProductCode, itemSku, itemSize, itemQuantity: money(item?.quantity), itemPrice: money(item?.price) });
+        rows.push({
+          orderId,
+          orderNumber,
+          orderDate,
+          customerName,
+          customerEmail,
+          customerPhone,
+          isConfirmed,
+          fulfillmentStatus,
+          subtotal,
+          discount,
+          shippingFee,
+          tax,
+          totalAmount,
+          finalPayable,
+          itemIndex: idx + 1,
+          itemTitle: safe(snap?.title),
+          itemProductCode,
+          itemSku,
+          itemSize,
+          itemQuantity: money(item?.quantity),
+          itemPrice: money(item?.price),
+        });
       });
     }
     return rows;
@@ -236,9 +287,60 @@ export default function OrdersListPage() {
     if (!filteredOrders?.length) return alert("No orders to export for the current filters.");
 
     const rows = buildCsvRows(filteredOrders);
-    const headers = ["Order DB Id", "Order #", "Order Date (ISO)", "Customer Name", "Customer Email", "Customer Phone", "Is Confirmed", "Fulfillment Status", "Subtotal", "Discount", "Shipping Fee", "Tax", "Total Amount", "Final Payable", "Item #", "Item Title", "Product Code", "Item SKU", "Item Size", "Item Quantity", "Item Price"];
+    const headers = [
+      "Order DB Id",
+      "Order #",
+      "Order Date (ISO)",
+      "Customer Name",
+      "Customer Email",
+      "Customer Phone",
+      "Is Confirmed",
+      "Fulfillment Status",
+      "Subtotal",
+      "Discount",
+      "Shipping Fee",
+      "Tax",
+      "Total Amount",
+      "Final Payable",
+      "Item #",
+      "Item Title",
+      "Product Code",
+      "Item SKU",
+      "Item Size",
+      "Item Quantity",
+      "Item Price",
+    ];
 
-    const csvLines = [headers.map(escapeCSV).join(","), ...rows.map((r) => [r.orderId, r.orderNumber, r.orderDate, r.customerName, r.customerEmail, r.customerPhone, r.isConfirmed, r.fulfillmentStatus, r.subtotal, r.discount, r.shippingFee, r.tax, r.totalAmount, r.finalPayable, r.itemIndex, r.itemTitle, r.itemProductCode, r.itemSku, r.itemSize, r.itemQuantity, r.itemPrice].map(escapeCSV).join(","))];
+    const csvLines = [
+      headers.map(escapeCSV).join(","),
+      ...rows.map((r) =>
+        [
+          r.orderId,
+          r.orderNumber,
+          r.orderDate,
+          r.customerName,
+          r.customerEmail,
+          r.customerPhone,
+          r.isConfirmed,
+          r.fulfillmentStatus,
+          r.subtotal,
+          r.discount,
+          r.shippingFee,
+          r.tax,
+          r.totalAmount,
+          r.finalPayable,
+          r.itemIndex,
+          r.itemTitle,
+          r.itemProductCode,
+          r.itemSku,
+          r.itemSize,
+          r.itemQuantity,
+          r.itemPrice,
+        ]
+          .map(escapeCSV)
+          .join(",")
+      ),
+    ];
 
     const blob = new Blob([csvLines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -263,7 +365,7 @@ export default function OrdersListPage() {
   }, [filteredOrders]);
 
   /* ---------------------------------------------
-     ✅ Filter chips
+     ✅ Filter chips (✅ added pickup_initiated)
   --------------------------------------------- */
   const chips = [
     { key: "", label: "All", type: "all" },
@@ -275,10 +377,14 @@ export default function OrdersListPage() {
     { key: "delivered", label: "Delivered", type: "status" },
     { key: "return_requested", label: "Return Requested", type: "status" },
     { key: "exchange_requested", label: "Exchange Requested", type: "status" },
+
+    { key: "pickup_initiated", label: "Pickup Initiated", type: "status" }, // ✅ NEW
+
     { key: "returned", label: "Returned", type: "status" },
     { key: "rto", label: "RTO", type: "status" },
     { key: "cancelled", label: "Cancelled", type: "status" },
     { key: "refunded", label: "Refunded", type: "status" },
+
     { key: "confirmed", label: "Confirmed", type: "confirm" },
     { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
     { key: "normal", label: "Priority: Normal", type: "priority" },
@@ -308,26 +414,46 @@ export default function OrdersListPage() {
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">All Orders</h1>
             <p className="text-gray-500 mt-1">View, filter and manage all customer orders.</p>
             <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
-              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">{totals.count} Orders</span>
-              <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">Total ₹{totals.sum}</span>
+              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
+                {totals.count} Orders
+              </span>
+              <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
+                Total ₹{totals.sum}
+              </span>
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 w-full md:w-80">
               <Search size={18} className="text-gray-400" />
-              <input type="text" placeholder="Search order # / name / email / phone..." className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && applySearch()} />
+              <input
+                type="text"
+                placeholder="Search order # / name / email / phone..."
+                className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && applySearch()}
+              />
             </div>
 
-            <button onClick={applySearch} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-gray-200 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition">
+            <button
+              onClick={applySearch}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-gray-200 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition"
+            >
               <Search size={18} /> Search
             </button>
 
-            <button onClick={clearSearch} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-200 active:scale-[0.98] transition">
+            <button
+              onClick={clearSearch}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-200 active:scale-[0.98] transition"
+            >
               Clear
             </button>
 
-            <button onClick={exportToCSV} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition">
+            <button
+              onClick={exportToCSV}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
+            >
               <Download size={18} /> Export CSV
             </button>
           </div>
@@ -338,7 +464,11 @@ export default function OrdersListPage() {
           <div className="grid md:grid-cols-4 gap-5">
             <div>
               <label className="text-sm font-semibold text-gray-700">Quick Date</label>
-              <select className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition" value={quickDate} onChange={(e) => setQuickDate(e.target.value)}>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={quickDate}
+                onChange={(e) => setQuickDate(e.target.value)}
+              >
                 <option value="">All</option>
                 <option value="today">Today</option>
                 <option value="yesterday">Yesterday</option>
@@ -348,27 +478,59 @@ export default function OrdersListPage() {
 
             <div>
               <label className="text-sm font-semibold text-gray-700">Start Date</label>
-              <input type="date" className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition" value={startDate} onChange={(e) => { setQuickDate(""); setStartDate(e.target.value); }} />
+              <input
+                type="date"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={startDate}
+                onChange={(e) => {
+                  setQuickDate("");
+                  setStartDate(e.target.value);
+                }}
+              />
             </div>
 
             <div>
               <label className="text-sm font-semibold text-gray-700">End Date</label>
-              <input type="date" className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition" value={endDate} onChange={(e) => { setQuickDate(""); setEndDate(e.target.value); }} />
+              <input
+                type="date"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={endDate}
+                onChange={(e) => {
+                  setQuickDate("");
+                  setEndDate(e.target.value);
+                }}
+              />
             </div>
 
             <div>
               <label className="text-sm font-semibold text-gray-700">Min Amount</label>
-              <input type="number" className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition" placeholder="₹0" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+              <input
+                type="number"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                placeholder="₹0"
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
+              />
             </div>
 
             <div>
               <label className="text-sm font-semibold text-gray-700">Max Amount</label>
-              <input type="number" className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition" placeholder="₹5000" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+              <input
+                type="number"
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                placeholder="₹5000"
+                value={maxAmount}
+                onChange={(e) => setMaxAmount(e.target.value)}
+              />
             </div>
 
             <div>
               <label className="text-sm font-semibold text-gray-700">Payment Method</label>
-              <select className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              >
                 <option value="">All</option>
                 <option value="cod">Cash on Delivery</option>
                 <option value="razorpay">Razorpay</option>
@@ -378,7 +540,11 @@ export default function OrdersListPage() {
 
             <div>
               <label className="text-sm font-semibold text-gray-700">Confirmation</label>
-              <select className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition" value={confirmFilter} onChange={(e) => setConfirmFilter(e.target.value)}>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={confirmFilter}
+                onChange={(e) => setConfirmFilter(e.target.value)}
+              >
                 <option value="">All</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="not_confirmed">Not Confirmed</option>
@@ -387,7 +553,11 @@ export default function OrdersListPage() {
 
             <div>
               <label className="text-sm font-semibold text-gray-700">Priority</label>
-              <select className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition" value={priority} onChange={(e) => setPriority(e.target.value)}>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+              >
                 <option value="">All</option>
                 <option value="normal">Normal</option>
                 <option value="medium">Medium</option>
@@ -396,9 +566,18 @@ export default function OrdersListPage() {
             </div>
           </div>
 
-          <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+<div className="mt-6 flex flex-wrap gap-2">
             {chips.map((s) => {
-              const isActive = s.type === "status" ? status === s.key : s.type === "confirm" ? confirmFilter === s.key : s.type === "priority" ? priority === s.key : s.type === "quickDate" ? quickDate === s.key : status === "" && confirmFilter === "" && priority === "" && quickDate === "";
+              const isActive =
+                s.type === "status"
+                  ? status === s.key
+                  : s.type === "confirm"
+                  ? confirmFilter === s.key
+                  : s.type === "priority"
+                  ? priority === s.key
+                  : s.type === "quickDate"
+                  ? quickDate === s.key
+                  : status === "" && confirmFilter === "" && priority === "" && quickDate === "";
 
               const onClick = () => {
                 if (s.type === "all") {
@@ -415,7 +594,15 @@ export default function OrdersListPage() {
               };
 
               return (
-                <button key={`${s.type}-${s.key || "all"}`} onClick={onClick} className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${isActive ? "bg-black text-white shadow-sm" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+                <button
+                  key={`${s.type}-${s.key || "all"}`}
+                  onClick={onClick}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${
+                    isActive
+                      ? "bg-black text-white shadow-sm"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
                   {s.label}
                 </button>
               );
@@ -455,14 +642,20 @@ export default function OrdersListPage() {
                       return bd - ad;
                     })
                     .map((order, idx) => {
-                      const rowKey = order?._id || order?.id || order?.orderNumber || `order-${idx}`;
+                      const rowKey =
+                        order?._id || order?.id || order?.orderNumber || `order-${idx}`;
+
                       return (
                         <OrderRow
                           key={String(rowKey)}
                           order={order}
                           onUpdated={(updatedOrder) => {
                             setOrders((prev) =>
-                              prev.map((o) => (o?._id || o?.id) === (updatedOrder?._id || updatedOrder?.id) ? updatedOrder : o)
+                              prev.map((o) =>
+                                (o?._id || o?.id) === (updatedOrder?._id || updatedOrder?.id)
+                                  ? updatedOrder
+                                  : o
+                              )
                             );
                           }}
                         />
@@ -470,7 +663,9 @@ export default function OrdersListPage() {
                     })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">No orders found for applied filters.</td>
+                    <td colSpan={7} className="py-12 text-center text-gray-500">
+                      No orders found for applied filters.
+                    </td>
                   </tr>
                 )}
               </tbody>
