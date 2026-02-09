@@ -21,18 +21,6 @@ const toMonthKey = (dateLike) => {
   return `${y}-${m}`; // YYYY-MM
 };
 
-const getCourierName = (order) => {
-  const provider = order?.shipment?.provider || "shiprocket";
-  const s = order?.shipment || {};
-  return (
-    s?.[provider]?.courierName ||
-    s?.shiprocket?.courierName ||
-    s?.xpressbees?.courierName ||
-    order?.trackingDetails?.courierName ||
-    ""
-  );
-};
-
 // ✅ safest COD / PREPAID mapping
 const getPaymentMode = (order) =>
   String(order?.paymentMethod || "").toLowerCase() === "cod" ? "COD" : "PREPAID";
@@ -79,7 +67,9 @@ const downloadCSV = (rows, filename = "sales-report.csv") => {
     "Payment mode",
     "Courier name",
 
+    // ✅ static column
     "Product type",
+
     "HSN code",
     "Product size",
     "Qty",
@@ -117,6 +107,7 @@ const downloadCSV = (rows, filename = "sales-report.csv") => {
         r.courierName,
 
         r.productType,
+
         r.hsnCode,
         r.productSize,
         r.qty,
@@ -200,7 +191,9 @@ export default function SalesReportPage() {
       const orderId = order?.orderNumber || order?._id || "";
 
       const paymentMode = getPaymentMode(order);
-      const courierName = getCourierName(order);
+
+      // ✅ FORCE courier
+      const courierName = "Shiprocket";
 
       const couponCode = order?.coupon?.code || "";
 
@@ -241,8 +234,10 @@ export default function SalesReportPage() {
         const taxableValue = netLine / (1 + TAX_RATE);
         const taxAmount = netLine - taxableValue;
 
+        // ✅ FORCE product type
+        const productType = "Apparel";
+
         // product fields (best-effort)
-        const productType = it?.productSnapshot?.productType || ""; // variable/simple etc
         const hsnCode = it?.productSnapshot?.hsnCode || "";
         const productSize = it?.selectedSize || "";
 
@@ -255,6 +250,7 @@ export default function SalesReportPage() {
           courierName,
 
           productType,
+
           hsnCode,
           productSize,
           qty,
@@ -414,7 +410,7 @@ export default function SalesReportPage() {
         {/* Table */}
         <div className="mt-4 overflow-hidden rounded-2xl border border-neutral-200">
           <div className="overflow-auto">
-            <table className="min-w-[2100px] w-full border-collapse">
+            <table className="min-w-[2200px] w-full border-collapse">
               <thead className="sticky top-0 z-10 bg-black text-white">
                 <tr className="text-left text-xs uppercase tracking-wide">
                   <th className="px-3 py-3">OrderId</th>
@@ -424,7 +420,8 @@ export default function SalesReportPage() {
                   <th className="px-3 py-3">Pay</th>
                   <th className="px-3 py-3">Courier</th>
 
-                  <th className="px-3 py-3">Type</th>
+                  <th className="px-3 py-3">Product Type</th>
+
                   <th className="px-3 py-3">HSN</th>
                   <th className="px-3 py-3">Size</th>
                   <th className="px-3 py-3">Qty</th>
@@ -448,7 +445,7 @@ export default function SalesReportPage() {
               <tbody className="text-sm">
                 {loading && (
                   <tr>
-                    <td className="px-3 py-4 text-neutral-600" colSpan={21}>
+                    <td className="px-3 py-4 text-neutral-600" colSpan={22}>
                       Loading…
                     </td>
                   </tr>
@@ -456,7 +453,7 @@ export default function SalesReportPage() {
 
                 {!loading && error && (
                   <tr>
-                    <td className="px-3 py-4 text-red-600" colSpan={21}>
+                    <td className="px-3 py-4 text-red-600" colSpan={22}>
                       {String(error)}
                     </td>
                   </tr>
@@ -464,7 +461,7 @@ export default function SalesReportPage() {
 
                 {!loading && !error && rows.length === 0 && (
                   <tr>
-                    <td className="px-3 py-4 text-neutral-600" colSpan={21}>
+                    <td className="px-3 py-4 text-neutral-600" colSpan={22}>
                       No delivered orders found for selected month.
                     </td>
                   </tr>
@@ -492,6 +489,7 @@ export default function SalesReportPage() {
                       <td className="px-3 py-3">{r.courierName}</td>
 
                       <td className="px-3 py-3">{r.productType}</td>
+
                       <td className="px-3 py-3">{r.hsnCode}</td>
                       <td className="px-3 py-3">{r.productSize}</td>
                       <td className="px-3 py-3">{r.qty}</td>

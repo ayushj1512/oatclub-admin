@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useAdminProductionStore from "@/store/adminProductionStore";
 import { useInventoryReservationStore } from "@/store/inventoryReservationStore";
+import SyncInventoryButton from "@/components/production/SyncInventoryButton";
 
 // ✅ Product Store for images (bulk fetch)
 import { useAdminProductStore } from "@/store/adminProductStore";
@@ -545,6 +546,8 @@ const markPackedFn =
           >
             Refresh
           </button>
+          
+  <SyncInventoryButton />
 
           <button
             onClick={onExportExcel}

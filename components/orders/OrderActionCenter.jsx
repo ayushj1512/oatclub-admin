@@ -3,7 +3,7 @@
 import { toast } from "react-hot-toast";
 import { Mail, Send, PackageCheck, Truck, Copy, Loader2 } from "lucide-react";
 import { useEmailStore } from "@/store/emailStore";
-import { useShiprocketStore } from "@/store/ShipRocketStore";
+import { useOrderStore } from "@/store/orderStore"; // ✅ Option A
 import { useXpressbeesStore } from "@/store/xpressbeesStore";
 
 const ActionCard = ({ title, desc, icon: Icon, onClick, loading, disabled }) => (
@@ -41,46 +41,35 @@ export default function OrderActionCenter({
 }) {
   const orderId = order?._id;
 
-  const { busy, busyKey, sendConfirmationEmail, sendTrackingEmail } =
-    useEmailStore();
-  const { loading: srLoading, bookShiprocketIfMissing } = useShiprocketStore();
+  const { busy, busyKey, sendConfirmationEmail, sendTrackingEmail } = useEmailStore();
 
-  // ✅ XpressBees store
-  const {
-    loading: xbLoading,
-    createShipment,
-    // optional for later buttons:
-    // syncTracking,
-    // trackByAwb,
-    // cancelShipment,
-  } = useXpressbeesStore();
+  // ✅ Shiprocket booking is in orderStore
+  const { loading: orderLoading, bookShiprocketIfMissing } = useOrderStore();
 
-  const isConfirmed = Boolean(order?.isConfirmed);
-  const actionLocked = busy || srLoading || xbLoading;
+  const { loading: xbLoading, createShipment } = useXpressbeesStore();
+
+  const isConfirmed = !!order?.isConfirmed;
+  const actionLocked = busy || orderLoading || xbLoading;
 
   const finalTrackingId = String(trackingId || "").trim();
   const finalCourierName = String(courierName || "").trim();
 
-  // prefer prop trackingUrl, else shiprocket/xpressbees stored
   const finalTrackingLink =
     String(trackingUrl || "").trim() ||
     String(order?.shipment?.shiprocket?.trackingUrl || "").trim() ||
     String(order?.shipment?.xpressbees?.trackingUrl || "").trim();
 
-  const canSendTrackingMail =
-    Boolean(finalTrackingId) &&
-    Boolean(finalCourierName) &&
-    Boolean(finalTrackingLink);
+  const canSendTrackingMail = !!finalTrackingId && !!finalCourierName && !!finalTrackingLink;
 
   const hasShiprocket =
-    Boolean(String(order?.shipment?.shiprocket?.awb || "").trim()) ||
-    Boolean(String(order?.shipment?.shiprocket?.shipmentId || "").trim());
+    !!String(order?.shipment?.shiprocket?.awb || "").trim() ||
+    !!String(order?.shipment?.shiprocket?.shipmentId || "").trim();
 
   const hasXpressbees =
-    Boolean(String(order?.shipment?.xpressbees?.awb || "").trim()) ||
-    Boolean(String(order?.shipment?.xpressbees?.shipmentId || "").trim());
+    !!String(order?.shipment?.xpressbees?.awb || "").trim() ||
+    !!String(order?.shipment?.xpressbees?.shipmentId || "").trim();
 
-  const copy = async (text, label = "Copied") => {
+  const copyToClipboard = async (text, label = "Copied") => {
     try {
       await navigator.clipboard.writeText(String(text || ""));
       toast.success(`${label} ✅`);
@@ -117,15 +106,13 @@ export default function OrderActionCenter({
 
   const handleBookShiprocket = async () => {
     if (!orderId || actionLocked) return;
-
-    if (!isConfirmed) {
-      return toast.error("Only confirmed orders will be booked ✅");
-    }
+    if (!isConfirmed) return toast.error("Only confirmed orders will be booked ✅");
+    if (hasShiprocket)
+      return toast("Already booked (AWB/Shipment ID exists). Skipped ✅", { icon: "ℹ️" });
 
     try {
       const res = await bookShiprocketIfMissing(orderId);
-      if (res?.skipped)
-        toast(res?.message || "Already booked. Skipped ✅", { icon: "ℹ️" });
+      if (res?.skipped) toast(res?.message || "Already booked. Skipped ✅", { icon: "ℹ️" });
       else toast.success(res?.message || "Shiprocket booked ✅");
       onRefresh?.();
     } catch (e) {
@@ -133,24 +120,17 @@ export default function OrderActionCenter({
     }
   };
 
-  // ✅ REAL: Book courier with XpressBees (manual trigger)
   const handleBookXpressbees = async () => {
     if (!orderId || actionLocked) return;
-
-    if (!isConfirmed) {
-      return toast.error("Only confirmed orders will be booked ✅");
-    }
-
-    if (hasXpressbees) {
+    if (!isConfirmed) return toast.error("Only confirmed orders will be booked ✅");
+    if (hasXpressbees)
       return toast("Already booked (XpressBees AWB/Shipment ID exists). Skipped ✅", {
         icon: "ℹ️",
       });
-    }
 
     try {
       toast.loading("Creating XpressBees booking…", { id: "xb-book" });
 
-      // force+confirmIfCOD handles manual cases safely (controller supports it)
       const res = await createShipment({
         orderId,
         force: true,
@@ -158,10 +138,7 @@ export default function OrderActionCenter({
         preferXpressbeesProvider: true,
       });
 
-      toast.success(res?.message || "XpressBees booking created ✅", {
-        id: "xb-book",
-      });
-
+      toast.success(res?.message || "XpressBees booking created ✅", { id: "xb-book" });
       onRefresh?.();
     } catch (e) {
       toast.error(e?.message || "XpressBees booking failed", { id: "xb-book" });
@@ -193,11 +170,7 @@ export default function OrderActionCenter({
 
         <ActionCard
           title="Send Tracking Email"
-          desc={
-            canSendTrackingMail
-              ? "Send AWB + courier + tracking link."
-              : "Requires Tracking ID + Courier + Tracking URL"
-          }
+          desc={canSendTrackingMail ? "Send AWB + courier + tracking link." : "Requires Tracking ID + Courier + Tracking URL"}
           icon={Send}
           onClick={handleSendTracking}
           loading={busyKey === "send-tracking-email"}
@@ -215,11 +188,10 @@ export default function OrderActionCenter({
           }
           icon={Truck}
           onClick={handleBookShiprocket}
-          loading={srLoading}
+          loading={orderLoading}
           disabled={!orderId || actionLocked || hasShiprocket || !isConfirmed}
         />
 
-        {/* ✅ NEW: REAL XpressBees booking */}
         <ActionCard
           title="Book Courier (XpressBees)"
           desc={
@@ -234,12 +206,12 @@ export default function OrderActionCenter({
           loading={xbLoading}
           disabled={!orderId || actionLocked || hasXpressbees || !isConfirmed}
         />
+
         <ActionCard
           title="Copy AWB / Tracking ID"
           desc="Copy tracking id for courier."
           icon={Copy}
-          onClick={() => copy(finalTrackingId, "Tracking ID copied")}
-          loading={false}
+          onClick={() => copyToClipboard(finalTrackingId, "Tracking ID copied")}
           disabled={!finalTrackingId || actionLocked}
         />
 
@@ -247,8 +219,7 @@ export default function OrderActionCenter({
           title="Copy Tracking Link"
           desc="Copy tracking URL."
           icon={PackageCheck}
-          onClick={() => copy(finalTrackingLink, "Tracking link copied")}
-          loading={false}
+          onClick={() => copyToClipboard(finalTrackingLink, "Tracking link copied")}
           disabled={!finalTrackingLink || actionLocked}
         />
       </div>

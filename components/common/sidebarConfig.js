@@ -80,7 +80,7 @@ inventory: [
     { label: "Comments / Moderation", href: "/blogs/comments" },
   ],
 
- products: [
+products: [
   { label: "Product Dashboard", href: "/products" },
   { label: "Add New Product", href: "/products/add" },
   { label: "Manage Products", href: "/products/manage" },
@@ -97,6 +97,9 @@ inventory: [
   // ✅ NEW: Product Colors
   { label: "Product Colors", href: "/products/colors" },
 
+  // ✅ NEW: Bulk Name Editor
+  { label: "Name Edit", href: "/products/name-edit" },
+
   { label: "Bulk Import", href: "/products/bulk-import" },
   { label: "Bulk Export", href: "/products/bulk-export" },
   { label: "Media Library", href: "/media" },
@@ -107,6 +110,7 @@ inventory: [
   { label: "Reviews & Ratings", href: "/products/reviews" },
   { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
 ],
+
 
 
   orders: [
