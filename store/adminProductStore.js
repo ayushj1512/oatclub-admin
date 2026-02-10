@@ -29,53 +29,130 @@ const normalizeProductPayload = (payload) => {
 
   const out = stripVariantPrices(payload);
 
-  if (out.patternNumber !== undefined) {
-    out.patternNumber = String(out.patternNumber || "").trim();
-  }
+  // ✅ backend removed this field (avoid sending)
+  delete out.longDescription;
+
+  // trim helper
+  const toStr = (v) => String(v ?? "").trim();
+
+  // (keep if your UI still uses it somewhere)
+  if (out.patternNumber !== undefined) out.patternNumber = toStr(out.patternNumber);
 
   // ✅ HSN Code hygiene: trim + digits-only (allow empty)
   if (out.hsnCode !== undefined) {
-    const hsn = String(out.hsnCode ?? "").trim();
-    const digitsOnly = hsn.replace(/[^\d]/g, "");
-    out.hsnCode = hsn === "" ? "" : digitsOnly;
+    const hsn = toStr(out.hsnCode);
+    out.hsnCode = hsn === "" ? "" : hsn.replace(/[^\d]/g, "");
   }
 
-  // allow fabrics + avgFabricConsumption to pass (sometimes UI may send as stringified JSON)
-  if (typeof out.fabrics === "string") {
+  // allow JSON strings
+  const tryJson = (v) => {
+    if (typeof v !== "string") return v;
     try {
-      out.fabrics = JSON.parse(out.fabrics);
-    } catch {}
+      return JSON.parse(v);
+    } catch {
+      return v;
+    }
+  };
+
+  out.fabrics = tryJson(out.fabrics);
+  out.avgFabricConsumption = tryJson(out.avgFabricConsumption);
+
+  // ✅ highlights -> keyFeatures
+  if (out.highlights !== undefined && out.keyFeatures === undefined) {
+    out.keyFeatures = out.highlights;
   }
 
-  if (typeof out.avgFabricConsumption === "string") {
-    try {
-      out.avgFabricConsumption = JSON.parse(out.avgFabricConsumption);
-    } catch {}
+  // ✅ normalize keyFeatures
+  if (out.keyFeatures !== undefined) {
+    const raw = tryJson(out.keyFeatures);
+    const list = Array.isArray(raw)
+      ? raw
+      : typeof raw === "string"
+        ? raw.split(",")
+        : [];
+
+    out.keyFeatures = Array.from(new Set(list.map((x) => toStr(x)).filter(Boolean)));
   }
 
-  // ✅ NEW: COLORS hygiene
+  delete out.highlights;
+
+  // ✅ optional trims (safe)
+  if (out.shortDescription !== undefined) out.shortDescription = toStr(out.shortDescription);
+  if (out.howToStyle !== undefined) out.howToStyle = toStr(out.howToStyle);
+  if (out.fabricDetails !== undefined) out.fabricDetails = toStr(out.fabricDetails);
+
+  // ✅ SPECIFICATIONS hygiene (screenshot table)
+  // Accept: [{key,value}] | JSON string | object {Color:"Red"} | "Color:Red|Length:Maxi"
+  const normalizeSpecs = (v) => {
+    const rows = [];
+    const push = (k, val) => {
+      const key = toStr(k);
+      const value = toStr(val);
+      if (!key) return;
+      rows.push({ key, value });
+    };
+
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (!t) return [];
+      try {
+        v = JSON.parse(t);
+      } catch {
+        const parts = t.includes("|") ? t.split("|") : t.split(",");
+        for (const p of parts) {
+          const s = String(p || "").trim();
+          if (!s) continue;
+          const sep = s.includes(":") ? ":" : s.includes("=") ? "=" : null;
+          if (!sep) continue;
+          const [k, ...rest] = s.split(sep);
+          push(k, rest.join(sep));
+        }
+        return rows;
+      }
+    }
+
+    if (Array.isArray(v)) {
+      v.forEach((r) => r && push(r.key, r.value));
+      return rows;
+    }
+
+    if (v && typeof v === "object") {
+      Object.entries(v).forEach(([k, val]) => push(k, val));
+      return rows;
+    }
+
+    return [];
+  };
+
+  // allow both: specifications / specs
+  if (out.specifications !== undefined || out.specs !== undefined) {
+    out.specifications = normalizeSpecs(out.specifications ?? out.specs);
+    delete out.specs;
+
+    // optional: don't send empty
+    if (Array.isArray(out.specifications) && out.specifications.length === 0) {
+      delete out.specifications;
+    }
+  }
+
+  // ✅ COLORS hygiene
   if (out.colors !== undefined) {
-    const list = Array.isArray(out.colors)
-      ? out.colors
-      : typeof out.colors === "string"
-        ? out.colors.split(",")
+    const raw = tryJson(out.colors);
+    const list = Array.isArray(raw)
+      ? raw
+      : typeof raw === "string"
+        ? raw.split(",")
         : [];
 
     out.colors = Array.from(
-      new Set(
-        list
-          .map((c) =>
-            String(c || "")
-              .trim()
-              .toLowerCase(),
-          )
-          .filter(Boolean),
-      ),
+      new Set(list.map((c) => toStr(c).toLowerCase()).filter(Boolean))
     );
   }
 
   return out;
 };
+
+
 
 const normalizeFabricsPayload = (fabrics) => {
   // allow JSON string
