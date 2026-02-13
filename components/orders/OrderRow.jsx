@@ -1,3 +1,4 @@
+// components/orders/OrderRow.jsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -10,17 +11,18 @@ import {
   Check,
   X,
   Loader2,
+  Copy,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown";
 import OrderPriorityDropdown from "@/components/orders/OrderPriorityDropdown";
+import DuplicateOrderCreatin from "@/components/orders/DuplicateOrderCreatin";
 
 const BASE_URL = "https://mirayfashions.com";
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 const safe = (v) => (v == null ? "" : String(v));
-const money = (n) =>
-  Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-IN") : "0";
+const money = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-IN") : "0");
 
 const getPaymentBadge = (order) => {
   const pm = String(order?.paymentMethod || "").toLowerCase();
@@ -28,14 +30,16 @@ const getPaymentBadge = (order) => {
 
   if (pm === "exchange")
     return { label: "Exchange", cls: "bg-blue-50 text-blue-700 border border-blue-100" };
-  if (pm === "cod")
-    return { label: "COD", cls: "bg-gray-100 text-gray-700 border border-gray-200" };
+  if (pm === "cod") return { label: "COD", cls: "bg-gray-100 text-gray-700 border border-gray-200" };
 
   if (pm === "razorpay") {
     if (ps === "paid") return { label: "Paid ✅", cls: "bg-green-50 text-green-700 border border-green-100" };
-    if (ps === "pending") return { label: "Pending ⏳", cls: "bg-yellow-50 text-yellow-700 border border-yellow-100" };
-    if (ps === "refund_pending") return { label: "Refund Pending ⏳", cls: "bg-orange-50 text-orange-700 border border-orange-100" };
-    if (ps === "refunded") return { label: "Refunded ✅", cls: "bg-emerald-50 text-emerald-700 border border-emerald-100" };
+    if (ps === "pending")
+      return { label: "Pending ⏳", cls: "bg-yellow-50 text-yellow-700 border border-yellow-100" };
+    if (ps === "refund_pending")
+      return { label: "Refund Pending ⏳", cls: "bg-orange-50 text-orange-700 border border-orange-100" };
+    if (ps === "refunded")
+      return { label: "Refunded ✅", cls: "bg-emerald-50 text-emerald-700 border border-emerald-100" };
     return { label: "Failed ❌", cls: "bg-red-50 text-red-700 border border-red-100" };
   }
 
@@ -72,6 +76,7 @@ const STATUS_LABELS = {
   returned: "Returned",
   cancelled: "Cancelled",
   rto: "RTO",
+  refunded: "Refunded",
 };
 
 const formatOrderDateTime = (value) => {
@@ -79,25 +84,13 @@ const formatOrderDateTime = (value) => {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return { time: "", date: "" };
   return {
-    time: d.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }),
-    date: d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    }),
+    time: d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: true }),
+    date: d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" }),
   };
 };
 
 const formatAddress = (a) =>
-  a
-    ? [a.line1, a.line2, a.city, a.state, a.pincode, a.country]
-        .filter(Boolean)
-        .join(", ")
-    : "";
+  a ? [a.line1, a.line2, a.city, a.state, a.pincode, a.country].filter(Boolean).join(", ") : "";
 
 const getCouponLabel = (order) => {
   const c = order?.coupon;
@@ -113,8 +106,11 @@ const buildProductUrl = (item) => {
 
 export default function OrderRow({ order, onUpdated }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
 
+  const [open, setOpen] = useState(false); // row expand
+  const [dupOpen, setDupOpen] = useState(false); // modal
+
+  // remark edit
   const [editingRemark, setEditingRemark] = useState(false);
   const [remarkDraft, setRemarkDraft] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
@@ -132,6 +128,8 @@ export default function OrderRow({ order, onUpdated }) {
   const bill = order?.billingAddressSnapshot || order?.shippingAddressSnapshot || null;
   const couponLabel = useMemo(() => getCouponLabel(order), [order]);
   const remarkValue = safe(order?.customerSupportRemark).trim();
+
+  const toggleOpen = () => setOpen((v) => !v);
 
   const startRemarkEdit = () => {
     setRemarkDraft(remarkValue);
@@ -155,6 +153,7 @@ export default function OrderRow({ order, onUpdated }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || "Failed to update remark");
+
       const updated = data?.order || data;
       setEditingRemark(false);
       onUpdated?.(updated);
@@ -167,11 +166,12 @@ export default function OrderRow({ order, onUpdated }) {
 
   return (
     <>
+      {/* ================= ROW ================= */}
       <tr className="hover:bg-black/[0.03] transition">
         <td className="py-4 px-5 font-semibold text-gray-900">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setOpen((v) => !v)}
+              onClick={toggleOpen}
               className="p-1.5 rounded-lg hover:bg-black/[0.05] transition"
               title="Expand"
               type="button"
@@ -183,9 +183,7 @@ export default function OrderRow({ order, onUpdated }) {
 
           <p className="text-xs text-gray-500 mt-1">
             {items?.[0]?.productSnapshot?.title
-              ? `${items[0].productSnapshot.title}${
-                  items.length > 1 ? ` +${items.length - 1} more` : ""
-                }`
+              ? `${items[0].productSnapshot.title}${items.length > 1 ? ` +${items.length - 1} more` : ""}`
               : "No items"}
           </p>
 
@@ -203,19 +201,14 @@ export default function OrderRow({ order, onUpdated }) {
             <OrderPriorityDropdown
               orderId={orderId}
               currentPriority={order?.priority}
-            onUpdated={(u) => {
-  const updated = u?.order ?? u;
-  onUpdated?.(updated);
-}}
+              onUpdated={(u) => onUpdated?.(u?.order ?? u)}
             />
           </div>
         </td>
 
         <td className="py-4 px-5">
           <div className="font-medium text-gray-900">
-            {order?.customerId?.name ||
-              order?.shippingAddressSnapshot?.fullName ||
-              "Unknown"}
+            {order?.customerId?.name || order?.shippingAddressSnapshot?.fullName || "Unknown"}
           </div>
           <div className="text-xs text-gray-500">
             {order?.customerId?.phone || order?.shippingAddressSnapshot?.phone || ""}
@@ -237,13 +230,11 @@ export default function OrderRow({ order, onUpdated }) {
             currentStatus={effectiveStatus}
             statuses={FULFILLMENT_STATUSES}
             labels={STATUS_LABELS}
-            onUpdated={(u) => onUpdated?.(u)}
+            onUpdated={(u) => onUpdated?.(u?.order ?? u)}
           />
         </td>
 
-        <td className="py-4 px-5 font-semibold text-gray-900">
-          ₹{money(order?.finalPayable)}
-        </td>
+        <td className="py-4 px-5 font-semibold text-gray-900">₹{money(order?.finalPayable)}</td>
 
         <td className="py-4 px-5 text-gray-700">
           <div className="leading-tight">
@@ -261,52 +252,67 @@ export default function OrderRow({ order, onUpdated }) {
             >
               View <ArrowRight size={16} />
             </button>
+
+            
           </div>
         </td>
       </tr>
 
+      {/* ================= EXPANDED ================= */}
       {open ? (
         <tr className="bg-black/[0.015]">
           <td colSpan={7} className="px-5 pb-4">
             <div className="mt-3 bg-white rounded-2xl px-4 py-4 space-y-4">
+              {/* TOP: address + coupon + actions */}
               <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold text-gray-700">
-                      Billing Address
-                    </div>
-                    <div className="text-sm text-gray-900 mt-1">
-                      {bill?.fullName || "-"}
-                    </div>
+                    <div className="text-xs font-semibold text-gray-700">Billing Address</div>
+                    <div className="text-sm text-gray-900 mt-1">{bill?.fullName || "-"}</div>
                     <div className="text-xs text-gray-600 mt-0.5">
                       {bill?.phone || ""}
                       {bill?.email ? ` • ${bill.email}` : ""}
                     </div>
-                    <div className="text-xs text-gray-600 mt-1">
-                      {formatAddress(bill) || "—"}
-                    </div>
+                    <div className="text-xs text-gray-600 mt-1">{formatAddress(bill) || "—"}</div>
                   </div>
 
-                  <div className="shrink-0">
-                    <div className="text-xs font-semibold text-gray-700">Coupon</div>
-                    <div className="mt-1 text-sm text-gray-900 font-semibold">
-                      {couponLabel || "—"}
+                  <div className="shrink-0 flex flex-col gap-2">
+                    <div>
+                      <div className="text-xs font-semibold text-gray-700">Coupon</div>
+                      <div className="mt-1 text-sm text-gray-900 font-semibold">{couponLabel || "—"}</div>
+                      {order?.discount ? (
+                        <div className="text-xs text-gray-600 mt-0.5">Discount: ₹{money(order.discount)}</div>
+                      ) : (
+                        <div className="text-xs text-gray-500 mt-0.5">No discount</div>
+                      )}
                     </div>
-                    {order?.discount ? (
-                      <div className="text-xs text-gray-600 mt-0.5">
-                        Discount: ₹{money(order.discount)}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-gray-500 mt-0.5">No discount</div>
-                    )}
+
+                    {/* ✅ ACTIONS INSIDE EXPAND */}
+                    <div className="flex flex-wrap gap-2 justify-start lg:justify-end pt-1">
+                      <button
+                        onClick={() => setDupOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:opacity-90 transition"
+                        type="button"
+                        title="Create Exchange / Replacement duplicate"
+                      >
+                        <Copy size={14} /> Exchange Order
+                      </button>
+
+                      <button
+                        onClick={() => router.push(`/orders/${orderId}`)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-900 text-xs font-semibold hover:bg-gray-50 transition"
+                        type="button"
+                      >
+                        Open <ArrowRight size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
 
+              {/* ITEMS */}
               <div className="space-y-2">
-                <h3 className="font-semibold text-gray-900 text-sm">
-                  Items ({items.length})
-                </h3>
+                <h3 className="font-semibold text-gray-900 text-sm">Items ({items.length})</h3>
 
                 {items.length === 0 ? (
                   <p className="text-xs text-gray-500">No items</p>
@@ -317,6 +323,7 @@ export default function OrderRow({ order, onUpdated }) {
                       const v = it?.variant || {};
                       const size = it?.selectedSize || "";
                       const color = it?.selectedColor || "";
+
                       const variantText =
                         size || color
                           ? [size ? `Size: ${size}` : "", color ? `Color: ${color}` : ""]
@@ -330,10 +337,10 @@ export default function OrderRow({ order, onUpdated }) {
                           : "";
 
                       const productUrl = buildProductUrl(it);
-                      const itemKey = `${orderId}-item-${idx}`;
+                      const key = `${orderId}-item-${idx}`;
 
                       return (
-                        <div key={itemKey} className="py-3 flex items-center justify-between gap-3">
+                        <div key={key} className="py-3 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <img
                               src={snap.thumbnail || "/placeholder.png"}
@@ -341,7 +348,6 @@ export default function OrderRow({ order, onUpdated }) {
                               alt={snap.title || "Product"}
                               loading="lazy"
                             />
-
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 min-w-0">
                                 <p className="text-sm font-semibold text-gray-900 truncate">
@@ -361,8 +367,7 @@ export default function OrderRow({ order, onUpdated }) {
                               </div>
 
                               <p className="text-xs text-gray-500 truncate">
-                                {variantText ||
-                                  (v?.sku || snap?.sku ? `SKU: ${v?.sku || snap?.sku}` : "")}
+                                {variantText || (v?.sku || snap?.sku ? `SKU: ${v?.sku || snap?.sku}` : "")}
                               </p>
 
                               {v?.variantId ? (
@@ -386,6 +391,7 @@ export default function OrderRow({ order, onUpdated }) {
                 )}
               </div>
 
+              {/* TOTALS */}
               <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2 text-xs text-gray-700">
                 <span className="px-3 py-1 rounded-full bg-gray-100">
                   Subtotal: <b>₹{money(order?.subtotal)}</b>
@@ -404,6 +410,7 @@ export default function OrderRow({ order, onUpdated }) {
                 </span>
               </div>
 
+              {/* REMARK */}
               <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -450,12 +457,7 @@ export default function OrderRow({ order, onUpdated }) {
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:opacity-90 disabled:opacity-40 transition"
                         type="button"
                       >
-                        {savingRemark ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Check size={14} />
-                        )}{" "}
-                        Save
+                        {savingRemark ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
                       </button>
                     </div>
                   </div>
@@ -465,6 +467,20 @@ export default function OrderRow({ order, onUpdated }) {
           </td>
         </tr>
       ) : null}
+
+      {/* MODAL */}
+      <DuplicateOrderCreatin
+        open={dupOpen}
+        onClose={() => setDupOpen(false)}
+        order={order}
+        onCreated={(newOrder) => {
+          setDupOpen(false);
+          // best: parent list re-fetch; still notify if needed
+          onUpdated?.(order);
+          // optional: auto-open newly created order
+          // if (newOrder?._id) router.push(`/orders/${newOrder._id}`);
+        }}
+      />
     </>
   );
 }

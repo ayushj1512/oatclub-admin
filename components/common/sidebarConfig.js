@@ -88,6 +88,10 @@ products: [
   { label: "Categories", href: "/products/category" },
   { label: "Category Analytics", href: "/products/category-analytics" },
   { label: "Bestsellers", href: "/products/bestseller" },
+
+  // ✅ NEW: Coming Soon
+  { label: "Coming Soon", href: "/products/comingsoon" },
+
   { label: "Size Charts", href: "/products/size-charts" },
   { label: "Attributes", href: "/products/attributes" },
   { label: "Variants", href: "/products/variants" },
@@ -110,6 +114,7 @@ products: [
   { label: "Reviews & Ratings", href: "/products/reviews" },
   { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
 ],
+
 
 
 

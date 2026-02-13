@@ -180,26 +180,36 @@ export const useAdminCollectionStore = create((set, get) => ({
 
     const safePayload = { ...payload };
 
-    // ✅ Only validate/normalize products IF products key is explicitly sent
-    // This allows "name only" updates without failing on missing productCode.
+    /**
+     * ✅ Products handling (NEW collection model)
+     * - If products key is NOT sent => don't touch products in DB
+     * - If products is null/undefined => treat as "don't update products"
+     * - If products is [] => allow clearing products (IMPORTANT)
+     * - If products has items => normalize + validate productCode for each item
+     */
     if (Object.prototype.hasOwnProperty.call(safePayload, "products")) {
-      const normalized = normalizeProductsPayload(safePayload.products);
-
-      // If caller passes products: undefined/null -> treat as "don't update products"
-      // so we remove the key entirely to avoid backend required validations.
-      if (!normalized.length) {
+      // don't update products if null/undefined
+      if (safePayload.products == null) {
         delete safePayload.products;
       } else {
-        const missingCodeItem = normalized.find(
-          (p) => !p?.productCode || !String(p.productCode).trim()
-        );
-        if (missingCodeItem) {
-          throw new Error(
-            `productCode missing for product: ${String(
-              missingCodeItem.product || ""
-            )}. Please provide productCode for all products.`
+        const normalized = normalizeProductsPayload(safePayload.products);
+
+        // ✅ Allow clearing: products: []
+        // Only validate productCode when there are items
+        if (normalized.length > 0) {
+          const missingCodeItem = normalized.find(
+            (p) => !p?.productCode || !String(p.productCode).trim()
           );
+          if (missingCodeItem) {
+            throw new Error(
+              `productCode missing for product: ${String(
+                missingCodeItem.product || ""
+              )}. Please provide productCode for all products.`
+            );
+          }
         }
+
+        // ✅ keep products even if [] (so DB can be cleared)
         safePayload.products = normalized;
       }
     }
@@ -231,6 +241,7 @@ export const useAdminCollectionStore = create((set, get) => ({
     set({ saving: false });
   }
 },
+
 
 
   /* ============================================================

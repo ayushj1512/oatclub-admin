@@ -309,6 +309,28 @@ export const useOrderStore = create((set, get) => ({
     return order;
   },
 
+// Exchange Order
+  duplicateExchangeOrder: async (orderId, payload = {}) => {
+  if (!orderId) return null;
+
+  const data = await get()._post(`/api/orders/${orderId}/duplicate-exchange`, payload);
+
+  // backend returns { order: newOrder }
+  const newOrder = get()._normalizeOrder(data);
+
+  if (newOrder?._id) {
+    // set as current order (optional)
+    set({ order: newOrder });
+
+    // add to list on top (optional)
+    set((s) => ({
+      orders: [newOrder, ...(s.orders || [])],
+    }));
+  }
+
+  return newOrder;
+},
+
   /**
    * ✅ Manual Shiprocket booking (only if missing)
    * Router: POST /api/orders/:id/shiprocket/book

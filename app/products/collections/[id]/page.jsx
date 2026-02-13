@@ -1,3 +1,4 @@
+// app/products/collections/[id]/page.jsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -12,11 +13,13 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
+import toast from "react-hot-toast";
+
 import { useAdminCollectionStore } from "@/store/adminCollectionStore";
 import { useAdminProductStore } from "@/store/adminProductStore";
 
 const uniq = (arr) =>
-  Array.from(new Set((arr || []).filter(Boolean).map(String)));
+  Array.from(new Set((arr || []).filter(Boolean).map((x) => String(x).trim())));
 
 const getCode = (p) => String(p?.productCode || p?.code || p?.sku || "").trim();
 const getImg = (p) =>
@@ -40,6 +43,7 @@ export default function EditCollectionPage() {
     collection,
     saving,
     syncCollectionOnProducts,
+    updateCollectionProducts
   } = useAdminCollectionStore();
 
   const { products, fetchProducts, loading: productLoading } =
@@ -47,6 +51,8 @@ export default function EditCollectionPage() {
 
   const [query, setQuery] = useState("");
   const [originalIds, setOriginalIds] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -109,6 +115,7 @@ export default function EditCollectionPage() {
   const unassignedProducts = useMemo(() => {
     const assignedSet = new Set(uniq(form.productIds));
     let list = (products || []).filter((p) => !assignedSet.has(String(p._id)));
+
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((p) => {
@@ -118,6 +125,7 @@ export default function EditCollectionPage() {
         return t.includes(q) || sku.includes(q) || code.includes(q);
       });
     }
+
     return list;
   }, [products, form.productIds, query]);
 
@@ -144,12 +152,16 @@ export default function EditCollectionPage() {
   const missingOnProductCollections = useMemo(() => {
     if (!collection?._id) return [];
     const colId = String(collection._id);
+
     const missing = [];
     for (const pid of uniq(form.productIds)) {
       const p = productMap.get(String(pid));
+      if (!p) continue;
+
       const pCols = Array.isArray(p?.collections)
         ? p.collections.map((x) => String(x?._id ?? x))
         : [];
+
       if (!pCols.includes(colId)) missing.push(String(pid));
     }
     return missing;
@@ -160,9 +172,7 @@ export default function EditCollectionPage() {
   const removeAssigned = (pid) =>
     setForm((p) => ({
       ...p,
-      productIds: (p.productIds || []).filter(
-        (x) => String(x) !== String(pid)
-      ),
+      productIds: (p.productIds || []).filter((x) => String(x) !== String(pid)),
     }));
 
   const addToAssigned = (pid) =>
@@ -172,22 +182,68 @@ export default function EditCollectionPage() {
     }));
 
   const buildProductsPayloadForUpdate = () =>
-    (form.productIds || []).map((pid) => ({
-      product: pid,
-      productCode: getCode(productMap.get(String(pid))),
-    }));
+  (form.productIds || []).map((pid) => {
+    const p = productMap.get(String(pid));
+    const code =
+      String(p?.productCode || p?.code || p?.sku || "").trim() ||
+      String(pid).slice(-8); // ✅ fallback
+
+    return { product: pid, productCode: code };
+  });
+
 
   const syncNow = async () => {
-    if (!collection?._id) return;
-    const mustAdd = uniq([...diff.addIds, ...missingOnProductCollections]);
+  if (!collection?._id) return;
+
+  const mustAdd = uniq([...diff.addIds, ...missingOnProductCollections]);
+  const mustRemove = uniq(diff.removeIds);
+
+  // nothing to do
+  if (mustAdd.length === 0 && mustRemove.length === 0 && !orderChanged) {
+    toast("Nothing to sync");
+    return;
+  }
+
+  setSyncing(true);
+  const tId = toast.loading("Syncing…");
+
+  try {
+    // 1) ✅ Product.collections sync
     await syncCollectionOnProducts({
       collectionId: collection._id,
       addIds: mustAdd,
-      removeIds: diff.removeIds,
+      removeIds: mustRemove,
     });
-    await fetchProducts({ limit: 1000 });
-    setOriginalIds((form.productIds || []).map(String)); // ✅ preserve current order as baseline
-  };
+
+    // 2) ✅ Collection.products update (THIS was missing)
+    const productsPayload = buildProductsPayloadForUpdate(); // [{product, productCode}]
+    const missingCode = productsPayload.find((x) => !x.productCode?.trim());
+    if (missingCode) {
+      const p = productMap.get(String(missingCode.product));
+      throw new Error(
+        `productCode/SKU missing for: "${p?.title || missingCode.product}"`
+      );
+    }
+
+    // Use your store helper (clean + consistent)
+    await updateCollectionProducts(collection._id, productsPayload);
+
+    // 3) ✅ Refetch to reflect in UI
+    await Promise.all([
+      fetchProducts({ limit: 1000 }),
+      fetchCollectionById(id),
+    ]);
+
+    setOriginalIds((form.productIds || []).map(String));
+    toast.success("Synced (Products + Collection) ✅", { id: tId });
+  } catch (e) {
+    console.error("[SYNC] error", e);
+    toast.error(e?.message || "Sync failed", { id: tId });
+  } finally {
+    setSyncing(false);
+  }
+};
+
 
   const submit = async () => {
     if (!form.name.trim()) return alert("Collection name is required");
@@ -256,6 +312,7 @@ export default function EditCollectionPage() {
     e.preventDefault();
     const fromId = String(draggingId || "");
     const toId = String(pid || "");
+
     if (!fromId || !toId || fromId === toId) {
       setDraggingId(null);
       setDragOverId(null);
@@ -311,12 +368,12 @@ export default function EditCollectionPage() {
           <button
             type="button"
             onClick={syncNow}
-            disabled={saving || productLoading || !collection?._id}
+            disabled={saving || syncing || productLoading || !collection?._id}
             className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm rounded-xl bg-gray-900 text-white hover:bg-black disabled:opacity-60 transition"
             title="Sync Product.collections for all assigned products"
           >
             <RefreshCcw size={16} />
-            Sync Products
+            {syncing ? "Syncing…" : "Sync Products"}
           </button>
         </div>
 
@@ -453,7 +510,7 @@ export default function EditCollectionPage() {
                           type="button"
                           onClick={() => moveUp(pid)}
                           className="h-6 w-6 inline-flex items-center justify-center rounded-lg bg-white ring-1 ring-gray-200 hover:bg-gray-100 disabled:opacity-40"
-                          disabled={saving || productLoading}
+                          disabled={saving || syncing || productLoading}
                           title="Move up"
                         >
                           <ArrowUp size={14} />
@@ -462,7 +519,7 @@ export default function EditCollectionPage() {
                           type="button"
                           onClick={() => moveDown(pid)}
                           className="h-6 w-6 inline-flex items-center justify-center rounded-lg bg-white ring-1 ring-gray-200 hover:bg-gray-100 disabled:opacity-40"
-                          disabled={saving || productLoading}
+                          disabled={saving || syncing || productLoading}
                           title="Move down"
                         >
                           <ArrowDown size={14} />
@@ -475,9 +532,7 @@ export default function EditCollectionPage() {
                         src={getImg(p)}
                         alt={p.title}
                         className="h-full w-full object-cover"
-                        onError={(e) =>
-                          (e.currentTarget.src = "/placeholder.png")
-                        }
+                        onError={(e) => (e.currentTarget.src = "/placeholder.png")}
                       />
                     </div>
 
@@ -567,9 +622,7 @@ export default function EditCollectionPage() {
                         src={getImg(p)}
                         alt={p.title}
                         className="h-full w-full object-cover"
-                        onError={(e) =>
-                          (e.currentTarget.src = "/placeholder.png")
-                        }
+                        onError={(e) => (e.currentTarget.src = "/placeholder.png")}
                       />
                     </div>
 

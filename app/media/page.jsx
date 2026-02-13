@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Upload, Trash2, Copy, RefreshCw, X, Image as ImageIcon, Video } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
@@ -32,6 +32,8 @@ function isAcceptedFile(file) {
 }
 
 export default function MediaPage() {
+  const limit = 48;
+
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
 
@@ -40,43 +42,105 @@ export default function MediaPage() {
   const [type, setType] = useState(""); // "" | image | video | raw
 
   const [page, setPage] = useState(1);
-  const limit = 48;
+  const [hasMore, setHasMore] = useState(true);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // initial load / refresh
+  const [loadingMore, setLoadingMore] = useState(false); // infinite append
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
 
+  const sentinelRef = useRef(null);
+  const ioRef = useRef(null);
+
   const pages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total]);
 
-  const load = async (targetPage = page, targetType = type) => {
-    setLoading(true);
-    try {
-      const url = new URL(`${API}/api/media`);
-      url.searchParams.set("page", String(targetPage));
-      url.searchParams.set("limit", String(limit));
-      if (targetType) url.searchParams.set("type", targetType);
+  const fetchPage = useCallback(
+    async ({ nextPage, targetType, mode }) => {
+      // mode: "replace" | "append"
+      const isAppend = mode === "append";
+      isAppend ? setLoadingMore(true) : setLoading(true);
 
-      const r = await fetch(url.toString(), { cache: "no-store" });
-      const d = await r.json();
+      try {
+        const url = new URL(`${API}/api/media`);
+        url.searchParams.set("page", String(nextPage));
+        url.searchParams.set("limit", String(limit));
+        if (targetType) url.searchParams.set("type", targetType);
 
-      setItems(d.items || []);
-      setTotal(d.total || 0);
-    } catch (e) {
-      console.error("❌ Media load:", e);
-      setItems([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  };
+        const r = await fetch(url.toString(), { cache: "no-store" });
+        const d = await r.json();
+
+        const newItems = Array.isArray(d.items) ? d.items : [];
+        const newTotal = Number(d.total || 0);
+
+        setTotal(newTotal);
+        setPage(nextPage);
+
+        setItems((prev) => (isAppend ? [...prev, ...newItems] : newItems));
+
+        // hasMore: either API signals end (items < limit) OR total-based
+        const moreByItems = newItems.length === limit;
+        const loadedCount = (isAppend ? items.length : 0) + newItems.length; // best-effort
+        const moreByTotal = newTotal ? loadedCount < newTotal : moreByItems;
+
+        setHasMore(moreByTotal && moreByItems);
+      } catch (e) {
+        console.error("❌ Media load:", e);
+        if (!isAppend) {
+          setItems([]);
+          setTotal(0);
+        }
+        setHasMore(false);
+      } finally {
+        isAppend ? setLoadingMore(false) : setLoading(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [limit, type, items.length]
+  );
+
+  const loadFirst = useCallback(
+    async (targetType = type) => {
+      setHasMore(true);
+      await fetchPage({ nextPage: 1, targetType, mode: "replace" });
+    },
+    [fetchPage, type]
+  );
+
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore || !hasMore) return;
+    await fetchPage({ nextPage: page + 1, targetType: type, mode: "append" });
+  }, [fetchPage, hasMore, loading, loadingMore, page, type]);
 
   useEffect(() => {
-    load();
+    loadFirst(type);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, type]);
+  }, [type]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+
+    if (ioRef.current) ioRef.current.disconnect();
+
+    ioRef.current = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first?.isIntersecting) loadMore();
+      },
+      { root: null, rootMargin: "800px 0px", threshold: 0 }
+    );
+
+    ioRef.current.observe(el);
+
+    return () => {
+      ioRef.current?.disconnect();
+      ioRef.current = null;
+    };
+  }, [loadMore]);
 
   // cleanup previews on unmount
   useEffect(() => {
@@ -137,9 +201,7 @@ export default function MediaPage() {
       if (!r.ok) throw new Error(d.message || "Upload failed");
 
       clearPicked();
-
-      setPage(1);
-      await load(1, type);
+      await loadFirst(type);
 
       alert(`Uploaded ${d.media?.length || 0} file(s)!`);
     } catch (e) {
@@ -170,7 +232,7 @@ export default function MediaPage() {
       const r = await fetch(`${API}/api/media/${id}`, { method: "DELETE" });
       const d = await r.json();
       if (!r.ok) throw new Error(d.message || "Delete failed");
-      await load();
+      await loadFirst(type); // refresh list
     } catch (e) {
       console.error("❌ Delete:", e);
       alert(e.message || "Delete failed");
@@ -203,24 +265,21 @@ export default function MediaPage() {
     if (dtFiles?.length) addFiles(dtFiles);
   };
 
-  // ✅ NEW: Paste support (Ctrl+V / Cmd+V)
+  // ✅ Paste support (Ctrl+V / Cmd+V)
   useEffect(() => {
     const onPaste = (e) => {
       const clipboardItems = e.clipboardData?.items;
       if (!clipboardItems?.length) return;
 
       const pastedFiles = [];
-
       for (const item of clipboardItems) {
         if (item.kind === "file") {
           const file = item.getAsFile();
           if (file && isAcceptedFile(file)) {
-            // If screenshot pasted, it may have empty name -> assign something nicer
             const named =
               file.name && file.name !== "image.png"
                 ? file
                 : new File([file], `pasted-${Date.now()}.png`, { type: file.type });
-
             pastedFiles.push(named);
           }
         }
@@ -252,7 +311,10 @@ export default function MediaPage() {
             </p>
           </div>
 
-          <button onClick={() => load()} className="inline-flex items-center gap-2 bg-black text-white px-4 py-2">
+          <button
+            onClick={() => loadFirst(type)}
+            className="inline-flex items-center gap-2 bg-black text-white px-4 py-2"
+          >
             <RefreshCw size={18} />
             Refresh
           </button>
@@ -278,10 +340,7 @@ export default function MediaPage() {
               <label className="text-sm font-semibold text-gray-800 block mb-2">Filter</label>
               <select
                 value={type}
-                onChange={(e) => {
-                  setPage(1);
-                  setType(e.target.value);
-                }}
+                onChange={(e) => setType(e.target.value)}
                 className="w-full bg-gray-100 px-3 py-2 outline-none border border-gray-200"
               >
                 <option value="">All</option>
@@ -366,7 +425,7 @@ export default function MediaPage() {
             )}
           </div>
 
-          {/* ✅ Preview grid */}
+          {/* Preview grid */}
           {selectedCount > 0 && (
             <div className="bg-gray-50 border border-gray-200 p-3">
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-8 gap-2">
@@ -418,6 +477,7 @@ export default function MediaPage() {
         <div className="text-sm text-gray-600 flex items-center justify-between">
           <span>
             Total: <b>{total}</b>
+            <span className="text-xs text-gray-500"> (loaded: {items.length})</span>
           </span>
           <span className="text-xs text-gray-500">
             Page {page} / {pages}
@@ -430,87 +490,89 @@ export default function MediaPage() {
         ) : items.length === 0 ? (
           <div className="text-gray-600">No media found.</div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
-            {items.map((m) => (
-              <div key={m._id} className="bg-white border border-gray-200">
-                <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
-                  {m.resourceType === "video" ? (
-                    <video
-                      src={m.url}
-                      className="w-full h-full object-contain bg-black"
-                      muted
-                      preload="metadata"
-                      controls
-                    />
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
+              {items.map((m) => (
+                <div key={m._id} className="bg-white border border-gray-200">
+                  <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
+                    {m.resourceType === "video" ? (
+                      <video
+                        src={m.url}
+                        className="w-full h-full object-contain bg-black"
+                        muted
+                        preload="metadata"
+                        controls
+                      />
+                    ) : (
+                      <img
+                        src={m.url}
+                        alt={m.originalName || "media"}
+                        className="w-full h-full object-contain"
+                        loading="lazy"
+                      />
+                    )}
+                  </div>
+
+                  <div className="p-2">
+                    <div className="text-[11px] text-gray-700" title={m.originalName || m.publicId}>
+                      {shortName(m.originalName || m.publicId)}
+                    </div>
+
+                    <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500">
+                      <span className="uppercase">{m.resourceType}</span>
+                      <span>{formatBytes(m.bytes)}</span>
+                    </div>
+
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={() => copyUrl(m.url)}
+                        className="flex-1 inline-flex items-center justify-center gap-1 bg-gray-100 hover:bg-gray-200 text-xs py-2"
+                        title="Copy URL"
+                      >
+                        <Copy size={14} />
+                        Copy
+                      </button>
+
+                      <button
+                        onClick={() => deleteOne(m._id)}
+                        disabled={deletingId === m._id}
+                        className={`inline-flex items-center justify-center px-3 py-2 text-white ${
+                          deletingId === m._id ? "bg-gray-400" : "bg-red-600 hover:bg-red-700"
+                        }`}
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Infinite footer */}
+            <div className="pt-4">
+              {hasMore ? (
+                <div className="flex items-center justify-center gap-3 text-sm text-gray-600">
+                  {loadingMore ? (
+                    <span>Loading more...</span>
                   ) : (
-                    <img
-                      src={m.url}
-                      alt={m.originalName || "media"}
-                      className="w-full h-full object-contain"
-                      loading="lazy"
-                    />
+                    <button
+                      onClick={loadMore}
+                      className="px-4 py-2 border bg-white hover:bg-gray-50 text-gray-700"
+                    >
+                      Load more
+                    </button>
                   )}
                 </div>
+              ) : (
+                <div className="text-center text-sm text-gray-500">You’ve reached the end.</div>
+              )}
 
-                <div className="p-2">
-                  <div className="text-[11px] text-gray-700" title={m.originalName || m.publicId}>
-                    {shortName(m.originalName || m.publicId)}
-                  </div>
-
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500">
-                    <span className="uppercase">{m.resourceType}</span>
-                    <span>{formatBytes(m.bytes)}</span>
-                  </div>
-
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={() => copyUrl(m.url)}
-                      className="flex-1 inline-flex items-center justify-center gap-1 bg-gray-100 hover:bg-gray-200 text-xs py-2"
-                      title="Copy URL"
-                    >
-                      <Copy size={14} />
-                      Copy
-                    </button>
-
-                    <button
-                      onClick={() => deleteOne(m._id)}
-                      disabled={deletingId === m._id}
-                      className={`inline-flex items-center justify-center px-3 py-2 text-white ${
-                        deletingId === m._id ? "bg-gray-400" : "bg-red-600 hover:bg-red-700"
-                      }`}
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              {/* observer target */}
+              <div ref={sentinelRef} className="h-1" />
+            </div>
+          </>
         )}
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between pt-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className={`px-4 py-2 border ${page <= 1 ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"}`}
-          >
-            Prev
-          </button>
-
-          <div className="text-sm text-gray-600">
-            Page <b>{page}</b> / <b>{pages}</b>
-          </div>
-
-          <button
-            disabled={page >= pages}
-            onClick={() => setPage((p) => Math.min(pages, p + 1))}
-            className={`px-4 py-2 border ${page >= pages ? "text-gray-400 bg-gray-100" : "bg-white hover:bg-gray-50"}`}
-          >
-            Next
-          </button>
-        </div>
       </div>
     </section>
   );
