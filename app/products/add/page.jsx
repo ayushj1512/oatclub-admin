@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Save } from "lucide-react";
+import { Save, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import CategoryMultiSelect from "@/components/product/CategoryMultiSelect";
@@ -15,25 +15,23 @@ import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 
+/* ---------------- helpers ---------------- */
 const toNum = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
 
-// ✅ show HSN only for apparels
 const isApparelCategory = (categories) => {
   const cats = Array.isArray(categories)
     ? categories
     : typeof categories === "string"
       ? categories.split(",")
       : [];
-
   return cats
     .map((c) => String(c || "").trim().toLowerCase())
     .some((c) => ["apparel", "apparels", "clothing", "garments"].includes(c));
 };
 
-// ✅ parse "a, b, c" OR JSON array string -> ["a","b","c"]
 const parseList = (v) => {
   if (Array.isArray(v)) return v.map((x) => String(x || "").trim()).filter(Boolean);
   if (typeof v !== "string") return [];
@@ -46,8 +44,6 @@ const parseList = (v) => {
   return t.split(",").map((x) => x.trim()).filter(Boolean);
 };
 
-// ✅ parse specifications from UI input
-// supports: [{key,value}] OR JSON string OR object OR "Key:Val|Key2:Val2"
 const parseSpecs = (v) => {
   const out = [];
   const push = (k, val) => {
@@ -89,6 +85,135 @@ const parseSpecs = (v) => {
   return [];
 };
 
+/* ---------------- Colors UI ---------------- */
+const BASIC_COLORS = [
+  "black", "white", "grey", "gray",
+  "red", "maroon", "pink", "magenta",
+  "purple", "lavender",
+  "blue", "navy", "sky blue", "teal",
+  "green", "olive", "mint",
+  "yellow", "mustard",
+  "orange", "peach",
+  "brown", "beige", "tan",
+  "nude", "cream",
+  "gold", "silver",
+];
+
+const normColor = (s) =>
+  String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+function ColorsPicker({ valueText, onChangeText }) {
+  const selected = useMemo(() => {
+    const list = parseList(valueText).map(normColor);
+    return Array.from(new Set(list)).filter(Boolean);
+  }, [valueText]);
+
+  const [input, setInput] = useState("");
+
+  const setSelected = (nextArr) => onChangeText(nextArr.join(", "));
+
+  const addOne = (raw) => {
+    const c = normColor(raw);
+    if (!c) return;
+    if (selected.includes(c)) return;
+    setSelected([...selected, c]);
+  };
+
+  const removeOne = (c) => setSelected(selected.filter((x) => x !== c));
+
+  const toggleChip = (c) => {
+    const key = normColor(c);
+    if (!key) return;
+    selected.includes(key) ? removeOne(key) : addOne(key);
+  };
+
+  const flushTyped = () => {
+    const parts = String(input || "")
+      .split(",")
+      .map(normColor)
+      .filter(Boolean);
+    if (!parts.length) return;
+    const merged = Array.from(new Set([...selected, ...parts]));
+    setSelected(merged);
+    setInput("");
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Chips */}
+      <div className="flex flex-wrap gap-2">
+        {BASIC_COLORS.map((c) => {
+          const key = normColor(c);
+          const on = selected.includes(key);
+          return (
+            <button
+              key={c}
+              type="button"
+              onClick={() => toggleChip(c)}
+              className={`px-3 py-1 rounded-full text-sm border transition ${
+                on ? "bg-black text-white border-black" : "bg-white text-gray-800 border-gray-200"
+              }`}
+              title="Click to toggle"
+            >
+              {c}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Type to add */}
+      <div className="space-y-2">
+        <input
+          className="input"
+          placeholder='Type colors and press Enter (e.g. "wine red, off white")'
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              flushTyped();
+            }
+            if (e.key === "Backspace" && !input && selected.length) {
+              removeOne(selected[selected.length - 1]);
+            }
+          }}
+          onBlur={flushTyped}
+        />
+
+        {/* Selected pills */}
+        {!!selected.length && (
+          <div className="flex flex-wrap gap-2">
+            {selected.map((c) => (
+              <span
+                key={c}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 border border-gray-200 text-sm"
+              >
+                {c}
+                <button
+                  type="button"
+                  onClick={() => removeOne(c)}
+                  className="text-gray-600 hover:text-black"
+                  aria-label={`Remove ${c}`}
+                >
+                  <X size={14} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Hidden text state (so your existing payload logic works) */}
+        <p className="text-xs text-gray-500">
+          Stored as: <span className="font-medium">{valueText || "—"}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function AddProductPage() {
   const router = useRouter();
 
@@ -97,39 +222,31 @@ export default function AddProductPage() {
   const [collections, setCollections] = useState([]);
 
   const [form, setForm] = useState({
-    /* BASIC */
     title: "",
     price: "",
     compareAtPrice: "",
     categories: [],
 
-    /* ✅ HSN (Apparels) */
     hsnCode: "62105000",
 
-    /* CONTENT (NEW SCHEMA FIELDS ✅) */
     shortDescription: "",
     howToStyle: "",
     fabricDetails: "",
-    keyFeaturesText: "", // comma separated
-    specificationsText: "", // "Key:Val|Key2:Val2" OR JSON
+    keyFeaturesText: "",
+    specificationsText: "",
 
-    /* TAGS + COLORS */
     tagsText: "",
     colorsText: "",
 
-    /* MEDIA */
     images: [],
     thumbnail: "",
 
-    /* CROSS SELL */
     crossSellProducts: [],
 
-    /* ATTRIBUTES / VARIANTS */
     attributes: [],
     variants: [],
 
-    /* ADVANCED */
-    highlights: [], // legacy (kept if ProductAdvancedFields uses it)
+    highlights: [],
     collections: [],
     weight: 0,
     dimensions: { length: 0, width: 0, height: 0, unit: "cm" },
@@ -143,10 +260,7 @@ export default function AddProductPage() {
     isDraft: false,
   });
 
-  const showHsnCode = useMemo(
-    () => isApparelCategory(form.categories),
-    [form.categories]
-  );
+  const showHsnCode = useMemo(() => isApparelCategory(form.categories), [form.categories]);
 
   /* ---------------- LOAD MASTER DATA ---------------- */
   useEffect(() => {
@@ -167,13 +281,11 @@ export default function AddProductPage() {
       alert("Title, Price & Category are required");
       return;
     }
-
     if (!form.images.length) {
       alert("At least one product image is required");
       return;
     }
 
-    // ✅ HSN validation only for apparels
     if (showHsnCode) {
       const hsn = String(form.hsnCode ?? "").trim();
       if (!hsn) return alert("HSN Code is required for Apparels");
@@ -183,7 +295,7 @@ export default function AddProductPage() {
     setSaving(true);
 
     const tags = parseList(form.tagsText).map((t) => t.toLowerCase());
-    const colors = parseList(form.colorsText).map((c) => c.toLowerCase());
+    const colors = parseList(form.colorsText).map((c) => normColor(c));
 
     const keyFeatures = parseList(form.keyFeaturesText);
     const specifications = parseSpecs(form.specificationsText);
@@ -194,17 +306,14 @@ export default function AddProductPage() {
       compareAtPrice: form.compareAtPrice === "" ? null : toNum(form.compareAtPrice),
 
       categories: form.categories,
-
       ...(showHsnCode ? { hsnCode: String(form.hsnCode ?? "").trim() } : {}),
 
-      // ✅ NEW schema fields
       shortDescription: String(form.shortDescription || "").trim(),
       howToStyle: String(form.howToStyle || "").trim(),
       fabricDetails: String(form.fabricDetails || "").trim(),
       keyFeatures,
       specifications,
 
-      // ✅ Images and thumbnail
       images: form.images,
       thumbnail: form.images?.[0] || "",
 
@@ -216,8 +325,7 @@ export default function AddProductPage() {
 
       crossSellProducts: form.crossSellProducts,
 
-      /* ADVANCED */
-      highlights: form.highlights, // harmless (backend maps highlights -> keyFeatures if keyFeatures missing)
+      highlights: form.highlights,
       collections: form.collections,
       weight: toNum(form.weight),
       dimensions: form.dimensions,
@@ -297,16 +405,15 @@ export default function AddProductPage() {
             />
           </div>
 
-          {/* COLORS */}
-          <div className="space-y-1">
-            <input
-              placeholder="Colors (comma-separated) e.g. red, black, navy"
-              value={form.colorsText}
-              onChange={(e) => setForm((p) => ({ ...p, colorsText: e.target.value }))}
-              className="input"
+          {/* COLORS (NEW) */}
+          <div className="space-y-2">
+            <h3 className="font-semibold">Colors</h3>
+            <ColorsPicker
+              valueText={form.colorsText}
+              onChangeText={(t) => setForm((p) => ({ ...p, colorsText: t }))}
             />
             <p className="text-xs text-gray-500">
-              Stored at product level for filtering.
+              Tip: chips se select karo ya type karke Enter dabao.
             </p>
           </div>
 
@@ -357,13 +464,11 @@ export default function AddProductPage() {
           <ProductImagesEditor
             value={form.images}
             folder="miray/products"
-            onChange={(urls) =>
-              setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))
-            }
+            onChange={(urls) => setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))}
           />
         </div>
 
-        {/* CONTENT (UPDATED: includes all new fields) */}
+        {/* CONTENT */}
         <ProductContentEditor
           editable
           value={{
