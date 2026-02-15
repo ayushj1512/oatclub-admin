@@ -13,9 +13,8 @@ const dedupe = (list) => {
     .filter((x) => x && !seen.has(x) && (seen.add(x), true));
 };
 const pad6 = (v) => {
-  const digits = String(v ?? "").trim().replace(/[^\d]/g, "");
-  if (!digits) return "";
-  return digits.slice(-6).padStart(6, "0");
+  const d = String(v ?? "").replace(/\D/g, "");
+  return d ? d.slice(-5).padStart(5, "0") : "";
 };
 const parseCodes = (input = "") =>
   dedupe(
