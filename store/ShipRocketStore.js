@@ -2,7 +2,11 @@
 
 import { create } from "zustand";
 
-const API = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "").trim();
+const API = (
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  ""
+).trim();
 
 /* ---------------- helpers ---------------- */
 const buildUrl = (path, params) => {
@@ -28,6 +32,19 @@ const errMsgFrom = (res, data) =>
   (res?.status ? `Request failed (${res.status})` : null) ||
   "Something went wrong";
 
+const normalizeError = (res, data) => new Error(errMsgFrom(res, data));
+
+/**
+ * ✅ Shiprocket Admin Store
+ * - Token fetch
+ * - Book shipment (✅ fixed route)
+ * - Reverse pickup (RMA)
+ * - Sync tracking from Shiprocket
+ *   ✅ supports BOTH:
+ *      - by orderId:      GET /api/orders/:id/tracking/sync
+ *      - by orderNumber:  GET /api/orders/tracking/sync?orderNumber=MIRAY-000271
+ * - Optional bulk booking (keep if backend exists)
+ */
 export const useShiprocketStore = create((set, get) => ({
   /* ============================================================
      STATE
@@ -40,9 +57,13 @@ export const useShiprocketStore = create((set, get) => ({
   token: null,
   tokenFetchedAt: null,
 
-  result: null,       // single booking response
-  bulkResult: null,   // bulk booking response
+  result: null, // single booking response
+  bulkResult: null, // bulk booking response
   reverseResult: null, // reverse pickup response
+
+  syncLoading: false,
+  syncError: null,
+  syncResult: null,
 
   /* ============================================================
      INTERNAL SETTERS
@@ -63,9 +84,18 @@ export const useShiprocketStore = create((set, get) => ({
       tokenError: err?.message || "Token fetch failed",
     }),
 
+  _startSync: () => set({ syncLoading: true, syncError: null }),
+  _successSync: () => set({ syncLoading: false }),
+  _errorSync: (err) =>
+    set({
+      syncLoading: false,
+      syncError: err?.message || "Tracking sync failed",
+    }),
+
   /* ============================================================
      GET TOKEN (ADMIN)
      GET /api/shiprocket/token
+     NOTE: optional (backend can handle token server-to-server)
   ============================================================ */
   fetchToken: async () => {
     get()._startToken();
@@ -77,7 +107,7 @@ export const useShiprocketStore = create((set, get) => ({
       });
 
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(errMsgFrom(res, data));
+      if (!res.ok) throw normalizeError(res, data);
 
       const token = data?.token || null;
       set({ token, tokenFetchedAt: Date.now() });
@@ -91,28 +121,75 @@ export const useShiprocketStore = create((set, get) => ({
   },
 
   /* ============================================================
-     SINGLE: BOOK SHIPROCKET
-     POST /api/orders/:id/ship
+     ✅ SINGLE: BOOK SHIPROCKET (ADMIN)
+     FIXED ROUTE:
+     POST /api/orders/:id/shiprocket/book
+     (matches your adminBookShiprocketIfMissing controller)
   ============================================================ */
   bookShipment: async (orderId) => {
     if (!orderId) throw new Error("orderId is required");
 
     get()._start();
     try {
-      const res = await fetch(buildUrl(`/api/orders/${orderId}/ship`), {
+      const res = await fetch(buildUrl(`/api/orders/${orderId}/shiprocket/book`), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: { Accept: "application/json" },
         credentials: "include",
       });
 
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(errMsgFrom(res, data));
+      if (!res.ok) throw normalizeError(res, data);
 
       set({ result: data });
       get()._success();
       return data;
     } catch (e) {
       get()._error(e);
+      throw e;
+    }
+  },
+
+  /* ============================================================
+     ✅ SYNC TRACKING (Shiprocket)
+     Supports:
+       1) syncTracking({ orderId })
+       2) syncTracking({ orderNumber })
+       3) syncTracking("orderId")  // backwards compatible
+  ============================================================ */
+  syncTracking: async (input) => {
+    let orderId = "";
+    let orderNumber = "";
+
+    if (typeof input === "string") orderId = input;
+    else {
+      orderId = String(input?.orderId || "").trim();
+      orderNumber = String(input?.orderNumber || "").trim();
+    }
+
+    if (!orderId && !orderNumber) {
+      throw new Error("orderId or orderNumber is required");
+    }
+
+    get()._startSync();
+    try {
+      const url = orderId
+        ? buildUrl(`/api/orders/${orderId}/tracking/sync`)
+        : buildUrl(`/api/orders/tracking/sync`, { orderNumber });
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "include",
+      });
+
+      const data = await safeJson(res);
+      if (!res.ok) throw normalizeError(res, data);
+
+      set({ syncResult: data });
+      get()._successSync();
+      return data;
+    } catch (e) {
+      get()._errorSync(e);
       throw e;
     }
   },
@@ -127,14 +204,17 @@ export const useShiprocketStore = create((set, get) => ({
 
     get()._start();
     try {
-      const res = await fetch(buildUrl(`/api/shiprocket/reverse/${orderId}/${rmaNumber}`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        credentials: "include",
-      });
+      const res = await fetch(
+        buildUrl(`/api/shiprocket/reverse/${orderId}/${rmaNumber}`),
+        {
+          method: "POST",
+          headers: { Accept: "application/json" },
+          credentials: "include",
+        }
+      );
 
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(errMsgFrom(res, data));
+      if (!res.ok) throw normalizeError(res, data);
 
       set({ reverseResult: data });
       get()._success();
@@ -146,21 +226,24 @@ export const useShiprocketStore = create((set, get) => ({
   },
 
   /* ============================================================
-     BULK BOOKING
-     (Only keep if your backend actually has this endpoint)
+     BULK BOOKING (optional)
      POST /api/orders/shiprocket/book-missing?limit=25&...
+     (keep only if this backend route exists)
   ============================================================ */
   bulkBookShiprocketMissing: async (filters = {}) => {
     get()._start();
     try {
-      const res = await fetch(buildUrl("/api/orders/shiprocket/book-missing", filters), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        credentials: "include",
-      });
+      const res = await fetch(
+        buildUrl("/api/orders/shiprocket/book-missing", filters),
+        {
+          method: "POST",
+          headers: { Accept: "application/json" },
+          credentials: "include",
+        }
+      );
 
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(errMsgFrom(res, data));
+      if (!res.ok) throw normalizeError(res, data);
 
       set({ bulkResult: data });
       get()._success();
@@ -176,21 +259,29 @@ export const useShiprocketStore = create((set, get) => ({
   ============================================================ */
   clearError: () => set({ error: null }),
   clearTokenError: () => set({ tokenError: null }),
+  clearSyncError: () => set({ syncError: null }),
 
   clearResult: () => set({ result: null }),
   clearBulkResult: () => set({ bulkResult: null }),
   clearReverseResult: () => set({ reverseResult: null }),
+  clearSyncResult: () => set({ syncResult: null }),
 
   resetStore: () =>
     set({
       loading: false,
       error: null,
+
       tokenLoading: false,
       tokenError: null,
       token: null,
       tokenFetchedAt: null,
+
       result: null,
       bulkResult: null,
       reverseResult: null,
+
+      syncLoading: false,
+      syncError: null,
+      syncResult: null,
     }),
 }));

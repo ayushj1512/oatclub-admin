@@ -19,6 +19,8 @@ import { toast } from "react-hot-toast";
 import { useOrderStore } from "@/store/orderStore";
 import OrderPrintPanel from "@/components/orders/OrderPrintPanel";
 import OrderRmaMention from "../../../components/orders/OrderRma";
+import OrderTrackingCard from "@/components/orders/OrderTrackingCard";
+
 const API = process.env.NEXT_PUBLIC_API_URL;
 
 const STORE_URL = "https://www.mirayfashions.com";
@@ -473,53 +475,12 @@ const productUrl = it?.productId?._id
   onRefresh={() => fetchOrderById(order._id)}
 />
 
-      {/* TRACKING */}
-<Card>
-  <h2 className="text-base font-semibold mb-4">Tracking</h2>
-
-  <div className="grid md:grid-cols-3 gap-4">
-    <div>
-      <label className="text-xs font-semibold text-gray-600">
-        Tracking ID / AWB
-      </label>
-      <input
-        className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
-        value={trackingId}
-        onChange={(e) => setTrackingId(e.target.value)}
-      />
-    </div>
-
-    <div>
-      <label className="text-xs font-semibold text-gray-600">
-        Courier Name
-      </label>
-      <input
-        className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
-        value={courierName}
-        onChange={(e) => setCourierName(e.target.value)}
-      />
-    </div>
-
-    <div>
-      <label className="text-xs font-semibold text-gray-600">
-        Tracking URL
-      </label>
-      <input
-        className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
-        value={trackingUrl}
-        onChange={(e) => setTrackingUrl(e.target.value)}
-        placeholder="https://..."
-      />
-    </div>
-  </div>
-
-  <button
-    onClick={updateTracking}
-    className="mt-4 px-6 py-2.5 rounded-lg bg-black text-white text-sm font-semibold hover:opacity-90 transition"
-  >
-    Save Tracking
-  </button>
-</Card>
+<OrderTrackingCard
+  orderId={order._id}
+  shipment={order?.shipment}
+  trackingDetails={order?.trackingDetails}
+  onRefresh={() => fetchOrderById(order._id)}
+/>
 
 
         {/* REMARKS */}
