@@ -35,13 +35,18 @@ production: [
   { label: "Production Dashboard", href: "/production" },
   { label: "Packed Orders", href: "/production/packed" },
 
-  { label: "Sampling", href: "/production/sampling" }, // ✅ NEW
- { label: "Stock Update", href: "/production/stock-update" },
+  { label: "Sampling", href: "/production/sampling" },
+  { label: "Stock Update", href: "/production/stock-update" },
   { label: "Pattern Number", href: "/production/pattern-number" },
   { label: "Fabric", href: "/production/fabric" },
-  { label: "Product Detail", href: "/production/product-detail" },   // ✅ new
-  { label: "Missing Patterns", href: "/production/missing-patterns" }, // ✅ new
+
+  { label: "Product Detail", href: "/production/product-detail" },
+  { label: "Missing Patterns", href: "/production/missing-patterns" },
+
+  // ✅ NEW
+  { label: "Barcode Generator", href: "/production/barcode" },
 ],
+
 
 
 
