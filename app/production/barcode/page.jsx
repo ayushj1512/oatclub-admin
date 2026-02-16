@@ -1,18 +1,18 @@
 // app/production/barcode/page.jsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Image from "next/image";
 import JsBarcode from "jsbarcode";
 import jsPDF from "jspdf";
-
 import { useAdminProductStore } from "@/store/adminProductStore";
 
 /* =========================================================
-   LABEL SIZE (2 x 1 inch)
-   ========================================================= */
+   LABEL SIZE (2 x 1 inch)  (length x breadth)
+========================================================= */
 const LABEL_W_IN = 2;
 const LABEL_H_IN = 1;
+
 const INCH_TO_MM = 25.4;
 const LABEL_W_MM = LABEL_W_IN * INCH_TO_MM; // 50.8
 const LABEL_H_MM = LABEL_H_IN * INCH_TO_MM; // 25.4
@@ -28,13 +28,11 @@ const toStr = (v) => String(v ?? "").trim();
 const normalizeSize = (v) => toStr(v).toUpperCase();
 
 const parseCodes = (raw) => {
-  // supports: "00123, 00124 00125\n00126"
   const parts = String(raw || "")
     .split(/[\s,]+/g)
     .map((x) => pad5(x))
     .filter(Boolean);
 
-  // dedupe
   const seen = new Set();
   const out = [];
   for (const c of parts) {
@@ -62,9 +60,8 @@ const getBestImage = (p) =>
   p?.thumbnail || (Array.isArray(p?.images) && p.images[0]) || "";
 
 /* =========================================================
-   BARCODE -> PNG DATAURL (for PDF / print sheet)
-   Uses an offscreen canvas per SKU
-   ========================================================= */
+   BARCODE -> PNG DATAURL
+========================================================= */
 function barcodeToPngDataUrl(value) {
   const v = toStr(value);
   if (!v) return "";
@@ -75,8 +72,7 @@ function barcodeToPngDataUrl(value) {
       format: "CODE128",
       displayValue: true,
       margin: 0,
-      // tuned to fit inside 2x1 label
-      height: 44, // px (we scale in PDF/print)
+      height: 44,
       fontSize: 12,
       textMargin: 2,
     });
@@ -87,31 +83,114 @@ function barcodeToPngDataUrl(value) {
 }
 
 /* =========================================================
+   RELIABLE PRINT (NO POPUP)
+   - Creates hidden iframe
+   - Waits for ALL images to load
+   - Then calls print()
+========================================================= */
+async function printHtmlViaIframe(html) {
+  return new Promise((resolve, reject) => {
+    try {
+      // remove old iframe if any
+      const old = document.getElementById("__print_iframe__");
+      if (old) old.remove();
+
+      const iframe = document.createElement("iframe");
+      iframe.id = "__print_iframe__";
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.style.opacity = "0";
+      iframe.setAttribute("aria-hidden", "true");
+
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (!doc) {
+        iframe.remove();
+        reject(new Error("Print iframe not available"));
+        return;
+      }
+
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      const win = iframe.contentWindow;
+      if (!win) {
+        iframe.remove();
+        reject(new Error("Print window not available"));
+        return;
+      }
+
+      // wait for images to load inside iframe
+      const waitImages = () => {
+        const imgs = Array.from(doc.images || []);
+        if (!imgs.length) return Promise.resolve();
+
+        return new Promise((res) => {
+          let done = 0;
+          const finish = () => {
+            done += 1;
+            if (done >= imgs.length) res();
+          };
+
+          imgs.forEach((img) => {
+            // if already loaded
+            if (img.complete && img.naturalWidth > 0) return finish();
+            img.onload = finish;
+            img.onerror = finish; // still proceed (better than stuck)
+          });
+        });
+      };
+
+      // when iframe finishes parsing + images loaded -> print
+      setTimeout(async () => {
+        await waitImages();
+        // small delay helps layout settle
+        setTimeout(() => {
+          try {
+            win.focus();
+            win.print();
+            // cleanup after print
+            setTimeout(() => {
+              iframe.remove();
+              resolve(true);
+            }, 500);
+          } catch (e) {
+            iframe.remove();
+            reject(e);
+          }
+        }, 150);
+      }, 50);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+/* =========================================================
    PAGE
-   - Multi product codes
-   - Per product choose size->SKU
-   - "Add to Sheet" asks qty
-   - "Print All / Download PDF" one sheet (auto-paginated)
-   ========================================================= */
+========================================================= */
 export default function BarcodePage() {
-  // store
   const storeLoading = useAdminProductStore((s) => s.loading);
   const fetchProducts = useAdminProductStore((s) => s.fetchProducts);
 
   const [inputCodes, setInputCodes] = useState("");
   const [loadError, setLoadError] = useState("");
 
-  // loaded products list
-  const [loaded, setLoaded] = useState([]); // [{ code, product, img, isVariable, skuOptions, selectedSize, selectedSku, error }]
+  const [loaded, setLoaded] = useState([]); // rows
   const [loadingCodes, setLoadingCodes] = useState(false);
 
-  // sheet items (what will be printed)
-  // each item is a single label: { id, productCode, title, sku, size, barcodePng }
+  // sheet items = labels
   const [sheet, setSheet] = useState([]);
-
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState("");
 
-  /* ---------------- build skuOptions for a product ---------------- */
   const buildSkuOptions = (p) => {
     const variants = Array.isArray(p?.variants) ? p.variants : [];
     if (variants.length) {
@@ -131,14 +210,12 @@ export default function BarcodePage() {
     return sku ? [{ size: "—", sku }] : [];
   };
 
-  /* ---------------- store-based fetch single product ---------------- */
   async function fetchOneProductByCode(code) {
     await fetchProducts({ productCode: code, page: 1, limit: 1 });
     const { products } = useAdminProductStore.getState();
     return Array.isArray(products) ? products[0] : null;
   }
 
-  /* ---------------- load multiple product codes ---------------- */
   const loadProducts = async () => {
     const codes = parseCodes(inputCodes);
     if (!codes.length) {
@@ -147,7 +224,10 @@ export default function BarcodePage() {
     }
 
     setLoadError("");
+    setPrinting(false);
+    setPrintError("");
     setLoadingCodes(true);
+
     try {
       const results = [];
 
@@ -173,7 +253,6 @@ export default function BarcodePage() {
           const isVariable = Array.isArray(p?.variants) && p.variants.length > 0;
           const img = getBestImage(p);
 
-          // auto select first sku
           let selectedSize = "";
           let selectedSku = "";
           if (skuOptions.length) {
@@ -211,13 +290,6 @@ export default function BarcodePage() {
     }
   };
 
-  /* ---------------- update selection per loaded row ---------------- */
-  const updateRow = (code, patch) => {
-    setLoaded((prev) =>
-      prev.map((r) => (r.code === code ? { ...r, ...patch } : r))
-    );
-  };
-
   const onSelectSize = (code, size) => {
     setLoaded((prev) =>
       prev.map((r) => {
@@ -229,15 +301,15 @@ export default function BarcodePage() {
     );
   };
 
-  /* =========================================================
-     ADD TO SHEET (asks qty)
-     ========================================================= */
   const askQty = (defaultQty = 1) => {
-    const raw = window.prompt("How many barcodes to print for this product?", String(defaultQty));
-    if (raw == null) return 0; // cancelled
+    const raw = window.prompt(
+      "How many barcodes to print for this product?",
+      String(defaultQty)
+    );
+    if (raw == null) return 0;
     const n = Number(String(raw).trim());
     if (!Number.isFinite(n) || n <= 0) return 0;
-    return Math.min(Math.floor(n), 999); // safety cap
+    return Math.min(Math.floor(n), 999);
   };
 
   const addRowToSheet = (row) => {
@@ -259,7 +331,9 @@ export default function BarcodePage() {
       const next = [...prev];
       for (let i = 0; i < qty; i++) {
         next.push({
-          id: `${productCode}-${sku}-${Date.now()}-${i}-${Math.random().toString(16).slice(2)}`,
+          id: `${productCode}-${sku}-${Date.now()}-${i}-${Math.random()
+            .toString(16)
+            .slice(2)}`,
           productCode,
           title,
           sku,
@@ -272,79 +346,85 @@ export default function BarcodePage() {
   };
 
   const clearSheet = () => setSheet([]);
-
   const removeOne = (id) => setSheet((prev) => prev.filter((x) => x.id !== id));
 
-  /* =========================================================
-     PRINT SHEET (2x1 inch labels)
-     ========================================================= */
-  const printSheet = () => {
+  /* =========================
+     PRINT ALL (FIXED)
+  ========================= */
+  const printSheet = async () => {
     if (!sheet.length) return;
 
-    // Build HTML with exact inch sizing
-    const html = `
-      <html>
-        <head>
-          <title>Barcodes</title>
-          <style>
-            @page { size: A4; margin: 10mm; }
-            body { margin: 0; font-family: Arial, sans-serif; }
-            .grid {
-              display: grid;
-              grid-template-columns: repeat(auto-fill, ${LABEL_W_IN}in);
-              grid-auto-rows: ${LABEL_H_IN}in;
-              gap: 2mm;
-              align-content: start;
-            }
-            .label {
-              width: ${LABEL_W_IN}in;
-              height: ${LABEL_H_IN}in;
-              border: 1px solid #ddd;
-              box-sizing: border-box;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              padding: 2mm;
-              overflow: hidden;
-            }
-            .label img {
-              width: 100%;
-              height: 100%;
-              object-fit: contain;
-              image-rendering: -webkit-optimize-contrast;
-            }
-            .meta { display:none; }
-          </style>
-        </head>
-        <body>
-          <div class="grid">
-            ${sheet
-              .map(
-                (x) => `
-                <div class="label">
-                  <img src="${x.barcodePng}" alt="${x.sku}" />
-                </div>
-              `
-              )
-              .join("")}
-          </div>
-          <script>
-            window.onload = function(){ window.print(); };
-          </script>
-        </body>
-      </html>
-    `;
+    setPrinting(true);
+    setPrintError("");
 
-    const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
+    try {
+      // IMPORTANT:
+      // - Use @page + fixed inch sizes
+      // - Use 100% scaling
+      // - Grid packs labels naturally
+      const html = `
+        <html>
+          <head>
+            <title>Barcodes</title>
+            <meta charset="utf-8" />
+            <style>
+              @page { size: A4; margin: 10mm; }
+              * { box-sizing: border-box; }
+              body { margin: 0; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, ${LABEL_W_IN}in);
+                grid-auto-rows: ${LABEL_H_IN}in;
+                gap: 2mm;
+                align-content: start;
+              }
+              .label {
+                width: ${LABEL_W_IN}in;
+                height: ${LABEL_H_IN}in;
+                border: 1px solid #ddd;
+                padding: 2mm;
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              .label img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="grid">
+              ${sheet
+                .map(
+                  (x) => `
+                    <div class="label">
+                      <img src="${x.barcodePng}" alt="${x.sku}" />
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>
+          </body>
+        </html>
+      `;
+
+      await printHtmlViaIframe(html);
+    } catch (e) {
+      setPrintError(
+        e?.message ||
+          "Print failed. If your browser blocks printing, allow popups/print and try again."
+      );
+    } finally {
+      setPrinting(false);
+    }
   };
 
-  /* =========================================================
-     PDF SHEET (A4, auto paginate)
-     2x1 inch label boxes (50.8mm x 25.4mm)
-     ========================================================= */
+  /* =========================
+     PDF SHEET (A4, paginate)
+  ========================= */
   const downloadSheetPdf = async () => {
     if (!sheet.length) return;
 
@@ -352,33 +432,24 @@ export default function BarcodePage() {
     try {
       const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
 
-      const pageW = doc.internal.pageSize.getWidth(); // ~210
-      const pageH = doc.internal.pageSize.getHeight(); // ~297
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
 
-      const margin = 10; // mm
-      const gap = 2; // mm
+      const margin = 10;
+      const gap = 2;
 
       const usableW = pageW - margin * 2;
       const usableH = pageH - margin * 2;
 
-      const cols = Math.max(
-        1,
-        Math.floor((usableW + gap) / (LABEL_W_MM + gap))
-      );
-      const rows = Math.max(
-        1,
-        Math.floor((usableH + gap) / (LABEL_H_MM + gap))
-      );
-
+      const cols = Math.max(1, Math.floor((usableW + gap) / (LABEL_W_MM + gap)));
+      const rows = Math.max(1, Math.floor((usableH + gap) / (LABEL_H_MM + gap)));
       const perPage = cols * rows;
 
       const drawLabel = (x, y, item) => {
-        // optional light border
         doc.setDrawColor(220);
         doc.rect(x, y, LABEL_W_MM, LABEL_H_MM);
 
-        // barcode image inside label (leave tiny padding)
-        const pad = 1.5; // mm
+        const pad = 1.5;
         const imgX = x + pad;
         const imgY = y + pad;
         const imgW = LABEL_W_MM - pad * 2;
@@ -388,9 +459,7 @@ export default function BarcodePage() {
       };
 
       for (let i = 0; i < sheet.length; i++) {
-        const pageIndex = Math.floor(i / perPage);
         const idxInPage = i % perPage;
-
         if (i > 0 && idxInPage === 0) doc.addPage();
 
         const r = Math.floor(idxInPage / cols);
@@ -408,7 +477,6 @@ export default function BarcodePage() {
     }
   };
 
-  /* ---------------- derived ---------------- */
   const loadedOkCount = useMemo(
     () => loaded.filter((r) => r.product && r.selectedSku && !r.error).length,
     [loaded]
@@ -424,7 +492,7 @@ export default function BarcodePage() {
               Barcode Sheet Generator
             </h1>
             <p className="text-sm text-neutral-600">
-              Label size: <span className="font-mono">2 × 1 inch</span> (length × breadth)
+              Label size: <span className="font-mono">2 × 1 inch</span>
             </p>
           </div>
           <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs text-neutral-600">
@@ -471,7 +539,7 @@ export default function BarcodePage() {
           ) : null}
         </div>
 
-        {/* Loaded products list */}
+        {/* Loaded products */}
         {loaded.length ? (
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {loaded.map((row) => {
@@ -523,7 +591,7 @@ export default function BarcodePage() {
                     </div>
                   </div>
 
-                  {/* Size/SKU select */}
+                  {/* Size/SKU */}
                   <div className="mt-3 grid gap-2">
                     <label className="text-xs font-medium text-neutral-700">
                       {p ? (row.isVariable ? "Size (auto SKU)" : "SKU") : "Size / SKU"}
@@ -556,7 +624,7 @@ export default function BarcodePage() {
                       <span className="font-mono">{row.selectedSku || "—"}</span>
                     </div>
 
-                    {/* Quick preview (2x1 inch visual) */}
+                    {/* Preview 2x1 inch */}
                     {p && row.selectedSku ? (
                       <div className="mt-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
                         <div className="text-xs text-neutral-600 mb-2">
@@ -564,16 +632,17 @@ export default function BarcodePage() {
                         </div>
                         <div
                           className="border border-neutral-200 bg-white overflow-hidden"
-                          style={{
-                            width: `${LABEL_W_IN}in`,
-                            height: `${LABEL_H_IN}in`,
-                          }}
+                          style={{ width: `${LABEL_W_IN}in`, height: `${LABEL_H_IN}in` }}
                         >
-                          {/* barcode image scaled to label size */}
                           <img
                             src={barcodeToPngDataUrl(row.selectedSku)}
                             alt={row.selectedSku}
-                            style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "contain",
+                              display: "block",
+                            }}
                           />
                         </div>
                       </div>
@@ -586,17 +655,6 @@ export default function BarcodePage() {
                         className="rounded-xl bg-black px-3 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
                       >
                         Add to Sheet (asks qty)
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          // quick fix: reload this one code
-                          setInputCodes(row.code);
-                          loadProducts();
-                        }}
-                        className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm hover:bg-neutral-50"
-                      >
-                        Reload
                       </button>
                     </div>
                   </div>
@@ -612,19 +670,23 @@ export default function BarcodePage() {
             <div>
               <div className="text-sm font-semibold">Print Sheet</div>
               <div className="text-xs text-neutral-600">
-                Total labels in sheet:{" "}
-                <span className="font-mono">{sheet.length}</span> • Size:{" "}
+                Total labels: <span className="font-mono">{sheet.length}</span> • Size:{" "}
                 <span className="font-mono">2×1 inch</span>
               </div>
+              {printError ? (
+                <div className="mt-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-red-600">
+                  {printError}
+                </div>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={printSheet}
-                disabled={!sheet.length}
+                disabled={!sheet.length || printing}
                 className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm hover:bg-neutral-50 disabled:opacity-50"
               >
-                Print All
+                {printing ? "Opening Print..." : "Print All"}
               </button>
 
               <button
@@ -645,7 +707,7 @@ export default function BarcodePage() {
             </div>
           </div>
 
-          {/* Sheet preview list (compact) */}
+          {/* Sheet preview */}
           {sheet.length ? (
             <div className="mt-4">
               <div className="text-xs text-neutral-600 mb-2">
@@ -695,23 +757,22 @@ export default function BarcodePage() {
 
               {sheet.length > 12 ? (
                 <div className="mt-2 text-xs text-neutral-500">
-                  Showing first 12 previews. PDF/Print will include all{" "}
+                  Showing first 12 previews. Print/PDF will include all{" "}
                   <span className="font-mono">{sheet.length}</span> labels.
                 </div>
               ) : null}
             </div>
           ) : (
             <div className="mt-3 text-xs text-neutral-500">
-              Add items from the product list using{" "}
+              Add items from above using{" "}
               <span className="font-mono">Add to Sheet</span> (it will ask qty).
             </div>
           )}
         </div>
 
         <div className="mt-3 text-xs text-neutral-500">
-          Notes: PDF/Print uses exact label size{" "}
-          <span className="font-mono">2×1 inch</span>. Printer scaling should be set to
-          <span className="font-mono"> Actual size / 100%</span> for perfect output.
+          Tip: For perfect physical size, in the browser print dialog set{" "}
+          <span className="font-mono">Scale = 100% / Actual size</span>.
         </div>
       </div>
     </div>
