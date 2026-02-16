@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useAdminProductStore } from "@/store/adminProductStore";
 import { useInventoryReservationStore } from "@/store/inventoryReservationStore";
+import StockCsvUploader from "../../components/inventory/StockCsvUploader.jsx";
+
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 const triggerReconcile = async ({ productId, variantId = null }) => {
@@ -343,338 +345,363 @@ const saveAllVariants = async (p) => {
 
   return (
     <div className="min-h-screen bg-white text-black">
-      {/* Controls */}
-      <div className="border-b border-black/10">
-        <div className="p-4 md:p-5 flex flex-col gap-3">
-          <div className="flex flex-col md:flex-row md:items-end gap-3">
-            <div className="min-w-[260px]">
-              <div className="text-lg font-semibold tracking-tight">{title}</div>
-              <div className="text-[11px] text-gray-600 mt-1">
-                {isBusy
-                  ? "Loading…"
-                  : `Products: ${totalProducts} • Showing: ${filteredProducts.length}${
-                      hideFootwear ? " • (Footwear hidden)" : ""
-                    }`}
-              </div>
-            </div>
-
-            <div className="flex-1" />
-
-            <div className="flex flex-col gap-2 w-full md:w-auto">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex w-full md:w-[520px]">
-                  <input
-                    className="px-3 py-2 text-sm bg-gray-50 border border-black/10 focus:border-black outline-none w-full rounded-l"
-                    placeholder="Search by productCode / title / SKU / size…"
-                    value={qDraft}
-                    onChange={(e) => setQDraft(e.target.value)}
-                    onKeyDown={onEnter}
-                  />
-                  <button
-                    className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 disabled:opacity-50 rounded-r"
-                    onClick={applySearch}
-                    disabled={isBusy}
-                  >
-                    Search
-                  </button>
-                </div>
-
-                <select
-                  className="px-3 py-2 text-sm bg-gray-50 border border-black/10 focus:border-black outline-none w-full md:w-64 rounded"
-                  value={catDraft}
-                  onChange={(e) => setCatDraft(e.target.value)}
-                >
-                  {categoryOptions.map((opt) => (
-                    <option key={opt || "__all"} value={opt}>
-                      {opt ? opt : "All categories"}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  className="px-3 py-2 text-sm border border-black/10 hover:bg-gray-50 rounded"
-                  onClick={clearFilters}
-                >
-                  Clear
-                </button>
-
-                <button
-                  className="px-3 py-2 text-sm border border-black/10 hover:bg-gray-50 disabled:opacity-50 rounded"
-                  onClick={loadAll}
-                  disabled={isBusy}
-                >
-                  {loadingAll ? "Refreshing…" : "Refresh"}
-                </button>
-              </div>
-
-              <div className="text-[11px] text-gray-500">
-                Tip: Variable products save stock by <b>size</b> (not variantId).
-              </div>
-            </div>
-          </div>
+ {/* Controls */}
+<div className="border-b border-black/10 bg-white">
+  <div className="p-4 md:p-5">
+    {/* Top row: title + filters */}
+    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      {/* Left: Title */}
+      <div className="min-w-[260px]">
+        <div className="text-lg font-semibold tracking-tight">{title}</div>
+        <div className="text-[11px] text-gray-600 mt-1">
+          {isBusy
+            ? "Loading…"
+            : `Products: ${totalProducts} • Showing: ${filteredProducts.length}${
+                hideFootwear ? " • (Footwear hidden)" : ""
+              }`}
         </div>
       </div>
 
-      {/* Body */}
-      <div className="p-4 md:p-6 space-y-2">
-        {isBusy ? (
-          <div className="p-4 text-sm text-gray-600">Loading…</div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="p-4 text-sm text-gray-600">No products found</div>
-        ) : (
-          filteredProducts.map((p) => {
-            const pid = t(p?._id);
-            const variants = safeArr(p?.variants);
-            const isVariable = variants.length > 0;
-            const opened = !!open[pid];
-            const { url, images, idx } = getImage(p);
+      {/* Right: Filters */}
+      <div className="w-full md:w-auto">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
+            {/* Search */}
+            <div className="flex w-full sm:w-[520px]">
+              <input
+                className="px-3 py-2 text-sm bg-gray-50 border border-black/10 focus:border-black outline-none w-full rounded-l"
+                placeholder="Search by productCode / title / SKU / size…"
+                value={qDraft}
+                onChange={(e) => setQDraft(e.target.value)}
+                onKeyDown={onEnter}
+              />
+              <button
+                className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 disabled:opacity-50 rounded-r shrink-0"
+                onClick={applySearch}
+                disabled={isBusy}
+              >
+                Search
+              </button>
+            </div>
 
-            const cats = safeArr(p?.categories)
-              .map((c) => t(c))
-              .filter((c) => c && !isMongoId(c));
+            {/* Category */}
+            <select
+              className="px-3 py-2 text-sm bg-gray-50 border border-black/10 focus:border-black outline-none w-full sm:w-64 rounded"
+              value={catDraft}
+              onChange={(e) => setCatDraft(e.target.value)}
+            >
+              {categoryOptions.map((opt) => (
+                <option key={opt || "__all"} value={opt}>
+                  {opt ? opt : "All categories"}
+                </option>
+              ))}
+            </select>
 
-            const simpleStock = Number(p?.stock ?? 0);
-            const totalVarStock = calcTotalVariantStock(p);
+            {/* Buttons */}
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-2 text-sm border border-black/10 hover:bg-gray-50 rounded"
+                onClick={clearFilters}
+              >
+                Clear
+              </button>
 
-            return (
-              <div key={pid} className="border rounded-lg overflow-hidden border-black/10">
-                <div className="p-3 md:p-4 flex gap-3 items-start">
-                  {/* Image */}
-                  <div className="w-[140px] shrink-0">
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100 border border-black/10 disabled:opacity-50 rounded"
-                        onClick={() => prevImg(p)}
-                        disabled={!images.length}
-                      >
-                        ←
-                      </button>
+              <button
+                className="px-3 py-2 text-sm border border-black/10 hover:bg-gray-50 disabled:opacity-50 rounded"
+                onClick={loadAll}
+                disabled={isBusy}
+              >
+                {loadingAll ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
+          </div>
 
-                      <div className="w-[92px] h-[68px] bg-gray-50 border border-black/10 overflow-hidden flex items-center justify-center rounded">
-                        {url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={url}
-                            alt={t(p?.title) || "product"}
-                            className="w-full h-full object-contain"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span className="text-xs text-gray-500">No image</span>
-                        )}
-                      </div>
+          <div className="text-[11px] text-gray-500">
+            Tip: Variable products save stock by <b>size</b> (not variantId).
+          </div>
+        </div>
+      </div>
+    </div>
 
-                      <button
-                        className="px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100 border border-black/10 disabled:opacity-50 rounded"
-                        onClick={() => nextImg(p)}
-                        disabled={!images.length}
-                      >
-                        →
-                      </button>
-                    </div>
+    {/* CSV uploader: separate row, full width */}
+    <div className="mt-4">
+      <StockCsvUploader
+        products={products}
+        updateProductStock={updateProductStock}
+        updateVariantStock={updateVariantStock}
+        loadAll={loadAll}
+        saving={saving}
+      />
+    </div>
+  </div>
+</div>
 
-                    {!!images.length && (
-                      <div className="text-[11px] text-gray-500 mt-1">
-                        {idx + 1}/{images.length}
-                      </div>
-                    )}
+
+     {/* Body */}
+<div className="p-4 md:p-6 space-y-3">
+  {isBusy ? (
+    <div className="p-4 text-sm text-gray-600">Loading…</div>
+  ) : filteredProducts.length === 0 ? (
+    <div className="p-4 text-sm text-gray-600">No products found</div>
+  ) : (
+    filteredProducts.map((p) => {
+      const pid = t(p?._id);
+      const variants = safeArr(p?.variants);
+      const isVariable = variants.length > 0;
+      const opened = !!open[pid];
+      const { url, images, idx } = getImage(p);
+
+      const cats = safeArr(p?.categories)
+        .map((c) => t(c))
+        .filter((c) => c && !isMongoId(c));
+
+      const simpleStock = Number(p?.stock ?? 0);
+      const totalVarStock = calcTotalVariantStock(p);
+
+      return (
+        <div key={pid} className="border border-black/10 rounded-lg overflow-hidden bg-white">
+          {/* Header Row */}
+          <div className="p-3 md:p-4 flex flex-col md:flex-row gap-3 md:gap-4 md:items-start">
+            {/* Image */}
+            <div className="w-full md:w-[150px] shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  className="px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100 border border-black/10 disabled:opacity-50 rounded"
+                  onClick={() => prevImg(p)}
+                  disabled={!images.length}
+                >
+                  ←
+                </button>
+
+                <div className="w-[92px] h-[68px] bg-gray-50 border border-black/10 overflow-hidden flex items-center justify-center rounded">
+                  {url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={url}
+                      alt={t(p?.title) || "product"}
+                      className="w-full h-full object-contain"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="text-xs text-gray-500">No image</span>
+                  )}
+                </div>
+
+                <button
+                  className="px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100 border border-black/10 disabled:opacity-50 rounded"
+                  onClick={() => nextImg(p)}
+                  disabled={!images.length}
+                >
+                  →
+                </button>
+              </div>
+
+              {!!images.length && (
+                <div className="text-[11px] text-gray-500 mt-1">
+                  {idx + 1}/{images.length}
+                </div>
+              )}
+            </div>
+
+            {/* Info + Actions */}
+            <div className="flex-1 min-w-0 flex flex-col gap-3">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                {/* Left: badges + title + cats */}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs px-2 py-1 rounded bg-black text-white">
+                      {t(p?.productCode) || "—"}
+                    </span>
+
+                    <span className="text-[11px] px-2 py-1 border border-black/10 bg-gray-50 rounded">
+                      {isVariable ? `Variable • ${variants.length} sizes` : "Simple"}
+                    </span>
+
+                    <span className="text-[11px] px-2 py-1 border border-black/10 bg-gray-50 rounded">
+                      {isVariable ? `Total stock: ${totalVarStock}` : `Stock: ${simpleStock}`}
+                    </span>
                   </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs px-2 py-1 rounded bg-black text-white">
-                            {t(p?.productCode) || "—"}
-                          </span>
+                  <div className="mt-1 font-medium truncate">{t(p?.title) || "—"}</div>
 
-                          <span className="text-[11px] px-2 py-1 border border-black/10 bg-gray-50 rounded">
-                            {isVariable ? `Variable • ${variants.length} sizes` : "Simple"}
-                          </span>
-
-                          <span className="text-[11px] px-2 py-1 border border-black/10 bg-gray-50 rounded">
-                            {isVariable ? `Total stock: ${totalVarStock}` : `Stock: ${simpleStock}`}
-                          </span>
-                        </div>
-
-                        <div className="mt-1 font-medium truncate">{t(p?.title) || "—"}</div>
-
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {cats.length ? (
-                            cats.slice(0, 8).map((c, i) => (
-                              <span
-                                key={`${pid}-cat-${i}`}
-                                className="px-2 py-1 text-[11px] rounded bg-gray-50 text-black border border-black/10"
-                              >
-                                {c}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-[11px] text-gray-400">—</span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          className="px-3 py-2 text-sm border border-black/10 hover:bg-gray-50 rounded"
-                          onClick={() => toggleOpen(pid)}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {cats.length ? (
+                      cats.slice(0, 8).map((c, i) => (
+                        <span
+                          key={`${pid}-cat-${i}`}
+                          className="px-2 py-1 text-[11px] rounded bg-gray-50 text-black border border-black/10"
                         >
-                          {opened ? "Hide" : "Expand"}
-                        </button>
-
-                        {isVariable ? (
-                          <button
-                            className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 disabled:opacity-50 rounded"
-                            onClick={() => saveAllVariants(p)}
-                            disabled={saving}
-                          >
-                            Save All
-                          </button>
-                        ) : (
-                          <button
-                            className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 disabled:opacity-50 rounded"
-                            onClick={() => saveSimple(p)}
-                            disabled={saving}
-                          >
-                            Save
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {!isVariable && (
-                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <div>
-                          <div className="text-[11px] text-gray-500 mb-1">SKU</div>
-                          <div className="px-3 py-2 text-sm bg-gray-50 border border-black/10 rounded">
-                            {t(p?.sku) || "—"}
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="text-[11px] text-gray-500 mb-1">Stock</div>
-                          <input
-                            className="px-3 py-2 text-sm border bg-gray-50 border-black/10 focus:border-black outline-none w-full rounded"
-                            value={getSimpleDraft(p)}
-                            onChange={(e) => setSimpleDraft(pid, e.target.value)}
-                            inputMode="numeric"
-                            placeholder="0"
-                          />
-                          <div className="text-[11px] text-gray-500 mt-1">
-                            Saved as integer (negative not allowed).
-                          </div>
-                        </div>
-                      </div>
+                          {c}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[11px] text-gray-400">—</span>
                     )}
                   </div>
                 </div>
 
-                {/* Variants */}
-                {opened && isVariable && (
-                  <div className="border-t border-black/10 bg-gray-50">
-                    <div className="p-3 md:p-4 overflow-x-auto">
-                      <table className="min-w-[920px] w-full text-sm bg-white border border-black/10 rounded">
-                        <thead>
-                          <tr className="text-left border-b border-black/10">
-                            <th className="p-3 w-[300px] font-semibold">SKU</th>
-                            <th className="p-3 w-[140px] font-semibold">Size</th>
-                            <th className="p-3 w-[280px] font-semibold">Attributes</th>
-                            <th className="p-3 w-[140px] font-semibold">Current</th>
-                            <th className="p-3 w-[180px] font-semibold">New Stock</th>
-                            <th className="p-3 w-[140px] font-semibold">Action</th>
-                          </tr>
-                        </thead>
+                {/* Right: buttons aligned */}
+                <div className="flex gap-2 lg:justify-end shrink-0">
+                  <button
+                    className="px-3 py-2 text-sm border border-black/10 hover:bg-gray-50 rounded"
+                    onClick={() => toggleOpen(pid)}
+                  >
+                    {opened ? "Hide" : "Expand"}
+                  </button>
 
-                        <tbody className="divide-y divide-black/5">
-                          {variants.map((v, i) => {
-                            const sku = t(v?.sku) || "—";
-                            const size = normalizeSize(getVariantSize(v));
-                            const current = Number(v?.stock ?? 0);
+                  {isVariable ? (
+                    <button
+                      className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 disabled:opacity-50 rounded"
+                      onClick={() => saveAllVariants(p)}
+                      disabled={saving}
+                    >
+                      Save All
+                    </button>
+                  ) : (
+                    <button
+                      className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 disabled:opacity-50 rounded"
+                      onClick={() => saveSimple(p)}
+                      disabled={saving}
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
+              </div>
 
-                            const attrs = safeArr(v?.attributes)
-                              .map((a) => {
-                                const key = t(a?.key);
-                                const val = t(a?.value);
-                                if (!key && !val) return "";
-                                return key && val ? `${key}: ${val}` : key || val;
-                              })
-                              .filter(Boolean)
-                              .slice(0, 4)
-                              .join(" • ");
-
-                            const newStock = getVariantDraft(pid, size, current);
-
-                            return (
-                              <tr key={`${pid}-v-${size || i}`} className="hover:bg-gray-50">
-                                <td className="p-3">
-                                  <div className="font-medium">{sku}</div>
-                                </td>
-
-                                <td className="p-3">
-                                  <span
-                                    className={[
-                                      "inline-flex px-2 py-1 text-xs rounded border",
-                                      size
-                                        ? "bg-gray-50 border-black/10"
-                                        : "bg-red-50 border-red-200 text-red-700",
-                                    ].join(" ")}
-                                    title={size ? "" : "Missing size mapping"}
-                                  >
-                                    {size || "MISSING"}
-                                  </span>
-                                </td>
-
-                                <td className="p-3">
-                                  <div className="text-xs text-gray-600">{attrs || "—"}</div>
-                                </td>
-
-                                <td className="p-3">
-                                  <div className="px-3 py-2 text-sm bg-gray-50 border border-black/10 rounded">
-                                    {current}
-                                  </div>
-                                </td>
-
-                                <td className="p-3">
-                                  <input
-                                    className="px-3 py-2 text-sm border bg-gray-50 border-black/10 focus:border-black outline-none w-full rounded"
-                                    value={newStock}
-                                    onChange={(e) => setVariantDraft(pid, size, e.target.value)}
-                                    inputMode="numeric"
-                                    placeholder="0"
-                                    disabled={!size}
-                                  />
-                                </td>
-
-                                <td className="p-3">
-                                  <button
-                                    className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 w-full disabled:opacity-50 rounded"
-                                    onClick={() => saveOneVariant(p, v)}
-                                    disabled={saving || !size}
-                                    title={!size ? "Cannot update without size" : ""}
-                                  >
-                                    Save
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-
-                      <div className="text-[11px] text-gray-500 mt-2">
-                        ⚠️ If any row shows <b>MISSING</b> size, please ensure variant has{" "}
-                        <code>size</code> field or attributes include <code>size</code>.
-                      </div>
+              {/* Simple product extra fields */}
+              {!isVariable && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-[11px] text-gray-500 mb-1">SKU</div>
+                    <div className="px-3 py-2 text-sm bg-gray-50 border border-black/10 rounded">
+                      {t(p?.sku) || "—"}
                     </div>
                   </div>
-                )}
+
+                  <div>
+                    <div className="text-[11px] text-gray-500 mb-1">Stock</div>
+                    <input
+                      className="px-3 py-2 text-sm border bg-gray-50 border-black/10 focus:border-black outline-none w-full rounded"
+                      value={getSimpleDraft(p)}
+                      onChange={(e) => setSimpleDraft(pid, e.target.value)}
+                      inputMode="numeric"
+                      placeholder="0"
+                    />
+                    <div className="text-[11px] text-gray-500 mt-1">
+                      Saved as integer (negative not allowed).
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Variants */}
+          {opened && isVariable && (
+            <div className="border-t border-black/10 bg-gray-50">
+              <div className="p-3 md:p-4 overflow-x-auto">
+                <table className="min-w-[920px] w-full text-sm bg-white border border-black/10 rounded">
+                  <thead>
+                    <tr className="text-left border-b border-black/10">
+                      <th className="p-3 w-[300px] font-semibold">SKU</th>
+                      <th className="p-3 w-[140px] font-semibold">Size</th>
+                      <th className="p-3 w-[280px] font-semibold">Attributes</th>
+                      <th className="p-3 w-[140px] font-semibold">Current</th>
+                      <th className="p-3 w-[180px] font-semibold">New Stock</th>
+                      <th className="p-3 w-[140px] font-semibold">Action</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-black/5">
+                    {variants.map((v, i) => {
+                      const sku = t(v?.sku) || "—";
+                      const size = normalizeSize(getVariantSize(v));
+                      const current = Number(v?.stock ?? 0);
+
+                      const attrs = safeArr(v?.attributes)
+                        .map((a) => {
+                          const key = t(a?.key);
+                          const val = t(a?.value);
+                          if (!key && !val) return "";
+                          return key && val ? `${key}: ${val}` : key || val;
+                        })
+                        .filter(Boolean)
+                        .slice(0, 4)
+                        .join(" • ");
+
+                      const newStock = getVariantDraft(pid, size, current);
+
+                      return (
+                        <tr key={`${pid}-v-${size || i}`} className="hover:bg-gray-50">
+                          <td className="p-3">
+                            <div className="font-medium">{sku}</div>
+                          </td>
+
+                          <td className="p-3">
+                            <span
+                              className={[
+                                "inline-flex px-2 py-1 text-xs rounded border",
+                                size
+                                  ? "bg-gray-50 border-black/10"
+                                  : "bg-red-50 border-red-200 text-red-700",
+                              ].join(" ")}
+                              title={size ? "" : "Missing size mapping"}
+                            >
+                              {size || "MISSING"}
+                            </span>
+                          </td>
+
+                          <td className="p-3">
+                            <div className="text-xs text-gray-600">{attrs || "—"}</div>
+                          </td>
+
+                          <td className="p-3">
+                            <div className="px-3 py-2 text-sm bg-gray-50 border border-black/10 rounded">
+                              {current}
+                            </div>
+                          </td>
+
+                          <td className="p-3">
+                            <input
+                              className="px-3 py-2 text-sm border bg-gray-50 border-black/10 focus:border-black outline-none w-full rounded"
+                              value={newStock}
+                              onChange={(e) => setVariantDraft(pid, size, e.target.value)}
+                              inputMode="numeric"
+                              placeholder="0"
+                              disabled={!size}
+                            />
+                          </td>
+
+                          <td className="p-3">
+                            <button
+                              className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 w-full disabled:opacity-50 rounded"
+                              onClick={() => saveOneVariant(p, v)}
+                              disabled={saving || !size}
+                              title={!size ? "Cannot update without size" : ""}
+                            >
+                              Save
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                <div className="text-[11px] text-gray-500 mt-2">
+                  ⚠️ If any row shows <b>MISSING</b> size, please ensure variant has{" "}
+                  <code>size</code> field or attributes include <code>size</code>.
+                </div>
               </div>
-            );
-          })
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      );
+    })
+  )}
+</div>
+
     </div>
   );
 }
