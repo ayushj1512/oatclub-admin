@@ -47,6 +47,13 @@ production: [
   { label: "Barcode Generator", href: "/production/barcode" },
 ],
 
+ // ✅ NEW: REVIEWS SIDEBAR GROUP
+  reviews: [
+    { label: "Reviews Dashboard", href: "/reviews" },
+    { label: "Manage Reviews", href: "/reviews/manage" },
+    { label: "Add Review", href: "/reviews/add" },
+  ],
+
 
 
 
@@ -280,7 +287,7 @@ export const routeSidebarMap = [
   { prefix: "/media", key: "media" },
   { prefix: "/blogs", key: "blogs" },
   { prefix: "/products", key: "products" },
-
+  { prefix: "/reviews", key: "reviews" },
   { prefix: "/wordpress", key: "wordpress" },
 
   // ✅ NEW: /rma route should show sidebar as RMA (or orders if you prefer)

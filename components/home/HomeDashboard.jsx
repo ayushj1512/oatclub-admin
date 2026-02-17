@@ -29,11 +29,16 @@ import {
   RotateCcw,
   Handshake,
   Footprints,
+  Star, // ✅ NEW for Reviews
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import useLoginStore from "@/store/useLoginStore";
-import { ROLE_DEFAULT_PERMS, DOMAIN_PERMISSIONS, hasPermission } from "@/config/loginConfig";
+import {
+  ROLE_DEFAULT_PERMS,
+  DOMAIN_PERMISSIONS,
+  hasPermission,
+} from "@/config/loginConfig";
 
 const QUOTES = [
   { text: "Small progress every day beats big plans someday.", tag: "Consistency" },
@@ -58,8 +63,12 @@ const DOMAIN_LIST = [
 
   { id: "orders", name: "Orders", icon: ClipboardList, route: "/orders" },
 
-  // ✅ NEW: Shiprocket
+  // ✅ Shiprocket
   { id: "shiprocket", name: "Shiprocket", icon: Package, route: "/shiprocket" },
+
+  // ✅ NEW: Reviews
+  // NOTE: route ko apne actual admin reviews page se match kar dena
+  { id: "reviews", name: "Reviews", icon: Star, route: "/reviews" },
 
   { id: "rma", name: "RMA Requests", icon: RotateCcw, route: "/rma" },
   { id: "media", name: "Media", icon: Images, route: "/media" },
@@ -115,8 +124,10 @@ export default function HomeDashboard() {
 
   const sortedDomains = useMemo(() => {
     const arr = [...allowedDomains];
-    if (sortBy === "default" || sortBy === "name_asc") return arr.sort((a, b) => a.name.localeCompare(b.name));
-    if (sortBy === "name_desc") return arr.sort((a, b) => b.name.localeCompare(a.name));
+    if (sortBy === "default" || sortBy === "name_asc")
+      return arr.sort((a, b) => a.name.localeCompare(b.name));
+    if (sortBy === "name_desc")
+      return arr.sort((a, b) => b.name.localeCompare(a.name));
     return arr;
   }, [allowedDomains, sortBy]);
 
@@ -238,10 +249,16 @@ export default function HomeDashboard() {
                     </p>
                   )}
 
-                  {/* ✅ Shiprocket hint */}
                   {id === "shiprocket" && (
                     <p className="text-xs text-gray-500 mt-1 text-center">
                       Manage Shiprocket sync, labels & tracking
+                    </p>
+                  )}
+
+                  {/* ✅ Reviews hint */}
+                  {id === "reviews" && (
+                    <p className="text-xs text-gray-500 mt-1 text-center">
+                      Moderate product reviews & ratings
                     </p>
                   )}
                 </motion.button>

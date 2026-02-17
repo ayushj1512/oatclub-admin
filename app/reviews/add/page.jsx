@@ -1,338 +1,507 @@
 // app/reviews/add/page.jsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { toast } from "react-hot-toast";
-import { useAdminProductStore } from "@/store/adminProductStore"; // ✅ Zustand product store
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import { motion } from "framer-motion";
+import {
+  ArrowLeft,
+  Star,
+  Save,
+  Loader2,
+  User,
+  BadgeCheck,
+  Image as ImageIcon,
+  Trash2,
+  Sparkles,
+} from "lucide-react";
 
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-const REVIEWS_API = `${BASE_URL}/api/reviews`;
+import useLoginStore from "@/store/useLoginStore";
+import { ROLE_DEFAULT_PERMS, DOMAIN_PERMISSIONS, hasPermission } from "@/config/loginConfig";
 
-/* ------------------------------------------------------------
-  Tiny UI helpers
------------------------------------------------------------- */
+import ProductPicker from "@/components/common/ProductPicker";
+import MediaPickerModal from "@/components/media/MediaPickerModal";
 
-const Input = (props) => (
-  <input
-    {...props}
-    className={`w-full rounded border px-3 py-2 text-sm outline-none focus:ring ${
-      props.className || ""
-    }`}
-  />
-);
+/* ---------------- helpers ---------------- */
+const API = (process.env.NEXT_PUBLIC_API_URL || "").trim();
+const safe = (v) => (v == null ? "" : String(v).trim());
+const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 
-const Select = (props) => (
-  <select
-    {...props}
-    className={`w-full rounded border px-3 py-2 text-sm outline-none focus:ring ${
-      props.className || ""
-    }`}
-  />
-);
+async function requestJSON(url, options = {}) {
+  const res = await fetch(url, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.message || "Request failed");
+  return data;
+}
 
-const Button = ({ variant = "solid", className = "", ...props }) => {
-  const base =
-    "rounded px-3 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed";
-  const styles =
-    variant === "solid"
-      ? "bg-black text-white hover:opacity-90"
-      : "border hover:bg-gray-50";
-  return <button {...props} className={`${base} ${styles} ${className}`} />;
+const StarsPicker = ({ value = 5, onChange }) => {
+  const v = clamp(Number(value) || 0, 1, 5);
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const n = i + 1;
+        const active = n <= v;
+        return (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange?.(n)}
+            className="p-2 rounded-xl hover:bg-gray-50 active:scale-95 transition"
+            title={`${n} star`}
+          >
+            <Star
+              size={22}
+              className={active ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}
+            />
+          </button>
+        );
+      })}
+      <span className="ml-2 text-sm text-gray-800 font-semibold">{v}/5</span>
+    </div>
+  );
+};
+
+const pickUrl = (m) => safe(m?.url);
+const pickPublicId = (m) => safe(m?.publicId);
+
+const uniqByPublicIdOrUrl = (arr = []) => {
+  const map = new Map();
+  for (const m of arr) {
+    const key = pickPublicId(m) || pickUrl(m);
+    if (!key) continue;
+    map.set(key, m);
+  }
+  return Array.from(map.values());
 };
 
 export default function AddReviewPage() {
-  /* ------------------------------------------------------------
-    ✅ Product Store (Zustand)
-    - loads products for dropdown
-  ------------------------------------------------------------ */
-  const {
-    products,
-    loading: productsLoading,
-    error: productsError,
-    fetchAllProducts,
-  } = useAdminProductStore();
+  const router = useRouter();
 
-  /* ------------------------------------------------------------
-    Form state
-  ------------------------------------------------------------ */
-  const [productId, setProductId] = useState("");
-  const [customerId, setCustomerId] = useState("");
+  // permission gate
+  const admin = useLoginStore((s) => s.admin);
+  const role = admin?.role || "viewer";
+  const permissions =
+    (admin?.permissions?.length ? admin.permissions : ROLE_DEFAULT_PERMS[role]) || [];
+  const canAccess = hasPermission(permissions, DOMAIN_PERMISSIONS.reviews);
 
+  // state
+  const [saving, setSaving] = useState(false);
+
+  // ✅ ProductPicker (single select)
+  const [productId, setProductId] = useState(null);
+
+  // review fields
+  const [customerId, setCustomerId] = useState(""); // ✅ optional now
   const [rating, setRating] = useState(5);
-  const [status, setStatus] = useState("approved");
-  const [verifiedPurchase, setVerifiedPurchase] = useState(false);
-
   const [title, setTitle] = useState("");
   const [reviewText, setReviewText] = useState("");
+  const [verifiedPurchase, setVerifiedPurchase] = useState(true);
 
-  // optional snapshots (backend snapshots anyway)
+  // optional customer snapshot fields (useful when customerId not present)
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
 
-  // optional images
-  const [images, setImages] = useState([]);
+  // ✅ Media system
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [mediaFolder, setMediaFolder] = useState("miray/reviews");
+  const [selectedMedia, setSelectedMedia] = useState([]);
 
-  /* ------------------------------------------------------------
-    Derived: sorted products for dropdown
-  ------------------------------------------------------------ */
-  const productOptions = useMemo(() => {
-    return (products || [])
-      .slice()
-      .sort((a, b) => String(a?.title || "").localeCompare(String(b?.title || "")));
-  }, [products]);
+  const images = useMemo(() => {
+    return uniqByPublicIdOrUrl(selectedMedia)
+      .map((m) => pickUrl(m))
+      .filter(Boolean);
+  }, [selectedMedia]);
 
-  /* ------------------------------------------------------------
-    Load products once
-  ------------------------------------------------------------ */
-  useEffect(() => {
-    fetchAllProducts().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const removeMediaAt = (idx) => setSelectedMedia((prev) => prev.filter((_, i) => i !== idx));
 
-  /* ------------------------------------------------------------
-    Helpers
-  ------------------------------------------------------------ */
-  const reset = () => {
-    setProductId("");
-    setCustomerId("");
-    setRating(5);
-    setStatus("approved");
-    setVerifiedPurchase(false);
-    setTitle("");
-    setReviewText("");
-    setCustomerName("");
-    setCustomerEmail("");
-    setCustomerPhone("");
-    setImages([]);
-  };
+  // ✅ only product is required now (rating always has default)
+  const canSubmit = useMemo(() => {
+    return !!safe(productId) && !saving;
+  }, [productId, saving]);
 
-  const submit = async () => {
-    if (!productId) return toast.error("Select a product");
-    if (!customerId) return toast.error("Customer ID is required");
+  const onCreate = async () => {
+    const product = safe(productId);
+    const customer = safe(customerId); // may be ""
+    const r = clamp(Number(rating) || 0, 1, 5);
 
-    const r = Number(rating);
-    if (Number.isNaN(r) || r < 1 || r > 5) return toast.error("Rating must be 1-5");
+    if (!product) return toast.error("Product selection required");
 
+    // if customerId not given, at least one snapshot field should exist (nice UX)
+    const hasSnapshot =
+      !!safe(customerName) || !!safe(customerEmail) || !!safe(customerPhone);
+
+    if (!customer && !hasSnapshot) {
+      // allow still, but warn (admin might want anonymous)
+      toast("Customer is optional. Add name/email/phone if you want.", { icon: "ℹ️" });
+    }
+
+    setSaving(true);
     try {
-      const hasImages = images?.length > 0;
-
-      // ✅ Review payload (json OR multipart)
-      const body = {
-        product: productId,
-        customer: customerId,
+      const payload = {
+        product,
         rating: r,
-        status,
+        title: safe(title),
+        reviewText: safe(reviewText),
         verifiedPurchase: !!verifiedPurchase,
-        title,
-        reviewText,
-
-        // optional snapshots
-        customerName,
-        customerEmail,
-        customerPhone,
+        images,
+        // ✅ send customer only if present (backend won’t try to find customer then)
+        ...(customer ? { customer } : {}),
+        // ✅ send snapshots (backend schema supports these)
+        ...(safe(customerName) ? { customerName: safe(customerName) } : {}),
+        ...(safe(customerEmail) ? { customerEmail: safe(customerEmail) } : {}),
+        ...(safe(customerPhone) ? { customerPhone: safe(customerPhone) } : {}),
       };
 
-      const payload = hasImages ? new FormData() : null;
-
-      if (hasImages) {
-        Object.entries(body).forEach(([k, v]) => payload.append(k, String(v ?? "")));
-        // ✅ backend multer should be: upload.array("images")
-        images.forEach((file) => payload.append("images", file));
-      }
-
-      const res = await fetch(REVIEWS_API, {
+      await requestJSON(`${API}/api/reviews`, {
         method: "POST",
-        credentials: "include",
-        headers: hasImages ? undefined : { "Content-Type": "application/json" },
-        body: hasImages ? payload : JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Failed to add review");
-
-      toast.success("Review added ✅");
-      reset();
+      toast.success("Review created");
+      router.push("/reviews");
     } catch (e) {
       console.error(e);
-      toast.error(e.message || "Failed to add review");
+      toast.error(e?.message || "Failed to create review");
+    } finally {
+      setSaving(false);
     }
   };
 
+  if (!canAccess) {
+    return (
+      <div className="min-h-screen bg-gray-50 px-4 py-10">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6">
+          <div className="text-lg font-semibold text-gray-900">Access denied</div>
+          <div className="text-sm text-gray-600 mt-1">
+            You don&apos;t have permission to add Reviews.
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700"
+          >
+            <ArrowLeft size={16} />
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-4 md:p-6">
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold">Add Review</h1>
-        <p className="text-sm text-gray-600">
-          Admin can create reviews manually (useful for importing offline reviews).
-        </p>
-      </div>
+    <div className="min-h-screen bg-gray-50 px-3 sm:px-6 md:px-8 py-6 sm:py-10">
+      <div>
+        {/* Top Bar */}
+        <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-4 sm:px-6 py-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3 min-w-0">
+              <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-white border border-blue-100 shrink-0 shadow-sm">
+                <Sparkles size={18} className="text-blue-700" />
+              </span>
 
-      {/* product store error */}
-      {productsError ? (
-        <div className="mb-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          Failed to load products: {productsError}
-        </div>
-      ) : null}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/reviews")}
+                    className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-white border border-gray-200 hover:bg-gray-50 shadow-sm"
+                    title="Back"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
 
-      <div className="rounded-xl border bg-white p-4 md:p-6">
-        {/* Product + customer */}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {/* ✅ Product dropdown (from store) */}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
-              Product
-            </label>
+                  <div className="text-xl sm:text-2xl font-semibold tracking-tight text-gray-900">
+                    Add Review
+                  </div>
 
-            <Select
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              disabled={productsLoading}
-            >
-              <option value="">
-                {productsLoading ? "Loading products..." : "Select product"}
-              </option>
+                  <span className="text-[11px] px-2 py-1 rounded-full bg-white border border-blue-100 text-blue-700">
+                    Product required • Customer optional
+                  </span>
+                </div>
 
-              {productOptions.map((p) => (
-                <option key={p._id} value={p._id}>
-                  {p.title} ({p.productCode})
-                </option>
-              ))}
-            </Select>
-
-            {/* manual fallback */}
-            <div className="mt-2 text-xs text-gray-500">Or paste Product ObjectId</div>
-            <Input
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              placeholder="Product ObjectId"
-              className="mt-2"
-            />
-          </div>
-
-          {/* Customer */}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
-              Customer ID
-            </label>
-            <Input
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              placeholder="Customer ObjectId"
-              required
-            />
-
-            {/* optional snapshot fields */}
-            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
-              <Input
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Name (optional)"
-              />
-              <Input
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-                placeholder="Email (optional)"
-              />
-              <Input
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="Phone (optional)"
-              />
+                <div className="mt-1 text-xs sm:text-[13px] text-gray-600">
+                  No custom upload logic — everything goes through the central Media Library.
+                </div>
+              </div>
             </div>
 
-            <div className="mt-1 text-xs text-gray-500">
-              * Optional — backend will snapshot from Customer model anyway.
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <div className="text-xs text-gray-600 bg-white border border-gray-200 rounded-2xl px-3 py-2">
+                Images: <span className="font-semibold text-gray-900">{images.length}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={onCreate}
+                disabled={!canSubmit}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 shadow-sm disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                Create Review
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Rating / status / verified */}
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
-              Rating (1-5)
-            </label>
-            <Input
-              type="number"
-              min={1}
-              max={5}
-              value={rating}
-              onChange={(e) => setRating(e.target.value)}
-            />
+        {/* Content */}
+        <div className="mt-6 grid grid-cols-1 xl:grid-cols-[1.2fr_.8fr] gap-4 sm:gap-6">
+          {/* Left: Details */}
+          <div className="bg-white border border-gray-200 rounded-3xl shadow-sm">
+            <div className="p-4 sm:p-6 border-b border-gray-100">
+              <div className="text-sm font-semibold text-gray-900">Review Details</div>
+              <div className="text-xs text-gray-600 mt-1">
+                Select product, (optional) customer, write review, set rating.
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6">
+              {/* Product */}
+              <div className="rounded-2xl border border-gray-200 p-3 sm:p-4 bg-gray-50">
+                <ProductPicker
+                  title="Pick a product for review"
+                  multiple={false}
+                  required
+                  value={productId}
+                  onChange={setProductId}
+                />
+                <div className="mt-2 text-[11px] text-gray-600">
+                  Selected Product ID:{" "}
+                  <span className="font-semibold text-gray-900">{safe(productId) || "—"}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {/* Customer ID (optional) */}
+                <div className="lg:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[11px] font-medium text-gray-600 flex items-center gap-1">
+                      <User size={12} /> Customer ID (optional)
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      Leave blank for admin/anonymous review
+                    </div>
+                  </div>
+                  <input
+                    value={customerId}
+                    onChange={(e) => setCustomerId(e.target.value)}
+                    placeholder="Mongo ObjectId (optional)"
+                    className="w-full px-3 py-3 rounded-2xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                {/* Snapshots (optional) */}
+                <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold text-gray-900">Customer Snapshot (optional)</div>
+                    <div className="text-[11px] text-gray-600">
+                      Useful when Customer ID is blank
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Name"
+                      className="w-full px-3 py-3 rounded-2xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-100 bg-white"
+                    />
+                    <input
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      placeholder="Email"
+                      className="w-full px-3 py-3 rounded-2xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-100 bg-white"
+                    />
+                    <input
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="Phone"
+                      className="w-full px-3 py-3 rounded-2xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-100 bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Rating */}
+                <div className="lg:col-span-2">
+                  <div className="text-[11px] font-medium text-gray-600 mb-2">Rating</div>
+                  <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                    <StarsPicker value={rating} onChange={setRating} />
+                  </div>
+                </div>
+
+                {/* Title */}
+                <div className="lg:col-span-2">
+                  <div className="text-[11px] font-medium text-gray-600 mb-1">Title (optional)</div>
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g. Great quality!"
+                    maxLength={100}
+                    className="w-full px-3 py-3 rounded-2xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                {/* Text */}
+                <div className="lg:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[11px] font-medium text-gray-600">Review Text</div>
+                    <div className="text-[11px] text-gray-500">{safe(reviewText).length}/1000</div>
+                  </div>
+                  <textarea
+                    value={reviewText}
+                    onChange={(e) => setReviewText(e.target.value)}
+                    placeholder="Write review..."
+                    rows={6}
+                    maxLength={1000}
+                    className="w-full px-3 py-3 rounded-2xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-100 resize-y"
+                  />
+                </div>
+
+                {/* Verified */}
+                <div className="lg:col-span-2">
+                  <label className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <span className="inline-flex items-center gap-2 text-sm text-gray-800">
+                      <input
+                        type="checkbox"
+                        checked={verifiedPurchase}
+                        onChange={(e) => setVerifiedPurchase(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <BadgeCheck size={16} className="text-green-700" />
+                      Verified Purchase
+                    </span>
+
+                    <span className="text-xs text-gray-600">Optional flag</span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Status</label>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="approved">approved</option>
-              <option value="pending">pending</option>
-              <option value="rejected">rejected</option>
-            </Select>
+          {/* Right: Media */}
+          <div className="bg-white border border-gray-200 rounded-3xl shadow-sm">
+            <div className="p-4 sm:p-6 border-b border-gray-100 flex items-end justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Review Images</div>
+                <div className="text-xs text-gray-600 mt-1">
+                  Select images using the central Media Library.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMediaOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+              >
+                <ImageIcon size={18} />
+                Select Media
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6">
+              {/* Folder */}
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
+                <div className="text-[11px] font-medium text-gray-600 mb-1">
+                  Cloudinary folder (optional)
+                </div>
+                <input
+                  value={mediaFolder}
+                  onChange={(e) => setMediaFolder(e.target.value)}
+                  placeholder="miray/reviews"
+                  className="w-full px-3 py-3 rounded-2xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-100 bg-white"
+                />
+                <div className="mt-1 text-[11px] text-gray-500">Passed to MediaPickerModal.</div>
+              </div>
+
+              {/* Selected media */}
+              <div className="mt-4">
+                {!selectedMedia.length ? (
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 text-sm text-gray-700">
+                    No media selected yet.
+                    <div className="text-xs text-gray-500 mt-1">
+                      Click <span className="font-semibold">Select Media</span> to pick/upload.
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-[11px] font-medium text-gray-600">
+                        Selected ({images.length})
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMedia([])}
+                        className="text-[11px] px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+
+                    <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(92px,1fr))]">
+                      {uniqByPublicIdOrUrl(selectedMedia).map((m, idx) => {
+                        const url = pickUrl(m);
+                        const name = safe(m?.originalName) || "media";
+                        return (
+                          <motion.div
+                            key={(pickPublicId(m) || url) + "-" + idx}
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="group relative rounded-2xl overflow-hidden border border-gray-200 bg-gray-50"
+                          >
+                            <div className="aspect-square w-full">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt={name} className="w-full h-full object-cover" />
+                            </div>
+
+                            <div className="absolute inset-x-2 bottom-2 flex items-center justify-between gap-2">
+                              <span className="text-[10px] px-2 py-1 rounded-full bg-white/90 border border-gray-200 truncate max-w-[78%]">
+                                {name}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() => removeMediaAt(idx)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center w-8 h-8 rounded-xl bg-white/90 border border-red-200 text-red-700 hover:bg-red-50"
+                                title="Remove"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-3 text-[11px] text-gray-500">
+                      Review will store only <span className="font-semibold">image URLs</span>.
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
-
-          <div className="flex items-center gap-2 pt-6">
-            <input
-              id="vp"
-              type="checkbox"
-              checked={verifiedPurchase}
-              onChange={(e) => setVerifiedPurchase(e.target.checked)}
-            />
-            <label htmlFor="vp" className="text-sm">
-              Verified Purchase
-            </label>
-          </div>
-        </div>
-
-        {/* Title + text */}
-        <div className="mt-4">
-          <label className="mb-1 block text-xs font-medium text-gray-600">Title</label>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Amazing quality!"
-          />
-        </div>
-
-        <div className="mt-3">
-          <label className="mb-1 block text-xs font-medium text-gray-600">
-            Review Text
-          </label>
-          <textarea
-            className="w-full rounded border px-3 py-2 text-sm outline-none focus:ring"
-            rows={5}
-            value={reviewText}
-            onChange={(e) => setReviewText(e.target.value)}
-            placeholder="Write review..."
-          />
-        </div>
-
-        {/* Images */}
-        <div className="mt-3">
-          <label className="mb-1 block text-xs font-medium text-gray-600">
-            Images (optional)
-          </label>
-          <input
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={(e) => setImages(Array.from(e.target.files || []))}
-          />
-          <div className="mt-1 text-xs text-gray-500">
-            Backend should use <b>upload.array("images")</b> so <b>req.files</b> works.
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" onClick={reset}>
-            Reset
-          </Button>
-          <Button onClick={submit} disabled={productsLoading}>
-            Create Review
-          </Button>
         </div>
       </div>
+
+      {/* ✅ Media System Modal */}
+      <MediaPickerModal
+        open={mediaOpen}
+        onClose={() => setMediaOpen(false)}
+        multiple
+        folder={mediaFolder || "miray/reviews"}
+        onSelect={(mediaList) => {
+          const list = Array.isArray(mediaList) ? mediaList : mediaList ? [mediaList] : [];
+          const merged = uniqByPublicIdOrUrl([...(selectedMedia || []), ...list]);
+          setSelectedMedia(merged);
+          setMediaOpen(false);
+          toast.success("Media selected");
+        }}
+      />
     </div>
   );
 }
