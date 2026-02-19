@@ -1155,6 +1155,10 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
+  /* ============================================================
+    ✅ SAMPLING STATUS
+  ============================================================ */
+
   updateSamplingStatus: async (productId, isSamplingDone) => {
     try {
       set({ saving: true });
@@ -1196,6 +1200,10 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
+
+     /* ============================================================
+    ✅ ADD COLOUR 
+  ============================================================ */
   updateProductColorsOnly: async (productId, colors) => {
     try {
       set({ saving: true, error: null });
@@ -1252,4 +1260,56 @@ export const useAdminProductStore = create((set, get) => ({
       set({ saving: false });
     }
   },
+
+    /* ============================================================
+    ✅ TOGGLE BEST SELLER
+    PATCH /api/products/:id/best-seller
+    - body empty => toggle
+    - body { isBestSeller: true/false } => force set
+  ============================================================ */
+  toggleBestSeller: async (productId, nextValue) => {
+    try {
+      set({ saving: true, error: null });
+
+      const body =
+        typeof nextValue === "boolean" ? { isBestSeller: nextValue } : {};
+
+      const res = await fetch(`${API}/${productId}/best-seller`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Best seller update failed");
+
+      const updated = data.product;
+
+      // ✅ edit page
+      if (get().product?._id === productId) set({ product: updated });
+
+      // ✅ grid list
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          p._id === productId
+            ? { ...p, isBestSeller: !!updated?.isBestSeller }
+            : p
+        ),
+      }));
+
+      toast.success(
+        updated?.isBestSeller ? "Marked Best Seller ✅" : "Removed Best Seller ✅"
+      );
+
+      return updated;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
 }));

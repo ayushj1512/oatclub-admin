@@ -1,9 +1,10 @@
 // store/bestseller.store.js
 // ✅ Minimal Bestseller Store (Zustand)
-// - Safe BASE handling (supports relative /api)
-// - fetchIds() returns ordered ids (backend position order)
-// - add() idempotent (works with 200/201)
-// - setOrder(ids) persists order (PUT/POST /order)
+// ✅ UPDATED:
+// - credentials: "include" for cookie auth
+// - cache: "no-store"
+// - safer JSON parsing for empty responses
+// - keep canonical order by re-fetching ids after add/remove/setOrder
 
 import { create } from "zustand";
 import { toast } from "react-hot-toast";
@@ -11,8 +12,12 @@ import { toast } from "react-hot-toast";
 const BASE = (process.env.NEXT_PUBLIC_BACKEND_URL || "").trim().replace(/\/+$/, "");
 const API = BASE ? `${BASE}/api/bestseller` : "/api/bestseller";
 
+const uniq = (a) => Array.from(new Set((a || []).map(String).filter(Boolean)));
+
 const request = async (url, options = {}) => {
   const res = await fetch(url, {
+    credentials: "include",
+    cache: "no-store",
     ...options,
     headers: {
       ...(options.body ? { "Content-Type": "application/json" } : {}),
@@ -20,12 +25,13 @@ const request = async (url, options = {}) => {
     },
   });
 
-  const data = await res.json().catch(() => null);
+  // handle empty body safely
+  const text = await res.text().catch(() => "");
+  const data = text ? JSON.parse(text) : null;
+
   if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
   return data;
 };
-
-const uniq = (a) => Array.from(new Set((a || []).map(String).filter(Boolean)));
 
 export const useBestsellerStore = create((set, get) => ({
   items: [], // docs
@@ -74,17 +80,21 @@ export const useBestsellerStore = create((set, get) => ({
       set({ saving: true, error: null });
 
       // idempotent controller returns existing doc (200) or new (201)
-      const doc = await request(API, { method: "POST", body: JSON.stringify({ productId: pid }) });
+      const doc = await request(API, {
+        method: "POST",
+        body: JSON.stringify({ productId: pid }),
+      });
 
-      const gotPid = String(doc?.productId || pid);
-
-      // keep local ids ordered: add to END if not present
+      // optimistic local update (keep ids unique)
       set((st) => ({
         items: doc?._id
           ? [doc, ...(st.items || []).filter((x) => String(x?._id) !== String(doc._id))]
           : st.items,
-        ids: st.ids?.includes(gotPid) ? st.ids : [...(st.ids || []), gotPid],
+        ids: st.ids?.includes(pid) ? st.ids : [...(st.ids || []), pid],
       }));
+
+      // ✅ canonical order from server (position-based)
+      await get().fetchIds();
 
       return doc;
     } catch (e) {
@@ -111,6 +121,9 @@ export const useBestsellerStore = create((set, get) => ({
         items: (st.items || []).filter((x) => String(x?._id) !== String(deleted?._id || bid)),
         ids: pid ? (st.ids || []).filter((x) => x !== pid) : st.ids,
       }));
+
+      // ✅ canonical refresh
+      await get().fetchIds();
 
       return data;
     } catch (e) {
@@ -139,6 +152,9 @@ export const useBestsellerStore = create((set, get) => ({
           : st.items,
       }));
 
+      // ✅ canonical refresh
+      await get().fetchIds();
+
       return data;
     } catch (e) {
       set({ error: e.message });
@@ -149,28 +165,46 @@ export const useBestsellerStore = create((set, get) => ({
     }
   },
 
-  // ✅ Persist order
+  // ✅ Persist order (primary: { ids })
   setOrder: async (ids) => {
     try {
       const ordered = uniq(Array.isArray(ids) ? ids : []);
+      if (!ordered.length) throw new Error("ids[] is required");
+
       set({ saving: true, error: null, ids: ordered });
 
-      const payload = { ids: ordered };
-      const tries = [
-        () => request(`${API}/order`, { method: "PUT", body: JSON.stringify(payload) }),
-        () => request(`${API}/order`, { method: "POST", body: JSON.stringify(payload) }),
-        () => request(`${API}/reorder`, { method: "PUT", body: JSON.stringify(payload) }),
+      const endpoints = [`${API}/order`, `${API}/reorder`, `${API}/ids/order`];
+      const methods = ["PUT", "POST", "PATCH"];
+
+      const payloads = [
+        { ids: ordered }, // ✅ your backend expects this
+        { productIds: ordered },
+        { bestsellerIds: ordered },
+        { order: ordered.map((productId, index) => ({ productId, index })) },
       ];
 
       let lastErr = null;
-      for (const fn of tries) {
-        try {
-          const out = await fn();
-          return out;
-        } catch (e) {
-          lastErr = e;
+
+      for (const url of endpoints) {
+        for (const method of methods) {
+          for (const payload of payloads) {
+            try {
+              const out = await request(url, {
+                method,
+                body: JSON.stringify(payload),
+              });
+
+              // ✅ after saving, fetch canonical ids (server position)
+              await get().fetchIds();
+
+              return out;
+            } catch (e) {
+              lastErr = e;
+            }
+          }
         }
       }
+
       throw lastErr || new Error("Order save failed");
     } catch (e) {
       set({ error: e.message });
