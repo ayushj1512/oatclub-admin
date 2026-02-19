@@ -12,8 +12,8 @@ import ProductVariantsEditor from "@/components/product/ProductVariantsEditor";
 import ProductImagesEditor from "@/components/product/ProductImagesEditor";
 import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
-import ProductFabricAssignment from "@/components/product/ProductFabricAssignment";
 import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
+import FabricAdd from "@/components/product/FabricAdd"; // ✅ NEW (replaces ProductFabricAssignment)
 
 const BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
 
@@ -25,7 +25,7 @@ const n = (v, fb = 0) => {
 };
 const uniqLower = (arr) =>
   Array.from(
-    new Set((arr || []).map((x) => s(x).trim().toLowerCase()).filter(Boolean))
+    new Set((arr || []).map((x) => s(x).trim().toLowerCase()).filter(Boolean)),
   );
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -47,7 +47,6 @@ export default function ProductDetailsPage({ params }) {
   const [product, setProduct] = useState(null);
   const [collections, setCollections] = useState([]);
   const [allAttributes, setAllAttributes] = useState([]);
-
   const [variantsDirty, setVariantsDirty] = useState(false);
 
   const [form, setForm] = useState({
@@ -57,7 +56,6 @@ export default function ProductDetailsPage({ params }) {
     categories: [],
     isActive: true,
 
-    // content (NEW ✅)
     shortDescription: "",
     howToStyle: "",
     fabricDetails: "",
@@ -66,21 +64,17 @@ export default function ProductDetailsPage({ params }) {
     tagsText: "",
     colorsText: "",
 
-    // attrs / variants
     attributes: [],
     variants: [],
 
-    // media
     images: [],
     thumbnail: "",
 
-    // fabrics + cross-sell + collections
-    fabrics: [],
+    fabrics: [], // ✅ NEW
     crossSellProducts: [],
     collections: [],
 
-    // advanced
-    highlights: [], // legacy (safe)
+    highlights: [],
     weight: 0,
     dimensions: { length: 0, width: 0, height: 0, unit: "cm" },
     metaTitle: "",
@@ -92,7 +86,7 @@ export default function ProductDetailsPage({ params }) {
 
   const showHsn = useMemo(
     () => isApparelCategory(editing ? form.categories : product?.categories),
-    [editing, form.categories, product?.categories]
+    [editing, form.categories, product?.categories],
   );
 
   /* ---------------- load master data ---------------- */
@@ -124,9 +118,7 @@ export default function ProductDetailsPage({ params }) {
 
         const imgs = safeImages(pData);
         const thumb =
-          pData?.thumbnail && imgs.includes(pData.thumbnail)
-            ? pData.thumbnail
-            : imgs[0] || "";
+          pData?.thumbnail && imgs.includes(pData.thumbnail) ? pData.thumbnail : imgs[0] || "";
 
         setForm({
           title: s(pData?.title),
@@ -150,7 +142,6 @@ export default function ProductDetailsPage({ params }) {
             mode: a?.attribute ? "select" : "custom",
           })),
 
-          // ⚠️ schema: variant has NO price fields now
           variants: safeArr(pData?.variants).map((v) => ({
             _id: v?._id,
             sku: s(v?.sku),
@@ -163,16 +154,15 @@ export default function ProductDetailsPage({ params }) {
           images: imgs,
           thumbnail: thumb,
 
-          fabrics: safeArr(pData?.fabrics),
+          fabrics: safeArr(pData?.fabrics), // ✅ NEW
           crossSellProducts: safeArr(pData?.crossSellProducts).map((x) =>
-            typeof x === "string" ? x : x?._id
+            typeof x === "string" ? x : x?._id,
           ),
           collections: safeArr(pData?.collections),
 
           highlights: safeArr(pData?.highlights),
           weight: n(pData?.weight),
-          dimensions:
-            pData?.dimensions || { length: 0, width: 0, height: 0, unit: "cm" },
+          dimensions: pData?.dimensions || { length: 0, width: 0, height: 0, unit: "cm" },
           metaTitle: s(pData?.metaTitle),
           metaDescription: s(pData?.metaDescription),
           keywords: safeArr(pData?.keywords),
@@ -199,10 +189,7 @@ export default function ProductDetailsPage({ params }) {
 
   const reload = async () => {
     setEditing(false);
-    // re-trigger effect by just calling same load block quickly
-    // simplest: refresh route
     router.refresh?.();
-    // fallback: soft reload
     window.location.reload();
   };
 
@@ -230,6 +217,16 @@ export default function ProductDetailsPage({ params }) {
         patternNumber: s(v?.patternNumber).trim(),
       }));
 
+      // ✅ fabrics: only keep rows that have fabricName
+      const cleanedFabrics = safeArr(form.fabrics)
+        .map((f) => ({
+          fabricName: s(f?.fabricName).trim(),
+          fabricCode: s(f?.fabricCode).trim(),
+          role: s(f?.role || "main").trim().toLowerCase(),
+          color: s(f?.color).trim(), // ✅ NEW: fabric color
+        }))
+        .filter((f) => !!f.fabricName);
+
       const payload = {
         title: s(form.title).trim(),
         price: n(form.price),
@@ -238,21 +235,15 @@ export default function ProductDetailsPage({ params }) {
         categories: safeArr(form.categories).filter(Boolean),
         isActive: !!form.isActive,
 
-        // ✅ NEW schema fields
         shortDescription: s(form.shortDescription).trim(),
         howToStyle: s(form.howToStyle).trim(),
         fabricDetails: s(form.fabricDetails).trim(),
-        keyFeatures: safeArr(form.keyFeaturesText)
-          ? s(form.keyFeaturesText)
-              .split(",")
-              .map((x) => x.trim())
-              .filter(Boolean)
-          : [],
+        keyFeatures: s(form.keyFeaturesText)
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean),
         specifications: safeArr(form.specifications)
-          .map((r) => ({
-            key: s(r?.key).trim(),
-            value: s(r?.value).trim(),
-          }))
+          .map((r) => ({ key: s(r?.key).trim(), value: s(r?.value).trim() }))
           .filter((r) => r.key),
 
         images: safeArr(form.images).filter(Boolean),
@@ -261,23 +252,16 @@ export default function ProductDetailsPage({ params }) {
         tags: uniqLower(s(form.tagsText).split(",")),
         colors: uniqLower(s(form.colorsText).split(",")),
 
-        fabrics: safeArr(form.fabrics),
+        fabrics: cleanedFabrics, // ✅ NEW
         attributes: cleanedAttributes,
-
         ...(variantsDirty ? { variants: cleanedVariants } : {}),
 
         crossSellProducts: safeArr(form.crossSellProducts).filter(Boolean),
         collections: safeArr(form.collections),
 
-        // advanced
         highlights: safeArr(form.highlights),
         weight: n(form.weight),
-        dimensions: form.dimensions || {
-          length: 0,
-          width: 0,
-          height: 0,
-          unit: "cm",
-        },
+        dimensions: form.dimensions || { length: 0, width: 0, height: 0, unit: "cm" },
         metaTitle: s(form.metaTitle),
         metaDescription: s(form.metaDescription),
         keywords: safeArr(form.keywords),
@@ -286,7 +270,7 @@ export default function ProductDetailsPage({ params }) {
       };
 
       const res = await fetch(`${BACKEND}/api/products/${product._id}`, {
-        method: "PATCH", // ✅ matches your updated controller
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -296,17 +280,17 @@ export default function ProductDetailsPage({ params }) {
 
       alert("Product updated ✅");
       setEditing(false);
-      // reload current product without full refresh
-      setProduct(data?.product || data);
       setVariantsDirty(false);
 
-      // rehydrate UI from server response
       const updated = data?.product || data;
+      setProduct(updated);
+
       const imgs = safeImages(updated);
       setForm((p) => ({
         ...p,
         images: imgs,
         thumbnail: imgs[0] || "",
+        fabrics: safeArr(updated?.fabrics),
       }));
     } catch (e) {
       console.error("❌ save error:", e);
@@ -322,9 +306,7 @@ export default function ProductDetailsPage({ params }) {
     if (!confirm("Delete this product?")) return;
 
     try {
-      const res = await fetch(`${BACKEND}/api/products/${product._id}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(`${BACKEND}/api/products/${product._id}`, { method: "DELETE" });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.message || "Delete failed");
 
@@ -340,7 +322,6 @@ export default function ProductDetailsPage({ params }) {
 
   return (
     <section className="min-h-screen bg-gray-50 p-6 md:p-10">
-      {/* ✅ removed max-width caps */}
       <div className="w-full space-y-8">
         <button
           onClick={() => router.push("/products")}
@@ -464,12 +445,7 @@ export default function ProductDetailsPage({ params }) {
 
           {editing ? (
             <label className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="isActive"
-                checked={!!form.isActive}
-                onChange={handleChange}
-              />
+              <input type="checkbox" name="isActive" checked={!!form.isActive} onChange={handleChange} />
               Active (visible)
             </label>
           ) : null}
@@ -498,7 +474,7 @@ export default function ProductDetailsPage({ params }) {
           )}
         </div>
 
-        {/* Content (UPDATED ✅) */}
+        {/* Content */}
         <ProductContentEditor
           editable={editing}
           value={{
@@ -547,19 +523,24 @@ export default function ProductDetailsPage({ params }) {
                 placeholder="Comma-separated colors e.g. red, black, navy"
                 className="w-full rounded-xl bg-gray-100 px-3 py-2 outline-none"
               />
-              <p className="text-xs text-gray-500">
-                Stored at product level for filtering.
-              </p>
+              <p className="text-xs text-gray-500">Stored at product level for filtering.</p>
             </div>
           )}
         </div>
 
-        {/* Fabrics */}
-        <ProductFabricAssignment
-          value={editing ? form.fabrics : product.fabrics}
-          editable={editing}
-          onChange={(next) => setForm((p) => ({ ...p, fabrics: next }))}
-        />
+        {/* ✅ Fabrics (NEW component) */}
+        <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
+          <div>
+            <h2 className="text-lg md:text-xl font-semibold">Fabrics</h2>
+            <p className="text-sm text-gray-500">Fabric name is required per row.</p>
+          </div>
+
+          <FabricAdd
+            value={editing ? form.fabrics : safeArr(product?.fabrics)}
+            editable={editing}
+            onChange={(next) => setForm((p) => ({ ...p, fabrics: next }))}
+          />
+        </div>
 
         {/* Attributes */}
         <AttributeSelector

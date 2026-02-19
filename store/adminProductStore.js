@@ -155,51 +155,66 @@ const normalizeProductPayload = (payload) => {
 
 
 const normalizeFabricsPayload = (fabrics) => {
+  const s = (v) => String(v ?? "").trim();
+  const ROLES = new Set(["main", "lining", "contrast", "padding", "other"]);
+
   // allow JSON string
   if (typeof fabrics === "string") {
-    try {
-      fabrics = JSON.parse(fabrics);
-    } catch {
-      return [];
-    }
+    try { fabrics = JSON.parse(fabrics); }
+    catch { return []; }
   }
 
   if (!Array.isArray(fabrics)) return [];
 
-  const ROLE_SET = new Set(["main", "lining", "contrast", "padding", "other"]);
-  const UNIT_SET = new Set(["meter", "gram"]);
   const seen = new Set();
-
   const out = [];
+
   for (const f of fabrics) {
-    const fabricCode = String(f?.fabricCode || "").trim();
-    if (!fabricCode) continue;
+    // allow string row → fabricName
+    if (typeof f === "string") {
+      const fabricName = s(f);
+      if (!fabricName) continue;
 
-    const roleRaw = String(f?.role || "main").trim();
-    const role = ROLE_SET.has(roleRaw) ? roleRaw : "main";
+      const key = `${fabricName.toLowerCase()}__main`;
+      if (seen.has(key)) continue;
+      seen.add(key);
 
-    const unitRaw = String(f?.consumption?.unit || "meter").trim();
-    const unit = UNIT_SET.has(unitRaw) ? unitRaw : "meter";
+      out.push({
+        fabricName,
+        fabricCode: "",
+        fabricColor: "",
+        role: "main",
+      });
+      continue;
+    }
 
-    let value = Number(f?.consumption?.value ?? 0);
-    if (Number.isNaN(value) || value < 0) value = 0;
+    if (!f || typeof f !== "object") continue;
 
-    const notes = String(f?.notes || "").trim();
+    const fabricName = s(f.fabricName);
+    const fabricCode = s(f.fabricCode);
+    const fabricColor = s(f.fabricColor);
+    const roleRaw = s(f.role || "main").toLowerCase();
+    const role = ROLES.has(roleRaw) ? roleRaw : "main";
 
-    const key = `${fabricCode}__${role}`;
-    if (seen.has(key)) continue; // de-dupe
+    // backward compat: if only fabricCode came
+    const finalName = fabricName || fabricCode;
+    if (!finalName) continue;
+
+    const key = `${finalName.toLowerCase()}__${role}`;
+    if (seen.has(key)) continue;
     seen.add(key);
 
     out.push({
-      fabricCode,
+      fabricName: finalName,
+      fabricCode: fabricCode || "",
+      fabricColor: fabricColor || "",
       role,
-      consumption: { value, unit },
-      notes,
     });
   }
 
   return out;
 };
+
 
 // ✅ numeric hygiene for stock endpoints
 const toNonNegInt = (v, fallback = 0) => {

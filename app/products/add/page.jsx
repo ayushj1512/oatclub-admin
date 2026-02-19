@@ -12,6 +12,7 @@ import ProductContentEditor from "@/components/product/ProductContentEditor";
 import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
 import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
+import FabricAdd from "@/components/product/FabricAdd"; // ✅ NEW
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -143,7 +144,6 @@ function ColorsPicker({ valueText, onChangeText }) {
 
   return (
     <div className="space-y-3">
-      {/* Chips */}
       <div className="flex flex-wrap gap-2">
         {BASIC_COLORS.map((c) => {
           const key = normColor(c);
@@ -164,7 +164,6 @@ function ColorsPicker({ valueText, onChangeText }) {
         })}
       </div>
 
-      {/* Type to add */}
       <div className="space-y-2">
         <input
           className="input"
@@ -183,7 +182,6 @@ function ColorsPicker({ valueText, onChangeText }) {
           onBlur={flushTyped}
         />
 
-        {/* Selected pills */}
         {!!selected.length && (
           <div className="flex flex-wrap gap-2">
             {selected.map((c) => (
@@ -205,7 +203,6 @@ function ColorsPicker({ valueText, onChangeText }) {
           </div>
         )}
 
-        {/* Hidden text state (so your existing payload logic works) */}
         <p className="text-xs text-gray-500">
           Stored as: <span className="font-medium">{valueText || "—"}</span>
         </p>
@@ -237,6 +234,8 @@ export default function AddProductPage() {
 
     tagsText: "",
     colorsText: "",
+
+    fabrics: [], // ✅ NEW
 
     images: [],
     thumbnail: "",
@@ -296,7 +295,6 @@ export default function AddProductPage() {
 
     const tags = parseList(form.tagsText).map((t) => t.toLowerCase());
     const colors = parseList(form.colorsText).map((c) => normColor(c));
-
     const keyFeatures = parseList(form.keyFeaturesText);
     const specifications = parseSpecs(form.specificationsText);
 
@@ -313,6 +311,8 @@ export default function AddProductPage() {
       fabricDetails: String(form.fabricDetails || "").trim(),
       keyFeatures,
       specifications,
+
+      fabrics: Array.isArray(form.fabrics) ? form.fabrics : [], // ✅ NEW
 
       images: form.images,
       thumbnail: form.images?.[0] || "",
@@ -400,12 +400,14 @@ export default function AddProductPage() {
             <input
               placeholder="Compare at price"
               value={form.compareAtPrice}
-              onChange={(e) => setForm((p) => ({ ...p, compareAtPrice: e.target.value }))}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, compareAtPrice: e.target.value }))
+              }
               className="input"
             />
           </div>
 
-          {/* COLORS (NEW) */}
+          {/* COLORS */}
           <div className="space-y-2">
             <h3 className="font-semibold">Colors</h3>
             <ColorsPicker
@@ -448,6 +450,21 @@ export default function AddProductPage() {
           </div>
         </div>
 
+        {/* FABRICS ✅ NEW */}
+        <div className="bg-white rounded-xl p-6 shadow space-y-4">
+          <div>
+            <h2 className="font-semibold">Fabrics (Optional)</h2>
+            <p className="text-sm text-gray-500">
+              Add one or more fabrics (Fabric name is required per row)
+            </p>
+          </div>
+
+          <FabricAdd
+            value={form.fabrics}
+            onChange={(next) => setForm((p) => ({ ...p, fabrics: next }))}
+          />
+        </div>
+
         {/* CATEGORIES */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
           <h2 className="font-semibold">Categories</h2>
@@ -464,7 +481,9 @@ export default function AddProductPage() {
           <ProductImagesEditor
             value={form.images}
             folder="miray/products"
-            onChange={(urls) => setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))}
+            onChange={(urls) =>
+              setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))
+            }
           />
         </div>
 
