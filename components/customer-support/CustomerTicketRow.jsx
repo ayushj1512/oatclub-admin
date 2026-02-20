@@ -1,4 +1,3 @@
-// components/customer-support/CustomerTicketRow.jsx
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -7,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import StatusDropdown from "@/components/customer-support/StatusDropdown";
+import OrderLookupPanel from "@/components/customer-support/OrderLookupPanel";
 import {
   Clock,
   ExternalLink,
@@ -46,6 +46,11 @@ const normalizeOrderNumber = (input) => {
   if (!raw) return "";
   const up = raw.toUpperCase();
 
+  // already normalized MIRAY-000123
+  const full = up.match(/^MIRAY-(\d{6})$/);
+  if (full) return `MIRAY-${full[1]}`;
+
+  // MIRAY-123
   const m = up.match(/^MIRAY-(\d+)$/);
   if (m) {
     const n = m[1].replace(/\D/g, "");
@@ -53,6 +58,7 @@ const normalizeOrderNumber = (input) => {
     return `MIRAY-${n.slice(-6).padStart(6, "0")}`;
   }
 
+  // any digits
   const digits = up.replace(/[^\d]/g, "");
   if (!digits) return "";
   return `MIRAY-${digits.slice(-6).padStart(6, "0")}`;
@@ -70,7 +76,7 @@ function ModalShell({ open, onClose, children, z = 80 }) {
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div className={`fixed inset-0 z-[${z}] flex items-center justify-center p-4`}>
       <button
         type="button"
         className="absolute inset-0 bg-black/50"
@@ -169,9 +175,8 @@ export default function CustomerTicketRow({
   onDeleted,
   apiBase,
 
-  // ✅ for bulk (parent handles bulk delete + bulk status)
   checked = false,
-  onCheck = () => { },
+  onCheck = () => {},
 }) {
   const API_BASE = useMemo(() => {
     if (apiBase) return apiBase;
@@ -181,20 +186,24 @@ export default function CustomerTicketRow({
 
   const id = safe(t?.ticketId);
   const phone = safe(t?.phone);
+  const email = safe(t?.email);
   const atts = Array.isArray(t?.attachments) ? t.attachments : [];
   const atCount = atts.length;
 
-  const serverOrder = safe(t?.orderNumber);
-  const [orderInput, setOrderInput] = useState(serverOrder);
+  const serverOrderRaw = safe(t?.orderNumber);
+  const serverOrder = useMemo(() => normalizeOrderNumber(serverOrderRaw), [serverOrderRaw]);
+
+  const [orderInput, setOrderInput] = useState(serverOrderRaw);
   const [savingOrder, setSavingOrder] = useState(false);
 
-  useEffect(() => setOrderInput(serverOrder), [serverOrder]);
+  useEffect(() => setOrderInput(serverOrderRaw), [serverOrderRaw]);
 
   const normalizedPreview = useMemo(
-    () => normalizeOrderNumber(orderInput || serverOrder),
-    [orderInput, serverOrder]
+    () => normalizeOrderNumber(orderInput || serverOrderRaw),
+    [orderInput, serverOrderRaw]
   );
 
+  // ✅ If ticket has order number, we still show OrderLookupPanel but in "attached view mode"
   const showOrderEditor = !serverOrder;
 
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -226,10 +235,10 @@ export default function CustomerTicketRow({
     }
   };
 
-  const saveOrderNumber = async () => {
+  const saveOrderNumber = async (forceOrderNumber = null) => {
     if (!id) return;
 
-    const next = normalizeOrderNumber(orderInput);
+    const next = normalizeOrderNumber(forceOrderNumber ?? orderInput);
     if (!next) return toast.error("Enter order number like 23 or MIRAY-000023");
 
     setSavingOrder(true);
@@ -247,7 +256,8 @@ export default function CustomerTicketRow({
       }
 
       toast.success("Order number saved ✅");
-      setOrderInput(next);
+      setOrderInput(next); // local update
+      // NOTE: parent list should refresh t.orderNumber from server; but panel below uses `attachedOrderNumber`
     } catch (e) {
       toast.error(e?.message || "Failed to save order number");
     } finally {
@@ -270,7 +280,6 @@ export default function CustomerTicketRow({
       <Lightbox open={lb.open} src={lb.src} alt={lb.alt} onClose={closeLb} />
 
       <tr className="hover:bg-gray-50">
-        {/* ✅ Select checkbox (bulk) */}
         <td className="px-4 py-3">
           <input
             type="checkbox"
@@ -300,7 +309,7 @@ export default function CustomerTicketRow({
         </td>
 
         <td className="px-4 py-3">{safe(t?.name) || "-"}</td>
-        <td className="px-4 py-3">{safe(t?.email) || "-"}</td>
+        <td className="px-4 py-3">{email || "-"}</td>
 
         <td className="px-4 py-3 text-xs text-gray-800">
           {phone ? (
@@ -319,7 +328,7 @@ export default function CustomerTicketRow({
           <div className="mt-1 text-[11px] text-gray-500">
             Order:{" "}
             <span className="font-semibold text-gray-700">
-              {serverOrder ? normalizeOrderNumber(serverOrder) : "—"}
+              {serverOrder ? serverOrder : normalizedPreview ? normalizedPreview : "—"}
             </span>
           </div>
         </td>
@@ -344,10 +353,11 @@ export default function CustomerTicketRow({
           <button
             type="button"
             onClick={onToggle}
-            className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ring-1 ring-inset ${isOpen
+            className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ring-1 ring-inset ${
+              isOpen
                 ? "bg-blue-600 text-white ring-blue-600"
                 : "bg-white text-blue-700 ring-blue-200 hover:bg-blue-50"
-              }`}
+            }`}
           >
             {isOpen ? "Hide" : "View"} <ExternalLink className="h-3.5 w-3.5" />
           </button>
@@ -358,10 +368,11 @@ export default function CustomerTicketRow({
             type="button"
             onClick={() => id && setDeleteOpen(true)}
             disabled={!id}
-            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ring-1 ring-inset transition ${id
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ring-1 ring-inset transition ${
+              id
                 ? "bg-white text-red-700 ring-red-200 hover:bg-red-50"
                 : "bg-gray-100 text-gray-400 ring-gray-200 cursor-not-allowed"
-              }`}
+            }`}
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete
@@ -392,6 +403,24 @@ export default function CustomerTicketRow({
                     </button>
                   </div>
 
+                  {/* ✅ ALWAYS show lookup panel:
+                      - If order number exists -> details auto show (attachedOrderNumber)
+                      - Else -> it helps search and attach
+                  */}
+                  {(email || phone || serverOrder || safe(orderInput)) ? (
+                    <div className="mt-4">
+                      <OrderLookupPanel
+                        email={email}
+                        phone={phone}
+                        disabled={savingOrder}
+                        initialAutoSearch={!serverOrder} // if already have orderNumber, avoid extra identity search on open
+                        attachedOrderNumber={serverOrder || normalizeOrderNumber(orderInput)}
+                        onAttach={(orderNumber) => saveOrderNumber(orderNumber)}
+                      />
+                    </div>
+                  ) : null}
+
+                  {/* manual add (only when missing server order) */}
                   {showOrderEditor ? (
                     <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
                       <p className="text-xs font-semibold text-gray-500">
@@ -407,7 +436,7 @@ export default function CustomerTicketRow({
                         />
                         <button
                           type="button"
-                          onClick={saveOrderNumber}
+                          onClick={() => saveOrderNumber()}
                           disabled={savingOrder || !safe(orderInput)}
                           className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
                         >
@@ -495,10 +524,11 @@ export default function CustomerTicketRow({
                 <div className="mt-3">
                   <Link
                     href={id ? `/customer-support/${encodeURIComponent(id)}` : "#"}
-                    className={`w-full inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ring-1 ring-inset transition ${id
+                    className={`w-full inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ring-1 ring-inset transition ${
+                      id
                         ? "bg-blue-600 text-white ring-blue-600 hover:opacity-90"
                         : "bg-gray-100 text-gray-400 ring-gray-200 pointer-events-none"
-                      }`}
+                    }`}
                   >
                     Open Full Page <ExternalLink className="h-4 w-4" />
                   </Link>

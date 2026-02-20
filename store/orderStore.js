@@ -352,6 +352,24 @@ export const useOrderStore = create((set, get) => ({
     return data;
   },
 
+
+    // GET /api/orders/lookup?email=...&phone=...
+  fetchOrdersByIdentity: async ({ email, phone } = {}) => {
+    const e = String(email ?? "").trim();
+    const p = String(phone ?? "").trim();
+
+    const qs = new URLSearchParams();
+    if (e) qs.set("email", e);
+    if (p) qs.set("phone", p);
+
+    const data = await get()._get(`/api/orders/lookup?${qs.toString()}`);
+
+    // backend can return { orders: [...] } OR [...]
+    const orders = Array.isArray(data) ? data : get()._normalizeOrders(data);
+    set({ orders });
+    return orders;
+  },
+
   /* =========================
      RESET
   ========================= */
