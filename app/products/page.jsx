@@ -86,12 +86,28 @@ const updateProductStatus = async (id, nextStatus) => {
   }
 };
 
-
+const s = (v) => String(v ?? "");
+const lower = (v) => s(v).trim().toLowerCase();
 
 const filteredProducts = useMemo(() => {
+  const q = lower(searchDraft || search); // ✅ includes productCode search locally
+
   return (products || []).filter((p) => {
-    // ✅ status calculate once per product
     const status = getProductStatus(p);
+
+    // ✅ Search (title/slug/sku/productCode)
+    if (q) {
+      const hay = [
+        p.title,
+        p.slug,
+        p.sku,
+        p.productCode, // ✅ productCode support
+      ]
+        .map(lower)
+        .join(" ");
+
+      if (!hay.includes(q)) return false;
+    }
 
     // ✅ Status filter
     if (published === "published" && status !== "published") return false;
@@ -106,21 +122,12 @@ const filteredProducts = useMemo(() => {
     if (typeFilter && p.productType !== typeFilter) return false;
 
     // ✅ SKU filter
-    if (
-      skuFilter &&
-      !String(p.sku || "").toLowerCase().includes(skuFilter.toLowerCase())
-    )
-      return false;
+    if (skuFilter && !lower(p.sku).includes(lower(skuFilter))) return false;
 
     // ✅ Tag filter (array)
     if (tagFilter) {
       const tags = Array.isArray(p.tags) ? p.tags : [];
-      if (
-        !tags.some((t) =>
-          String(t).toLowerCase().includes(tagFilter.toLowerCase())
-        )
-      )
-        return false;
+      if (!tags.some((t) => lower(t).includes(lower(tagFilter)))) return false;
     }
 
     // ✅ Price range
@@ -132,6 +139,8 @@ const filteredProducts = useMemo(() => {
   });
 }, [
   products,
+  searchDraft,
+  search, // ✅ added
   published,
   stockFilter,
   typeFilter,
@@ -731,11 +740,11 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
       <div className="flex flex-wrap gap-3 mb-4 items-center">
         <div className="search">
           <Search size={16} />
-          <input
-            placeholder="Search products…"
-            value={searchDraft}
-            onChange={(e) => setSearchDraft(e.target.value)}
-          />
+         <input
+  placeholder="Search title / SKU / Product Code…"
+  value={searchDraft}
+  onChange={(e) => setSearchDraft(e.target.value)}
+/>
         </div>
 
         <select
@@ -938,10 +947,10 @@ function CategoryInlineEditor({ id, value = [], allCategories = [] }) {
                 />
                 <div className="flex flex-col leading-tight">
                 <TitleInlineEditor id={p._id} value={p.title} />
-
-                  <span className="text-xs text-gray-400">
-                    {p.productType || "-"} • {p.sku || "-"}
-                  </span>
+<span className="text-xs text-gray-400">
+  {p.productType || "-"} • {p.sku || "-"} •{" "}
+  <span className="font-semibold text-gray-600">{p.productCode || "-"}</span>
+</span>
                 </div>
               </div>
             </td>
