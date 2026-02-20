@@ -14,6 +14,7 @@ import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
 import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
 import FabricAdd from "@/components/product/FabricAdd"; // ✅ NEW (replaces ProductFabricAssignment)
+import OriginalProductLinkField from "@/components/product/OriginalProductLinkField";
 
 const BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
 
@@ -73,6 +74,7 @@ export default function ProductDetailsPage({ params }) {
     fabrics: [], // ✅ NEW
     crossSellProducts: [],
     collections: [],
+    originalProductLink: "",
 
     highlights: [],
     weight: 0,
@@ -159,7 +161,7 @@ export default function ProductDetailsPage({ params }) {
             typeof x === "string" ? x : x?._id,
           ),
           collections: safeArr(pData?.collections),
-
+ originalProductLink: s(pData?.originalProductLink),
           highlights: safeArr(pData?.highlights),
           weight: n(pData?.weight),
           dimensions: pData?.dimensions || { length: 0, width: 0, height: 0, unit: "cm" },
@@ -390,6 +392,17 @@ export default function ProductDetailsPage({ params }) {
               setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))
             }
           />
+        </div>
+
+         {/* ✅ NEW: Original product link */}
+        <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
+          <OriginalProductLinkField
+            value={editing ? form.originalProductLink : s(product?.originalProductLink)}
+            onChange={(next) => setForm((p) => ({ ...p, originalProductLink: next }))}
+          />
+          {!editing && !s(product?.originalProductLink) ? (
+            <p className="text-sm text-gray-500">No original link set.</p>
+          ) : null}
         </div>
 
         {/* Pricing */}

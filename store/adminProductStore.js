@@ -32,11 +32,22 @@ const normalizeProductPayload = (payload) => {
   // ✅ backend removed this field (avoid sending)
   delete out.longDescription;
 
-  // trim helper
   const toStr = (v) => String(v ?? "").trim();
+  const toBool = (v) =>
+    typeof v === "boolean" ? v : ["true", "1", "yes"].includes(toStr(v).toLowerCase());
 
   // (keep if your UI still uses it somewhere)
   if (out.patternNumber !== undefined) out.patternNumber = toStr(out.patternNumber);
+
+  // ✅ NEW: product link (accept both keys)
+  if (out.originalProductLink !== undefined) out.originalProductLink = toStr(out.originalProductLink);
+  if (out.productLink !== undefined && out.originalProductLink === undefined) {
+    out.originalProductLink = toStr(out.productLink);
+  }
+  delete out.productLink;
+
+  // ✅ NEW: allow sending (backend may recompute from variants)
+  if (out.isPatternReady !== undefined) out.isPatternReady = toBool(out.isPatternReady);
 
   // ✅ HSN Code hygiene: trim + digits-only (allow empty)
   if (out.hsnCode !== undefined) {
@@ -65,15 +76,9 @@ const normalizeProductPayload = (payload) => {
   // ✅ normalize keyFeatures
   if (out.keyFeatures !== undefined) {
     const raw = tryJson(out.keyFeatures);
-    const list = Array.isArray(raw)
-      ? raw
-      : typeof raw === "string"
-        ? raw.split(",")
-        : [];
-
+    const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(",") : [];
     out.keyFeatures = Array.from(new Set(list.map((x) => toStr(x)).filter(Boolean)));
   }
-
   delete out.highlights;
 
   // ✅ optional trims (safe)
@@ -81,8 +86,7 @@ const normalizeProductPayload = (payload) => {
   if (out.howToStyle !== undefined) out.howToStyle = toStr(out.howToStyle);
   if (out.fabricDetails !== undefined) out.fabricDetails = toStr(out.fabricDetails);
 
-  // ✅ SPECIFICATIONS hygiene (screenshot table)
-  // Accept: [{key,value}] | JSON string | object {Color:"Red"} | "Color:Red|Length:Maxi"
+  // ✅ SPECIFICATIONS hygiene
   const normalizeSpecs = (v) => {
     const rows = [];
     const push = (k, val) => {
@@ -100,26 +104,19 @@ const normalizeProductPayload = (payload) => {
       } catch {
         const parts = t.includes("|") ? t.split("|") : t.split(",");
         for (const p of parts) {
-          const s = String(p || "").trim();
-          if (!s) continue;
-          const sep = s.includes(":") ? ":" : s.includes("=") ? "=" : null;
+          const ss = String(p || "").trim();
+          if (!ss) continue;
+          const sep = ss.includes(":") ? ":" : ss.includes("=") ? "=" : null;
           if (!sep) continue;
-          const [k, ...rest] = s.split(sep);
+          const [k, ...rest] = ss.split(sep);
           push(k, rest.join(sep));
         }
         return rows;
       }
     }
 
-    if (Array.isArray(v)) {
-      v.forEach((r) => r && push(r.key, r.value));
-      return rows;
-    }
-
-    if (v && typeof v === "object") {
-      Object.entries(v).forEach(([k, val]) => push(k, val));
-      return rows;
-    }
+    if (Array.isArray(v)) return v.forEach((r) => r && push(r.key, r.value)), rows;
+    if (v && typeof v === "object") return Object.entries(v).forEach(([k, val]) => push(k, val)), rows;
 
     return [];
   };
@@ -129,7 +126,6 @@ const normalizeProductPayload = (payload) => {
     out.specifications = normalizeSpecs(out.specifications ?? out.specs);
     delete out.specs;
 
-    // optional: don't send empty
     if (Array.isArray(out.specifications) && out.specifications.length === 0) {
       delete out.specifications;
     }
@@ -138,15 +134,8 @@ const normalizeProductPayload = (payload) => {
   // ✅ COLORS hygiene
   if (out.colors !== undefined) {
     const raw = tryJson(out.colors);
-    const list = Array.isArray(raw)
-      ? raw
-      : typeof raw === "string"
-        ? raw.split(",")
-        : [];
-
-    out.colors = Array.from(
-      new Set(list.map((c) => toStr(c).toLowerCase()).filter(Boolean))
-    );
+    const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(",") : [];
+    out.colors = Array.from(new Set(list.map((c) => toStr(c).toLowerCase()).filter(Boolean)));
   }
 
   return out;
@@ -1317,6 +1306,43 @@ export const useAdminProductStore = create((set, get) => ({
         updated?.isBestSeller ? "Marked Best Seller ✅" : "Removed Best Seller ✅"
       );
 
+      return updated;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
+   /* =========================
+    ✅ NEW: MARK PATTERN READY (manual)
+    PATCH /api/products/:id/mark-pattern-ready
+  ========================= */
+  markPatternReady: async (productId) => {
+    try {
+      set({ saving: true, error: null });
+
+      const res = await fetch(`${API}/${productId}/mark-pattern-ready`, {
+        method: "PATCH",
+        credentials: "include",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Mark pattern ready failed");
+
+      const updated = data.product;
+
+      if (get().product?._id === productId) set({ product: updated });
+
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          p._id === productId ? { ...p, isPatternReady: !!updated?.isPatternReady } : p
+        ),
+      }));
+
+      toast.success("Marked Pattern Ready ✅");
       return updated;
     } catch (e) {
       console.error(e);

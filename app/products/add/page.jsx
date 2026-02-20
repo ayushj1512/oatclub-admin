@@ -13,6 +13,7 @@ import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
 import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
 import FabricAdd from "@/components/product/FabricAdd"; // ✅ NEW
+import OriginalProductLinkField from "@/components/product/OriginalProductLinkField"; // ✅ NEW
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -448,6 +449,14 @@ export default function AddProductPage() {
               <p className="text-xs text-gray-500">*Only digits allowed.</p>
             )}
           </div>
+        </div>
+
+        {/* ✅ NEW: PRODUCT LINK */}
+        <div className="bg-white rounded-xl p-6 shadow space-y-4">
+          <OriginalProductLinkField
+            value={form.originalProductLink}
+            onChange={(v) => setForm((p) => ({ ...p, originalProductLink: v }))}
+          />
         </div>
 
         {/* FABRICS ✅ NEW */}
