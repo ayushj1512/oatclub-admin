@@ -1,13 +1,25 @@
 // components/product/ProductImagesEditor.jsx
 "use client";
 
-import { useMemo, useState } from "react";
-import { ImagePlus, X, GripVertical, Clipboard, Check, Link2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import {
+  ImagePlus,
+  X,
+  GripVertical,
+  Clipboard,
+  Check,
+  Link2,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import MediaPickerModal from "@/components/media/MediaPickerModal";
 
 /**
  * ProductImagesEditor (Tailwind)
- * ✅ MediaPicker + ✅ Single URL quick-add input (auto-add on paste/enter/blur) + ✅ Copy URLs
+ * ✅ MediaPicker
+ * ✅ Quick URL add (paste/enter/blur) + Set Thumb
+ * ✅ Copy URLs
+ * ✅ Reorder: Drag & Drop + Up/Down buttons
  * - Thumbnail = index 0
  */
 export default function ProductImagesEditor({
@@ -16,7 +28,10 @@ export default function ProductImagesEditor({
   folder = "miray/products",
   max = 12,
 }) {
-  const urls = Array.isArray(value) ? value.filter(Boolean) : [];
+  const urls = useMemo(
+    () => (Array.isArray(value) ? value.filter(Boolean).map(String) : []),
+    [value]
+  );
 
   const [thumbOpen, setThumbOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -24,22 +39,22 @@ export default function ProductImagesEditor({
   // optional refs: {url, publicId}
   const [mediaRefs, setMediaRefs] = useState([]);
 
-  // ✅ quick add url input
+  // quick add url input
   const [urlInput, setUrlInput] = useState("");
 
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedOne, setCopiedOne] = useState("");
 
-  const thumb = urls[0] || null;
+  const thumb = urls[0] || "";
   const gallery = urls.slice(1);
   const canAddMore = urls.length < max;
 
   const emit = (nextUrls, nextRefs = mediaRefs) => onChange?.(nextUrls, nextRefs);
 
-  /* ---------- picker handlers ---------- */
+  /* ---------------- pickers ---------------- */
   const onSelectThumb = (media) => {
     if (!media?.url) return;
-    const nextUrls = [media.url, ...gallery].slice(0, max);
+    const nextUrls = unique([media.url, ...gallery]).slice(0, max);
 
     const nextRefs = upsertRef(mediaRefs, media);
     setMediaRefs(nextRefs);
@@ -53,37 +68,37 @@ export default function ProductImagesEditor({
     if (!picked.length) return setGalleryOpen(false);
 
     const addUrls = picked.map((m) => m?.url).filter(Boolean);
-    const merged = unique([thumb, ...gallery, ...addUrls].filter(Boolean)).slice(0, max);
+    const nextUrls = unique([thumb, ...gallery, ...addUrls].filter(Boolean)).slice(0, max);
 
     const nextRefs = mergeRefs(mediaRefs, picked);
     setMediaRefs(nextRefs);
-    emit(merged, nextRefs);
+    emit(nextUrls, nextRefs);
 
     setGalleryOpen(false);
   };
 
-  /* ---------- remove/reorder ---------- */
+  /* ---------------- remove / up-down reorder ---------------- */
   const removeAt = (idx) => emit(urls.filter((_, i) => i !== idx));
 
   const move = (from, to) => {
     if (to < 0 || to >= urls.length) return;
-    const copy = [...urls];
-    const [item] = copy.splice(from, 1);
-    copy.splice(to, 0, item);
-    emit(copy);
+    if (from === to) return;
+    const next = [...urls];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    emit(next);
   };
 
-  /* ---------- quick add (single textbox) ---------- */
+  /* ---------------- quick add ---------------- */
   const addUrl = (rawUrl, mode = "gallery") => {
-    if (!rawUrl) return false;
-    if (!canAddMore && mode !== "thumbnail") return false;
-
     const clean = normalizeUrl(rawUrl);
     if (!clean) return false;
 
+    if (mode !== "thumbnail" && !canAddMore) return false;
+
     const next =
       mode === "thumbnail"
-        ? unique([clean, ...gallery].filter(Boolean)).slice(0, max)
+        ? unique([clean, ...urls.filter((_, i) => i !== 0)]).slice(0, max)
         : unique([thumb, ...gallery, clean].filter(Boolean)).slice(0, max);
 
     emit(next);
@@ -94,22 +109,21 @@ export default function ProductImagesEditor({
     const u = normalizeUrl(text);
     if (!u) return false;
     const ok = addUrl(u, mode);
-    if (ok) setUrlInput(""); // ✅ clear after add
+    if (ok) setUrlInput("");
     return ok;
   };
 
   const onPasteIntoInput = (e) => {
     const pasted = e.clipboardData?.getData("text") || "";
-    // try to extract first valid url from paste
     const found = extractFirstUrl(pasted);
     if (!found) return;
 
-    e.preventDefault(); // don't keep pasted text
-    const ok = flushInput(found, "gallery"); // default: add to gallery
-    if (!ok) setUrlInput(found); // fallback
+    e.preventDefault();
+    const ok = flushInput(found, "gallery");
+    if (!ok) setUrlInput(found);
   };
 
-  /* ---------- copy ---------- */
+  /* ---------------- copy ---------------- */
   const flashBool = (setter, ms = 900) => {
     setter(true);
     setTimeout(() => setter(false), ms);
@@ -131,6 +145,21 @@ export default function ProductImagesEditor({
     } catch {}
   };
 
+  /* ---------------- drag & drop reorder ---------------- */
+  const dragFrom = useRef(null);
+
+  const onDragStart = (idx) => () => {
+    dragFrom.current = idx;
+  };
+
+  const onDrop = (to) => (e) => {
+    e.preventDefault();
+    const from = dragFrom.current;
+    dragFrom.current = null;
+    if (from == null) return;
+    move(from, to);
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -143,7 +172,7 @@ export default function ProductImagesEditor({
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Thumbnail first, then gallery. Add URL quickly from textbox.
+            Thumbnail first, then gallery. Drag or use Up/Down.
           </p>
         </div>
 
@@ -180,7 +209,7 @@ export default function ProductImagesEditor({
         </div>
       </div>
 
-      {/* ✅ Quick Add URL */}
+      {/* Quick Add URL */}
       <div className="rounded-3xl border border-slate-100 bg-white p-3 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2 text-slate-700">
@@ -189,9 +218,7 @@ export default function ProductImagesEditor({
             </span>
             <div>
               <p className="text-xs font-extrabold text-slate-900">Quick add image URL</p>
-              <p className="text-[11px] text-slate-500">
-                Paste URL → auto add + input clears (adds to gallery).
-              </p>
+              <p className="text-[11px] text-slate-500">Paste URL → auto add (gallery).</p>
             </div>
           </div>
 
@@ -206,10 +233,7 @@ export default function ProductImagesEditor({
                   flushInput(urlInput, "gallery");
                 }
               }}
-              onBlur={() => {
-                // if user typed url and clicked away, add it
-                flushInput(urlInput, "gallery");
-              }}
+              onBlur={() => flushInput(urlInput, "gallery")}
               placeholder="https://example.com/image.jpg"
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-300 focus:bg-white"
             />
@@ -253,6 +277,11 @@ export default function ProductImagesEditor({
                 "rounded-3xl border bg-white p-2 shadow-sm",
                 idx === 0 ? "border-slate-200" : "border-slate-100",
               ].join(" ")}
+              draggable
+              onDragStart={onDragStart(idx)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={onDrop(idx)}
+              title="Drag to reorder"
             >
               <div className="relative overflow-hidden rounded-2xl bg-slate-100">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -270,6 +299,14 @@ export default function ProductImagesEditor({
                 >
                   <X size={16} />
                 </button>
+
+                <div
+                  className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-2xl bg-white/90 px-2 py-1 text-[10px] font-extrabold text-slate-800 shadow-sm backdrop-blur"
+                  title="Drag to reorder"
+                >
+                  <GripVertical size={14} />
+                  Drag
+                </div>
               </div>
 
               {/* url + copy */}
@@ -290,15 +327,16 @@ export default function ProductImagesEditor({
                 </button>
               </div>
 
-              {/* reorder */}
+              {/* Up / Down */}
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
                   onClick={() => move(idx, idx - 1)}
                   disabled={idx === 0}
                   className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-2 py-2 text-xs font-extrabold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Move up"
                 >
-                  <GripVertical size={14} />
+                  <ArrowUp size={14} />
                   Up
                 </button>
 
@@ -307,8 +345,9 @@ export default function ProductImagesEditor({
                   onClick={() => move(idx, idx + 1)}
                   disabled={idx === urls.length - 1}
                   className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-2 py-2 text-xs font-extrabold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Move down"
                 >
-                  <GripVertical size={14} />
+                  <ArrowDown size={14} />
                   Down
                 </button>
               </div>
@@ -339,20 +378,21 @@ export default function ProductImagesEditor({
 /* ---------------- helpers ---------------- */
 
 function unique(arr) {
-  return Array.from(new Set((arr || []).map(String)));
+  return Array.from(new Set((arr || []).filter(Boolean).map(String)));
 }
 
 function normalizeUrl(raw) {
-  const s = String(raw || "").trim().replace(/^"+|"+$/g, "").replace(/^'+|'+$/g, "");
+  const s = String(raw || "")
+    .trim()
+    .replace(/^"+|"+$/g, "")
+    .replace(/^'+|'+$/g, "");
   if (!s) return "";
-  // only allow http(s)
   if (!/^https?:\/\//i.test(s)) return "";
   return s;
 }
 
 function extractFirstUrl(text) {
   const raw = String(text || "");
-  // pick first http(s) url found even inside a line
   const match = raw.match(/https?:\/\/[^\s,"')]+/i);
   return match ? match[0] : "";
 }

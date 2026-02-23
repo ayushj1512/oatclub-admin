@@ -8,16 +8,10 @@ import { useInventoryReservationStore } from "@/store/inventoryReservationStore"
 /**
  * SyncInventoryButton (minimal + real reserve)
  *
- * On click:
- * 1) Expire due reservations (releases stuck reservedStock)
- * 2) Fetch ALL confirmed + processing orders (production queue)
- * 3) Fetch current RESERVED(order) reservations
- * 4) For every order item, if qty is not fully reserved -> create reservation (only if stock exists; backend enforces)
- * 5) Refresh reservations + production queue + summary
- *
- * NOTE:
- * - Reservation matching is by (orderId + productId + variantId)
- * - If same product+variant appears multiple times in same order, we aggregate it to avoid double reserve.
+ * FIX:
+ * Orders are now scanned in ASC order based on MIRAY-00000 format.
+ * Example:
+ * MIRAY-000123 will be processed before MIRAY-000484
  */
 
 const btnBase =
@@ -30,11 +24,25 @@ const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const variantKey = (variantId) => (variantId ? sid(variantId) : "simple");
 const makeKey = (productId, variantId) => `${sid(productId)}::${variantKey(variantId)}`;
 
+/* -------------------------------------------------------
+   🔥 NEW: Extract numeric part from MIRAY-000484
+------------------------------------------------------- */
+const getOrderNumberValue = (orderNumber) => {
+  const raw = String(orderNumber || "").trim();
+
+  // Remove "MIRAY-" prefix
+  const numericPart = raw.replace(/^MIRAY-/i, "");
+
+  const n = Number(numericPart);
+  return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+};
+
 // sum RESERVED qty for a given order+product+variant
 const reservedQtyForKey = (reservationList, orderId, productId, variantId) => {
   const oid = sid(orderId);
   const pid = sid(productId);
-  const vid = variantId ? sid(variantId) : ""; // "" means simple
+  const vid = variantId ? sid(variantId) : "";
+
   return (reservationList || [])
     .filter((r) => {
       if (!r) return false;
@@ -43,8 +51,8 @@ const reservedQtyForKey = (reservationList, orderId, productId, variantId) => {
       if (sid(r.refId) !== oid) return false;
       if (sid(r.productId) !== pid) return false;
 
-      const rVid = sid(r.variantId); // "" if null
-      if (!vid) return !rVid; // simple expects null variantId
+      const rVid = sid(r.variantId);
+      if (!vid) return !rVid;
       return rVid === vid;
     })
     .reduce((sum, r) => sum + num(r.qty), 0);
@@ -57,13 +65,11 @@ export default function SyncInventoryButton({
   const [loading, setLoading] = useState(false);
   const [meta, setMeta] = useState({ expired: null, created: 0, failed: 0 });
 
-  // production store (hook)
   const prodStore = useAdminProductionStore();
   const fetchProductionQueue = prodStore?.fetchProductionQueue;
   const fetchProductionSummary = prodStore?.fetchProductionSummary;
   const currentFulfillmentStatus = prodStore?.fulfillmentStatus || "processing";
 
-  // inventory store (hook)
   const invStore = useInventoryReservationStore();
   const expireDueReservations = invStore?.expireDueReservations;
   const fetchInventoryReservations = invStore?.fetchReservations;
@@ -79,7 +85,9 @@ export default function SyncInventoryButton({
 
       console.log("[SYNC_INV] start");
 
-      // 1) expire due reservations (frees reservedStock)
+      /* -----------------------------------
+         1️⃣ Expire due reservations
+      ----------------------------------- */
       let expiredCount = 0;
       try {
         const r = await expireDueReservations?.();
@@ -87,30 +95,51 @@ export default function SyncInventoryButton({
       } catch (err) {
         console.log("[SYNC_INV] expireDue failed:", err?.message || err);
       }
-      console.log("[SYNC_INV] expired:", expiredCount);
 
-      // 2) fetch confirmed+processing queue (your prod API already returns confirmed only,
-      //    but we still re-check in frontend for safety)
+      /* -----------------------------------
+         2️⃣ Fetch production queue
+      ----------------------------------- */
       await fetchProductionQueue?.({ fulfillmentStatus: "processing" });
 
-      // IMPORTANT: read fresh queue from zustand state (not from stale render)
       const freshQueue = useAdminProductionStore.getState?.().queue || [];
-      const processingConfirmed = (freshQueue || []).filter(
-        (o) => String(o?.fulfillmentStatus) === "processing" && Boolean(o?.isConfirmed)
+
+      /* -----------------------------------
+         🔥 FIX: ASC SORTING APPLIED HERE
+      ----------------------------------- */
+      const processingConfirmed = (freshQueue || [])
+        .filter(
+          (o) =>
+            String(o?.fulfillmentStatus) === "processing" &&
+            Boolean(o?.isConfirmed)
+        )
+        .sort((a, b) => {
+          const aNum = getOrderNumberValue(a?.orderNumber);
+          const bNum = getOrderNumberValue(b?.orderNumber);
+
+          return aNum - bNum; // ASC order
+        });
+
+      console.log(
+        "[SYNC_INV] processing+confirmed ASC orders:",
+        processingConfirmed.map((o) => o.orderNumber)
       );
 
-      console.log("[SYNC_INV] processing+confirmed orders:", processingConfirmed.length);
+      /* -----------------------------------
+         3️⃣ Fetch current reservations
+      ----------------------------------- */
+      await fetchInventoryReservations?.({
+        status: "reserved",
+        refType: "order",
+      });
 
-      // 3) fetch current reserved(order) reservations
-      await fetchInventoryReservations?.({ status: "reserved", refType: "order" });
-      const reservationList = useInventoryReservationStore.getState?.().reservations || [];
-      console.log("[SYNC_INV] reserved(order) reservations:", reservationList.length);
+      const reservationList =
+        useInventoryReservationStore.getState?.().reservations || [];
 
-      // 4) reserve wherever possible
+      /* -----------------------------------
+         4️⃣ Reserve logic
+      ----------------------------------- */
       let created = 0;
       let failed = 0;
-
-      // cap to avoid accidental spam
       const HARD_CAP = 800;
       let attempts = 0;
 
@@ -120,7 +149,6 @@ export default function SyncInventoryButton({
         const orderId = order?._id;
         const orderNo = s(order?.orderNumber);
 
-        // aggregate per (productId+variantId) within this order
         const agg = new Map();
 
         for (const it of order?.items || []) {
@@ -129,21 +157,19 @@ export default function SyncInventoryButton({
 
           const vid = sid(it?.variant?.variantId) || null;
           const key = makeKey(pid, vid);
-
           const qty = Math.max(0, num(it?.quantity));
 
-          // store best snapshots for denormalized fields
           const prev = agg.get(key) || {
             productId: pid,
             variantId: vid || null,
             requiredQty: 0,
-
-            // denormalized for admin tables
             orderNumber: orderNo,
             productTitle: s(it?.productSnapshot?.title),
             productImage: s(
               it?.productSnapshot?.thumbnail ||
-                (Array.isArray(it?.productSnapshot?.images) ? it?.productSnapshot?.images?.[0] : "")
+                (Array.isArray(it?.productSnapshot?.images)
+                  ? it?.productSnapshot?.images?.[0]
+                  : "")
             ),
             variantSku: s(it?.variant?.sku),
             selectedSize: s(it?.selectedSize),
@@ -151,21 +177,9 @@ export default function SyncInventoryButton({
           };
 
           prev.requiredQty += qty;
-          // keep best values (don’t overwrite good with blank)
-          if (!prev.productTitle) prev.productTitle = s(it?.productSnapshot?.title);
-          if (!prev.productImage)
-            prev.productImage = s(
-              it?.productSnapshot?.thumbnail ||
-                (Array.isArray(it?.productSnapshot?.images) ? it?.productSnapshot?.images?.[0] : "")
-            );
-          if (!prev.variantSku) prev.variantSku = s(it?.variant?.sku);
-          if (!prev.selectedSize) prev.selectedSize = s(it?.selectedSize);
-          if (!prev.selectedColor) prev.selectedColor = s(it?.selectedColor);
-
           agg.set(key, prev);
         }
 
-        // now reserve per aggregated key
         for (const [, g] of agg.entries()) {
           if (attempts >= HARD_CAP) break;
 
@@ -187,46 +201,35 @@ export default function SyncInventoryButton({
             qty: need,
             refType: "order",
             refId: orderId,
-
-            // ✅ denormalized
             orderNumber: g.orderNumber || orderNo,
             productTitle: g.productTitle || "",
             productImage: g.productImage || "",
             variantSku: g.variantSku || "",
             selectedSize: g.selectedSize || "",
             selectedColor: g.selectedColor || "",
-
             notes: `Manual sync reserve | orderNumber=${orderNo}`,
           };
-
-          console.log("[SYNC_INV] reserve try", {
-            order: orderNo,
-            productId: g.productId,
-            variantId: g.variantId || null,
-            need,
-            already,
-          });
 
           try {
             await createReservation?.(payload);
             created += 1;
-            console.log("[SYNC_INV] reserve ok", { order: orderNo, need });
           } catch (err) {
             failed += 1;
-            console.log("[SYNC_INV] reserve failed", {
-              order: orderNo,
-              msg: err?.response?.data?.message || err?.message || String(err),
-            });
           }
         }
       }
 
-      console.log("[SYNC_INV] done", { expiredCount, created, failed, attempts });
-
-      // 5) refresh UI
+      /* -----------------------------------
+         5️⃣ Refresh UI
+      ----------------------------------- */
       await Promise.allSettled([
-        fetchInventoryReservations?.({ status: "reserved", refType: "order" }),
-        fetchProductionQueue?.({ fulfillmentStatus: currentFulfillmentStatus }),
+        fetchInventoryReservations?.({
+          status: "reserved",
+          refType: "order",
+        }),
+        fetchProductionQueue?.({
+          fulfillmentStatus: currentFulfillmentStatus,
+        }),
         fetchProductionSummary?.(),
       ]);
 

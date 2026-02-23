@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import useAdminProductionStore from "@/store/adminProductionStore";
 import { useInventoryReservationStore } from "@/store/inventoryReservationStore";
@@ -12,19 +12,6 @@ import { useAdminProductStore } from "@/store/adminProductStore";
 // ✅ Excel Export libs
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-
-/**
- * ✅ /production Dashboard
- * - Summary metrics
- * - Production queue (confirmed only)
- * - Compact UI (cards)
- * - Horizontal calendar bar: Today / Yesterday / 7D / 30D / All
- * - Custom range filter
- * - Export Excel (.xlsx) with EMBEDDED images ✅
- * - Uses Product store to resolve images (order snapshot images missing)
- * - ✅ Uses Backend Proxy for images (fix CORS)
- * - Action: Mark Packed (processing -> packed)
- */
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
@@ -98,58 +85,37 @@ const getPresetRange = (key) => {
 /* ============================
    ✅ URL + Proxy Helpers
 ============================ */
-
-// ✅ normalize url into absolute (for WP urls mostly)
 const toAbsoluteUrl = (url) => {
   const u = String(url || "").trim();
   if (!u) return "";
-
-  // already absolute
   if (u.startsWith("http://") || u.startsWith("https://")) return u;
-
-  // relative -> attach WP origin if needed (you can change this if WP base is fixed)
   if (u.startsWith("//")) return `https:${u}`;
   if (u.startsWith("/")) return `https://mirayfashions.in${u}`;
-
-  // fallback
   return `https://mirayfashions.in/${u}`;
 };
 
-// ✅ proxy url creator
 const proxifyImage = (url) => {
   const abs = toAbsoluteUrl(url);
   if (!abs) return "";
   return `${BASE_URL}/api/proxy-image?url=${encodeURIComponent(abs)}`;
 };
 
-// ✅ helper: safe product id from populated OR string
-const getProductId = (item) =>
-  String(item?.productId?._id || item?.productId || "");
+const getProductId = (item) => String(item?.productId?._id || item?.productId || "");
 
-/* ============================================================
-   ✅ Resolve image from ProductMap using productId
-   ✅ Always return proxy URL (fix CORS)
-============================================================ */
 const resolveItemImage = (item, productMap) => {
   const pid = getProductId(item);
   const product = productMap?.[pid];
 
-  const variantId = item?.variant?.variantId
-    ? String(item.variant.variantId)
-    : "";
+  const variantId = item?.variant?.variantId ? String(item.variant.variantId) : "";
 
-  // ✅ try variant image from product store
   if (product && variantId && Array.isArray(product?.variants)) {
     const v = product.variants.find((x) => String(x?._id) === variantId);
     if (v?.image) return proxifyImage(v.image);
   }
 
-  // ✅ fallback product thumbnail / images
   if (product?.thumbnail) return proxifyImage(product.thumbnail);
-  if (Array.isArray(product?.images) && product.images.length)
-    return proxifyImage(product.images[0]);
+  if (Array.isArray(product?.images) && product.images.length) return proxifyImage(product.images[0]);
 
-  // ✅ fallback snapshot
   return proxifyImage(
     item?.variant?.image ||
       item?.productSnapshot?.thumbnail ||
@@ -158,36 +124,25 @@ const resolveItemImage = (item, productMap) => {
   );
 };
 
-
-// ✅ helper: get variantId from order item (variable product)
-const getVariantIdFromItem = (item) =>
-  String(item?.variant?.variantId || "");
-
-// ✅ safe string id
+const getVariantIdFromItem = (item) => String(item?.variant?.variantId || "");
 const safeId = (v) => String(v?._id || v || "").trim();
 
-// ✅ per-item reserved qty (for that order + product + variant)
 const getReservedQtyForItem = (orderId, item, reservationList) => {
   const oid = String(orderId || "").trim();
   if (!oid) return 0;
 
   const pid = safeId(item?.productId);
-  const vid = getVariantIdFromItem(item); // "" for simple
+  const vid = getVariantIdFromItem(item);
 
   return (reservationList || [])
     .filter((r) => {
       if (String(r?.status) !== "reserved") return false;
       if (String(r?.refType) !== "order") return false;
-
-      // ✅ same order
       if (String(r?.refId) !== oid) return false;
-
-      // ✅ same product
       if (safeId(r?.productId) !== pid) return false;
 
-      // ✅ same variant (null for simple)
-      const rVid = safeId(r?.variantId); // "" if null
-      if (!vid) return !rVid; // simple item: reservation variantId should be null
+      const rVid = safeId(r?.variantId);
+      if (!vid) return !rVid;
       return rVid === vid;
     })
     .reduce((sum, r) => sum + Number(r?.qty || 0), 0);
@@ -208,14 +163,23 @@ const getOrderReservationIds = (orderId, reservationList = []) => {
     .filter(Boolean);
 };
 
+const getOrderPackability = (order, reservationList = []) => {
+  const items = order?.items || [];
+  for (const it of items) {
+    const req = Number(it?.quantity || 0);
+    const resv = getReservedQtyForItem(order?._id, it, reservationList);
+    if (resv < req) {
+      const title = it?.productSnapshot?.title || "Item";
+      return { fullyReserved: false, reason: `Not fully reserved: ${title} (${resv}/${req})` };
+    }
+  }
+  return { fullyReserved: true, reason: "" };
+};
+
 /* ============================================================
    ✅ Excel Export With Embedded Images (via Proxy)
 ============================================================ */
-async function exportProductionXLSX(
-  orders,
-  productMap,
-  filename = "production.xlsx"
-) {
+async function exportProductionXLSX(orders, productMap, filename = "production.xlsx") {
   if (!orders?.length) return;
 
   const workbook = new ExcelJS.Workbook();
@@ -249,16 +213,11 @@ async function exportProductionXLSX(
     const orderNumber = order?.orderNumber || "";
     const customer = order?.shippingAddressSnapshot?.fullName || "";
     const phone = order?.shippingAddressSnapshot?.phone || "";
-    const date = new Date(
-      order?.createdAt || order?.orderDate || Date.now()
-    ).toLocaleString();
+    const date = new Date(order?.createdAt || order?.orderDate || Date.now()).toLocaleString();
 
     for (const it of order?.items || []) {
       const title = it?.productSnapshot?.title || "Item";
-
-      // ✅ proxy image url
       const imageUrl = resolveItemImage(it, productMap);
-
       const size = it?.selectedSize || "";
       const color = it?.selectedColor || "";
       const sku = it?.variant?.sku || it?.productSnapshot?.sku || "";
@@ -281,7 +240,6 @@ async function exportProductionXLSX(
       row.height = 55;
       row.alignment = { vertical: "middle" };
 
-      // ✅ embed image (proxy prevents CORS)
       if (imageUrl) {
         try {
           const imgRes = await fetch(imageUrl);
@@ -289,11 +247,7 @@ async function exportProductionXLSX(
           const buffer = await blob.arrayBuffer();
 
           const ext = blob.type.includes("png") ? "png" : "jpeg";
-
-          const imageId = workbook.addImage({
-            buffer,
-            extension: ext,
-          });
+          const imageId = workbook.addImage({ buffer, extension: ext });
 
           sheet.addImage(imageId, {
             tl: { col: 0, row: rowIndex - 1 },
@@ -318,39 +272,39 @@ async function exportProductionXLSX(
 
 export default function ProductionDashboardPage() {
   const router = useRouter();
-
   const prodStore = useAdminProductionStore();
 
   const {
-  queue,
-  summary,
-  loadingQueue,
-  loadingSummary,
-  error,
-  fulfillmentStatus,
-  setFulfillmentStatus,
-  fetchProductionQueue,
-  fetchProductionSummary,
-  refreshAll,
-  clearError,
-} = prodStore;
+    queue: storeQueue,
+    summary: storeSummary,
+    loadingQueue,
+    loadingSummary,
+    error,
+    fulfillmentStatus,
+    setFulfillmentStatus,
+    fetchProductionQueue,
+    fetchProductionSummary,
+    refreshAll,
+    clearError,
+  } = prodStore;
 
-const markPackedFn =
-  prodStore?.markOrderPacked ||
-  prodStore?.markPacked ||
-  prodStore?.markPackedOrder ||
-  prodStore?.updateOrderStatus ||
-  prodStore?.setOrderStatus ||
-  null;
+  const markPackedFn =
+    prodStore?.markOrderPacked ||
+    prodStore?.markPacked ||
+    prodStore?.markPackedOrder ||
+    prodStore?.updateOrderStatus ||
+    prodStore?.setOrderStatus ||
+    null;
 
-    const {
-    reservations: reservationList,
+  const {
+    reservations: storeReservations,
     fetchReservations: fetchInventoryReservations,
     consumeReservation,
   } = useInventoryReservationStore();
 
   const { fetchProductsByIds } = useAdminProductStore();
 
+  // ✅ Local UI state
   const [search, setSearch] = useState("");
   const [datePreset, setDatePreset] = useState("today");
   const [exporting, setExporting] = useState(false);
@@ -361,6 +315,17 @@ const markPackedFn =
 
   const [productMap, setProductMap] = useState({});
 
+  // ✅ IMPORTANT: local list & local reservations so UI doesn't "refresh"
+  const [localQueue, setLocalQueue] = useState([]);
+  const [localReservations, setLocalReservations] = useState([]);
+  const [localSummary, setLocalSummary] = useState({});
+
+  // ✅ Selection states
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [packingIds, setPackingIds] = useState(() => new Set()); // per-order loading
+  const [bulkPacking, setBulkPacking] = useState(false);
+
+  // Initial load
   useEffect(() => {
     fetchProductionSummary();
     fetchProductionQueue({ fulfillmentStatus: "processing" });
@@ -372,51 +337,52 @@ const markPackedFn =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fulfillmentStatus]);
 
-  // ✅ Build productMap whenever queue changes
+  // Mirror store -> local (ONLY when store changes)
+  useEffect(() => {
+    setLocalQueue(Array.isArray(storeQueue) ? storeQueue : []);
+  }, [storeQueue]);
+
+  useEffect(() => {
+    setLocalSummary(storeSummary || {});
+  }, [storeSummary]);
+
+  useEffect(() => {
+    setLocalReservations(Array.isArray(storeReservations) ? storeReservations : []);
+  }, [storeReservations]);
+
+  // ✅ Build productMap whenever localQueue changes
   useEffect(() => {
     const run = async () => {
       const ids = Array.from(
         new Set(
-          (queue || [])
+          (localQueue || [])
             .flatMap((o) => (o?.items || []).map((it) => getProductId(it)))
             .filter(Boolean)
         )
       );
-
       if (!ids.length) return;
 
       const products = await fetchProductsByIds(ids);
-
       const map = {};
       (products || []).forEach((p) => {
         map[String(p._id)] = p;
       });
-
       setProductMap(map);
     };
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue]);
+  }, [localQueue]);
 
-    // ✅ Pull all reserved reservations (order based) so UI can show reserved/partial
+  // ✅ Fetch reservations when queue present (but don't refetch after packing)
   useEffect(() => {
     const run = async () => {
-      // if no queue, clear
-      if (!queue?.length) return;
-
-      // fetch only reserved+order
-      // NOTE: if your backend has a lot of data, you can add date range filters later
-    await fetchInventoryReservations({
-  status: "reserved",
-  refType: "order",
-});
+      if (!localQueue?.length) return;
+      await fetchInventoryReservations({ status: "reserved", refType: "order" });
     };
-
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue?.length]);
-
+  }, [localQueue?.length]);
 
   const activeDateRange = useMemo(() => {
     if (useCustomRange) {
@@ -428,7 +394,7 @@ const markPackedFn =
   }, [datePreset, useCustomRange, rangeFrom, rangeTo]);
 
   const filteredQueue = useMemo(() => {
-    const q = (queue || []).slice();
+    const q = (localQueue || []).slice();
     const term = String(search || "").trim().toLowerCase();
     const { from, to } = activeDateRange;
 
@@ -446,78 +412,191 @@ const markPackedFn =
         .join(" ")
         .toLowerCase();
 
-      return (
-        orderNumber.includes(term) ||
-        name.includes(term) ||
-        phone.includes(term) ||
-        itemsText.includes(term)
-      );
+      return orderNumber.includes(term) || name.includes(term) || phone.includes(term) || itemsText.includes(term);
     });
-  }, [queue, search, activeDateRange]);
+  }, [localQueue, search, activeDateRange]);
+
+  // ✅ Packability map for current filtered list (for selection UI)
+  const packabilityMap = useMemo(() => {
+    const map = {};
+    for (const o of filteredQueue) {
+      map[String(o?._id)] = getOrderPackability(o, localReservations);
+    }
+    return map;
+  }, [filteredQueue, localReservations]);
+
+  const packableFilteredIds = useMemo(() => {
+    return filteredQueue
+      .filter((o) => {
+        const id = String(o?._id);
+        const p = packabilityMap[id];
+        return o?.fulfillmentStatus === "processing" && p?.fullyReserved;
+      })
+      .map((o) => String(o?._id));
+  }, [filteredQueue, packabilityMap]);
+
+  // ✅ Keep selection clean when list changes
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = new Set();
+      const visible = new Set(filteredQueue.map((o) => String(o?._id)));
+      for (const id of prev) if (visible.has(String(id))) next.add(String(id));
+      return next;
+    });
+  }, [filteredQueue]);
+
+  const selectedCount = selectedIds.size;
 
   const onOpenOrder = (orderId) => {
     router.push(`/production/order/${orderId}`);
   };
 
-  const onMarkPacked = async (orderId) => {
-  try {
-    if (!orderId) return;
+  const applyLocalRemovalAfterPacked = useCallback(
+    (orderId) => {
+      // If you're viewing "processing" list, packed orders should disappear
+      setLocalQueue((prev) => prev.filter((o) => String(o?._id) !== String(orderId)));
 
-    if (!markPackedFn) {
-      console.error("No mark packed function found in production store");
-      return;
-    }
+      // Also remove reservations for that order locally (so pills don't flicker)
+      setLocalReservations((prev) =>
+        (prev || []).filter((r) => String(r?.refId) !== String(orderId))
+      );
 
-    const isStatusFn =
-      markPackedFn === prodStore.updateOrderStatus ||
-      markPackedFn === prodStore.setOrderStatus;
+      // Optimistic summary update
+      setLocalSummary((prev) => {
+        const p = { ...(prev || {}) };
+        p.processing = Math.max(0, Number(p.processing || 0) - 1);
+        p.packed = Number(p.packed || 0) + 1;
+        return p;
+      });
+    },
+    []
+  );
 
-    if (isStatusFn) {
-      await markPackedFn(orderId, "packed");
-    } else {
-      await markPackedFn(orderId);
-    }
-
-    // ✅ better readable reason (orderNumber preferred)
-    const orderNo = String(
-      (queue || []).find((o) => String(o?._id) === String(orderId))?.orderNumber || ""
-    ).trim();
-
-    const reservationIds = getOrderReservationIds(orderId, reservationList);
-
-    if (reservationIds.length) {
-      for (const rid of reservationIds) {
-        try {
-          await consumeReservation(rid, `Packed from production (${orderNo || orderId})`);
-        } catch (err) {
-          console.error("consumeReservation failed:", rid, err);
-        }
+  const doMarkPacked = useCallback(
+    async (orderId) => {
+      if (!orderId) return;
+      if (!markPackedFn) {
+        console.error("No mark packed function found in production store");
+        return;
       }
+
+      // Loading state for this order
+      setPackingIds((prev) => new Set(prev).add(String(orderId)));
+
+      try {
+        const isStatusFn = markPackedFn === prodStore.updateOrderStatus || markPackedFn === prodStore.setOrderStatus;
+
+        if (isStatusFn) await markPackedFn(orderId, "packed");
+        else await markPackedFn(orderId);
+
+        const orderNo = String(
+          (localQueue || []).find((o) => String(o?._id) === String(orderId))?.orderNumber || ""
+        ).trim();
+
+        const reservationIds = getOrderReservationIds(orderId, localReservations);
+
+        if (reservationIds.length) {
+          for (const rid of reservationIds) {
+            try {
+              await consumeReservation(rid, `Packed from production (${orderNo || orderId})`);
+            } catch (err) {
+              console.error("consumeReservation failed:", rid, err);
+            }
+          }
+        }
+
+        // ✅ NO REFRESH: just remove from UI
+        applyLocalRemovalAfterPacked(orderId);
+
+        // Also unselect it if selected
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(String(orderId));
+          return next;
+        });
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setPackingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(String(orderId));
+          return next;
+        });
+      }
+    },
+    [
+      applyLocalRemovalAfterPacked,
+      consumeReservation,
+      localQueue,
+      localReservations,
+      markPackedFn,
+      prodStore.updateOrderStatus,
+      prodStore.setOrderStatus,
+    ]
+  );
+
+  const onMarkPacked = (orderId) => doMarkPacked(orderId);
+
+  const toggleSelect = (orderId) => {
+    const id = String(orderId);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const selectAllPackableFiltered = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of packableFilteredIds) next.add(String(id));
+      return next;
+    });
+  };
+
+  const deselectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const o of filteredQueue) next.delete(String(o?._id));
+      return next;
+    });
+  };
+
+  const allPackableVisibleSelected = useMemo(() => {
+    if (!packableFilteredIds.length) return false;
+    return packableFilteredIds.every((id) => selectedIds.has(String(id)));
+  }, [packableFilteredIds, selectedIds]);
+
+  const onBulkMarkPacked = async () => {
+    if (bulkPacking) return;
+
+    // only packable + processing
+    const ids = Array.from(selectedIds).filter((id) => {
+      const p = packabilityMap[String(id)];
+      return p?.fullyReserved;
+    });
+
+    if (!ids.length) return;
+
+    setBulkPacking(true);
+    try {
+      // sequential to be safe with backend / inventory
+      for (const id of ids) {
+        await doMarkPacked(id);
+      }
+      // after done, selection already cleaned in doMarkPacked
+    } finally {
+      setBulkPacking(false);
     }
-
-    await Promise.allSettled([
-      fetchProductionQueue({ fulfillmentStatus }),
-      fetchProductionSummary(),
-      fetchInventoryReservations({ status: "reserved", refType: "order" }),
-    ]);
-  } catch (e) {
-    console.error(e);
-  }
-};
-
-
-
-
-
-
+  };
 
   const onExportExcel = async () => {
     try {
       setExporting(true);
-      const filename = `production-${fulfillmentStatus}-${toYYYYMMDD(
-        new Date()
-      )}.xlsx`;
-
+      const filename = `production-${fulfillmentStatus}-${toYYYYMMDD(new Date())}.xlsx`;
       await exportProductionXLSX(filteredQueue, productMap, filename);
     } catch (e) {
       console.error("Export error:", e);
@@ -531,12 +610,8 @@ const markPackedFn =
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <h1 className="text-xl md:text-2xl font-semibold text-gray-900">
-            Production
-          </h1>
-          <p className="text-xs text-gray-500">
-            Confirmed orders only • Produce items → Mark Packed
-          </p>
+          <h1 className="text-xl md:text-2xl font-semibold text-gray-900">Production</h1>
+          <p className="text-xs text-gray-500">Confirmed orders only • Fully reserved orders can be packed in bulk</p>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -546,8 +621,8 @@ const markPackedFn =
           >
             Refresh
           </button>
-          
-  <SyncInventoryButton />
+
+          <SyncInventoryButton />
 
           <button
             onClick={onExportExcel}
@@ -575,14 +650,14 @@ const markPackedFn =
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
         <MetricCard
           title="Processing"
-          value={summary?.processing}
+          value={localSummary?.processing}
           loading={loadingSummary}
           onClick={() => setFulfillmentStatus("processing")}
           active={fulfillmentStatus === "processing"}
         />
         <MetricCard
           title="Packed"
-          value={summary?.packed}
+          value={localSummary?.packed}
           loading={loadingSummary}
           onClick={() => setFulfillmentStatus("packed")}
           active={fulfillmentStatus === "packed"}
@@ -612,9 +687,7 @@ const markPackedFn =
           <button
             onClick={() => setUseCustomRange((v) => !v)}
             className={`whitespace-nowrap px-3 py-2 rounded-full text-xs shadow-sm transition ${
-              useCustomRange
-                ? "bg-black text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              useCustomRange ? "bg-black text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
             Custom Range
@@ -654,7 +727,10 @@ const markPackedFn =
             <span className="text-xs text-gray-500">Status</span>
             <select
               value={fulfillmentStatus}
-              onChange={(e) => setFulfillmentStatus(e.target.value)}
+              onChange={(e) => {
+                setFulfillmentStatus(e.target.value);
+                clearSelection();
+              }}
               className="px-3 py-2 rounded-xl bg-gray-50 text-xs ring-1 ring-black/5"
             >
               {STATUS_OPTIONS.map((opt) => (
@@ -678,38 +754,88 @@ const markPackedFn =
             {loadingQueue ? "Loading..." : `${filteredQueue.length} orders`}
           </div>
         </div>
+
+        {/* ✅ Bulk selection / pack bar */}
+        {fulfillmentStatus === "processing" ? (
+          <div className="flex flex-col md:flex-row md:items-center gap-2 rounded-2xl bg-gray-50 ring-1 ring-black/5 p-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={allPackableVisibleSelected}
+                onChange={(e) => {
+                  if (e.target.checked) selectAllPackableFiltered();
+                  else deselectAllVisible();
+                }}
+                className="h-4 w-4 accent-black"
+              />
+              <span className="text-xs text-gray-700">
+                Select all <span className="font-semibold">packable</span> (fully reserved) from current list
+              </span>
+              <span className="text-[11px] text-gray-500">• {packableFilteredIds.length} packable</span>
+            </div>
+
+            <div className="flex items-center gap-2 md:ml-auto">
+              <div className="text-xs text-gray-600">
+                Selected: <span className="font-semibold">{selectedCount}</span>
+              </div>
+
+              <button
+                onClick={clearSelection}
+                disabled={!selectedCount}
+                className="px-3 py-2 rounded-xl bg-white text-xs ring-1 ring-black/10 hover:shadow disabled:opacity-50"
+              >
+                Clear
+              </button>
+
+              <button
+                onClick={onBulkMarkPacked}
+                disabled={!selectedCount || bulkPacking}
+                className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 disabled:opacity-50"
+              >
+                {bulkPacking ? "Packing..." : "Mark Selected Packed"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Orders */}
       <div className="space-y-2">
         {loadingQueue ? (
-          <div className="p-6 text-center text-gray-500 text-sm">
-            Loading orders...
-          </div>
+          <div className="p-6 text-center text-gray-500 text-sm">Loading orders...</div>
         ) : filteredQueue.length === 0 ? (
-          <div className="p-6 text-center text-gray-500 text-sm">
-            No orders found in selected filter.
-          </div>
+          <div className="p-6 text-center text-gray-500 text-sm">No orders found in selected filter.</div>
         ) : (
-                  filteredQueue.map((order, idx) => (
-  <OrderCard
-    key={String(order?._id || order?.orderNumber || `order-${idx}`)}
-    order={order}
-    productMap={productMap}
-    reservationList={reservationList}
-    onOpen={() => onOpenOrder(order._id)}
-    onMarkPacked={() => onMarkPacked(order._id)}
-    canMarkPacked={order.fulfillmentStatus === "processing"}
-  />
-))
+          filteredQueue.map((order, idx) => {
+            const id = String(order?._id);
+            const pack = packabilityMap[id] || { fullyReserved: false, reason: "" };
+            const selected = selectedIds.has(id);
+            const isPacking = packingIds.has(id);
 
-
-
+            return (
+              <OrderCard
+                key={String(order?._id || order?.orderNumber || `order-${idx}`)}
+                order={order}
+                productMap={productMap}
+                reservationList={localReservations}
+                onOpen={() => onOpenOrder(order._id)}
+                onMarkPacked={() => onMarkPacked(order._id)}
+                canMarkPacked={order.fulfillmentStatus === "processing"}
+                // ✅ selection props
+                showSelect={fulfillmentStatus === "processing"}
+                isPackable={pack.fullyReserved}
+                packDisabledReason={pack.reason}
+                selected={selected}
+                onToggleSelect={() => toggleSelect(order._id)}
+                packing={isPacking}
+              />
+            );
+          })
         )}
       </div>
 
       <div className="text-[11px] text-gray-500">
-        ✅ Images now load via Backend Proxy (fixes WordPress CORS) + Excel export embeds them properly.
+        ✅ Packed orders are removed instantly (no full refresh). Images via Backend Proxy + Excel export embeds images.
       </div>
     </div>
   );
@@ -728,9 +854,7 @@ function MetricCard({ title, value, loading, onClick, active }) {
       }`}
     >
       <div className="text-[11px] text-gray-500">{title}</div>
-      <div className="text-lg font-semibold mt-1 text-gray-900">
-        {loading ? "—" : Number(value || 0)}
-      </div>
+      <div className="text-lg font-semibold mt-1 text-gray-900">{loading ? "—" : Number(value || 0)}</div>
     </button>
   );
 }
@@ -742,86 +866,106 @@ function OrderCard({
   canMarkPacked,
   productMap,
   reservationList = [],
+
+  // ✅ selection props
+  showSelect = false,
+  isPackable = false,
+  packDisabledReason = "",
+  selected = false,
+  onToggleSelect,
+  packing = false,
 }) {
   const items = order?.items || [];
 
-  const itemsCount = items.reduce(
-    (sum, it) => sum + Number(it?.quantity || 0),
-    0
-  );
+  const itemsCount = items.reduce((sum, it) => sum + Number(it?.quantity || 0), 0);
 
-  // ✅ order is packable ONLY if all items are fully reserved
-  const packCheck = useMemo(() => {
-    let ok = true;
-    let missingText = "";
+  // still keep per-card tooltip reason consistent with live reservations
+  const packCheck = useMemo(() => getOrderPackability(order, reservationList), [order, reservationList]);
 
-    for (const it of items) {
-      const req = Number(it?.quantity || 0);
-      const resv = getReservedQtyForItem(order?._id, it, reservationList);
-
-      if (resv < req) {
-        ok = false;
-        const title = it?.productSnapshot?.title || "Item";
-        missingText = `Not fully reserved: ${title} (${resv}/${req})`;
-        break;
-      }
-    }
-
-    return { fullyReserved: ok, reason: missingText };
-  }, [items, order?._id, reservationList]);
+  const disablePackBtn = !packCheck.fullyReserved || packing;
 
   return (
     <div
-      className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 hover:shadow transition cursor-pointer"
+      className={`bg-white rounded-2xl shadow-sm ring-1 ring-black/5 hover:shadow transition cursor-pointer ${
+        selected ? "ring-2 ring-black/70" : ""
+      }`}
       onClick={onOpen}
     >
       <div className="px-3 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-gray-900 text-sm truncate">
-              {order.orderNumber}
-            </h3>
+        <div className="min-w-0 flex items-start gap-2">
+          {showSelect ? (
+            <div
+              className="pt-0.5"
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selected}
+                disabled={!isPackable}
+                title={isPackable ? "Select order" : packDisabledReason || "Order not fully reserved"}
+                onChange={() => onToggleSelect?.()}
+                className="h-4 w-4 accent-black disabled:opacity-40"
+              />
+            </div>
+          ) : null}
 
-            <StatusPill status={order.fulfillmentStatus} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900 text-sm truncate">{order.orderNumber}</h3>
+              <StatusPill status={order.fulfillmentStatus} />
+              <span className="text-[11px] text-gray-500">• {itemsCount} pcs</span>
+              {showSelect ? (
+                isPackable ? (
+                  <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-green-100 text-green-800">
+                    Packable
+                  </span>
+                ) : (
+                  <span
+                    className="px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700"
+                    title={packDisabledReason || "Not fully reserved"}
+                  >
+                    Not packable
+                  </span>
+                )
+              ) : null}
+            </div>
 
-            <span className="text-[11px] text-gray-500">• {itemsCount} pcs</span>
-          </div>
-
-          <div className="text-[11px] text-gray-500 truncate mt-0.5">
-            {order?.shippingAddressSnapshot?.fullName || "—"} •{" "}
-            {order?.shippingAddressSnapshot?.phone || "—"} •{" "}
-            {new Date(
-              order.createdAt || order.orderDate || Date.now()
-            ).toLocaleString()}
+            <div className="text-[11px] text-gray-500 truncate mt-0.5">
+              {order?.shippingAddressSnapshot?.fullName || "—"} • {order?.shippingAddressSnapshot?.phone || "—"} •{" "}
+              {new Date(order.createdAt || order.orderDate || Date.now()).toLocaleString()}
+            </div>
           </div>
         </div>
 
         <div
           className="flex items-center gap-2"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
         >
           <div className="text-right">
-            <div className="text-sm font-semibold text-gray-900">
-              ₹{Number(order.finalPayable || 0).toFixed(0)}
-            </div>
+            <div className="text-sm font-semibold text-gray-900">₹{Number(order.finalPayable || 0).toFixed(0)}</div>
             <div className="text-[11px] text-gray-500">
-              {String(order.paymentMethod || "").toUpperCase()} •{" "}
-              {order.paymentStatus || "pending"}
+              {String(order.paymentMethod || "").toUpperCase()} • {order.paymentStatus || "pending"}
             </div>
           </div>
 
           {canMarkPacked ? (
             <button
               onClick={onMarkPacked}
-              disabled={!packCheck.fullyReserved}
+              disabled={disablePackBtn}
               title={
                 packCheck.fullyReserved
-                  ? "Mark Packed"
+                  ? packing
+                    ? "Packing..."
+                    : "Mark Packed"
                   : packCheck.reason || "Order not fully reserved"
               }
               className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 disabled:opacity-50"
             >
-              Mark Packed
+              {packing ? "Packing..." : "Mark Packed"}
             </button>
           ) : (
             <div className="text-xs text-gray-400 px-2">—</div>
@@ -833,15 +977,11 @@ function OrderCard({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {items.map((it, idx) => (
             <ItemRow
-              key={String(
-                it?._id ||
-                  `${safeId(it?.productId)}-${getVariantIdFromItem(it) || "simple"}-${idx}`
-              )}
+              key={String(it?._id || `${safeId(it?.productId)}-${getVariantIdFromItem(it) || "simple"}-${idx}`)}
               item={it}
               productMap={productMap}
               orderId={order?._id}
               reservationList={reservationList}
-              
             />
           ))}
         </div>
@@ -850,46 +990,25 @@ function OrderCard({
   );
 }
 
-
-/* ✅ Add this component somewhere in the same file (below StatusPill is fine) */
 function ReservationPill({ requiredQty, reservedQty }) {
   const req = Number(requiredQty || 0);
   const resv = Number(reservedQty || 0);
 
   if (!req) {
     return (
-      <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">
-        Reserved: —
-      </span>
+      <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">Reserved: —</span>
     );
   }
 
   const pct = Math.min(1, resv / req);
 
   const label =
-    pct >= 1
-      ? "Reserved ✅"
-      : pct > 0
-      ? `Partial Reserved (${resv}/${req})`
-      : "Not Reserved";
+    pct >= 1 ? "Reserved ✅" : pct > 0 ? `Partial Reserved (${resv}/${req})` : "Not Reserved";
 
-  const cls =
-    pct >= 1
-      ? "bg-green-100 text-green-800"
-      : pct > 0
-      ? "bg-yellow-100 text-yellow-800"
-      : "bg-red-100 text-red-800";
+  const cls = pct >= 1 ? "bg-green-100 text-green-800" : pct > 0 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800";
 
-  return (
-    <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>
-      {label}
-    </span>
-  );
+  return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>{label}</span>;
 }
-
-
-
-
 
 function ItemRow({ item, productMap, orderId, reservationList }) {
   const title = item?.productSnapshot?.title || "Item";
@@ -915,11 +1034,7 @@ function ItemRow({ item, productMap, orderId, reservationList }) {
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <div className="text-xs font-medium text-gray-900 truncate flex-1">
-            {title}
-          </div>
-
-          {/* ✅ Product-level Reserved */}
+          <div className="text-xs font-medium text-gray-900 truncate flex-1">{title}</div>
           <ReservationPill requiredQty={qty} reservedQty={reservedQty} />
         </div>
 
@@ -934,12 +1049,9 @@ function ItemRow({ item, productMap, orderId, reservationList }) {
   );
 }
 
-
 function Tag({ label }) {
   return (
-    <span className="px-2 py-1 rounded-full bg-white ring-1 ring-black/5 text-[11px] text-gray-700">
-      {label}
-    </span>
+    <span className="px-2 py-1 rounded-full bg-white ring-1 ring-black/5 text-[11px] text-gray-700">{label}</span>
   );
 }
 
@@ -957,9 +1069,5 @@ function StatusPill({ status }) {
 
   const cls = map[s] || "bg-gray-100 text-gray-800";
 
-  return (
-    <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>
-      {s.replaceAll("_", " ")}
-    </span>
-  );
+  return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>{s.replaceAll("_", " ")}</span>;
 }
