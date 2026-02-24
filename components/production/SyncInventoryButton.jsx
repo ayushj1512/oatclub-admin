@@ -291,7 +291,7 @@ export default function SyncInventoryButton({
       ]);
 
       setMeta({ expired: expiredCount, created, failed });
-    } catch (err) {
+  } catch (err) {
       console.error("SyncInventoryButton fatal:", err);
     } finally {
       setLoading(false);
@@ -313,4 +313,4 @@ export default function SyncInventoryButton({
       ) : null}
     </button>
   );
-}
+} 

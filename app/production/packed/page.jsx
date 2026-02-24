@@ -1,27 +1,31 @@
+// src/app/production/packed/page.jsx
+// ✅ Updated OrderPrintPanel import path: components\orders\OrderPrintPanel.jsx
+// ✅ PackedOrderRow import path: components\production\PackedOrderRow.jsx
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useOrderStore } from "@/store/orderStore";
 
-/**
- * Route: /production/packed
- * File: app/production/packed/page.jsx
- *
- * Tailwind UI (black/white/grey + 1 accent)
- */
+import PackedOrderRow from "@/components/production/PackedOrderRow";
+
+// ✅ FIXED PATH (as per you)
+import OrderPrintPanel from "@/components/orders/OrderPrintPanel";
+
 export default function PackedOrdersPage() {
   const { orders, loading, error, fetchAllOrders, updateOrderStatus } =
     useOrderStore();
 
-  // Filters / UI
   const [q, setQ] = useState("");
   const [onlyConfirmed, setOnlyConfirmed] = useState(true);
   const [onlyShipmentOrders, setOnlyShipmentOrders] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Sorting
-  const [sortKey, setSortKey] = useState("date"); // date | total | name
-  const [sortDir, setSortDir] = useState("desc"); // asc | desc
+  // per-order edit state
+  const [edit, setEdit] = useState({}); // { [id]: { courier:"", awb:"", saving:false } }
+
+  // ✅ print open state per order
+  const [printOpen, setPrintOpen] = useState({}); // { [id]: true/false }
 
   useEffect(() => {
     const run = async () => {
@@ -36,202 +40,202 @@ export default function PackedOrdersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onlyConfirmed, onlyShipmentOrders, refreshKey]);
 
-  const onRefresh = () => setRefreshKey((k) => k + 1);
+  const refresh = () => setRefreshKey((k) => k + 1);
 
-  const formatDate = (d) => {
-    if (!d) return "-";
+  const safe = (v) => String(v ?? "").trim();
+
+  // ✅ Shiprocket ONLY
+  const getShiprocketAwb = (o) => safe(o?.shipment?.shiprocket?.awb);
+  const getShiprocketCourier = (o) => safe(o?.shipment?.shiprocket?.courierName);
+
+  const beginEdit = (o) => {
+    const id = o?._id;
+    if (!id) return;
+    setEdit((prev) => ({
+      ...prev,
+      [id]: prev[id] || {
+        courier: getShiprocketCourier(o) || "",
+        awb: getShiprocketAwb(o) || "",
+        saving: false,
+      },
+    }));
+  };
+
+  const setField = (id, key, value) => {
+    setEdit((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [key]: value },
+    }));
+  };
+
+  const cancelEdit = (id) => {
+    setEdit((prev) => {
+      const cp = { ...prev };
+      delete cp[id];
+      return cp;
+    });
+  };
+
+  const saveShiprocket = async (o) => {
+    const id = o?._id;
+    if (!id) return;
+
+    const courier = safe(edit?.[id]?.courier);
+    const awb = safe(edit?.[id]?.awb);
+
+    if (!courier || !awb) {
+      alert("Courier and AWB both required.");
+      return;
+    }
+
+    setEdit((p) => ({ ...p, [id]: { ...(p[id] || {}), saving: true } }));
     try {
-      return new Date(d).toLocaleString();
-    } catch {
-      return "-";
+      await updateOrderStatus(id, {
+        shipment: {
+          provider: "shiprocket",
+          shiprocket: {
+            courierName: courier,
+            awb,
+          },
+        },
+        trackingDetails: {
+          courierName: courier,
+          trackingId: awb,
+        },
+      });
+      refresh();
+    } finally {
+      setEdit((p) => ({ ...p, [id]: { ...(p[id] || {}), saving: false } }));
     }
   };
 
-  const getAwb = (o) =>
-    o?.shipment?.shiprocket?.awb ||
-    o?.shipment?.xpressbees?.awb ||
-    o?.trackingDetails?.trackingId ||
-    "-";
-
-  const getCourier = (o) =>
-    o?.shipment?.shiprocket?.courierName ||
-    o?.shipment?.xpressbees?.courierName ||
-    o?.trackingDetails?.courierName ||
-    "-";
-
-  const itemsSummary = (o) => {
-    const items = Array.isArray(o?.items) ? o.items : [];
-    const totalQty = items.reduce(
-      (sum, it) => sum + Number(it?.quantity || 0),
-      0
-    );
-    const firstTitle =
-      items?.[0]?.productSnapshot?.title || items?.[0]?.title || "Item";
-    if (items.length <= 1) return `${firstTitle} × ${totalQty || 1}`;
-    return `${firstTitle} + ${items.length - 1} more (qty: ${totalQty})`;
+  const markPicked = async (id) => {
+    if (!id) return;
+    await updateOrderStatus(id, { fulfillmentStatus: "picked" });
+    refresh();
   };
 
-  const totals = useMemo(() => {
-    const list = Array.isArray(orders) ? orders : [];
-    const payable = list.reduce((s, o) => s + Number(o?.finalPayable || 0), 0);
-    return { payable };
-  }, [orders]);
+  const markShipped = async (id) => {
+    if (!id) return;
+    await updateOrderStatus(id, { fulfillmentStatus: "shipped" });
+    refresh();
+  };
+
+  const togglePrint = (id) => {
+    if (!id) return;
+    setPrintOpen((p) => ({ ...p, [id]: !p[id] }));
+  };
+
+  const closePrint = (id) => {
+    if (!id) return;
+    setPrintOpen((p) => {
+      const cp = { ...p };
+      delete cp[id];
+      return cp;
+    });
+  };
 
   const filtered = useMemo(() => {
     const list = Array.isArray(orders) ? orders : [];
-    const s = String(q || "").trim().toLowerCase();
+    const s = safe(q).toLowerCase();
+    if (!s) return list;
 
-    const out = !s
-      ? list
-      : list.filter((o) => {
-          const orderNumber = String(o?.orderNumber || "").toLowerCase();
-          const name = String(
-            o?.shippingAddressSnapshot?.fullName || ""
-          ).toLowerCase();
-          const phone = String(
-            o?.shippingAddressSnapshot?.phone || ""
-          ).toLowerCase();
-          const city = String(
-            o?.shippingAddressSnapshot?.city || ""
-          ).toLowerCase();
-          const awb = String(getAwb(o)).toLowerCase();
-
-          return (
-            orderNumber.includes(s) ||
-            name.includes(s) ||
-            phone.includes(s) ||
-            city.includes(s) ||
-            awb.includes(s)
-          );
-        });
-
-    const dir = sortDir === "asc" ? 1 : -1;
-
-    const sorted = [...out].sort((a, b) => {
-      if (sortKey === "date") {
-        const da = new Date(a?.orderDate || a?.createdAt || 0).getTime();
-        const db = new Date(b?.orderDate || b?.createdAt || 0).getTime();
-        return (da - db) * dir;
-      }
-      if (sortKey === "total") {
-        const ta = Number(a?.finalPayable || 0);
-        const tb = Number(b?.finalPayable || 0);
-        return (ta - tb) * dir;
-      }
-      if (sortKey === "name") {
-        const na = String(a?.shippingAddressSnapshot?.fullName || "");
-        const nb = String(b?.shippingAddressSnapshot?.fullName || "");
-        return na.localeCompare(nb) * dir;
-      }
-      return 0;
+    return list.filter((o) => {
+      const orderNumber = safe(o?.orderNumber).toLowerCase();
+      const awb = getShiprocketAwb(o).toLowerCase();
+      const name = safe(o?.shippingAddressSnapshot?.fullName).toLowerCase();
+      const phone = safe(o?.shippingAddressSnapshot?.phone).toLowerCase();
+      const city = safe(o?.shippingAddressSnapshot?.city).toLowerCase();
+      return (
+        orderNumber.includes(s) ||
+        awb.includes(s) ||
+        name.includes(s) ||
+        phone.includes(s) ||
+        city.includes(s)
+      );
     });
-
-    return sorted;
-  }, [orders, q, sortKey, sortDir]);
-
-  const toggleSort = (key) => {
-    if (sortKey !== key) {
-      setSortKey(key);
-      setSortDir("desc");
-      return;
-    }
-    setSortDir((d) => (d === "desc" ? "asc" : "desc"));
-  };
-
-  const markPicked = async (orderId) => {
-    if (!orderId) return;
-    await updateOrderStatus(orderId, { fulfillmentStatus: "picked" });
-    onRefresh();
-  };
-
-  const markShipped = async (orderId) => {
-    if (!orderId) return;
-    await updateOrderStatus(orderId, { fulfillmentStatus: "shipped" });
-    onRefresh();
-  };
-
-  const copyToClipboard = async (text) => {
-    try {
-      await navigator.clipboard.writeText(String(text || ""));
-    } catch {}
-  };
+  }, [orders, q]);
 
   const Chip = ({ children, tone = "neutral" }) => {
     const base =
-      "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-wide";
+      "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold";
     const map = {
       neutral: "border-zinc-200 bg-zinc-100 text-zinc-900",
-      accent: "border-blue-200 bg-blue-50 text-blue-800",
+      accent: "border-blue-200 bg-blue-50 text-blue-900",
       ok: "border-emerald-200 bg-emerald-50 text-emerald-800",
       warn: "border-amber-200 bg-amber-50 text-amber-800",
-      danger: "border-red-200 bg-red-50 text-red-800",
     };
-    return <span className={`${base} ${map[tone] || map.neutral}`}>{children}</span>;
+    return (
+      <span className={`${base} ${map[tone] || map.neutral}`}>{children}</span>
+    );
   };
 
-  const SortPill = ({ active, onClick, children }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        "rounded-full border px-3 py-2 text-xs font-semibold transition",
-        active
-          ? "border-blue-200 bg-blue-50 text-blue-900"
-          : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50",
-      ].join(" ")}
-    >
-      {children}
-    </button>
-  );
+  const SmallBtn = ({ children, onClick, disabled, variant = "ghost" }) => {
+    const base =
+      "rounded-xl px-3 py-2 text-xs font-extrabold transition active:scale-[0.99]";
+    const styles = {
+      ghost: disabled
+        ? "cursor-not-allowed border border-zinc-200 bg-zinc-100 text-zinc-500"
+        : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50",
+      primary: disabled
+        ? "cursor-not-allowed bg-blue-300 text-white"
+        : "bg-blue-600 text-white hover:bg-blue-700",
+    };
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={`${base} ${styles[variant]}`}
+      >
+        {children}
+      </button>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-white p-5 text-zinc-950">
-      {/* Header */}
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div className="min-h-screen bg-white p-4 text-zinc-950">
+      {/* Top */}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-extrabold tracking-tight">
-              Packed Orders
-            </h1>
-            <Chip tone="neutral">Production</Chip>
-            <Chip tone="accent">Packed</Chip>
+            <h1 className="text-xl font-extrabold tracking-tight">Packed</h1>
+            <Chip tone="accent">Shiprocket</Chip>
+            {loading ? <Chip tone="warn">Loading</Chip> : <Chip tone="ok">Ready</Chip>}
+            <Chip tone="neutral">{filtered.length}</Chip>
           </div>
-          <p className="mt-1 text-sm text-zinc-500">
-            Manage packed shipments • search, sort, copy AWB, and update status
+          <p className="mt-1 text-xs text-zinc-500">
+            Order # • Items • Payment • Courier/AWB • Status • Print
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onRefresh}
-            disabled={loading}
-            className={[
-              "rounded-xl border px-4 py-2 text-sm font-bold transition",
-              loading
-                ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-500"
-                : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50",
-            ].join(" ")}
-          >
-            {loading ? "Refreshing…" : "Refresh"}
-          </button>
-        </div>
+        <button
+          onClick={refresh}
+          disabled={loading}
+          className={[
+            "rounded-xl border px-4 py-2 text-sm font-bold transition",
+            loading
+              ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-500"
+              : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50",
+          ].join(" ")}
+        >
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
       </div>
 
       {/* Controls */}
-      <div className="mb-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 shadow-sm">
+      <div className="mb-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3 lg:items-center">
-          {/* Search */}
           <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2">
             <span className="select-none text-zinc-400">⌕</span>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search order #, name, phone, city, AWB"
+              placeholder="Search order # / AWB / name / phone / city"
               className="w-full bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
             />
           </div>
 
-          {/* Toggles */}
           <div className="flex flex-wrap gap-4">
             <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-zinc-800">
               <input
@@ -240,7 +244,7 @@ export default function PackedOrdersPage() {
                 onChange={(e) => setOnlyConfirmed(e.target.checked)}
                 className="h-4 w-4 accent-blue-600"
               />
-              Confirmed only
+              Confirmed
             </label>
 
             <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-zinc-800">
@@ -250,88 +254,106 @@ export default function PackedOrdersPage() {
                 onChange={(e) => setOnlyShipmentOrders(e.target.checked)}
                 className="h-4 w-4 accent-blue-600"
               />
-              Shipment orders only
+              Shipment only
             </label>
           </div>
 
-          {/* Sort */}
-          <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
-            <span className="text-xs font-semibold text-zinc-500">Sort:</span>
-            <SortPill
-              active={sortKey === "date"}
-              onClick={() => toggleSort("date")}
-            >
-              Date{" "}
-              {sortKey === "date" ? (sortDir === "asc" ? "↑" : "↓") : ""}
-            </SortPill>
-            <SortPill
-              active={sortKey === "total"}
-              onClick={() => toggleSort("total")}
-            >
-              Total{" "}
-              {sortKey === "total" ? (sortDir === "asc" ? "↑" : "↓") : ""}
-            </SortPill>
-            <SortPill
-              active={sortKey === "name"}
-              onClick={() => toggleSort("name")}
-            >
-              Name{" "}
-              {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}
-            </SortPill>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-            <div className="text-xs font-semibold text-zinc-500">Packed</div>
-            <div className="mt-0.5 text-lg font-extrabold tracking-tight">
-              {filtered.length}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-            <div className="text-xs font-semibold text-zinc-500">Total Value</div>
-            <div className="mt-0.5 text-lg font-extrabold tracking-tight">
-              ₹{Number(totals.payable || 0).toFixed(0)}
-            </div>
-          </div>
-
-          <div className="ml-auto">
+          <div className="flex items-center justify-start gap-2 lg:justify-end">
             {error ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
                 <b>Error:</b> {error}
               </div>
             ) : (
-              <div className="text-xs text-zinc-500">
-                Tip: click <b>Order #</b> or <b>AWB</b> to copy
+              <div className="text-[11px] text-zinc-500">
+                Tip: click <b>Order #</b> / <b>AWB</b> to copy
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Chip tone="neutral">Showing {filtered.length} order(s)</Chip>
-            {loading ? <Chip tone="warn">Loading…</Chip> : <Chip tone="ok">Ready</Chip>}
+      {/* MOBILE: Cards */}
+      <div className="grid grid-cols-1 gap-3 lg:hidden">
+        {loading && filtered.length === 0 ? (
+          <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-500">
+            Loading…
           </div>
-        </div>
+        ) : null}
 
+        {!loading && filtered.length === 0 ? (
+          <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-500">
+            No packed orders.
+          </div>
+        ) : null}
+
+        {filtered.map((o) => {
+          const id = o?._id;
+          const open = !!printOpen?.[id];
+          const courier = getShiprocketCourier(o);
+          const awb = getShiprocketAwb(o);
+
+          return (
+            <div key={id} className="space-y-2">
+              <PackedOrderRow
+                variant="mobile"
+                order={o}
+                loading={loading}
+                edit={edit}
+                onBeginEdit={beginEdit}
+                onSetField={setField}
+                onCancelEdit={cancelEdit}
+                onSaveShiprocket={saveShiprocket}
+                onMarkPicked={markPicked}
+                onMarkShipped={markShipped}
+              />
+
+              <div className="flex justify-end">
+                <SmallBtn
+                  disabled={loading}
+                  onClick={() => togglePrint(id)}
+                  variant={open ? "primary" : "ghost"}
+                >
+                  {open ? "Hide Print" : "Print / Invoice"}
+                </SmallBtn>
+              </div>
+
+              {open ? (
+                <div className="rounded-2xl border border-zinc-200 bg-white p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-sm font-extrabold text-zinc-900">
+                      Invoice / Packing Slip
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => closePrint(id)}
+                      className="text-xs font-bold text-zinc-600 hover:underline"
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <OrderPrintPanel
+                    order={o}
+                    courierName={courier}
+                    trackingId={awb}
+                  />
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* DESKTOP: Table + expandable print panel row */}
+      <div className="hidden overflow-hidden rounded-2xl border border-zinc-200 bg-white lg:block">
         <div className="w-full overflow-x-auto">
-          <table className="min-w-[1200px] w-full border-collapse">
+          <table className="min-w-[980px] w-full border-collapse">
             <thead className="sticky top-0 z-10 bg-zinc-50">
               <tr className="text-left text-[11px] font-extrabold uppercase tracking-wider text-zinc-600">
                 <Th>Order</Th>
-                <Th>Date</Th>
-                <Th>Customer</Th>
-                <Th>City</Th>
                 <Th>Items</Th>
                 <Th>Payment</Th>
-                <Th>Total</Th>
-                <Th>Courier</Th>
-                <Th>AWB</Th>
+                <Th>Shiprocket Courier / AWB</Th>
                 <Th>Status</Th>
                 <Th className="text-right">Actions</Th>
               </tr>
@@ -340,168 +362,67 @@ export default function PackedOrdersPage() {
             <tbody className="divide-y divide-zinc-100">
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <Td colSpan={11}>
-                    <div className="p-5 text-sm text-zinc-500">
-                      Loading packed orders…
-                    </div>
+                  <Td colSpan={6}>
+                    <div className="p-5 text-sm text-zinc-500">Loading…</div>
                   </Td>
                 </tr>
               ) : null}
 
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <Td colSpan={11}>
+                  <Td colSpan={6}>
                     <div className="p-5 text-sm text-zinc-500">
-                      No packed orders found.
+                      No packed orders.
                     </div>
                   </Td>
                 </tr>
               ) : null}
 
               {filtered.map((o) => {
-                const awb = getAwb(o);
-                const courier = getCourier(o);
-
-                const name = o?.shippingAddressSnapshot?.fullName || "-";
-                const phone = o?.shippingAddressSnapshot?.phone || "-";
-                const city = o?.shippingAddressSnapshot?.city || "-";
-
-                const paymentMethod = String(o?.paymentMethod || "-").toUpperCase();
-                const paymentStatus = o?.paymentStatus || "-";
+                const id = o?._id;
+                const open = !!printOpen?.[id];
+                const courier = getShiprocketCourier(o);
+                const awb = getShiprocketAwb(o);
 
                 return (
-                  <tr
-                    key={o?._id}
-                    className="bg-white hover:bg-zinc-50/60"
-                  >
-                    {/* Order */}
-                    <Td>
-                      <div className="flex min-w-[190px] flex-col gap-2">
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(o?.orderNumber)}
-                          title="Click to copy order number"
-                          className="w-fit text-sm font-extrabold underline decoration-blue-300 underline-offset-4 hover:decoration-blue-500"
-                        >
-                          {o?.orderNumber || "-"}
-                        </button>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {o?.orderType === "shipment" ? (
-                            <Chip tone="neutral">Split {o?.splitSuffix || "-"}</Chip>
-                          ) : (
-                            <Chip tone="neutral">Parent</Chip>
-                          )}
-                          {o?.isConfirmed ? (
-                            <Chip tone="ok">Confirmed</Chip>
-                          ) : (
-                            <Chip tone="warn">Unconfirmed</Chip>
-                          )}
+                  <React.Fragment key={id}>
+                    <PackedOrderRow
+                      variant="desktop"
+                      order={o}
+                      loading={loading}
+                      edit={edit}
+                      onBeginEdit={beginEdit}
+                      onSetField={setField}
+                      onCancelEdit={cancelEdit}
+                      onSaveShiprocket={saveShiprocket}
+                      onMarkPicked={markPicked}
+                      onMarkShipped={markShipped}
+                    />
+
+                    <tr className="bg-white">
+                      <Td colSpan={6} className="pt-0">
+                        <div className="flex justify-end px-4 pb-3">
+                          <SmallBtn
+                            disabled={loading}
+                            onClick={() => togglePrint(id)}
+                            variant={open ? "primary" : "ghost"}
+                          >
+                            {open ? "Hide Print" : "Print / Invoice"}
+                          </SmallBtn>
                         </div>
-                      </div>
-                    </Td>
 
-                    {/* Date */}
-                    <Td>
-                      <div className="font-mono text-xs text-zinc-800">
-                        {formatDate(o?.orderDate || o?.createdAt)}
-                      </div>
-                    </Td>
-
-                    {/* Customer */}
-                    <Td>
-                      <div className="min-w-[200px]">
-                        <div className="text-sm font-bold text-zinc-900">
-                          {name}
-                        </div>
-                        <div className="text-xs text-zinc-500">{phone}</div>
-                      </div>
-                    </Td>
-
-                    {/* City */}
-                    <Td>{city}</Td>
-
-                    {/* Items */}
-                    <Td>
-                      <div className="max-w-[360px] truncate text-sm text-zinc-900">
-                        {itemsSummary(o)}
-                      </div>
-                    </Td>
-
-                    {/* Payment */}
-                    <Td>
-                      <div className="flex min-w-[140px] flex-col gap-1.5">
-                        <Chip tone="neutral">{paymentMethod}</Chip>
-                        <div className="text-xs text-zinc-500">{paymentStatus}</div>
-                      </div>
-                    </Td>
-
-                    {/* Total */}
-                    <Td>
-                      <div className="font-mono text-sm font-extrabold text-zinc-900">
-                        ₹{Number(o?.finalPayable || 0).toFixed(0)}
-                      </div>
-                    </Td>
-
-                    {/* Courier */}
-                    <Td>{courier}</Td>
-
-                    {/* AWB */}
-                    <Td>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(awb)}
-                        title="Click to copy AWB"
-                        className="w-fit font-mono text-xs font-bold underline decoration-blue-300 underline-offset-4 hover:decoration-blue-500"
-                      >
-                        {awb}
-                      </button>
-                    </Td>
-
-                    {/* Status */}
-                    <Td>
-                      <div className="flex min-w-[160px] flex-col gap-1.5">
-                        <Chip tone="accent">{o?.fulfillmentStatus || "-"}</Chip>
-                        <div className="text-xs text-zinc-500">
-                          shipment: {o?.shipment?.status || "-"}
-                        </div>
-                      </div>
-                    </Td>
-
-                    {/* Actions */}
-                    <Td className="text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => markPicked(o?._id)}
-                          disabled={loading}
-                          className={[
-                            "rounded-xl border px-3 py-2 text-sm font-extrabold transition",
-                            loading
-                              ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-500"
-                              : "border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50",
-                          ].join(" ")}
-                          title="Move packed → picked"
-                        >
-                          Picked
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => markShipped(o?._id)}
-                          disabled={loading}
-                          className={[
-                            "rounded-xl px-3 py-2 text-sm font-extrabold transition",
-                            loading
-                              ? "cursor-not-allowed bg-blue-300 text-white"
-                              : "bg-blue-600 text-white hover:bg-blue-700",
-                          ].join(" ")}
-                          title="Move packed → shipped"
-                        >
-                          Shipped
-                        </button>
-                      </div>
-                    </Td>
-                  </tr>
+                        {open ? (
+                          <div className="px-4 pb-4">
+                            <OrderPrintPanel
+                              order={o}
+                              courierName={courier}
+                              trackingId={awb}
+                            />
+                          </div>
+                        ) : null}
+                      </Td>
+                    </tr>
+                  </React.Fragment>
                 );
               })}
             </tbody>
@@ -512,18 +433,20 @@ export default function PackedOrdersPage() {
   );
 }
 
-/** Tailwind table helpers */
 function Th({ children, className = "" }) {
   return (
-    <th className={`px-4 py-3 whitespace-nowrap border-b border-zinc-200 ${className}`}>
+    <th
+      className={`px-4 py-3 whitespace-nowrap border-b border-zinc-200 ${className}`}
+    >
       {children}
     </th>
   );
 }
 
-function Td({ children, colSpan, className = "" }) {
+function Td({ children, colSpan, className = "", ...rest }) {
   return (
     <td
+      {...rest}
       colSpan={colSpan}
       className={`px-4 py-3 align-top whitespace-nowrap ${className}`}
     >

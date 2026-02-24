@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, ChevronDown } from "lucide-react";
 import { useOrderStore } from "@/store/orderStore";
 
-/* ✅ UPDATED STATUS LIST (added pickup_initiated before returned/refunded) */
+/**
+ * ✅ UPDATED fulfillmentStatus (forward + terminal only)
+ */
 const STATUS_OPTIONS = [
   { value: "processing", label: "Processing" },
   { value: "packed", label: "Packed" },
@@ -13,19 +15,15 @@ const STATUS_OPTIONS = [
   { value: "out_for_delivery", label: "Out for Delivery" },
   { value: "delivered", label: "Delivered" },
 
-  { value: "return_requested", label: "Return Requested" },
-  { value: "exchange_requested", label: "Exchange Requested" },
-
-  { value: "pickup_initiated", label: "Pickup Initiated" }, // ✅ NEW (reverse pickup)
-
-  { value: "returned", label: "Returned" },
-  { value: "refunded", label: "Refunded" }, // ✅ already
+  { value: "exchanged", label: "Exchanged" }, // ✅ NEW TERMINAL
 
   { value: "rto", label: "RTO" },
   { value: "cancelled", label: "Cancelled" },
 ];
 
-/* ✅ STATUS BADGE COLORS (added pickup_initiated) */
+/**
+ * ✅ Badge colors
+ */
 const statusStyle = (status) => {
   switch (status) {
     case "processing":
@@ -41,21 +39,12 @@ const statusStyle = (status) => {
     case "delivered":
       return "bg-green-50 text-green-700 ring-1 ring-green-200";
 
-    case "return_requested":
-      return "bg-orange-50 text-orange-700 ring-1 ring-orange-200";
-    case "exchange_requested":
-      return "bg-pink-50 text-pink-700 ring-1 ring-pink-200";
-
-    case "pickup_initiated":
-      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200"; // ✅ NEW
-
-    case "returned":
-      return "bg-orange-100 text-orange-800 ring-1 ring-orange-200";
-    case "refunded":
+    case "exchanged":
       return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
 
     case "rto":
       return "bg-gray-200 text-gray-800 ring-1 ring-gray-300";
+
     case "cancelled":
       return "bg-red-50 text-red-700 ring-1 ring-red-200";
 
@@ -64,14 +53,27 @@ const statusStyle = (status) => {
   }
 };
 
-export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated }) {
+const pretty = (v) => String(v || "").replace(/_/g, " ").trim();
+
+export default function OrderStatusDropdown({
+  orderId,
+  currentStatus,
+  onUpdated,
+}) {
   const { updateOrderStatus } = useOrderStore();
   const [loading, setLoading] = useState(false);
-  const [value, setValue] = useState(currentStatus || "processing");
+
+  const safeInitial = useMemo(() => {
+    const v = String(currentStatus || "processing").trim();
+    const exists = STATUS_OPTIONS.some((s) => s.value === v);
+    return exists ? v : "processing";
+  }, [currentStatus]);
+
+  const [value, setValue] = useState(safeInitial);
 
   useEffect(() => {
-    setValue(currentStatus || "processing");
-  }, [currentStatus]);
+    setValue(safeInitial);
+  }, [safeInitial]);
 
   const handleChange = async (e) => {
     const newStatus = e.target.value;
@@ -82,6 +84,7 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
 
       let payload = { fulfillmentStatus: newStatus };
 
+      // ✅ Cancel logic
       if (newStatus === "cancelled") {
         payload = {
           fulfillmentStatus: "cancelled",
@@ -92,15 +95,16 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
         };
       }
 
-      if (newStatus === "refunded") {
-        payload = { fulfillmentStatus: "refunded", paymentStatus: "refunded" };
+      // ✅ Exchanged = final state (no payment mutation here)
+      if (newStatus === "exchanged") {
+        payload = { fulfillmentStatus: "exchanged" };
       }
 
       const updatedOrder = await updateOrderStatus(orderId, payload);
       onUpdated?.(updatedOrder);
     } catch (err) {
       alert(err?.message || "Failed to update status");
-      setValue(currentStatus || "processing");
+      setValue(safeInitial);
     } finally {
       setLoading(false);
     }
@@ -113,7 +117,7 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
           value
         )}`}
       >
-        {String(value || "").replace(/_/g, " ")}
+        {pretty(value)}
         {loading ? (
           <Loader2 size={14} className="animate-spin" />
         ) : (

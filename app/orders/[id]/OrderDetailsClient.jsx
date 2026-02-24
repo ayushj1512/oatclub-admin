@@ -5,15 +5,13 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Loader2,
-  MapPin,
   Phone,
   Mail,
   Package,
   User,
-  Receipt,
   BadgeIndianRupee,
   ExternalLink,
-} from "lucide-react";
+} from "lucide-react";  
 import EditableAddressCard from "@/components/orders/EditableAddressCard";
 import { toast } from "react-hot-toast";
 import { useOrderStore } from "@/store/orderStore";
@@ -22,8 +20,22 @@ import OrderRmaMention from "../../../components/orders/OrderRma";
 import OrderTrackingCard from "@/components/orders/OrderTrackingCard";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
-
 const STORE_URL = "https://www.mirayfashions.com";
+
+/**
+ * ✅ NEW fulfillmentStatus (forward + terminal only)
+ */
+const FULFILLMENT_OPTIONS = [
+  { value: "processing", label: "Processing" },
+  { value: "packed", label: "Packed" },
+  { value: "picked", label: "Picked" },
+  { value: "shipped", label: "Shipped" },
+  { value: "out_for_delivery", label: "Out for Delivery" },
+  { value: "delivered", label: "Delivered" },
+  { value: "exchanged", label: "Exchanged" }, // ✅ terminal
+  { value: "rto", label: "RTO" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 const statusBadgeStyle = (status) => {
   switch (status) {
@@ -31,14 +43,18 @@ const statusBadgeStyle = (status) => {
       return "bg-yellow-50 text-yellow-700";
     case "packed":
       return "bg-indigo-50 text-indigo-700";
+    case "picked":
+      return "bg-cyan-50 text-cyan-700";
     case "shipped":
       return "bg-blue-50 text-blue-700";
     case "out_for_delivery":
       return "bg-purple-50 text-purple-700";
     case "delivered":
       return "bg-green-50 text-green-700";
-    case "returned":
-      return "bg-orange-50 text-orange-700";
+    case "exchanged":
+      return "bg-emerald-50 text-emerald-700";
+    case "rto":
+      return "bg-gray-200 text-gray-800";
     case "cancelled":
       return "bg-red-50 text-red-700";
     default:
@@ -80,6 +96,7 @@ const getPriorityBadge = (order) => {
   };
 };
 
+const pretty = (v) => String(v || "").replace(/_/g, " ").trim();
 
 export default function OrderDetailsClient({ id }) {
   const router = useRouter();
@@ -94,23 +111,25 @@ export default function OrderDetailsClient({ id }) {
   } = useOrderStore();
 
   const [statusUpdating, setStatusUpdating] = useState(false);
-  const [newStatus, setNewStatus] = useState("");
+  const [newStatus, setNewStatus] = useState("processing");
 
   const [trackingId, setTrackingId] = useState("");
   const [courierName, setCourierName] = useState("");
+  const [trackingUrl, setTrackingUrl] = useState("");
 
   const [remarks, setRemarks] = useState("");
   const [remarksSaving, setRemarksSaving] = useState(false);
-const [trackingUrl, setTrackingUrl] = useState("");
 
-  const orderStatusLabel = useMemo(() => {
-    if (!order?.fulfillmentStatus) return "";
-    return String(order.fulfillmentStatus).replace(/_/g, " ");
+  const pri = useMemo(() => getPriorityBadge(order), [order?.priority]);
+
+  const safeCurrentStatus = useMemo(() => {
+    const v = String(order?.fulfillmentStatus || "processing").trim();
+    const ok = FULFILLMENT_OPTIONS.some((o) => o.value === v);
+    return ok ? v : "processing";
   }, [order?.fulfillmentStatus]);
 
-    const pri = useMemo(() => getPriorityBadge(order), [order?.priority]);
+  const orderStatusLabel = useMemo(() => pretty(safeCurrentStatus), [safeCurrentStatus]);
 
-console.log("priority:", order?.priority)
   /* ✅ Load order */
   useEffect(() => {
     if (!id) return;
@@ -122,19 +141,49 @@ console.log("priority:", order?.priority)
   /* ✅ Hydrate inputs */
   useEffect(() => {
     if (!order) return;
-    setNewStatus(order.fulfillmentStatus || "processing");
+
+    // ✅ keep dropdown safe even if old status exists
+    const v = String(order.fulfillmentStatus || "processing").trim();
+    const ok = FULFILLMENT_OPTIONS.some((o) => o.value === v);
+    setNewStatus(ok ? v : "processing");
+
     setTrackingId(order.trackingDetails?.trackingId || "");
     setCourierName(order.trackingDetails?.courierName || "");
+    setTrackingUrl(
+      order?.shipment?.shiprocket?.trackingUrl ||
+        order?.trackingDetails?.trackingUrl ||
+        ""
+    );
     setRemarks(order.adminRemarks || "");
   }, [order]);
 
-  /* ✅ Update status */
+  /* ✅ Update status (PATCH payload updated for new enum) */
   const handleUpdateStatus = async () => {
     if (!order?._id) return;
 
     setStatusUpdating(true);
     try {
-      await updateOrderStatus(order._id, { fulfillmentStatus: newStatus });
+      let payload = { fulfillmentStatus: newStatus };
+
+      // ✅ Cancel flow (keep your backend fields)
+      if (newStatus === "cancelled") {
+        payload = {
+          fulfillmentStatus: "cancelled",
+          reason: "cancelled_by_admin",
+          cancelledBy: "admin",
+          adminRemarks: "cancelled_by_admin",
+          customerMessage: "",
+        };
+      }
+
+      // ✅ IMPORTANT:
+      // No "returned/refunded" here anymore; refund is tracked in `rmas[].status`.
+      // Exchanged is allowed as a terminal state only.
+      if (newStatus === "exchanged") {
+        payload = { fulfillmentStatus: "exchanged" };
+      }
+
+      await updateOrderStatus(order._id, payload);
       toast.success("Order status updated ✅");
       await fetchOrderById(order._id);
     } catch (e) {
@@ -145,26 +194,25 @@ console.log("priority:", order?.priority)
   };
 
   /* ✅ Update tracking */
-const updateTracking = async () => {
-  if (!order?._id) return;
+  const updateTracking = async () => {
+    if (!order?._id) return;
 
-  try {
-    const res = await fetch(`${API}/api/orders/${order._id}/tracking`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trackingId, courierName, trackingUrl }),
-    });
+    try {
+      const res = await fetch(`${API}/api/orders/${order._id}/tracking`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackingId, courierName, trackingUrl }),
+      });
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) return toast.error(data?.message || "Failed to update tracking");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error(data?.message || "Failed to update tracking");
 
-    toast.success("Tracking updated ✅");
-    await fetchOrderById(order._id);
-  } catch {
-    toast.error("Failed to update tracking");
-  }
-};
-
+      toast.success("Tracking updated ✅");
+      await fetchOrderById(order._id);
+    } catch {
+      toast.error("Failed to update tracking");
+    }
+  };
 
   /* ✅ Update remarks */
   const updateRemarks = async () => {
@@ -190,20 +238,6 @@ const updateTracking = async () => {
     }
   };
 
-  useEffect(() => {
-  if (!order) return;
-  setNewStatus(order.fulfillmentStatus || "processing");
-  setTrackingId(order.trackingDetails?.trackingId || "");
-  setCourierName(order.trackingDetails?.courierName || "");
-  setTrackingUrl(
-    order?.shipment?.shiprocket?.trackingUrl ||
-      order?.trackingDetails?.trackingUrl ||
-      ""
-  );
-  setRemarks(order.adminRemarks || "");
-}, [order]);
-
-
   /* ✅ LOADING */
   if (loading)
     return (
@@ -220,7 +254,6 @@ const updateTracking = async () => {
   return (
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
-
         {/* BACK */}
         <button
           onClick={() => router.push("/orders/all")}
@@ -235,13 +268,13 @@ const updateTracking = async () => {
             <h1 className="text-2xl font-bold text-gray-900">
               Order #{order.orderNumber}
             </h1>
-          {/* ✅ PRIORITY BADGE (NEW) */}
-<span
-  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${pri.cls} ring-1 ring-black/5`}
->
-  Priority: {pri.label}
-  
-</span>
+
+            {/* ✅ PRIORITY BADGE */}
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${pri.cls} ring-1 ring-black/5`}
+            >
+              Priority: {pri.label}
+            </span>
 
             <p className="text-sm text-gray-500 mt-0.5">
               Manage customer details, tracking & printing.
@@ -250,7 +283,7 @@ const updateTracking = async () => {
 
           <span
             className={`px-3 py-1.5 rounded-full capitalize font-semibold text-xs w-fit ${statusBadgeStyle(
-              order.fulfillmentStatus
+              safeCurrentStatus
             )}`}
           >
             {orderStatusLabel}
@@ -282,9 +315,10 @@ const updateTracking = async () => {
                   {items.map((it, idx) => {
                     const snap = it?.productSnapshot || {};
                     const v = it?.variant || {};
-const productUrl = it?.productId?._id
-  ? `${STORE_URL}/category/products/name/${it.productId._id}`
-  : "";
+                    const productUrl = it?.productId?._id
+                      ? `${STORE_URL}/category/products/name/${it.productId._id}`
+                      : "";
+
                     const size = it?.selectedSize || "-";
                     const color = it?.selectedColor || "-";
                     const sku = v?.sku || snap?.sku || "-";
@@ -300,20 +334,21 @@ const productUrl = it?.productId?._id
                               className="w-12 h-12 rounded-xl object-cover border border-gray-100"
                             />
                             <div>
-                             <p className="font-semibold text-gray-900">
-  {snap.title || "-"}
-</p>
+                              <p className="font-semibold text-gray-900">
+                                {snap.title || "-"}
+                              </p>
 
-{productUrl && (
-  <a
-    href={productUrl}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="text-xs text-blue-600 font-semibold hover:underline inline-flex items-center gap-1 mt-0.5"
-  >
-    View Product <ExternalLink size={13} />
-  </a>
-)}
+                              {productUrl && (
+                                <a
+                                  href={productUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 font-semibold hover:underline inline-flex items-center gap-1 mt-0.5"
+                                >
+                                  View Product <ExternalLink size={13} />
+                                </a>
+                              )}
+
                               <p className="text-xs text-gray-500">
                                 Code: {snap.productCode || "-"} • SKU: {sku}
                               </p>
@@ -325,12 +360,10 @@ const productUrl = it?.productId?._id
                         <td className="py-4 px-4 text-gray-700">
                           <div className="space-y-1 text-xs">
                             <p>
-                              <span className="font-medium">Size:</span>{" "}
-                              {size}
+                              <span className="font-medium">Size:</span> {size}
                             </p>
                             <p>
-                              <span className="font-medium">Color:</span>{" "}
-                              {color}
+                              <span className="font-medium">Color:</span> {color}
                             </p>
                           </div>
                         </td>
@@ -409,22 +442,21 @@ const productUrl = it?.productId?._id
           </div>
         </Card>
 
-       <div className="grid md:grid-cols-2 gap-5">
-  <EditableAddressCard
-    orderId={order._id}
-    type="shipping"
-    address={order.shippingAddressSnapshot}
-    onRefresh={() => fetchOrderById(order._id)}
-  />
+        <div className="grid md:grid-cols-2 gap-5">
+          <EditableAddressCard
+            orderId={order._id}
+            type="shipping"
+            address={order.shippingAddressSnapshot}
+            onRefresh={() => fetchOrderById(order._id)}
+          />
 
-  <EditableAddressCard
-    orderId={order._id}
-    type="billing"
-    address={order.billingAddressSnapshot}
-    onRefresh={() => fetchOrderById(order._id)}
-  />
-</div>
-
+          <EditableAddressCard
+            orderId={order._id}
+            type="billing"
+            address={order.billingAddressSnapshot}
+            onRefresh={() => fetchOrderById(order._id)}
+          />
+        </div>
 
         {/* STATUS UPDATE */}
         <Card>
@@ -441,13 +473,11 @@ const productUrl = it?.productId?._id
                 onChange={(e) => setNewStatus(e.target.value)}
                 className="mt-2 w-full px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-black/10"
               >
-                <option value="processing">Processing</option>
-                <option value="packed">Packed</option>
-                <option value="shipped">Shipped</option>
-                <option value="out_for_delivery">Out for Delivery</option>
-                <option value="delivered">Delivered</option>
-                <option value="returned">Returned</option>
-                <option value="cancelled">Cancelled</option>
+                {FULFILLMENT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -459,29 +489,33 @@ const productUrl = it?.productId?._id
               {statusUpdating ? "Updating..." : "Update"}
             </button>
           </div>
+
+          {/* Optional helper note for admins */}
+          <p className="mt-3 text-xs text-gray-500">
+            Note: Return/Exchange progress is tracked in RMA section, not in fulfillment status.
+          </p>
         </Card>
 
-<OrderRmaMention orderId={order._id} />
+        <OrderRmaMention orderId={order._id} />
 
-<OrderActionCenter
-  order={order}
-  trackingId={trackingId}
-  courierName={courierName}
-  trackingUrl={
-    order?.shipment?.shiprocket?.trackingUrl ||
-    order?.trackingDetails?.trackingUrl ||
-    ""
-  }
-  onRefresh={() => fetchOrderById(order._id)}
-/>
+        <OrderActionCenter
+          order={order}
+          trackingId={trackingId}
+          courierName={courierName}
+          trackingUrl={
+            order?.shipment?.shiprocket?.trackingUrl ||
+            order?.trackingDetails?.trackingUrl ||
+            ""
+          }
+          onRefresh={() => fetchOrderById(order._id)}
+        />
 
-<OrderTrackingCard
-  orderId={order._id}
-  shipment={order?.shipment}
-  trackingDetails={order?.trackingDetails}
-  onRefresh={() => fetchOrderById(order._id)}
-/>
-
+        <OrderTrackingCard
+          orderId={order._id}
+          shipment={order?.shipment}
+          trackingDetails={order?.trackingDetails}
+          onRefresh={() => fetchOrderById(order._id)}
+        />
 
         {/* REMARKS */}
         <Card>
@@ -497,21 +531,27 @@ const productUrl = it?.productId?._id
             onChange={(e) => setRemarks(e.target.value)}
           />
 
-          <button
-            onClick={updateRemarks}
-            disabled={remarksSaving}
-            className="mt-4 px-6 py-2.5 rounded-lg bg-black text-white text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition"
-          >
-            {remarksSaving ? "Saving..." : "Save Remarks"}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center mt-4">
+            <button
+              onClick={updateRemarks}
+              disabled={remarksSaving}
+              className="px-6 py-2.5 rounded-lg bg-black text-white text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition"
+            >
+              {remarksSaving ? "Saving..." : "Save Remarks"}
+            </button>
+
+            <button
+              onClick={updateTracking}
+              className="px-6 py-2.5 rounded-lg bg-white text-black border border-gray-200 text-sm font-semibold hover:bg-gray-50 transition"
+              type="button"
+            >
+              Save Tracking
+            </button>
+          </div>
         </Card>
 
         {/* ✅ PRINT PANEL */}
-        <OrderPrintPanel
-          order={order}
-          courierName={courierName}
-          trackingId={trackingId}
-        />
+        <OrderPrintPanel order={order} courierName={courierName} trackingId={trackingId} />
       </div>
     </section>
   );
