@@ -20,7 +20,7 @@ export const useCustomerStore = create((set, get) => ({
 
   customer: null,
 
-  // ✅ cartAdds (NEW)
+  // ✅ cartAdds
   cartAdds: [],
   cartAddsTotal: 0,
   loadingCartAdds: false,
@@ -29,12 +29,17 @@ export const useCustomerStore = create((set, get) => ({
   loadingSingle: false,
   saving: false,
 
+  // ✅ NEW: payout details save state
+  payoutSaving: false,
+  payoutError: "",
+
   error: "",
 
   /* ---------------- HELPERS ---------------- */
   setError: (msg = "") => set({ error: msg }),
   clearAddresses: () => set({ addresses: [], addressesTotal: 0 }),
-  clearCustomer: () => set({ customer: null, cartAdds: [], cartAddsTotal: 0 }),
+  clearCustomer: () =>
+    set({ customer: null, cartAdds: [], cartAddsTotal: 0, payoutError: "" }),
 
   /* ----------------------------------------------------
      FETCH ALL CUSTOMERS (ADMIN LIST)
@@ -49,7 +54,8 @@ export const useCustomerStore = create((set, get) => ({
       const url = new URL(`${API}/api/customers`);
 
       Object.entries(params).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
+        if (v !== undefined && v !== null && v !== "")
+          url.searchParams.set(k, String(v));
       });
 
       const res = await fetch(url.toString(), { cache: "no-store" });
@@ -57,7 +63,12 @@ export const useCustomerStore = create((set, get) => ({
 
       if (!res.ok) throw new Error(data?.message || "Failed to load customers");
 
-      set({ customers: data.items || [], total: data.total || 0, page: data.page || 1, pages: data.pages || 1 });
+      set({
+        customers: data.items || [],
+        total: data.total || 0,
+        page: data.page || 1,
+        pages: data.pages || 1,
+      });
     } catch (err) {
       set({ error: err?.message || "Failed to load customers" });
     } finally {
@@ -73,10 +84,12 @@ export const useCustomerStore = create((set, get) => ({
   fetchCustomerById: async (id) => {
     if (!API || !id) return;
 
-    set({ loadingSingle: true, error: "" });
+    set({ loadingSingle: true, error: "", payoutError: "" });
 
     try {
-      const res = await fetch(`${API}/api/customers/${id}`, { cache: "no-store" });
+      const res = await fetch(`${API}/api/customers/${id}`, {
+        cache: "no-store",
+      });
       const data = await res.json();
 
       if (!res.ok) throw new Error(data?.message || "Customer not found");
@@ -95,7 +108,6 @@ export const useCustomerStore = create((set, get) => ({
   /* ----------------------------------------------------
      ✅ FETCH CUSTOMER CART ADDS (OPTIONAL, explicit)
      GET /api/customers/:id
-     (uses the same endpoint; keeps UI decoupled)
   ---------------------------------------------------- */
   fetchCustomerCartAdds: async (id) => {
     if (!API || !id) return;
@@ -103,7 +115,9 @@ export const useCustomerStore = create((set, get) => ({
     set({ loadingCartAdds: true, error: "" });
 
     try {
-      const res = await fetch(`${API}/api/customers/${id}`, { cache: "no-store" });
+      const res = await fetch(`${API}/api/customers/${id}`, {
+        cache: "no-store",
+      });
       const data = await res.json();
 
       if (!res.ok) throw new Error(data?.message || "Customer not found");
@@ -129,13 +143,19 @@ export const useCustomerStore = create((set, get) => ({
     set({ saving: true, error: "" });
 
     try {
-      const res = await fetch(`${API}/api/customers/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const res = await fetch(`${API}/api/customers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       const data = await res.json();
 
       if (!res.ok) throw new Error(data?.message || "Update failed");
 
       const updated = data?.customer || null;
-      const cartAdds = Array.isArray(updated?.cartAdds) ? updated.cartAdds : get().cartAdds || [];
+      const cartAdds = Array.isArray(updated?.cartAdds)
+        ? updated.cartAdds
+        : get().cartAdds || [];
 
       set({ customer: updated, cartAdds, cartAddsTotal: cartAdds.length });
       return { success: true };
@@ -148,7 +168,66 @@ export const useCustomerStore = create((set, get) => ({
   },
 
   /* ----------------------------------------------------
-     UPDATE CUSTOMER ANALYTICS (ADMIN / SYSTEM)
+     ✅ NEW: UPDATE CUSTOMER PAYOUT DETAILS (Bank OR UPI)
+     PATCH /api/customers/:id/payout-details
+     payload example:
+       { upi: { upiId: "name@paytm" } }
+       { bank: { accountHolderName, accountNumber, ifscCode } }
+       { bank: {...}, upi: {...} }
+  ---------------------------------------------------- */
+  updateCustomerPayoutDetails: async (id, payload) => {
+    if (!API || !id) return { success: false, error: "Missing id" };
+
+    set({ payoutSaving: true, payoutError: "", error: "" });
+
+    try {
+      const res = await fetch(`${API}/api/customers/${id}/payout-details`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data?.message || "Payout update failed");
+
+      // controller returns { customer } OR { payoutDetails, customer }
+      const updatedCustomer = data?.customer || null;
+
+      if (updatedCustomer?._id) {
+        const cartAdds = Array.isArray(updatedCustomer?.cartAdds)
+          ? updatedCustomer.cartAdds
+          : get().cartAdds || [];
+
+        set({
+          customer: updatedCustomer,
+          cartAdds,
+          cartAddsTotal: cartAdds.length,
+        });
+      } else {
+        // fallback: merge payoutDetails into current customer (if controller doesn't return full doc)
+        const current = get().customer;
+        if (current?._id) {
+          set({
+            customer: {
+              ...current,
+              payoutDetails: data?.payoutDetails || current.payoutDetails,
+            },
+          });
+        }
+      }
+
+      return { success: true };
+    } catch (err) {
+      const msg = err?.message || "Failed to update payout details";
+      set({ payoutError: msg });
+      return { success: false, error: msg };
+    } finally {
+      set({ payoutSaving: false });
+    }
+  },
+
+  /* ----------------------------------------------------
+     UPDATE CUSTOMER ANALYTICS
      PATCH /api/customers/:id/analytics
   ---------------------------------------------------- */
   updateAnalytics: async (id, analyticsPayload) => {
@@ -157,13 +236,19 @@ export const useCustomerStore = create((set, get) => ({
     set({ saving: true, error: "" });
 
     try {
-      const res = await fetch(`${API}/api/customers/${id}/analytics`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(analyticsPayload) });
+      const res = await fetch(`${API}/api/customers/${id}/analytics`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(analyticsPayload),
+      });
       const data = await res.json();
 
       if (!res.ok) throw new Error(data?.message || "Analytics update failed");
 
       const updated = data?.customer || null;
-      const cartAdds = Array.isArray(updated?.cartAdds) ? updated.cartAdds : get().cartAdds || [];
+      const cartAdds = Array.isArray(updated?.cartAdds)
+        ? updated.cartAdds
+        : get().cartAdds || [];
 
       set({ customer: updated, cartAdds, cartAddsTotal: cartAdds.length });
       return { success: true };
@@ -190,7 +275,12 @@ export const useCustomerStore = create((set, get) => ({
 
       if (!res.ok) throw new Error(data?.message || "Delete failed");
 
-      set((state) => ({ customers: state.customers.filter((c) => c._id !== id), customer: null, cartAdds: [], cartAddsTotal: 0 }));
+      set((state) => ({
+        customers: state.customers.filter((c) => c._id !== id),
+        customer: null,
+        cartAdds: [],
+        cartAddsTotal: 0,
+      }));
       return { success: true };
     } catch (err) {
       set({ error: err?.message || "Failed to delete customer" });
@@ -213,7 +303,8 @@ export const useCustomerStore = create((set, get) => ({
       const res = await fetch(`${API}/api/addresses`, { cache: "no-store" });
       const data = await res.json();
 
-      if (!res.ok || data?.success === false) throw new Error(data?.message || "Failed to load addresses");
+      if (!res.ok || data?.success === false)
+        throw new Error(data?.message || "Failed to load addresses");
 
       const list = Array.isArray(data?.data) ? data.data : [];
       set({ addresses: list, addressesTotal: data?.count ?? list.length });
@@ -238,7 +329,8 @@ export const useCustomerStore = create((set, get) => ({
       const firstParams = { page: 1, limit: 200, ...params };
 
       Object.entries(firstParams).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
+        if (v !== undefined && v !== null && v !== "")
+          url.searchParams.set(k, String(v));
       });
 
       const res1 = await fetch(url.toString(), { cache: "no-store" });
@@ -255,9 +347,15 @@ export const useCustomerStore = create((set, get) => ({
         for (let p = 2; p <= totalPages; p++) {
           const u = new URL(`${API}/api/customers`);
           Object.entries({ ...firstParams, page: p }).forEach(([k, v]) => {
-            if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, String(v));
+            if (v !== undefined && v !== null && v !== "")
+              u.searchParams.set(k, String(v));
           });
-          pageFetches.push(fetch(u.toString(), { cache: "no-store" }).then((r) => r.json().then((j) => ({ ok: r.ok, j }))));
+
+          pageFetches.push(
+            fetch(u.toString(), { cache: "no-store" }).then((r) =>
+              r.json().then((j) => ({ ok: r.ok, j }))
+            )
+          );
         }
 
         const rest = await Promise.all(pageFetches);
@@ -266,7 +364,12 @@ export const useCustomerStore = create((set, get) => ({
         });
       }
 
-      set({ customers: all, total: data1?.total || all.length, page: 1, pages: totalPages });
+      set({
+        customers: all,
+        total: data1?.total || all.length,
+        page: 1,
+        pages: totalPages,
+      });
     } catch (err) {
       set({ error: err?.message || "Failed to load customers" });
     } finally {

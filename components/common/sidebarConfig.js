@@ -177,17 +177,18 @@ export const sidebarMenus = {
     { label: "ROAS Report", href: "/marketing/ROAS" }, // ✅ Added
   ],
 
-  customers: [
-    { label: "Customer Dashboard", href: "/customers/dashboard" },
-    { label: "Customer List", href: "/customers" },
-    { label: "Customer / Address", href: "/customers/address" },
-    { label: "Cart Adds", href: "/customers/cart-adds" },
-    { label: "Abandoned Carts", href: "/customers/abandoned-carts" }, // ✅ added
-    { label: "Tickets & Support", href: "/customers/support" },
-    { label: "Newsletter Subscribers", href: "/customers/newsletter" },
-    { label: "Wishlist", href: "/customers/wishlist" },
-    { label: "Analytics", href: "/customers/analytics" },
-  ],
+ customers: [
+  { label: "Customer Dashboard", href: "/customers/dashboard" },
+  { label: "Customer List", href: "/customers" },
+  { label: "Banking / Refund Details", href: "/customers/bankingDetails" },
+  { label: "Customer / Address", href: "/customers/address" },
+  { label: "Cart Adds", href: "/customers/cart-adds" },
+  { label: "Abandoned Carts", href: "/customers/abandoned-carts" },
+  { label: "Wishlist", href: "/customers/wishlist" },
+  { label: "Tickets & Support", href: "/customers/support" },
+  { label: "Newsletter Subscribers", href: "/customers/newsletter" },
+  { label: "Analytics", href: "/customers/analytics" },
+],
 
   customer_support: [
     { label: "Support Dashboard", href: "/customer-support" },

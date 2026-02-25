@@ -2,7 +2,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCcw, Search, ExternalLink, Check, Copy } from "lucide-react";
+import {
+  Loader2,
+  RefreshCcw,
+  Search,
+  ExternalLink,
+  Check,
+  Copy,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { useShiprocketStore } from "@/store/ShipRocketStore";
 
@@ -29,27 +36,25 @@ export default function OrderRowTracking({
   const [trackingUrl, setTrackingUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const { syncTracking, syncLoading, syncError, clearSyncError } = useShiprocketStore();
+  const { syncTracking, syncLoading, syncError, clearSyncError } =
+    useShiprocketStore();
 
-  // hydrate from order
+  // ✅ Shiprocket-only hydrate
   useEffect(() => {
     const awb =
       shipment?.shiprocket?.awb ||
-      shipment?.xpressbees?.awb ||
       trackingDetails?.trackingId ||
       shipment?.awb ||
       "";
 
     const courier =
       shipment?.shiprocket?.courierName ||
-      shipment?.xpressbees?.courierName ||
       trackingDetails?.courierName ||
       shipment?.courierName ||
       "";
 
     const url =
       shipment?.shiprocket?.trackingUrl ||
-      shipment?.xpressbees?.trackingUrl ||
       trackingDetails?.trackingUrl ||
       shipment?.trackingUrl ||
       "";
@@ -66,10 +71,12 @@ export default function OrderRowTracking({
   }, [syncError, clearSyncError]);
 
   const canSave = useMemo(() => Boolean(orderId) && !saving, [orderId, saving]);
+
   const canSync = useMemo(
     () => (Boolean(orderId) || Boolean(orderNumber)) && !syncLoading,
     [orderId, orderNumber, syncLoading]
   );
+
   const canSyncByNumber = useMemo(
     () => Boolean(orderNumber) && !syncLoading,
     [orderNumber, syncLoading]
@@ -86,7 +93,7 @@ export default function OrderRowTracking({
     }
   };
 
-  // save manual tracking to DB
+  // ✅ save manual tracking to DB (Shiprocket-focused payload)
   const saveTracking = async () => {
     if (!orderId) return;
     setSaving(true);
@@ -105,6 +112,8 @@ export default function OrderRowTracking({
           awb: trackingId?.trim(),
           courierName: courierName?.trim(),
           trackingUrl: trackingUrl?.trim(),
+          // optional hint (if your backend uses it)
+          provider: "shiprocket",
         }),
       });
 
@@ -129,13 +138,15 @@ export default function OrderRowTracking({
   const applySyncResponse = (data) => {
     const d = data?.data ?? data;
 
+    // ✅ Shiprocket-only extraction
     const awb =
       d?.trackingId ??
       d?.awb ??
       d?.awb_code ??
       d?.shiprocket?.awb ??
       d?.shipment?.shiprocket?.awb ??
-      d?.shipment?.xpressbees?.awb ??
+      d?.order?.shipment?.shiprocket?.awb ??
+      d?.data?.shipment?.shiprocket?.awb ??
       "";
 
     const courier =
@@ -144,7 +155,8 @@ export default function OrderRowTracking({
       d?.courier_name ??
       d?.shiprocket?.courierName ??
       d?.shipment?.shiprocket?.courierName ??
-      d?.shipment?.xpressbees?.courierName ??
+      d?.order?.shipment?.shiprocket?.courierName ??
+      d?.data?.shipment?.shiprocket?.courierName ??
       "";
 
     const url =
@@ -153,7 +165,8 @@ export default function OrderRowTracking({
       d?.trackingLink ??
       d?.shiprocket?.trackingUrl ??
       d?.shipment?.shiprocket?.trackingUrl ??
-      d?.shipment?.xpressbees?.trackingUrl ??
+      d?.order?.shipment?.shiprocket?.trackingUrl ??
+      d?.data?.shipment?.shiprocket?.trackingUrl ??
       "";
 
     if (awb) setTrackingId(String(awb));
@@ -161,7 +174,7 @@ export default function OrderRowTracking({
     if (url) setTrackingUrl(String(url));
   };
 
-  // smart sync: try orderId then fallback orderNumber
+  // ✅ smart sync: try orderId then fallback orderNumber
   const syncFromShiprocket = async () => {
     try {
       if (orderId) {
@@ -176,6 +189,7 @@ export default function OrderRowTracking({
         toast.error(e?.message || "Shiprocket sync failed");
         return;
       }
+      // fallback below
     }
 
     if (!orderNumber) return toast.error("Order number missing for sync");
@@ -203,7 +217,9 @@ export default function OrderRowTracking({
   };
 
   const hasAny =
-    safe(trackingId).trim() || safe(courierName).trim() || safe(trackingUrl).trim();
+    safe(trackingId).trim() ||
+    safe(courierName).trim() ||
+    safe(trackingUrl).trim();
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-4 md:p-5">
@@ -215,6 +231,7 @@ export default function OrderRowTracking({
               Order: <span className="font-semibold">{orderNumber}</span>
             </p>
           ) : null}
+          <p className="text-[11px] text-gray-400 mt-1">Provider: Shiprocket</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -258,7 +275,6 @@ export default function OrderRowTracking({
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:opacity-90"
-              type="button"
               title="Open tracking link"
             >
               <ExternalLink size={14} /> Open
@@ -269,7 +285,9 @@ export default function OrderRowTracking({
 
       <div className="grid md:grid-cols-3 gap-3">
         <div>
-          <label className="text-[11px] font-semibold text-gray-600">Tracking ID / AWB</label>
+          <label className="text-[11px] font-semibold text-gray-600">
+            Tracking ID / AWB
+          </label>
           <div className="mt-2 flex gap-2">
             <input
               className="px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
@@ -290,7 +308,9 @@ export default function OrderRowTracking({
         </div>
 
         <div>
-          <label className="text-[11px] font-semibold text-gray-600">Courier Name</label>
+          <label className="text-[11px] font-semibold text-gray-600">
+            Courier Name
+          </label>
           <input
             className="mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
             value={courierName}
@@ -300,7 +320,9 @@ export default function OrderRowTracking({
         </div>
 
         <div>
-          <label className="text-[11px] font-semibold text-gray-600">Tracking URL</label>
+          <label className="text-[11px] font-semibold text-gray-600">
+            Tracking URL
+          </label>
           <div className="mt-2 flex gap-2">
             <input
               className="px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
