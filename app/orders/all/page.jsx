@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Loader2, Search } from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
+import { useOrderStore } from "@/store/orderStore";
 
-const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 const IST_TZ = "Asia/Kolkata";
 const IST_OFFSET = "+05:30";
 
@@ -76,8 +76,13 @@ const safe = (v) => (v === null || v === undefined ? "" : v);
    Page
 --------------------------------------------- */
 export default function OrdersListPage() {
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const orders = useOrderStore((s) => s.orders);
+  const loading = useOrderStore((s) => s.loading);
+  const ordersMeta = useOrderStore((s) => s.ordersMeta);
+
+  const fetchAllOrders = useOrderStore((s) => s.fetchAllOrders);
+  const fetchNextOrdersPage = useOrderStore((s) => s.fetchNextOrdersPage);
+  const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
 
   // Search (button based)
   const [searchInput, setSearchInput] = useState("");
@@ -98,7 +103,14 @@ export default function OrdersListPage() {
   const [priority, setPriority] = useState("");
   const [quickDate, setQuickDate] = useState("");
 
-  const applySearch = useCallback(() => setSearch(searchInput.trim()), [searchInput]);
+  // pagination
+  const [pageSize, setPageSize] = useState(500);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const applySearch = useCallback(
+    () => setSearch(searchInput.trim()),
+    [searchInput]
+  );
 
   const clearSearch = useCallback(() => {
     setSearchInput("");
@@ -122,60 +134,77 @@ export default function OrdersListPage() {
   }, [quickDate]);
 
   /* ---------------------------------------------
-     ✅ Fetch orders with backend filters (IST-correct)
+     ✅ Build backend filters (IST-correct)
+     NOTE: we send BOTH startDate/endDate + startAt/endAt (as your backend supports)
+  --------------------------------------------- */
+  const backendFilters = useMemo(() => {
+    const f = {};
+
+    if (search) f.customerName = search;
+
+    if (startDate) {
+      f.startDate = startDate;
+      f.startAt = istStartISO(startDate);
+      f.tz = IST_TZ;
+    }
+    if (endDate) {
+      f.endDate = endDate;
+      f.endAt = istEndISO(endDate);
+      f.tz = IST_TZ;
+    }
+
+    if (minAmount) f.minAmount = minAmount;
+    if (maxAmount) f.maxAmount = maxAmount;
+    if (paymentMethod) f.paymentMethod = paymentMethod;
+
+    if (status) f.fulfillmentStatus = status;
+    if (confirmFilter) f.confirmFilter = confirmFilter;
+    if (priority) f.priority = priority;
+
+    // pagination (works only if backend supports; store handles old backend too)
+    f.page = 1;
+    f.limit = pageSize;
+
+    return f;
+  }, [
+    search,
+    startDate,
+    endDate,
+    minAmount,
+    maxAmount,
+    paymentMethod,
+    status,
+    confirmFilter,
+    priority,
+    pageSize,
+  ]);
+
+  /* ---------------------------------------------
+     ✅ Fetch orders (via store)
   --------------------------------------------- */
   const loadOrders = useCallback(async () => {
     try {
-      setLoading(true);
-
-      const qs = new URLSearchParams();
-
-      if (search) qs.set("customerName", search);
-
-      if (startDate) {
-        qs.set("startDate", startDate);
-        qs.set("startAt", istStartISO(startDate));
-        qs.set("tz", IST_TZ);
-      }
-      if (endDate) {
-        qs.set("endDate", endDate);
-        qs.set("endAt", istEndISO(endDate));
-        qs.set("tz", IST_TZ);
-      }
-
-      if (minAmount) qs.set("minAmount", minAmount);
-      if (maxAmount) qs.set("maxAmount", maxAmount);
-      if (paymentMethod) qs.set("paymentMethod", paymentMethod);
-
-      if (status) qs.set("fulfillmentStatus", status);
-      if (confirmFilter) qs.set("confirmFilter", confirmFilter);
-      if (priority) qs.set("priority", priority);
-
-      const url = `${API}/api/orders?${qs.toString()}`;
-      const res = await fetch(url, { cache: "no-store" });
-      const data = await res.json();
-
-      setOrders(Array.isArray(data) ? data : data?.orders || []);
-    } catch (err) {
-      console.log("Orders Fetch Error:", err);
-      setOrders([]);
-    } finally {
-      setLoading(false);
+      await fetchAllOrders(backendFilters);
+    } catch (e) {
+      // store already sets error; keep page safe
+      console.log("Orders Fetch Error:", e);
     }
-  }, [search, startDate, endDate, minAmount, maxAmount, paymentMethod, status, confirmFilter, priority]);
+  }, [fetchAllOrders, backendFilters]);
 
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
 
   /* ---------------------------------------------
-     ✅ Client-side filters
+     ✅ Client-side filters (kept)
   --------------------------------------------- */
   const filteredOrders = useMemo(() => {
     let data = Array.isArray(orders) ? [...orders] : [];
 
-    if (confirmFilter === "confirmed") data = data.filter((o) => o?.isConfirmed === true);
-    if (confirmFilter === "not_confirmed") data = data.filter((o) => o?.isConfirmed !== true);
+    if (confirmFilter === "confirmed")
+      data = data.filter((o) => o?.isConfirmed === true);
+    if (confirmFilter === "not_confirmed")
+      data = data.filter((o) => o?.isConfirmed !== true);
 
     if (priority) data = data.filter((o) => norm(o?.priority) === norm(priority));
 
@@ -184,15 +213,26 @@ export default function OrdersListPage() {
 
     return data.filter((o) => {
       const orderNumber = String(o?.orderNumber || "").toLowerCase();
-      const name = String(o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || "").toLowerCase();
-      const email = String(o?.customerId?.email || o?.shippingAddressSnapshot?.email || "").toLowerCase();
-      const phone = String(o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || "").toLowerCase();
-      return orderNumber.includes(q) || name.includes(q) || email.includes(q) || phone.includes(q);
+      const name = String(
+        o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
+      ).toLowerCase();
+      const email = String(
+        o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
+      ).toLowerCase();
+      const phone = String(
+        o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
+      ).toLowerCase();
+      return (
+        orderNumber.includes(q) ||
+        name.includes(q) ||
+        email.includes(q) ||
+        phone.includes(q)
+      );
     });
   }, [orders, confirmFilter, priority, search]);
 
   /* ---------------------------------------------
-     ✅ CSV export
+     ✅ CSV export (kept)
   --------------------------------------------- */
   const buildCsvRows = (ordersArr) => {
     const rows = [];
@@ -247,7 +287,9 @@ export default function OrdersListPage() {
       items.forEach((item, idx) => {
         const snap = item?.productSnapshot || {};
         const itemProductCode = safe(snap?.productCode || "");
-        const attrs = Array.isArray(item?.variant?.attributes) ? item.variant.attributes : [];
+        const attrs = Array.isArray(item?.variant?.attributes)
+          ? item.variant.attributes
+          : [];
         const attrSize =
           attrs.find((a) => String(a?.key || "").toLowerCase() === "size")?.value ||
           attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")?.value ||
@@ -284,7 +326,8 @@ export default function OrdersListPage() {
   };
 
   const exportToCSV = () => {
-    if (!filteredOrders?.length) return alert("No orders to export for the current filters.");
+    if (!filteredOrders?.length)
+      return alert("No orders to export for the current filters.");
 
     const rows = buildCsvRows(filteredOrders);
     const headers = [
@@ -342,7 +385,9 @@ export default function OrdersListPage() {
       ),
     ];
 
-    const blob = new Blob([csvLines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([csvLines.join("\r\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
@@ -357,15 +402,25 @@ export default function OrdersListPage() {
 
   /* ---------------------------------------------
      ✅ Totals
+     - if backend returns meta (totalCount/totalSum), show that
+     - else fallback to current filtered list
   --------------------------------------------- */
   const totals = useMemo(() => {
-    const count = filteredOrders.length;
-    const sum = filteredOrders.reduce((acc, o) => acc + (Number(o?.finalPayable) || 0), 0);
+    const metaCount = Number(ordersMeta?.totalCount);
+    const metaSum = Number(ordersMeta?.totalSum);
+
+    const count = Number.isFinite(metaCount) && metaCount >= 0 ? metaCount : filteredOrders.length;
+
+    const sum =
+      Number.isFinite(metaSum) && metaSum >= 0
+        ? metaSum
+        : filteredOrders.reduce((acc, o) => acc + (Number(o?.finalPayable) || 0), 0);
+
     return { count, sum };
-  }, [filteredOrders]);
+  }, [ordersMeta, filteredOrders]);
 
   /* ---------------------------------------------
-     ✅ Filter chips (✅ added pickup_initiated)
+     ✅ Filter chips (✅ pickup_initiated included)
   --------------------------------------------- */
   const chips = [
     { key: "", label: "All", type: "all" },
@@ -377,14 +432,11 @@ export default function OrdersListPage() {
     { key: "delivered", label: "Delivered", type: "status" },
     { key: "return_requested", label: "Return Requested", type: "status" },
     { key: "exchange_requested", label: "Exchange Requested", type: "status" },
-
     { key: "pickup_initiated", label: "Pickup Initiated", type: "status" }, // ✅ NEW
-
     { key: "returned", label: "Returned", type: "status" },
     { key: "rto", label: "RTO", type: "status" },
     { key: "cancelled", label: "Cancelled", type: "status" },
     { key: "refunded", label: "Refunded", type: "status" },
-
     { key: "confirmed", label: "Confirmed", type: "confirm" },
     { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
     { key: "normal", label: "Priority: Normal", type: "priority" },
@@ -393,6 +445,19 @@ export default function OrdersListPage() {
     { key: "today", label: "Today", type: "quickDate" },
     { key: "yesterday", label: "Yesterday", type: "quickDate" },
   ];
+
+  const hasMore = !!ordersMeta?.hasMore;
+
+  const loadMore = async () => {
+    try {
+      setLoadingMore(true);
+      await fetchNextOrdersPage({ ...backendFilters, page: undefined }); // store calculates next page from meta
+    } catch (e) {
+      console.log("Load more error:", e);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   /* ---------------------------------------------
      Render
@@ -411,8 +476,12 @@ export default function OrdersListPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">All Orders</h1>
-            <p className="text-gray-500 mt-1">View, filter and manage all customer orders.</p>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+              All Orders
+            </h1>
+            <p className="text-gray-500 mt-1">
+              View, filter and manage all customer orders.
+            </p>
             <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
                 {totals.count} Orders
@@ -463,7 +532,9 @@ export default function OrdersListPage() {
         <Card>
           <div className="grid md:grid-cols-4 gap-5">
             <div>
-              <label className="text-sm font-semibold text-gray-700">Quick Date</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Quick Date
+              </label>
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={quickDate}
@@ -473,11 +544,15 @@ export default function OrdersListPage() {
                 <option value="today">Today</option>
                 <option value="yesterday">Yesterday</option>
               </select>
-              <p className="mt-1 text-xs text-gray-500">Selecting this auto-fills start/end date (IST).</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Selecting this auto-fills start/end date (IST).
+              </p>
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">Start Date</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Start Date
+              </label>
               <input
                 type="date"
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
@@ -490,7 +565,9 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">End Date</label>
+              <label className="text-sm font-semibold text-gray-700">
+                End Date
+              </label>
               <input
                 type="date"
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
@@ -503,7 +580,9 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">Min Amount</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Min Amount
+              </label>
               <input
                 type="number"
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
@@ -514,7 +593,9 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">Max Amount</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Max Amount
+              </label>
               <input
                 type="number"
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
@@ -525,7 +606,9 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">Payment Method</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Payment Method
+              </label>
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={paymentMethod}
@@ -539,7 +622,9 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">Confirmation</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Confirmation
+              </label>
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={confirmFilter}
@@ -552,7 +637,9 @@ export default function OrdersListPage() {
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">Priority</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Priority
+              </label>
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={priority}
@@ -564,9 +651,28 @@ export default function OrdersListPage() {
                 <option value="high">High</option>
               </select>
             </div>
+
+            {/* optional: page size */}
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Page Size
+              </label>
+              <select
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
+                value={String(pageSize)}
+                onChange={(e) => setPageSize(Number(e.target.value) || 500)}
+              >
+                <option value="200">200</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Applies on next fetch.
+              </p>
+            </div>
           </div>
 
-<div className="mt-6 flex flex-wrap gap-2">
+          <div className="mt-6 flex flex-wrap gap-2">
             {chips.map((s) => {
               const isActive =
                 s.type === "status"
@@ -577,7 +683,10 @@ export default function OrdersListPage() {
                   ? priority === s.key
                   : s.type === "quickDate"
                   ? quickDate === s.key
-                  : status === "" && confirmFilter === "" && priority === "" && quickDate === "";
+                  : status === "" &&
+                    confirmFilter === "" &&
+                    priority === "" &&
+                    quickDate === "";
 
               const onClick = () => {
                 if (s.type === "all") {
@@ -588,9 +697,12 @@ export default function OrdersListPage() {
                   return;
                 }
                 if (s.type === "status") setStatus((prev) => (prev === s.key ? "" : s.key));
-                if (s.type === "confirm") setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
-                if (s.type === "priority") setPriority((prev) => (prev === s.key ? "" : s.key));
-                if (s.type === "quickDate") setQuickDate((prev) => (prev === s.key ? "" : s.key));
+                if (s.type === "confirm")
+                  setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
+                if (s.type === "priority")
+                  setPriority((prev) => (prev === s.key ? "" : s.key));
+                if (s.type === "quickDate")
+                  setQuickDate((prev) => (prev === s.key ? "" : s.key));
               };
 
               return (
@@ -607,6 +719,44 @@ export default function OrdersListPage() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Load More */}
+          <div className="mt-6 flex items-center justify-between gap-3">
+            <div className="text-xs text-gray-500">
+              {ordersMeta?.page
+                ? `Page ${ordersMeta.page} • Showing ${orders.length} orders`
+                : `Showing ${orders.length} orders`}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={loadOrders}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98] transition"
+              >
+                Refresh
+              </button>
+
+              <button
+                disabled={!hasMore || loadingMore}
+                onClick={loadMore}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                  !hasMore || loadingMore
+                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
+                }`}
+              >
+                {loadingMore ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin" /> Loading...
+                  </span>
+                ) : hasMore ? (
+                  "Load More"
+                ) : (
+                  "No More"
+                )}
+              </button>
+            </div>
           </div>
         </Card>
 
@@ -630,6 +780,7 @@ export default function OrdersListPage() {
                 {filteredOrders.length ? (
                   [...filteredOrders]
                     .sort((a, b) => {
+                      // keep your original sorting (orderNumber numeric desc, then date desc)
                       const getNum = (o) => {
                         const m = String(o?.orderNumber || "").match(/(\d+)$/);
                         return m ? Number(m[1]) : 0;
@@ -650,13 +801,8 @@ export default function OrdersListPage() {
                           key={String(rowKey)}
                           order={order}
                           onUpdated={(updatedOrder) => {
-                            setOrders((prev) =>
-                              prev.map((o) =>
-                                (o?._id || o?.id) === (updatedOrder?._id || updatedOrder?.id)
-                                  ? updatedOrder
-                                  : o
-                              )
-                            );
+                            // ✅ store-level sync (keeps all existing behavior, no local setOrders needed)
+                            if (updatedOrder?._id) syncOrderInList(updatedOrder);
                           }}
                         />
                       );

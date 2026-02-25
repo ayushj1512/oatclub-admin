@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "";
+const API = (process.env.NEXT_PUBLIC_API_URL || "").trim();
 
 /**
  * Remove all undefined values deeply.
@@ -50,11 +50,30 @@ const buildQueryString = (filters = {}) => {
       return;
     }
 
+    // pagination sanitize (only if passed in filters)
+    if (k === "page" || k === "limit") {
+      const n = parseInt(s, 10);
+      if (Number.isFinite(n)) params.set(k, String(n));
+      return;
+    }
+
     params.set(k, s);
   });
 
   const qs = params.toString();
   return qs ? `?${qs}` : "";
+};
+
+const normalizeOrdersPayload = (data) => {
+  // backend can return:
+  // 1) [ ... ] (legacy)
+  // 2) { orders:[...], meta:{...} } (new pagination)
+  // 3) { orders:[...] } (some routes)
+  // 4) { data:[...] } (rare)
+  if (Array.isArray(data)) return { orders: data, meta: null };
+  if (data && Array.isArray(data.orders)) return { orders: data.orders, meta: data.meta || null };
+  if (data && Array.isArray(data.data)) return { orders: data.data, meta: data.meta || null };
+  return { orders: [], meta: data?.meta || null };
 };
 
 export const useOrderStore = create((set, get) => ({
@@ -65,6 +84,9 @@ export const useOrderStore = create((set, get) => ({
   order: null,
   loading: false,
   error: null,
+
+  // ✅ NEW: pagination meta for orders list
+  ordersMeta: null, // { page, limit, totalCount, totalSum, hasMore }
 
   /* =========================
      UI HELPERS
@@ -80,7 +102,6 @@ export const useOrderStore = create((set, get) => ({
   /* =========================
      NORMALIZERS
   ========================= */
-  _normalizeOrders: (data) => (Array.isArray(data) ? data : data?.orders || []),
   _normalizeOrder: (data) => data?.order ?? data ?? null,
 
   _syncOrderInList: (updatedOrder) => {
@@ -89,6 +110,13 @@ export const useOrderStore = create((set, get) => ({
       orders: (s.orders || []).map((o) =>
         String(o?._id) === String(updatedOrder._id) ? updatedOrder : o
       ),
+    }));
+  },
+
+  _removeOrderFromList: (orderId) => {
+    if (!orderId) return;
+    set((s) => ({
+      orders: (s.orders || []).filter((o) => String(o?._id) !== String(orderId)),
     }));
   },
 
@@ -192,18 +220,47 @@ export const useOrderStore = create((set, get) => ({
   fetchOrdersByCustomer: async (customerId) => {
     if (!customerId) return [];
     const data = await get()._get(`/api/orders/customer/${customerId}`);
-    const orders = get()._normalizeOrders(data);
-    set({ orders });
+    const { orders } = normalizeOrdersPayload(data);
+    set({ orders, ordersMeta: null });
     return orders;
   },
 
-  // GET /api/orders?filters (supports priority)
+  /**
+   * ✅ GET /api/orders?filters
+   * - supports old backend (array) and new backend ({orders, meta})
+   * - supports pagination: filters.page, filters.limit
+   */
   fetchAllOrders: async (filters = {}) => {
     const qs = buildQueryString(filters);
     const data = await get()._get(`/api/orders${qs}`);
-    const orders = get()._normalizeOrders(data);
-    set({ orders });
+
+    const { orders, meta } = normalizeOrdersPayload(data);
+
+    set({ orders, ordersMeta: meta || null });
     return orders;
+  },
+
+  /**
+   * ✅ NEW: load next page and APPEND
+   * - uses existing filters + increments page
+   * - if backend doesn't return meta, it falls back to simple append without hasMore
+   */
+  fetchNextOrdersPage: async (filters = {}) => {
+    const currMeta = get().ordersMeta;
+    const nextPage = Math.max(1, Number(currMeta?.page || filters?.page || 1) + 1);
+    const limit = Number(filters?.limit || currMeta?.limit || 500);
+
+    const qs = buildQueryString({ ...(filters || {}), page: nextPage, limit });
+    const data = await get()._get(`/api/orders${qs}`);
+
+    const { orders: nextOrders, meta } = normalizeOrdersPayload(data);
+
+    set((s) => ({
+      orders: [...(s.orders || []), ...(nextOrders || [])],
+      ordersMeta: meta || s.ordersMeta || null,
+    }));
+
+    return nextOrders || [];
   },
 
   // PATCH /api/orders/:id/status
@@ -218,6 +275,12 @@ export const useOrderStore = create((set, get) => ({
 
     set({ order });
     get()._syncOrderInList(order);
+
+    // ✅ optional: if order is now terminal & your current list is "active only", remove it.
+    // (won't break anything if you don't use it)
+    // const fs = String(order?.fulfillmentStatus || "").toLowerCase();
+    // if (["cancelled", "refunded"].includes(fs)) get()._removeOrderFromList(orderId);
+
     return order;
   },
 
@@ -254,7 +317,8 @@ export const useOrderStore = create((set, get) => ({
 
     const p = { ...(payload || {}) };
     if (p.priority != null) p.priority = normalizePriority(p.priority) || "normal";
-    if (p.customerSupportRemark != null) p.customerSupportRemark = String(p.customerSupportRemark).trim();
+    if (p.customerSupportRemark != null)
+      p.customerSupportRemark = String(p.customerSupportRemark).trim();
 
     const data = await get()._patch(`/api/orders/${orderId}`, p);
     const order = get()._normalizeOrder(data);
@@ -309,27 +373,27 @@ export const useOrderStore = create((set, get) => ({
     return order;
   },
 
-// Exchange Order
+  // Exchange Order
   duplicateExchangeOrder: async (orderId, payload = {}) => {
-  if (!orderId) return null;
+    if (!orderId) return null;
 
-  const data = await get()._post(`/api/orders/${orderId}/duplicate-exchange`, payload);
+    const data = await get()._post(`/api/orders/${orderId}/duplicate-exchange`, payload);
 
-  // backend returns { order: newOrder }
-  const newOrder = get()._normalizeOrder(data);
+    // backend returns { order: newOrder }
+    const newOrder = get()._normalizeOrder(data);
 
-  if (newOrder?._id) {
-    // set as current order (optional)
-    set({ order: newOrder });
+    if (newOrder?._id) {
+      // set as current order (optional)
+      set({ order: newOrder });
 
-    // add to list on top (optional)
-    set((s) => ({
-      orders: [newOrder, ...(s.orders || [])],
-    }));
-  }
+      // add to list on top (optional)
+      set((s) => ({
+        orders: [newOrder, ...(s.orders || [])],
+      }));
+    }
 
-  return newOrder;
-},
+    return newOrder;
+  },
 
   /**
    * ✅ Manual Shiprocket booking (only if missing)
@@ -352,8 +416,7 @@ export const useOrderStore = create((set, get) => ({
     return data;
   },
 
-
-    // GET /api/orders/lookup?email=...&phone=...
+  // GET /api/orders/lookup?email=...&phone=...
   fetchOrdersByIdentity: async ({ email, phone } = {}) => {
     const e = String(email ?? "").trim();
     const p = String(phone ?? "").trim();
@@ -364,9 +427,8 @@ export const useOrderStore = create((set, get) => ({
 
     const data = await get()._get(`/api/orders/lookup?${qs.toString()}`);
 
-    // backend can return { orders: [...] } OR [...]
-    const orders = Array.isArray(data) ? data : get()._normalizeOrders(data);
-    set({ orders });
+    const { orders } = normalizeOrdersPayload(data);
+    set({ orders, ordersMeta: null });
     return orders;
   },
 
@@ -374,7 +436,7 @@ export const useOrderStore = create((set, get) => ({
      RESET
   ========================= */
   clearOrder: () => set({ order: null }),
-  clearOrders: () => set({ orders: [] }),
+  clearOrders: () => set({ orders: [], ordersMeta: null }),
 
   resetStore: () =>
     set({
@@ -382,5 +444,6 @@ export const useOrderStore = create((set, get) => ({
       order: null,
       loading: false,
       error: null,
+      ordersMeta: null,
     }),
 }));
