@@ -73,7 +73,8 @@ const isPaidPrepaid = (o) =>
   safeLower(o?.paymentMethod) !== "cod" && safeLower(o?.paymentStatus) === "paid";
 const isCodConfirmed = (o) =>
   safeLower(o?.paymentMethod) === "cod" && Boolean(o?.isConfirmed);
-const isConfirmed = (o) => Boolean(o?.isConfirmed) || isPaidPrepaid(o) || isCodConfirmed(o);
+const isConfirmed = (o) =>
+  Boolean(o?.isConfirmed) || isPaidPrepaid(o) || isCodConfirmed(o);
 
 const isDispatched = (o) =>
   ["shipped", "out_for_delivery"].includes(orderFS(o)) ||
@@ -140,6 +141,7 @@ function Chip({ active, icon: Icon, label, onClick }) {
           ? "bg-gray-900 text-white ring-gray-900"
           : "bg-white text-gray-800 ring-black/5 hover:ring-black/10 hover:bg-gray-50",
       ].join(" ")}
+      type="button"
     >
       {Icon ? <Icon className="h-4 w-4" /> : null}
       {label}
@@ -163,9 +165,7 @@ function KpiCard({ title, value, sub, tone = "indigo" }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs text-gray-600">{title}</div>
-          <div className="text-xl md:text-2xl font-semibold text-gray-900 mt-1">
-            {value}
-          </div>
+          <div className="text-xl md:text-2xl font-semibold text-gray-900 mt-1">{value}</div>
           {sub ? <div className="text-xs text-gray-500 mt-1">{sub}</div> : null}
         </div>
         <div
@@ -207,6 +207,42 @@ function Td({ children, right, className = "" }) {
   );
 }
 
+function PageLoader({ show, fetchedCount }) {
+  if (!show) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-white/70 backdrop-blur-sm" />
+      <div className="relative mx-4 w-full max-w-md rounded-2xl bg-white shadow-xl ring-1 ring-black/10 p-5">
+        <div className="flex items-start gap-3">
+          <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 shadow-sm flex items-center justify-center">
+            <Loader2 className="h-5 w-5 text-white animate-spin" />
+          </div>
+          <div className="flex-1">
+            <div className="text-base font-semibold text-gray-900">Processing data…</div>
+            <div className="mt-1 text-sm text-gray-600">
+              Fetching orders & building report
+              {Number.isFinite(Number(fetchedCount)) ? (
+                <>
+                  {" "}
+                  <span className="text-gray-400">•</span>{" "}
+                  <span className="font-semibold text-gray-900">{fetchedCount}</span>{" "}
+                  <span className="text-gray-500">fetched</span>
+                </>
+              ) : null}
+            </div>
+            <div className="mt-3 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+              <div className="h-full w-1/2 animate-pulse bg-gray-300" />
+            </div>
+            <div className="mt-2 text-xs text-gray-500">
+              Please wait — this can take a few seconds for large order volumes.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ================= PAGE ================= */
 
 export default function OrdersReportPage() {
@@ -223,6 +259,7 @@ export default function OrdersReportPage() {
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true); // ✅ for full-screen loader
   const [fetchedCount, setFetchedCount] = useState(0);
   const [err, setErr] = useState("");
 
@@ -295,6 +332,7 @@ export default function OrdersReportPage() {
       setOrders([]);
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   };
 
@@ -403,7 +441,10 @@ export default function OrdersReportPage() {
   const exportDisabled = loading || !report.rows.length;
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#f6f7fb] p-4 md:p-6">
+    <div className="min-h-[calc(100vh-64px)] bg-[#f6f7fb] p-4 md:p-6" aria-busy={loading}>
+      {/* ✅ FULL-SCREEN LOADER (initial fetch + processing) */}
+      <PageLoader show={initialLoad && loading} fetchedCount={fetchedCount} />
+
       <div className="mx-auto space-y-4">
         {/* Header / Controls */}
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
@@ -427,8 +468,7 @@ export default function OrdersReportPage() {
                     {loading ? fetchedCount : orders.length}
                   </span>
                   {" • "}
-                  Filtered:{" "}
-                  <span className="font-semibold text-gray-900">{filtered.length}</span>
+                  Filtered: <span className="font-semibold text-gray-900">{filtered.length}</span>
                 </div>
               </div>
             </div>
@@ -438,12 +478,9 @@ export default function OrdersReportPage() {
                 onClick={run}
                 className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm text-gray-800 shadow-sm ring-1 ring-black/5 hover:bg-gray-50 disabled:opacity-60"
                 disabled={loading}
+                type="button"
               >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCcw className="h-4 w-4" />
-                )}
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
                 Refresh
               </button>
 
@@ -457,6 +494,7 @@ export default function OrdersReportPage() {
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-600 to-fuchsia-600 px-3 py-2 text-sm text-white shadow-sm hover:opacity-95 disabled:opacity-60"
                 disabled={exportDisabled}
                 title={exportDisabled ? "No rows to export" : "Export CSV"}
+                type="button"
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Export CSV
@@ -476,7 +514,6 @@ export default function OrdersReportPage() {
 
                 <button
                   onClick={() => {
-                    // quick UX: reset to 7d + clear extras
                     setQuery("");
                     setScope("all");
                     applyQuick("7d");
@@ -489,22 +526,12 @@ export default function OrdersReportPage() {
               </div>
 
               <div className="mt-2 flex flex-wrap gap-2">
-                <Chip
-                  active={quick === "7d"}
-                  label="Last 7 days"
-                  onClick={() => applyQuick("7d")}
-                />
-                <Chip
-                  active={quick === "30d"}
-                  label="Last 30 days"
-                  onClick={() => applyQuick("30d")}
-                />
+                <Chip active={quick === "7d"} label="Last 7 days" onClick={() => applyQuick("7d")} />
+                <Chip active={quick === "30d"} label="Last 30 days" onClick={() => applyQuick("30d")} />
                 <Chip active={quick === "all"} label="ALL" onClick={() => applyQuick("all")} />
               </div>
 
-              <div className="mt-2 text-xs text-gray-500">
-                Use date picker for custom range.
-              </div>
+              <div className="mt-2 text-xs text-gray-500">Use date picker for custom range.</div>
             </div>
 
             {/* Date range */}
@@ -538,9 +565,7 @@ export default function OrdersReportPage() {
                 />
               </div>
 
-              <div className="mt-2 text-xs text-gray-500">
-                Table shows latest date first (DESC)
-              </div>
+              <div className="mt-2 text-xs text-gray-500">Table shows latest date first (DESC)</div>
             </div>
 
             {/* Scope + search */}
