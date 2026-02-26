@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import useAdminProductionStore from "@/store/adminProductionStore";
 import { useInventoryReservationStore } from "@/store/inventoryReservationStore";
 import SyncInventoryButton from "@/components/production/SyncInventoryButton";
-
+import { toast } from "react-hot-toast";
 // ✅ Product Store for images (bulk fetch)
 import { useAdminProductStore } from "@/store/adminProductStore";
 
@@ -338,9 +338,12 @@ export default function ProductionDashboardPage() {
   }, [fulfillmentStatus]);
 
   // Mirror store -> local (ONLY when store changes)
-  useEffect(() => {
-    setLocalQueue(Array.isArray(storeQueue) ? storeQueue : []);
-  }, [storeQueue]);
+ useEffect(() => {
+  const onlyConfirmed = (Array.isArray(storeQueue) ? storeQueue : []).filter(
+    (o) => o?.isConfirmed === true
+  );
+  setLocalQueue(onlyConfirmed);
+}, [storeQueue]);
 
   useEffect(() => {
     setLocalSummary(storeSummary || {});
@@ -376,13 +379,30 @@ export default function ProductionDashboardPage() {
 
   // ✅ Fetch reservations when queue present (but don't refetch after packing)
   useEffect(() => {
-    const run = async () => {
-      if (!localQueue?.length) return;
+  const run = async () => {
+    if (!localQueue?.length) return;
+
+    const refIds = localQueue
+      .map((o) => String(o?._id || "").trim())
+      .filter(Boolean);
+
+    // ✅ If your backend/store supports refIds filter, it will reduce load.
+    // ✅ If it doesn't support, fallback to old call.
+    try {
+      await fetchInventoryReservations({
+        status: "reserved",
+        refType: "order",
+        refIds, // ✅ NEW (optional)
+      });
+    } catch (e) {
+      // fallback (backward compatible)
       await fetchInventoryReservations({ status: "reserved", refType: "order" });
-    };
-    run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localQueue?.length]);
+    }
+  };
+
+  run();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [localQueue]);
 
   const activeDateRange = useMemo(() => {
     if (useCustomRange) {
@@ -394,27 +414,37 @@ export default function ProductionDashboardPage() {
   }, [datePreset, useCustomRange, rangeFrom, rangeTo]);
 
   const filteredQueue = useMemo(() => {
-    const q = (localQueue || []).slice();
-    const term = String(search || "").trim().toLowerCase();
-    const { from, to } = activeDateRange;
+  const q = Array.isArray(localQueue) ? localQueue.slice() : [];
+  const term = String(search || "").trim().toLowerCase();
+  const { from, to } = activeDateRange;
 
-    return q.filter((o) => {
-      const created = new Date(o?.createdAt || o?.orderDate || Date.now());
-      const inRange = (!from || created >= from) && (!to || created <= to);
-      if (!inRange) return false;
-      if (!term) return true;
+  return q.filter((o) => {
+    // ✅ ONLY confirmed orders on this page
+    if (o?.isConfirmed !== true) return false;
 
-      const orderNumber = String(o?.orderNumber || "").toLowerCase();
-      const name = String(o?.shippingAddressSnapshot?.fullName || "").toLowerCase();
-      const phone = String(o?.shippingAddressSnapshot?.phone || "").toLowerCase();
-      const itemsText = (o?.items || [])
-        .map((it) => it?.productSnapshot?.title || "")
-        .join(" ")
-        .toLowerCase();
+    const created = new Date(o?.createdAt || o?.orderDate || Date.now());
+    const inRange = (!from || created >= from) && (!to || created <= to);
+    if (!inRange) return false;
 
-      return orderNumber.includes(term) || name.includes(term) || phone.includes(term) || itemsText.includes(term);
-    });
-  }, [localQueue, search, activeDateRange]);
+    if (!term) return true;
+
+    const orderNumber = String(o?.orderNumber || "").toLowerCase();
+    const name = String(o?.shippingAddressSnapshot?.fullName || "").toLowerCase();
+    const phone = String(o?.shippingAddressSnapshot?.phone || "").toLowerCase();
+
+    const itemsText = (o?.items || [])
+      .map((it) => it?.productSnapshot?.title || "")
+      .join(" ")
+      .toLowerCase();
+
+    return (
+      orderNumber.includes(term) ||
+      name.includes(term) ||
+      phone.includes(term) ||
+      itemsText.includes(term)
+    );
+  });
+}, [localQueue, search, activeDateRange]);
 
   // ✅ Packability map for current filtered list (for selection UI)
   const packabilityMap = useMemo(() => {
@@ -426,14 +456,26 @@ export default function ProductionDashboardPage() {
   }, [filteredQueue, localReservations]);
 
   const packableFilteredIds = useMemo(() => {
-    return filteredQueue
-      .filter((o) => {
-        const id = String(o?._id);
-        const p = packabilityMap[id];
-        return o?.fulfillmentStatus === "processing" && p?.fullyReserved;
-      })
-      .map((o) => String(o?._id));
-  }, [filteredQueue, packabilityMap]);
+  return (filteredQueue || [])
+    .filter((o) => {
+      if (!o) return false;
+
+      const id = String(o?._id || "");
+      const p = packabilityMap?.[id];
+
+      // ✅ Only confirmed orders
+      if (o?.isConfirmed !== true) return false;
+
+      // ✅ Only processing stage
+      if (String(o?.fulfillmentStatus) !== "processing") return false;
+
+      // ✅ Fully reserved required
+      if (!p?.fullyReserved) return false;
+
+      return true;
+    })
+    .map((o) => String(o?._id));
+}, [filteredQueue, packabilityMap]);
 
   // ✅ Keep selection clean when list changes
   useEffect(() => {
@@ -473,67 +515,100 @@ export default function ProductionDashboardPage() {
   );
 
   const doMarkPacked = useCallback(
-    async (orderId) => {
-      if (!orderId) return;
-      if (!markPackedFn) {
-        console.error("No mark packed function found in production store");
-        return;
-      }
+  async (orderId) => {
+    if (!orderId) return;
+    if (!markPackedFn) {
+      console.error("No mark packed function found in production store");
+      return;
+    }
 
-      // Loading state for this order
-      setPackingIds((prev) => new Set(prev).add(String(orderId)));
+    const oid = String(orderId);
 
-      try {
-        const isStatusFn = markPackedFn === prodStore.updateOrderStatus || markPackedFn === prodStore.setOrderStatus;
+    // ✅ ONLY confirmed orders can be packed + reserved
+    const order = (localQueue || []).find((o) => String(o?._id) === oid);
+    if (!order) {
+      console.error("Order not found in localQueue:", oid);
+      return;
+    }
+    if (order?.isConfirmed !== true) {
+      // toast optional
+      // toast.error("Only confirmed orders can be packed.");
+      console.warn("Blocked packing for unconfirmed order:", oid);
+      return;
+    }
 
-        if (isStatusFn) await markPackedFn(orderId, "packed");
-        else await markPackedFn(orderId);
+    // ✅ Guard: only allow packing from processing
+    if (String(order?.fulfillmentStatus) !== "processing") {
+      console.warn("Blocked packing. Not in processing:", oid, order?.fulfillmentStatus);
+      return;
+    }
 
-        const orderNo = String(
-          (localQueue || []).find((o) => String(o?._id) === String(orderId))?.orderNumber || ""
-        ).trim();
+    // ✅ Guard: avoid double click
+    if (packingIds.has(oid)) return;
 
-        const reservationIds = getOrderReservationIds(orderId, localReservations);
+    // Loading state for this order
+    setPackingIds((prev) => {
+      const next = new Set(prev);
+      next.add(oid);
+      return next;
+    });
 
-        if (reservationIds.length) {
-          for (const rid of reservationIds) {
-            try {
-              await consumeReservation(rid, `Packed from production (${orderNo || orderId})`);
-            } catch (err) {
-              console.error("consumeReservation failed:", rid, err);
-            }
+    try {
+      const isStatusFn =
+        markPackedFn === prodStore.updateOrderStatus ||
+        markPackedFn === prodStore.setOrderStatus;
+
+      if (isStatusFn) await markPackedFn(oid, "packed");
+      else await markPackedFn(oid);
+
+      const orderNo = String(order?.orderNumber || "").trim();
+
+      // ✅ consume ONLY this order’s reservations
+      const reservationIds = getOrderReservationIds(oid, localReservations);
+
+      if (reservationIds.length) {
+        for (const rid of reservationIds) {
+          try {
+            await consumeReservation(
+              rid,
+              `Packed from production (${orderNo || oid})`
+            );
+          } catch (err) {
+            console.error("consumeReservation failed:", rid, err);
           }
         }
-
-        // ✅ NO REFRESH: just remove from UI
-        applyLocalRemovalAfterPacked(orderId);
-
-        // Also unselect it if selected
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(String(orderId));
-          return next;
-        });
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setPackingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(String(orderId));
-          return next;
-        });
       }
-    },
-    [
-      applyLocalRemovalAfterPacked,
-      consumeReservation,
-      localQueue,
-      localReservations,
-      markPackedFn,
-      prodStore.updateOrderStatus,
-      prodStore.setOrderStatus,
-    ]
-  );
+
+      // ✅ NO REFRESH: just remove from UI
+      applyLocalRemovalAfterPacked(oid);
+
+      // Also unselect it if selected
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(oid);
+        return next;
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setPackingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(oid);
+        return next;
+      });
+    }
+  },
+  [
+    applyLocalRemovalAfterPacked,
+    consumeReservation,
+    localQueue,
+    localReservations,
+    markPackedFn,
+    prodStore.updateOrderStatus,
+    prodStore.setOrderStatus,
+    packingIds,
+  ]
+);
 
   const onMarkPacked = (orderId) => doMarkPacked(orderId);
 
