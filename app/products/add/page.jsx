@@ -1,8 +1,9 @@
+// app/products/add/page.jsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { Save, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import CategoryMultiSelect from "@/components/product/CategoryMultiSelect";
 import AttributeSelector from "@/components/product/AttributeSelector";
@@ -12,15 +13,15 @@ import ProductContentEditor from "@/components/product/ProductContentEditor";
 import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
 import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
-import FabricAdd from "@/components/product/FabricAdd"; // ✅ NEW
-import OriginalProductLinkField from "@/components/product/OriginalProductLinkField"; // ✅ NEW
+import FabricAdd from "@/components/product/FabricAdd";
+import OriginalProductLinkField from "@/components/product/OriginalProductLinkField";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 /* ---------------- helpers ---------------- */
 const toNum = (v) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+  const x = Number(v);
+  return Number.isFinite(x) ? x : 0;
 };
 
 const isApparelCategory = (categories) => {
@@ -87,18 +88,39 @@ const parseSpecs = (v) => {
   return [];
 };
 
+const safeArr = (v) => (Array.isArray(v) ? v : []);
+const safeObj = (v, fb = {}) => (v && typeof v === "object" ? v : fb);
+
 /* ---------------- Colors UI ---------------- */
 const BASIC_COLORS = [
-  "black", "white", "grey", "gray",
-  "red", "maroon", "pink", "magenta",
-  "purple", "lavender",
-  "blue", "navy", "sky blue", "teal",
-  "green", "olive", "mint",
-  "yellow", "mustard",
-  "orange", "peach",
-  "brown", "beige", "tan",
-  "nude", "cream",
-  "gold", "silver",
+  "black",
+  "white",
+  "grey",
+  "gray",
+  "red",
+  "maroon",
+  "pink",
+  "magenta",
+  "purple",
+  "lavender",
+  "blue",
+  "navy",
+  "sky blue",
+  "teal",
+  "green",
+  "olive",
+  "mint",
+  "yellow",
+  "mustard",
+  "orange",
+  "peach",
+  "brown",
+  "beige",
+  "tan",
+  "nude",
+  "cream",
+  "gold",
+  "silver",
 ];
 
 const normColor = (s) =>
@@ -214,6 +236,7 @@ function ColorsPicker({ valueText, onChangeText }) {
 
 export default function AddProductPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [saving, setSaving] = useState(false);
   const [allAttributes, setAllAttributes] = useState([]);
@@ -236,7 +259,7 @@ export default function AddProductPage() {
     tagsText: "",
     colorsText: "",
 
-    fabrics: [], // ✅ NEW
+    fabrics: [],
 
     images: [],
     thumbnail: "",
@@ -258,9 +281,55 @@ export default function AddProductPage() {
     isActive: true,
     isFeatured: false,
     isDraft: false,
+
+    // ✅ NEW: original link field in add page too
+    originalProductLink: "",
   });
 
   const showHsnCode = useMemo(() => isApparelCategory(form.categories), [form.categories]);
+
+  /* ---------------- DUPLICATE PREFILL (from slug page new tab) ----------------
+     Reads: /products/add?dupKey=xxxx
+     Source: localStorage[dupKey] = JSON(formPatch)
+  ----------------------------------------------------------------------------- */
+  useEffect(() => {
+    const dupKey = searchParams?.get("dupKey");
+    if (!dupKey) return;
+
+    try {
+      const raw = localStorage.getItem(dupKey);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+
+      setForm((p) => ({
+        ...p,
+        ...parsed,
+
+        // safety coercions
+        categories: safeArr(parsed?.categories),
+        images: safeArr(parsed?.images),
+        thumbnail: safeArr(parsed?.images)?.[0] || parsed?.thumbnail || "",
+        fabrics: safeArr(parsed?.fabrics),
+        attributes: safeArr(parsed?.attributes),
+        variants: safeArr(parsed?.variants),
+        crossSellProducts: safeArr(parsed?.crossSellProducts),
+        collections: safeArr(parsed?.collections),
+        highlights: safeArr(parsed?.highlights),
+        dimensions: safeObj(parsed?.dimensions, p.dimensions),
+        keywords: safeArr(parsed?.keywords),
+
+        // make sure duplicate always opens as draft + inactive (safe)
+        isDraft: parsed?.isDraft ?? true,
+        isActive: parsed?.isActive ?? false,
+      }));
+
+      // cleanup so refresh doesn't reapply
+      localStorage.removeItem(dupKey);
+    } catch (e) {
+      console.error("dupKey prefill error:", e);
+    }
+  }, [searchParams]);
 
   /* ---------------- LOAD MASTER DATA ---------------- */
   useEffect(() => {
@@ -300,11 +369,11 @@ export default function AddProductPage() {
     const specifications = parseSpecs(form.specificationsText);
 
     const payload = {
-      title: form.title,
+      title: String(form.title || "").trim(),
       price: toNum(form.price),
       compareAtPrice: form.compareAtPrice === "" ? null : toNum(form.compareAtPrice),
 
-      categories: form.categories,
+      categories: safeArr(form.categories),
       ...(showHsnCode ? { hsnCode: String(form.hsnCode ?? "").trim() } : {}),
 
       shortDescription: String(form.shortDescription || "").trim(),
@@ -313,31 +382,34 @@ export default function AddProductPage() {
       keyFeatures,
       specifications,
 
-      fabrics: Array.isArray(form.fabrics) ? form.fabrics : [], // ✅ NEW
+      fabrics: safeArr(form.fabrics),
 
-      images: form.images,
-      thumbnail: form.images?.[0] || "",
+      images: safeArr(form.images),
+      thumbnail: safeArr(form.images)?.[0] || "",
 
       tags,
       colors,
 
-      attributes: form.attributes,
-      variants: form.variants,
+      attributes: safeArr(form.attributes),
+      variants: safeArr(form.variants),
 
-      crossSellProducts: form.crossSellProducts,
+      crossSellProducts: safeArr(form.crossSellProducts),
 
-      highlights: form.highlights,
-      collections: form.collections,
+      highlights: safeArr(form.highlights),
+      collections: safeArr(form.collections),
       weight: toNum(form.weight),
       dimensions: form.dimensions,
 
-      metaTitle: form.metaTitle,
-      metaDescription: form.metaDescription,
-      keywords: form.keywords,
+      metaTitle: String(form.metaTitle || "").trim(),
+      metaDescription: String(form.metaDescription || "").trim(),
+      keywords: safeArr(form.keywords),
 
       isActive: Boolean(form.isActive),
       isFeatured: Boolean(form.isFeatured),
       isDraft: Boolean(form.isDraft),
+
+      // ✅ NEW
+      originalProductLink: String(form.originalProductLink || "").trim(),
     };
 
     try {
@@ -347,13 +419,13 @@ export default function AddProductPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.message || "Create failed");
 
       alert("✅ Product created successfully");
       router.push("/products");
     } catch (e) {
-      alert(e.message || "Failed to create product");
+      alert(e?.message || "Failed to create product");
     } finally {
       setSaving(false);
     }
@@ -368,6 +440,16 @@ export default function AddProductPage() {
           <div>
             <h1 className="text-xl font-semibold">Add Product</h1>
             <p className="text-sm text-gray-600">Create a new product for your store</p>
+
+            {(form.isDraft || !form.isActive) && (
+              <p className="mt-1 text-xs text-gray-500">
+                Status:{" "}
+                <span className="font-medium">
+                  {form.isDraft ? "Draft" : "Live"}
+                  {!form.isActive ? " (Inactive)" : ""}
+                </span>
+              </p>
+            )}
           </div>
 
           <button
@@ -401,9 +483,7 @@ export default function AddProductPage() {
             <input
               placeholder="Compare at price"
               value={form.compareAtPrice}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, compareAtPrice: e.target.value }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, compareAtPrice: e.target.value }))}
               className="input"
             />
           </div>
@@ -415,9 +495,7 @@ export default function AddProductPage() {
               valueText={form.colorsText}
               onChangeText={(t) => setForm((p) => ({ ...p, colorsText: t }))}
             />
-            <p className="text-xs text-gray-500">
-              Tip: chips se select karo ya type karke Enter dabao.
-            </p>
+            <p className="text-xs text-gray-500">Tip: chips se select karo ya type karke Enter dabao.</p>
           </div>
 
           {/* HSN */}
@@ -451,7 +529,7 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        {/* ✅ NEW: PRODUCT LINK */}
+        {/* ✅ Product Link */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
           <OriginalProductLinkField
             value={form.originalProductLink}
@@ -459,22 +537,17 @@ export default function AddProductPage() {
           />
         </div>
 
-        {/* FABRICS ✅ NEW */}
+        {/* Fabrics */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
           <div>
             <h2 className="font-semibold">Fabrics (Optional)</h2>
-            <p className="text-sm text-gray-500">
-              Add one or more fabrics (Fabric name is required per row)
-            </p>
+            <p className="text-sm text-gray-500">Add one or more fabrics (Fabric name is required per row)</p>
           </div>
 
-          <FabricAdd
-            value={form.fabrics}
-            onChange={(next) => setForm((p) => ({ ...p, fabrics: next }))}
-          />
+          <FabricAdd value={form.fabrics} onChange={(next) => setForm((p) => ({ ...p, fabrics: next }))} />
         </div>
 
-        {/* CATEGORIES */}
+        {/* Categories */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
           <h2 className="font-semibold">Categories</h2>
           <CategoryMultiSelect
@@ -483,20 +556,18 @@ export default function AddProductPage() {
           />
         </div>
 
-        {/* IMAGES */}
+        {/* Images */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
           <h2 className="font-semibold">Product Images</h2>
 
           <ProductImagesEditor
             value={form.images}
             folder="miray/products"
-            onChange={(urls) =>
-              setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))
-            }
+            onChange={(urls) => setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))}
           />
         </div>
 
-        {/* CONTENT */}
+        {/* Content */}
         <ProductContentEditor
           editable
           value={{
@@ -510,7 +581,7 @@ export default function AddProductPage() {
           onChange={(next) => setForm((p) => ({ ...p, ...next }))}
         />
 
-        {/* ATTRIBUTES */}
+        {/* Attributes */}
         <AttributeSelector
           editable
           value={form.attributes}
@@ -518,7 +589,7 @@ export default function AddProductPage() {
           onChange={(next) => setForm((p) => ({ ...p, attributes: next }))}
         />
 
-        {/* VARIANTS */}
+        {/* Variants */}
         {form.attributes.length > 0 && (
           <ProductVariantsEditor
             editable
@@ -527,7 +598,7 @@ export default function AddProductPage() {
           />
         )}
 
-        {/* CROSS SELL */}
+        {/* Cross Sell */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
           <h2 className="font-semibold">Cross-sell Products</h2>
 
@@ -537,7 +608,7 @@ export default function AddProductPage() {
           />
         </div>
 
-        {/* COLLECTIONS */}
+        {/* Collections */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
           <h2 className="font-semibold">Collections (Optional)</h2>
           <p className="text-sm text-gray-500">Assign this product to one or more collections</p>
@@ -549,13 +620,8 @@ export default function AddProductPage() {
           />
         </div>
 
-        {/* ADVANCED */}
-        <ProductAdvancedFields
-          value={form}
-          collections={collections}
-          editable
-          onChange={(next) => setForm(next)}
-        />
+        {/* Advanced */}
+        <ProductAdvancedFields value={form} collections={collections} editable onChange={(next) => setForm(next)} />
       </div>
 
       <style jsx>{`
