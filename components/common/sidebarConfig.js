@@ -123,27 +123,28 @@ export const sidebarMenus = {
   ],
 
   orders: [
-    { label: "Orders Dashboard", href: "/orders" },
-    { label: "All Orders", href: "/orders/all" },
-    { label: "Order Analytics", href: "/orders/report" },
+  { label: "Orders Dashboard", href: "/orders" },
+  { label: "All Orders", href: "/orders/all" },
+  { label: "Order Search", href: "/orders/search" }, // ✅ NEW
+  { label: "Order Analytics", href: "/orders/report" },
 
-    // Status Buckets
-    { label: "Pending Orders", href: "/orders/pending" },
-    { label: "Processing", href: "/orders/processing" },
-    { label: "Shipped", href: "/orders/shipped" },
-    { label: "Delivered", href: "/orders/delivered" },
+  // Status Buckets
+  { label: "Pending Orders", href: "/orders/pending" },
+  { label: "Processing", href: "/orders/processing" },
+  { label: "Shipped", href: "/orders/shipped" },
+  { label: "Delivered", href: "/orders/delivered" },
 
-    // Returns & Exceptions
-    { label: "Returned / Cancelled", href: "/orders/returns" },
-    { label: "RTO / NDR", href: "/orders/rto" },
-    { label: "Order Remark", href: "/orders/remark" },
+  // Returns & Exceptions
+  { label: "Returned / Cancelled", href: "/orders/returns" },
+  { label: "RTO / NDR", href: "/orders/rto" },
+  { label: "Order Remark", href: "/orders/remark" },
 
-    // ✅ UPDATED: RMA now points to /rma
-    { label: "RMA Requests", href: "/rma" },
+  // ✅ RMA
+  { label: "RMA Requests", href: "/rma" },
 
-    // Other Tools
-    { label: "Order Tags", href: "/orders/tags" },
-  ],
+  // Other Tools
+  { label: "Order Tags", href: "/orders/tags" },
+],
 
   // ✅ OPTIONAL: Separate RMA menu group (if you want sidebar items when on /rma)
   rma: [
