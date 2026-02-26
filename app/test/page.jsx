@@ -1,163 +1,157 @@
-// app/test/page.jsx
 "use client";
 
-import React, { useMemo, useState } from "react";
-import ProductPicker from "@/components/common/ProductPicker";
-import { useAdminProductStore } from "@/store/adminProductStore";
-import toast from "react-hot-toast";
+import { useMemo } from "react";
 
-/**
- * /test/page.jsx
- * A sandbox page to review the reusable ProductPicker component.
- * - Multi select (required)
- * - Locked category select (required)
- * - Single select (required)
- */
-export default function TestProductPickerPage() {
-  const { products, loading, error } = useAdminProductStore();
+/* -------------------------------
+   Mock JSON Data (Safe Testing)
+--------------------------------*/
+const mockReservations = [
+  {
+    _id: "r1",
+    orderNumber: "MIRAY-000010",
+    createdAt: "2026-02-26T01:00:00.000Z",
+    orderDoc: { priority: "normal" },
+  },
+  {
+    _id: "r2",
+    orderNumber: "MIRAY-000002",
+    createdAt: "2026-02-26T02:00:00.000Z",
+    orderDoc: { priority: "normal" },
+  },
+  {
+    _id: "r3",
+    orderNumber: "MIRAY-000007",
+    createdAt: "2026-02-26T03:00:00.000Z",
+    orderDoc: { priority: "high" },
+  },
+  {
+    _id: "r4",
+    orderNumber: "MIRAY-000001",
+    createdAt: "2026-02-26T04:00:00.000Z",
+    orderDoc: { priority: "high" },
+  },
+  {
+    _id: "r5",
+    orderNumber: "MIRAY-000003",
+    createdAt: "2026-02-26T05:00:00.000Z",
+    orderDoc: { priority: "medium" },
+  },
+  {
+    _id: "r6",
+    orderNumber: "",
+    createdAt: "2026-02-26T06:00:00.000Z",
+    orderDoc: null,
+  },
+];
 
-  // Demo 1: Collection (multi required)
-  const [collectionIds, setCollectionIds] = useState([]);
+/* -------------------------------
+   Sorting Helpers
+--------------------------------*/
+const priorityRank = (p) => {
+  const x = String(p || "").toLowerCase();
+  if (x === "high") return 0;
+  if (x === "medium") return 1;
+  if (x === "normal") return 2;
+  return 3;
+};
 
-  // Demo 2: Tight Reviews (multi required + locked category)
-  const [tightReviewIds, setTightReviewIds] = useState([]);
+const cmpOrderNumber = (a, b) =>
+  String(a || "").localeCompare(String(b || ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
 
-  // Demo 3: Featured (single required)
-  const [featuredId, setFeaturedId] = useState(null);
+function sortReservations(rows) {
+  return [...rows].sort((a, b) => {
+    const pa = priorityRank(a?.orderDoc?.priority);
+    const pb = priorityRank(b?.orderDoc?.priority);
+    if (pa !== pb) return pa - pb;
 
-  // Optional: build category options from products (if product.categories exists)
-  // If you already have category store, replace this with real options.
-  const categoryOptions = useMemo(() => {
-    const set = new Map(); // value -> label
-    (products || []).forEach((p) => {
-      const cats = Array.isArray(p?.categories) ? p.categories : [];
-      cats.forEach((c) => {
-        // supports categories being strings or objects {slug/name/_id}
-        if (typeof c === "string") {
-          const v = c.trim();
-          if (v) set.set(v, v);
-        } else if (c && typeof c === "object") {
-          const v = c.slug || c._id || c.id || c.value || "";
-          const label = c.name || c.title || c.slug || v;
-          if (v) set.set(String(v), String(label));
-        }
-      });
-    });
+    const on = cmpOrderNumber(a?.orderNumber, b?.orderNumber);
+    if (on !== 0) return on;
 
-    return Array.from(set.entries()).map(([value, label]) => ({ value, label }));
-  }, [products]);
-
-  const onSaveAll = () => {
-    // enforce "must select" here too (parent side)
-    if (!collectionIds.length) return toast.error("Collection needs at least 1 product");
-    if (!tightReviewIds.length) return toast.error("Tight Reviews needs at least 1 product");
-    if (!featuredId) return toast.error("Featured product is required");
-
-    toast.success("Looks good ✅ (Review the selected ids below)");
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="rounded-2xl border bg-white p-4 md:p-6">
-          <h1 className="text-2xl font-semibold">Product Picker Test</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Use this page to review the common product selection component behavior.
-          </p>
-
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <div className="rounded-lg bg-gray-100 px-3 py-2 text-sm">
-              <span className="text-gray-600">Loading:</span>{" "}
-              <span className="font-medium">{loading ? "true" : "false"}</span>
-            </div>
-            <div className="rounded-lg bg-gray-100 px-3 py-2 text-sm">
-              <span className="text-gray-600">Products in store:</span>{" "}
-              <span className="font-medium">{(products || []).length}</span>
-            </div>
-            {error ? (
-              <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                Error: {error}
-              </div>
-            ) : null}
-
-            <button
-              type="button"
-              onClick={onSaveAll}
-              className="ml-auto rounded-xl bg-black px-4 py-2 text-sm text-white hover:opacity-90"
-            >
-              Validate selections
-            </button>
-          </div>
-        </header>
-
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Demo 1 */}
-          <section className="space-y-3">
-            <ProductPicker
-              title="Demo 1 — Collection (multi, required)"
-              multiple
-              required
-              value={collectionIds}
-              onChange={setCollectionIds}
-              categoryOptions={categoryOptions}
-            />
-
-            <SelectionPreview label="Selected (Collection)" value={collectionIds} />
-          </section>
-
-          {/* Demo 2 */}
-          <section className="space-y-3">
-            <ProductPicker
-              title="Demo 2 — Tight Reviews (locked category, multi, required)"
-              multiple
-              required
-              lockedCategory="tight-reviews"
-              value={tightReviewIds}
-              onChange={setTightReviewIds}
-              categoryOptions={categoryOptions}
-            />
-
-            <SelectionPreview label="Selected (Tight Reviews)" value={tightReviewIds} />
-            <p className="text-xs text-gray-600">
-              Note: lockedCategory is set to <span className="font-medium">tight-reviews</span>.
-              Change the slug if your backend expects something else.
-            </p>
-          </section>
-
-          {/* Demo 3 */}
-          <section className="space-y-3 lg:col-span-2">
-            <ProductPicker
-              title="Demo 3 — Featured product (single, required)"
-              multiple={false}
-              required
-              value={featuredId}
-              onChange={setFeaturedId}
-              categoryOptions={categoryOptions}
-            />
-
-            <SelectionPreview label="Selected (Featured)" value={featuredId} />
-          </section>
-        </div>
-
-        <footer className="rounded-2xl border bg-white p-4 text-sm text-gray-600">
-          <p>
-            If search isn’t working, your backend may not support <code className="px-1">q</code>{" "}
-            param in <code className="px-1">GET /api/products</code>. Update the param name inside
-            <code className="ml-1 px-1">ProductPicker</code> (the queryParams section).
-          </p>
-        </footer>
-      </div>
-    </div>
-  );
+    const ca = new Date(a?.createdAt).getTime();
+    const cb = new Date(b?.createdAt).getTime();
+    return ca - cb;
+  });
 }
 
-function SelectionPreview({ label, value }) {
+function isSorted(rows) {
+  for (let i = 1; i < rows.length; i++) {
+    const a = rows[i - 1];
+    const b = rows[i];
+
+    const pa = priorityRank(a?.orderDoc?.priority);
+    const pb = priorityRank(b?.orderDoc?.priority);
+    if (pa > pb) return false;
+
+    if (pa === pb) {
+      const on = cmpOrderNumber(a?.orderNumber, b?.orderNumber);
+      if (on > 0) return false;
+
+      if (on === 0) {
+        const ca = new Date(a?.createdAt).getTime();
+        const cb = new Date(b?.createdAt).getTime();
+        if (ca > cb) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/* -------------------------------
+   Page Component
+--------------------------------*/
+export default function ReservationSortTest() {
+  const sorted = useMemo(() => sortReservations(mockReservations), []);
+
+  const ok = useMemo(() => isSorted(sorted), [sorted]);
+
   return (
-    <div className="rounded-2xl border bg-white p-4">
-      <p className="text-sm font-semibold">{label}</p>
-      <pre className="mt-2 max-h-48 overflow-auto rounded-xl bg-gray-50 p-3 text-xs text-gray-800">
-        {JSON.stringify(value, null, 2)}
-      </pre>
+    <div className="p-6 space-y-6">
+      <div className="text-xl font-semibold">
+        🔬 Reservation Sorting Test (Mock JSON Only)
+      </div>
+
+      <div className="text-sm text-gray-600">
+        Rule: priority (high → medium → normal) → orderNumber ASC → createdAt ASC
+      </div>
+
+      <div className="text-lg">
+        Result:{" "}
+        {ok ? (
+          <span className="text-green-600 font-bold">✅ PASS</span>
+        ) : (
+          <span className="text-red-600 font-bold">❌ FAIL</span>
+        )}
+      </div>
+
+      <div className="border rounded overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="p-2 text-left">#</th>
+              <th className="p-2 text-left">Priority</th>
+              <th className="p-2 text-left">Order Number</th>
+              <th className="p-2 text-left">Created At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r, i) => (
+              <tr key={r._id} className="border-b">
+                <td className="p-2">{i + 1}</td>
+                <td className="p-2">{r?.orderDoc?.priority || "none"}</td>
+                <td className="p-2">{r.orderNumber || "—"}</td>
+                <td className="p-2">{r.createdAt}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="text-xs text-gray-500">
+        This page uses static JSON data. No API calls. No database impact.
+      </div>
     </div>
   );
 }

@@ -44,19 +44,34 @@ const ddmmyyyy = (ymd) => {
 
 const todayIST = () => ymdIST(new Date());
 
+// ✅ add/subtract days from YYYY-MM-DD (timezone-safe)
 const addDays = (ymd, days) => {
-  const d = new Date(`${ymd}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  if (!ymd) return "";
+  const [y, m, d] = ymd.split("-").map(Number);
+
+  // Use UTC to avoid local/IST DST/timezone shifts
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + Number(days || 0));
+
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
 };
 
+// ✅ inclusive list between YYYY-MM-DD (timezone-safe)
 const listDaysInclusive = (from, to) => {
+  if (!from || !to) return [];
+  if (from > to) return [];
+
   const out = [];
-  const a = new Date(`${from}T00:00:00`);
-  const b = new Date(`${to}T00:00:00`);
-  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return out;
-  for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
-    out.push(d.toISOString().slice(0, 10));
+  let cur = from;
+
+  // hard safety cap (prevents infinite loop)
+  for (let i = 0; i < 4000; i++) {
+    out.push(cur);
+    if (cur === to) break;
+    cur = addDays(cur, 1);
   }
   return out;
 };
@@ -92,8 +107,7 @@ const isCancelledBeforeDispatch = (o) => {
   return true;
 };
 
-const orderRevenue = (o) => Number(o?.finalPayable ?? o?.totalAmount ?? 0) || 0;
-
+const orderRevenue = (o) => Number(o?.finalPayable ?? 0) || 0;
 /* ================= CSV EXPORT ================= */
 
 const exportCSV = (rows, filename) => {
