@@ -22,9 +22,11 @@ import {
   Ban,
   ChevronDown,
   Hash,
+  Info,
 } from "lucide-react";
 
 import { useOrderStore } from "@/store/orderStore";
+import { useShiprocketStore } from "@/store/ShipRocketStore";
 
 /* ================= Helpers ================= */
 const IST = "Asia/Kolkata";
@@ -71,8 +73,10 @@ const dtIST = (value) => {
 };
 
 const copyText = (text, label = "Copied") => {
+  const t = String(text || "");
+  if (!t) return;
   try {
-    navigator.clipboard.writeText(String(text || ""));
+    navigator.clipboard.writeText(t);
     toast.success(label);
   } catch {
     toast.error("Copy failed");
@@ -80,6 +84,32 @@ const copyText = (text, label = "Copied") => {
 };
 
 const cn = (...a) => a.filter(Boolean).join(" ");
+
+const extractTracking = (payload) => {
+  const d = payload?.data ?? payload ?? {};
+  const awb =
+    d?.trackingId ??
+    d?.awb ??
+    d?.awb_code ??
+    d?.shipment?.shiprocket?.awb ??
+    d?.shiprocket?.awb ??
+    "";
+  const courier =
+    d?.courierName ??
+    d?.courier ??
+    d?.courier_name ??
+    d?.shipment?.shiprocket?.courierName ??
+    d?.shiprocket?.courierName ??
+    "";
+  const url =
+    d?.trackingUrl ??
+    d?.tracking_url ??
+    d?.trackingLink ??
+    d?.shipment?.shiprocket?.trackingUrl ??
+    d?.shiprocket?.trackingUrl ??
+    "";
+  return { awb: String(awb || "").trim(), courier: String(courier || "").trim(), url: String(url || "").trim() };
+};
 
 /* ================= Status options ================= */
 const FULFILLMENT_OPTIONS = [
@@ -129,15 +159,16 @@ function Pill({ children, variant = "neutral" }) {
 }
 
 function Card({ title, icon: Icon, accent = "neutral", right, children }) {
-  const bar = {
-    neutral: "bg-zinc-200",
-    amber: "bg-amber-300",
-    indigo: "bg-indigo-300",
-    info: "bg-sky-300",
-    violet: "bg-violet-300",
-    success: "bg-emerald-300",
-    danger: "bg-rose-300",
-  }[accent] || "bg-zinc-200";
+  const bar =
+    {
+      neutral: "bg-zinc-200",
+      amber: "bg-amber-300",
+      indigo: "bg-indigo-300",
+      info: "bg-sky-300",
+      violet: "bg-violet-300",
+      success: "bg-emerald-300",
+      danger: "bg-rose-300",
+    }[accent] || "bg-zinc-200";
 
   return (
     <div className="bg-white shadow-sm ring-1 ring-zinc-200/60">
@@ -222,7 +253,16 @@ function Img({ src, alt }) {
 
 /* ================= Page ================= */
 export default function OrderSearchPage() {
-  const { fetchOrderByNumber, confirmOrder, updateOrderStatus, cancelOrder, bookShiprocketIfMissing } = useOrderStore();
+  const {
+    fetchOrderByNumber,
+    confirmOrder,
+    updateOrderStatus,
+    cancelOrder,
+    bookShiprocketIfMissing,
+  } = useOrderStore();
+
+  // ✅ tracking sync store
+  const { syncTracking, syncLoading, syncErrorCode } = useShiprocketStore();
 
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
@@ -357,6 +397,24 @@ export default function OrderSearchPage() {
     }
   }, [order, bookShiprocketIfMissing, refresh]);
 
+  // ✅ NEW: Tracking sync (fills AWB + carrier in DB; then refresh order)
+  const syncTrackingNow = useCallback(async () => {
+    if (!order?._id && !order?.orderNumber) return toast.error("Order not loaded");
+    try {
+      const data = order?._id
+        ? await syncTracking({ orderId: order._id })
+        : await syncTracking({ orderNumber: order.orderNumber });
+
+      const t = extractTracking(data);
+      if (t.awb || t.courier || t.url) toast.success("Tracking synced ✅");
+      else toast(data?.message || "Tracking not available yet", { icon: "ℹ️" });
+
+      await refresh();
+    } catch (e) {
+      toast.error(e?.message || "Tracking sync failed");
+    }
+  }, [order, syncTracking, refresh]);
+
   const items = Array.isArray(order?.items) ? order.items : [];
 
   const shipProvider = safe(order?.shipment?.provider) || "shiprocket";
@@ -391,7 +449,11 @@ export default function OrderSearchPage() {
   }, [order]);
 
   const canConfirm = !!order?._id && !order?.isConfirmed;
-  const canPack = !!order?._id && !!order?.isConfirmed && fs === "processing" && safe(order?.orderType).toLowerCase() !== "parent";
+  const canPack =
+    !!order?._id &&
+    !!order?.isConfirmed &&
+    fs === "processing" &&
+    safe(order?.orderType).toLowerCase() !== "parent";
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -405,7 +467,6 @@ export default function OrderSearchPage() {
                 <div className="text-xs text-zinc-500">Paste MIRAY-000123 or just 123</div>
               </div>
 
-              {/* refresh moved here */}
               <button
                 onClick={refresh}
                 disabled={!order?._id || loading}
@@ -486,7 +547,10 @@ export default function OrderSearchPage() {
                   value={
                     <div className="inline-flex items-center gap-2">
                       <span className="font-mono">{safe(order.orderNumber)}</span>
-                      <button onClick={() => copyText(order.orderNumber, "Order number copied")} className="inline-flex items-center gap-1 text-xs text-zinc-700 hover:text-black">
+                      <button
+                        onClick={() => copyText(order.orderNumber, "Order number copied")}
+                        className="inline-flex items-center gap-1 text-xs text-zinc-700 hover:text-black"
+                      >
                         <Copy className="h-3 w-3" /> copy
                       </button>
                     </div>
@@ -516,7 +580,6 @@ export default function OrderSearchPage() {
                     return (
                       <div key={safe(it?.lineId) || idx} className="flex gap-3 py-3 border-b border-zinc-100 last:border-b-0">
                         <Img src={img} alt={safe(snap?.title) || "Product"} />
-
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
@@ -542,21 +605,6 @@ export default function OrderSearchPage() {
                               <div className="text-xs text-zinc-500 mt-1">Subtotal: ₹{money(it?.subtotal)}</div>
                             </div>
                           </div>
-
-                          <div className="mt-2 grid grid-cols-3 gap-2">
-                            <div className="bg-zinc-50 ring-1 ring-zinc-200/60 px-3 py-2">
-                              <div className="text-[11px] text-zinc-500">Allocated</div>
-                              <div className="text-sm font-semibold text-zinc-900">{Number(it?.fulfillment?.allocatedQty || 0)}</div>
-                            </div>
-                            <div className="bg-zinc-50 ring-1 ring-zinc-200/60 px-3 py-2">
-                              <div className="text-[11px] text-zinc-500">Shipped</div>
-                              <div className="text-sm font-semibold text-zinc-900">{Number(it?.fulfillment?.shippedQty || 0)}</div>
-                            </div>
-                            <div className="bg-zinc-50 ring-1 ring-zinc-200/60 px-3 py-2">
-                              <div className="text-[11px] text-zinc-500">To Produce</div>
-                              <div className="text-sm font-semibold text-zinc-900">{Number(it?.fulfillment?.toProduceQty || 0)}</div>
-                            </div>
-                          </div>
                         </div>
                       </div>
                     );
@@ -573,9 +621,6 @@ export default function OrderSearchPage() {
                 <Row label="Tax" value={`₹${money(totals.tax)}`} />
                 <Row label="Total Amount" value={`₹${money(totals.totalAmount)}`} />
                 <Row label="Final Payable" value={`₹${money(totals.finalPayable)}`} />
-                <Row label="Razorpay OrderId" value={safe(order?.razorpay?.orderId)} mono />
-                <Row label="Razorpay PaymentId" value={safe(order?.razorpay?.paymentId)} mono />
-                <Row label="Paid At" value={dtIST(order?.razorpay?.paidAt)} />
               </Card>
             </div>
 
@@ -628,6 +673,26 @@ export default function OrderSearchPage() {
                   ) : null
                 }
               >
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="text-[11px] text-zinc-500">Sync carrier + AWB</div>
+                  <button
+                    onClick={syncTrackingNow}
+                    disabled={syncLoading}
+                    className="inline-flex items-center gap-2 text-xs text-zinc-900 hover:text-black disabled:opacity-60"
+                    title="Sync tracking from Shiprocket"
+                  >
+                    {syncLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+                    Sync
+                  </button>
+                </div>
+
+                {syncErrorCode === "SHIPROCKET_UPSTREAM_DOWN" ? (
+                  <div className="mb-3 flex items-start gap-2 rounded bg-amber-50 ring-1 ring-amber-200/60 px-3 py-2 text-xs text-amber-800">
+                    <Info className="h-4 w-4 mt-0.5" />
+                    Shiprocket temporary issue. Retry after 2 minutes.
+                  </div>
+                ) : null}
+
                 <Row label="Provider" value={safe(order?.shipment?.provider)} />
                 <Row label="Courier" value={courierName} />
                 <Row
@@ -636,7 +701,10 @@ export default function OrderSearchPage() {
                     trackingId ? (
                       <div className="inline-flex items-center gap-2">
                         <span className="font-mono">{trackingId}</span>
-                        <button onClick={() => copyText(trackingId, "Tracking copied")} className="inline-flex items-center gap-1 text-xs text-zinc-700 hover:text-black">
+                        <button
+                          onClick={() => copyText(trackingId, "Tracking copied")}
+                          className="inline-flex items-center gap-1 text-xs text-zinc-700 hover:text-black"
+                        >
                           <Copy className="h-3 w-3" /> copy
                         </button>
                       </div>

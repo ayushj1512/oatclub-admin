@@ -25,11 +25,12 @@ export const sidebarMenus = {
   ],
 
   designing: [
-    { label: "Design Home", href: "/designing" },
-    { label: "Banners Manager", href: "/designing/banners" },
-    { label: "Top Categories", href: "/designing/top-categories" },
-    { label: "Collections Editor", href: "/designing/collection" },
-  ],
+  { label: "Design Home", href: "/designing" },
+  { label: "Banners Manager", href: "/designing/banners" },
+  { label: "Top Categories", href: "/designing/top-categories" },
+  { label: "Collections Editor", href: "/designing/collection" },
+  { label: "Marquee Manager", href: "/designing/marquee" },
+],
 
   production: [
     { label: "Production Dashboard", href: "/production" },
