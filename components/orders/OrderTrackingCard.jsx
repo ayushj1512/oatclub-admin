@@ -1,28 +1,56 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCcw, Search } from "lucide-react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { Loader2, RefreshCcw, Save, ExternalLink, Info } from "lucide-react";
 import toast from "react-hot-toast";
 import { useShiprocketStore } from "@/store/ShipRocketStore";
 
-const API = (
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  ""
-).trim();
+const API =
+  (process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "").trim();
 
 const apiBase = API ? API.replace(/\/+$/, "") : "";
 
+const s = (v) => (v == null ? "" : String(v));
+const trim = (v) => s(v).trim();
+const isNonEmpty = (v) => trim(v).length > 0;
+
+const extractTracking = (payload) => {
+  const d = payload?.data ?? payload ?? {};
+
+  const awb =
+    d?.trackingId ??
+    d?.awb ??
+    d?.awb_code ??
+    d?.shipment?.shiprocket?.awb ??
+    d?.shiprocket?.awb ??
+    "";
+
+  const courier =
+    d?.courierName ??
+    d?.courier ??
+    d?.courier_name ??
+    d?.shipment?.shiprocket?.courierName ??
+    d?.shiprocket?.courierName ??
+    "";
+
+  const url =
+    d?.trackingUrl ??
+    d?.tracking_url ??
+    d?.trackingLink ??
+    d?.shipment?.shiprocket?.trackingUrl ??
+    d?.shiprocket?.trackingUrl ??
+    "";
+
+  return { awb: trim(awb), courier: trim(courier), url: trim(url) };
+};
+
 /**
  * OrderTrackingCard
- * ✅ Manual edit/save tracking (PATCH /api/orders/:id/tracking)
- * ✅ Sync from Shiprocket (via zustand store)
- *    - by orderId (preferred)
- *    - fallback by orderNumber
- *
- * NOTE:
- * - Your Shiprocket booking bug was backend casting on shipment.xpressbees.
- * - This UI just calls sync endpoints; it’ll work once backend saves shiprocket ids/awb.
+ * ✅ Manual save: PATCH /api/orders/:id/tracking
+ * ✅ Shiprocket sync: GET /api/orders/:id/tracking/sync OR /api/orders/tracking/sync?orderNumber=...
+ * ✅ Better UX for SHIPROCKET_UPSTREAM_DOWN (temporary)
  */
 export default function OrderTrackingCard({
   orderId,
@@ -31,67 +59,75 @@ export default function OrderTrackingCard({
   trackingDetails,
   onRefresh,
 }) {
-  const [trackingId, setTrackingId] = useState("");
-  const [courierName, setCourierName] = useState("");
-  const [trackingUrl, setTrackingUrl] = useState("");
+  const [awb, setAwb] = useState("");
+  const [courier, setCourier] = useState("");
+  const [url, setUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState(null);
 
-  // ✅ store (sync)
-  const { syncTracking, syncLoading, syncError, clearSyncError } =
-    useShiprocketStore();
+  const {
+    syncTracking,
+    syncLoading,
+    syncError,
+    syncErrorCode,
+    clearSyncError,
+  } = useShiprocketStore();
 
-  /* ------------------------------------------------------------
-     Hydrate inputs from order
-  ------------------------------------------------------------ */
+  // hydrate from order
   useEffect(() => {
-    const awb =
+    const nextAwb =
       shipment?.shiprocket?.awb ||
       trackingDetails?.trackingId ||
       shipment?.awb ||
       "";
 
-    const courier =
+    const nextCourier =
       shipment?.shiprocket?.courierName ||
       trackingDetails?.courierName ||
       shipment?.courierName ||
       "";
 
-    const url =
+    const nextUrl =
       shipment?.shiprocket?.trackingUrl ||
       trackingDetails?.trackingUrl ||
       shipment?.trackingUrl ||
       "";
 
-    setTrackingId(String(awb || ""));
-    setCourierName(String(courier || ""));
-    setTrackingUrl(String(url || ""));
+    setAwb(trim(nextAwb));
+    setCourier(trim(nextCourier));
+    setUrl(trim(nextUrl));
   }, [shipment, trackingDetails]);
 
-  /* ------------------------------------------------------------
-     Show sync errors nicely (one place)
-  ------------------------------------------------------------ */
+  // store errors (single place)
   useEffect(() => {
     if (!syncError) return;
-    toast.error(syncError);
-    clearSyncError?.();
-  }, [syncError, clearSyncError]);
 
-  const canSave = useMemo(() => Boolean(orderId) && !saving, [orderId, saving]);
+    if (syncErrorCode === "SHIPROCKET_UPSTREAM_DOWN") {
+      toast.error(syncError, { duration: 5000 });
+    } else {
+      toast.error(syncError);
+    }
+
+    clearSyncError?.();
+  }, [syncError, syncErrorCode, clearSyncError]);
+
+  const canSave = useMemo(
+    () => Boolean(orderId) && !saving,
+    [orderId, saving]
+  );
 
   const canSync = useMemo(
     () => (Boolean(orderId) || Boolean(orderNumber)) && !syncLoading,
     [orderId, orderNumber, syncLoading]
   );
 
-  const canSyncByNumber = useMemo(
-    () => Boolean(orderNumber) && !syncLoading,
-    [orderNumber, syncLoading]
-  );
+  const openTracking = useCallback(() => {
+    const link = trim(url);
+    if (!link) return toast.error("Tracking URL missing");
+    window.open(link, "_blank", "noopener,noreferrer");
+  }, [url]);
 
-  /* ------------------------------------------------------------
-     Save manual tracking to DB
-  ------------------------------------------------------------ */
-  const saveTracking = async () => {
+  const saveTracking = useCallback(async () => {
     if (!orderId) return;
 
     setSaving(true);
@@ -104,212 +140,166 @@ export default function OrderTrackingCard({
         },
         credentials: "include",
         body: JSON.stringify({
-          // backend accepts trackingId OR awb (your controller supports both)
-          trackingId: trackingId?.trim(),
-          awb: trackingId?.trim(), // ✅ keep compatible with older backend
-          courierName: courierName?.trim(),
-          trackingUrl: trackingUrl?.trim(),
+          trackingId: trim(awb),
+          awb: trim(awb), // backward compatible
+          courierName: trim(courier),
+          trackingUrl: trim(url),
         }),
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data?.message || "Failed to update tracking");
-        return;
-      }
+      if (!res.ok) throw new Error(data?.message || "Failed to update tracking");
 
-      toast.success("Tracking updated ✅");
+      toast.success("Tracking saved ✅");
       await onRefresh?.();
     } catch (e) {
       toast.error(e?.message || "Failed to update tracking");
     } finally {
       setSaving(false);
     }
-  };
+  }, [orderId, awb, courier, url, onRefresh]);
 
-  /* ------------------------------------------------------------
-     Apply sync response to UI
-     (handles different backend response shapes)
-  ------------------------------------------------------------ */
-  const applySyncResponse = (data) => {
-    const d = data?.data ?? data; // sometimes backend wraps payload in {data}
-    const awb =
-      d?.trackingId ??
-      d?.awb ??
-      d?.awb_code ??
-      d?.shiprocket?.awb ??
-      d?.shipment?.shiprocket?.awb ??
-      "";
+  const syncFromShiprocket = useCallback(async () => {
+    if (!orderId && !orderNumber) return toast.error("orderId/orderNumber missing");
 
-    const courier =
-      d?.courierName ??
-      d?.courier ??
-      d?.courier_name ??
-      d?.shiprocket?.courierName ??
-      d?.shipment?.shiprocket?.courierName ??
-      "";
-
-    const url =
-      d?.trackingUrl ??
-      d?.tracking_url ??
-      d?.trackingLink ??
-      d?.shiprocket?.trackingUrl ??
-      d?.shipment?.shiprocket?.trackingUrl ??
-      "";
-
-    if (awb) setTrackingId(String(awb));
-    if (courier) setCourierName(String(courier));
-    if (url) setTrackingUrl(String(url));
-  };
-
-  /* ------------------------------------------------------------
-     Smart sync:
-     - try orderId first
-     - fallback orderNumber if orderId sync fails
-  ------------------------------------------------------------ */
-  const syncFromShiprocket = async () => {
     try {
-      if (orderId) {
-        const data = await syncTracking({ orderId });
-        applySyncResponse(data);
+      const data = orderId
+        ? await syncTracking({ orderId })
+        : await syncTracking({ orderNumber });
+
+      const t = extractTracking(data);
+
+      // if backend says "not available yet", still refresh and inform
+      const msg = String(data?.message || "");
+      const looksEmpty = !isNonEmpty(t.awb) && !isNonEmpty(t.courier) && !isNonEmpty(t.url);
+
+      if (!looksEmpty) {
+        if (t.awb) setAwb(t.awb);
+        if (t.courier) setCourier(t.courier);
+        if (t.url) setUrl(t.url);
         toast.success("Synced from Shiprocket ✅");
-        await onRefresh?.();
-        return;
+      } else if (msg) {
+        toast(msg, { icon: "ℹ️" });
+      } else {
+        toast("Tracking not available yet (AWB not generated)", { icon: "ℹ️" });
       }
-    } catch (e) {
-      // If orderId sync fails and we have orderNumber, fallback
-      if (!orderNumber) {
-        toast.error(e?.message || "Shiprocket sync failed");
-        return;
-      }
-    }
 
-    if (!orderNumber) return toast.error("Order number missing for sync");
-
-    try {
-      const data = await syncTracking({ orderNumber });
-      applySyncResponse(data);
-      toast.success("Synced from Shiprocket ✅");
+      setLastSyncAt(Date.now());
       await onRefresh?.();
     } catch (e) {
+      // store already sets a nicer message, but keep fallback here
       toast.error(e?.message || "Shiprocket sync failed");
     }
-  };
-
-  const syncOnlyByOrderNumber = async () => {
-    if (!orderNumber) return toast.error("Order number missing for sync");
-    try {
-      const data = await syncTracking({ orderNumber });
-      applySyncResponse(data);
-      toast.success("Synced from Shiprocket ✅");
-      await onRefresh?.();
-    } catch (e) {
-      toast.error(e?.message || "Shiprocket sync failed");
-    }
-  };
+  }, [orderId, orderNumber, syncTracking, onRefresh]);
 
   return (
-    <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-5">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-base font-semibold">Tracking</h2>
-          {orderNumber ? (
-            <p className="text-xs text-gray-500 mt-0.5">
-              Order: <span className="font-semibold">{orderNumber}</span>
-            </p>
-          ) : null}
-        </div>
+    <div className="bg-white/90 backdrop-blur border border-gray-100 rounded-2xl shadow-sm p-5">
+      <Header
+        orderNumber={orderNumber}
+        onSync={syncFromShiprocket}
+        onOpen={openTracking}
+        canSync={canSync}
+        canOpen={isNonEmpty(url)}
+        syncLoading={syncLoading}
+      />
 
-        <div className="flex items-center gap-2">
-          {/* ✅ Smart Sync */}
-          <button
-            onClick={syncFromShiprocket}
-            disabled={!canSync}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold hover:bg-gray-50 disabled:opacity-60"
-            title="Sync from Shiprocket (OrderId first, then OrderNumber fallback)"
-          >
-            {syncLoading ? (
-              <>
-                <Loader2 className="animate-spin" size={16} /> Syncing...
-              </>
-            ) : (
-              <>
-                <RefreshCcw size={16} /> Sync
-              </>
-            )}
-          </button>
+      {syncErrorCode === "SHIPROCKET_UPSTREAM_DOWN" ? (
+        <Notice text="Shiprocket is temporarily down (upstream issue). Retry after 2 minutes." />
+      ) : null}
 
-          {/* ✅ Explicit Order# Sync */}
-          <button
-            onClick={syncOnlyByOrderNumber}
-            disabled={!canSyncByNumber}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold hover:bg-gray-50 disabled:opacity-60"
-            title="Sync using Order Number"
-          >
-            {syncLoading ? (
-              <>
-                <Loader2 className="animate-spin" size={16} />
-              </>
-            ) : (
-              <>
-                <Search size={16} /> By Order#
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      {lastSyncAt ? (
+        <p className="mt-3 text-[11px] text-gray-500">
+          Last sync: {new Date(lastSyncAt).toLocaleString()}
+        </p>
+      ) : null}
 
-      <div className="grid md:grid-cols-3 gap-4">
-        <div>
-          <label className="text-xs font-semibold text-gray-600">
-            Tracking ID / AWB
-          </label>
-          <input
-            className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
-            value={trackingId}
-            onChange={(e) => setTrackingId(e.target.value)}
-            placeholder="AWB / Tracking ID"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold text-gray-600">
-            Courier Name
-          </label>
-          <input
-            className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
-            value={courierName}
-            onChange={(e) => setCourierName(e.target.value)}
-            placeholder="Delhivery / Bluedart / ..."
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold text-gray-600">
-            Tracking URL
-          </label>
-          <input
-            className="mt-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 w-full text-sm outline-none focus:ring-2 focus:ring-black/10"
-            value={trackingUrl}
-            onChange={(e) => setTrackingUrl(e.target.value)}
-            placeholder="https://..."
-          />
-        </div>
+      <div className="mt-4 grid md:grid-cols-3 gap-4">
+        <Field label="AWB / Tracking ID" value={awb} onChange={setAwb} placeholder="AWB / Tracking ID" />
+        <Field label="Carrier / Courier" value={courier} onChange={setCourier} placeholder="Delhivery / Bluedart / ..." />
+        <Field label="Tracking URL" value={url} onChange={setUrl} placeholder="https://..." />
       </div>
 
       <button
         onClick={saveTracking}
         disabled={!canSave}
-        className="mt-4 px-6 py-2.5 rounded-lg bg-black text-white text-sm font-semibold hover:opacity-90 transition disabled:opacity-60 inline-flex items-center gap-2"
+        className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-black text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60"
       >
         {saving ? (
           <>
-            <Loader2 className="animate-spin" size={16} /> Saving...
+            <Loader2 className="animate-spin" size={16} /> Saving
           </>
         ) : (
-          "Save Tracking"
+          <>
+            <Save size={16} /> Save
+          </>
         )}
       </button>
+    </div>
+  );
+}
+
+function Header({ orderNumber, onSync, onOpen, canSync, canOpen, syncLoading }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold">Tracking</h2>
+        {orderNumber ? (
+          <p className="text-xs text-gray-500 mt-0.5 truncate">
+            Order: <span className="font-semibold">{orderNumber}</span>
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onSync}
+          disabled={!canSync}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold hover:bg-gray-50 disabled:opacity-60"
+          title="Sync carrier + AWB from Shiprocket"
+        >
+          {syncLoading ? (
+            <>
+              <Loader2 className="animate-spin" size={16} /> Syncing
+            </>
+          ) : (
+            <>
+              <RefreshCcw size={16} /> Sync
+            </>
+          )}
+        </button>
+
+        <button
+          onClick={onOpen}
+          disabled={!canOpen}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold hover:bg-gray-50 disabled:opacity-60"
+          title="Open tracking"
+        >
+          <ExternalLink size={16} /> Open
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Notice({ text }) {
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      <Info size={14} className="mt-0.5" />
+      <span className="leading-5">{text}</span>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, placeholder }) {
+  return (
+    <div>
+      <label className="text-xs font-semibold text-gray-600">{label}</label>
+      <input
+        className="mt-2 w-full px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-black/10"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
     </div>
   );
 }

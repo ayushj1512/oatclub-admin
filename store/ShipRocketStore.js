@@ -29,21 +29,27 @@ const errMsgFrom = (res, data) =>
   data?.message ||
   data?.error?.message ||
   (typeof data?.error === "string" ? data.error : null) ||
+  data?.details?.message ||
   (res?.status ? `Request failed (${res.status})` : null) ||
   "Something went wrong";
 
-const normalizeError = (res, data) => new Error(errMsgFrom(res, data));
+const normalizeError = (res, data) => {
+  const e = new Error(errMsgFrom(res, data));
+  e.status = res?.status;
+  e.code = data?.code || data?.error?.code || null;
+  e.payload = data || null;
+  return e;
+};
 
 /**
- * ✅ Shiprocket Admin Store
- * - Token fetch
- * - Book shipment (✅ fixed route)
- * - Reverse pickup (RMA)
- * - Sync tracking from Shiprocket
- *   ✅ supports BOTH:
- *      - by orderId:      GET /api/orders/:id/tracking/sync
- *      - by orderNumber:  GET /api/orders/tracking/sync?orderNumber=MIRAY-000271
- * - Optional bulk booking (keep if backend exists)
+ * ✅ Shiprocket Store (Admin)
+ * - Book shipment
+ * - Reverse pickup
+ * - Sync tracking
+ *
+ * ✅ Handles new backend behavior:
+ * - backend tries shipmentId and may fallback to orders/show (orderId)
+ * - may return 503 with code SHIPROCKET_UPSTREAM_DOWN (temporary)
  */
 export const useShiprocketStore = create((set, get) => ({
   /* ============================================================
@@ -57,12 +63,13 @@ export const useShiprocketStore = create((set, get) => ({
   token: null,
   tokenFetchedAt: null,
 
-  result: null, // single booking response
-  bulkResult: null, // bulk booking response
-  reverseResult: null, // reverse pickup response
+  result: null,
+  bulkResult: null,
+  reverseResult: null,
 
   syncLoading: false,
   syncError: null,
+  syncErrorCode: null, // ✅ NEW
   syncResult: null,
 
   /* ============================================================
@@ -84,18 +91,21 @@ export const useShiprocketStore = create((set, get) => ({
       tokenError: err?.message || "Token fetch failed",
     }),
 
-  _startSync: () => set({ syncLoading: true, syncError: null }),
+  _startSync: () => set({ syncLoading: true, syncError: null, syncErrorCode: null }),
   _successSync: () => set({ syncLoading: false }),
   _errorSync: (err) =>
     set({
       syncLoading: false,
-      syncError: err?.message || "Tracking sync failed",
+      syncError:
+        err?.code === "SHIPROCKET_UPSTREAM_DOWN"
+          ? "Shiprocket temporary down. Try again in 2 minutes."
+          : err?.message || "Tracking sync failed",
+      syncErrorCode: err?.code || null,
     }),
 
   /* ============================================================
      GET TOKEN (ADMIN)
      GET /api/shiprocket/token
-     NOTE: optional (backend can handle token server-to-server)
   ============================================================ */
   fetchToken: async () => {
     get()._startToken();
@@ -121,10 +131,8 @@ export const useShiprocketStore = create((set, get) => ({
   },
 
   /* ============================================================
-     ✅ SINGLE: BOOK SHIPROCKET (ADMIN)
-     FIXED ROUTE:
+     BOOK SHIPROCKET (ADMIN)
      POST /api/orders/:id/shiprocket/book
-     (matches your adminBookShiprocketIfMissing controller)
   ============================================================ */
   bookShipment: async (orderId) => {
     if (!orderId) throw new Error("orderId is required");
@@ -150,25 +158,22 @@ export const useShiprocketStore = create((set, get) => ({
   },
 
   /* ============================================================
-     ✅ SYNC TRACKING (Shiprocket)
-     Supports:
-       1) syncTracking({ orderId })
-       2) syncTracking({ orderNumber })
-       3) syncTracking("orderId")  // backwards compatible
+     SYNC TRACKING (Shiprocket)
+     - syncTracking({ orderId })  -> GET /api/orders/:id/tracking/sync
+     - syncTracking({ orderNumber }) -> GET /api/orders/tracking/sync?orderNumber=...
+     - syncTracking("orderId") (compat)
   ============================================================ */
   syncTracking: async (input) => {
     let orderId = "";
     let orderNumber = "";
 
-    if (typeof input === "string") orderId = input;
+    if (typeof input === "string") orderId = String(input).trim();
     else {
       orderId = String(input?.orderId || "").trim();
       orderNumber = String(input?.orderNumber || "").trim();
     }
 
-    if (!orderId && !orderNumber) {
-      throw new Error("orderId or orderNumber is required");
-    }
+    if (!orderId && !orderNumber) throw new Error("orderId or orderNumber is required");
 
     get()._startSync();
     try {
@@ -227,20 +232,16 @@ export const useShiprocketStore = create((set, get) => ({
 
   /* ============================================================
      BULK BOOKING (optional)
-     POST /api/orders/shiprocket/book-missing?limit=25&...
-     (keep only if this backend route exists)
+     POST /api/orders/shiprocket/book-missing
   ============================================================ */
   bulkBookShiprocketMissing: async (filters = {}) => {
     get()._start();
     try {
-      const res = await fetch(
-        buildUrl("/api/orders/shiprocket/book-missing", filters),
-        {
-          method: "POST",
-          headers: { Accept: "application/json" },
-          credentials: "include",
-        }
-      );
+      const res = await fetch(buildUrl("/api/orders/shiprocket/book-missing", filters), {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        credentials: "include",
+      });
 
       const data = await safeJson(res);
       if (!res.ok) throw normalizeError(res, data);
@@ -259,7 +260,7 @@ export const useShiprocketStore = create((set, get) => ({
   ============================================================ */
   clearError: () => set({ error: null }),
   clearTokenError: () => set({ tokenError: null }),
-  clearSyncError: () => set({ syncError: null }),
+  clearSyncError: () => set({ syncError: null, syncErrorCode: null }),
 
   clearResult: () => set({ result: null }),
   clearBulkResult: () => set({ bulkResult: null }),
@@ -282,6 +283,7 @@ export const useShiprocketStore = create((set, get) => ({
 
       syncLoading: false,
       syncError: null,
+      syncErrorCode: null,
       syncResult: null,
     }),
 }));
