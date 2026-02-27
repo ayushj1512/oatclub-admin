@@ -3,35 +3,45 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useOrderStore } from "@/store/orderStore";
 
+const IST = "Asia/Kolkata";
 const TAX_RATE = 0.05;
+const DEFAULT_HSN = "62105000";
+
 const money2 = (n) => (Number(n || 0)).toFixed(2);
 
 const getDeliveredAt = (order) =>
   order?.shipment?.deliveredAt ||
   order?.trackingDetails?.deliveredAt ||
-  order?.updatedAt ||
-  order?.orderDate ||
+  order?.shipment?.shiprocket?.deliveredAt ||
+  order?.shipment?.shiprocket?.delivered_date ||
+  order?.statusTimestamps?.deliveredAt ||
+  order?.deliveredAt ||
   null;
 
+// Month key in IST (stable)
 const toMonthKey = (dateLike) => {
   const d = dateLike ? new Date(dateLike) : null;
   if (!d || Number.isNaN(d.getTime())) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: IST,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(d);
+  const y = parts.find((p) => p.type === "year")?.value || "";
+  const m = parts.find((p) => p.type === "month")?.value || "";
+  return y && m ? `${y}-${m}` : "";
 };
 
 const getPaymentMode = (order) =>
   String(order?.paymentMethod || "").toLowerCase() === "cod" ? "COD" : "PREPAID";
 
-// Paid -> Razorpay, COD -> Shiprocket
-const getPaymentMethodLabel = (order) =>
-  String(order?.paymentMethod || "").toLowerCase() === "cod" ? "Shiprocket" : "Razorpay";
+const getPaymentMethodLabel = (order) => {
+  const pm = String(order?.paymentMethod || "").toLowerCase();
+  if (pm === "cod") return "Shiprocket";
+  if (pm === "exchange") return "Exchange";
+  return "Razorpay";
+};
 
-/**
- * Pro-rata discount allocation across items by net line base (incl tax).
- * (We still need this to compute per-line net + tax breakup.)
- */
 const allocateDiscountProRata = (lineTotals, orderDiscount) => {
   const disc = Math.max(0, Number(orderDiscount || 0));
   const total = lineTotals.reduce((s, g) => s + Number(g || 0), 0);
@@ -55,6 +65,15 @@ const allocateDiscountProRata = (lineTotals, orderDiscount) => {
   return rounded;
 };
 
+// ✅ HSN auto-fill helper
+const normalizeHSN = (hsn) => {
+  const v = String(hsn ?? "").trim();
+  const low = v.toLowerCase();
+  const isMissing =
+    !v || low === "na" || low === "n/a" || low === "null" || low === "undefined" || v === "0";
+  return isMissing ? DEFAULT_HSN : v;
+};
+
 const downloadCSV = (rows, filename = "sales-report.csv") => {
   const headers = [
     "OrderId",
@@ -70,11 +89,11 @@ const downloadCSV = (rows, filename = "sales-report.csv") => {
     "Qty",
     "Selling price (unit, incl tax)",
     "Allocated discount",
-    "Net line (incl tax)",
+    "Net line (incl tax) (after discount)",
     "Taxable value (excl tax)",
     "Tax amount (5%)",
     "Tax rate",
-    "Order total amount",
+    "Order total amount (final payable)",
     "Order discount",
     "Coupon code",
   ];
@@ -129,7 +148,7 @@ export default function SalesReportPage() {
   const { orders, loading, error, fetchAllOrders } = useOrderStore();
 
   const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const defaultMonth = toMonthKey(now);
 
   const [month, setMonth] = useState(defaultMonth);
   const [search, setSearch] = useState("");
@@ -152,7 +171,10 @@ export default function SalesReportPage() {
     const q = search.trim().toLowerCase();
 
     for (const order of deliveredOrders) {
-      const deliveredMonth = toMonthKey(getDeliveredAt(order));
+      const deliveredAt = getDeliveredAt(order);
+      const deliveredMonth = toMonthKey(deliveredAt);
+
+      if (!deliveredMonth) continue;
       if (month && deliveredMonth !== month) continue;
 
       const orderId = order?.orderNumber || order?._id || "";
@@ -162,21 +184,26 @@ export default function SalesReportPage() {
       const paymentMode = getPaymentMode(order);
       const paymentMethod = getPaymentMethodLabel(order);
 
-      const courierName = "Shiprocket";
+      const courierName =
+        String(order?.shipment?.shiprocket?.courierName || "").trim() || "Shiprocket";
       const couponCode = order?.coupon?.code || "";
 
-      const orderTotalAmount = Number(order?.totalAmount ?? 0);
-      const orderDiscountRaw = Number(order?.discount ?? 0);
+      // ✅ final payable (after discount)
+      const orderTotalAmount = Number(order?.finalPayable ?? 0);
+
+      const orderDiscountRaw =
+        Number(order?.discount ?? 0) || Number(order?.coupon?.discount ?? 0) || 0;
 
       const items = Array.isArray(order?.items) ? order.items : [];
+
       const lineTotals = items.map((it) => {
         const qty = Math.max(0, Number(it?.quantity || 0) || 0);
         const unitInclTax = Math.max(0, Number(it?.price || 0) || 0);
         return unitInclTax * qty;
       });
 
-      const total = lineTotals.reduce((s, g) => s + g, 0);
-      const orderDiscount = Math.min(Math.max(0, orderDiscountRaw), total);
+      const grossItemsTotal = lineTotals.reduce((s, g) => s + Number(g || 0), 0);
+      const orderDiscount = Math.min(Math.max(0, orderDiscountRaw), grossItemsTotal);
       const alloc = allocateDiscountProRata(lineTotals, orderDiscount);
 
       for (let idx = 0; idx < items.length; idx++) {
@@ -193,6 +220,8 @@ export default function SalesReportPage() {
         const taxableValue = netLine / (1 + TAX_RATE);
         const taxAmount = netLine - taxableValue;
 
+        const hsnCode = normalizeHSN(it?.productSnapshot?.hsnCode);
+
         out.push({
           orderId,
           deliveredMonth,
@@ -203,7 +232,7 @@ export default function SalesReportPage() {
           courierName,
 
           productType: "Apparel",
-          hsnCode: it?.productSnapshot?.hsnCode || "",
+          hsnCode,
           productSize: it?.selectedSize || "",
           qty,
 
@@ -282,12 +311,11 @@ export default function SalesReportPage() {
   return (
     <div className="min-h-screen bg-white text-black">
       <div className="px-4 py-6">
-        {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Sales Report</h1>
             <p className="text-sm text-neutral-600">
-              Delivered only • Prices inclusive GST • Discount allocated pro-rata • Tax rate 5%
+              Delivered only • Prices incl GST • Discount allocated pro-rata • Tax after discount • HSN auto-fill {DEFAULT_HSN}
             </p>
           </div>
 
@@ -305,7 +333,7 @@ export default function SalesReportPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search (order/customer/HSN/coupon/payment-method/size...)"
+              placeholder="Search (order/customer/HSN/coupon/payment/size...)"
               className="w-full sm:w-96 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             />
 
@@ -319,7 +347,6 @@ export default function SalesReportPage() {
           </div>
         </div>
 
-        {/* Summary (gross + final removed) */}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-6">
           <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
             <div className="text-xs text-neutral-600">Rows</div>
@@ -347,7 +374,6 @@ export default function SalesReportPage() {
           </div>
         </div>
 
-        {/* Table */}
         <div className="mt-4 overflow-hidden rounded-2xl border border-neutral-200">
           <div className="overflow-auto">
             <table className="min-w-[2250px] w-full border-collapse">
@@ -357,25 +383,20 @@ export default function SalesReportPage() {
                   <th className="px-3 py-3">Month</th>
                   <th className="px-3 py-3">Customer</th>
                   <th className="px-3 py-3">State</th>
-
                   <th className="px-3 py-3">Pay</th>
                   <th className="px-3 py-3">Payment Method</th>
                   <th className="px-3 py-3">Courier</th>
-
                   <th className="px-3 py-3">Product Type</th>
                   <th className="px-3 py-3">HSN</th>
                   <th className="px-3 py-3">Size</th>
                   <th className="px-3 py-3">Qty</th>
-
                   <th className="px-3 py-3">Unit (incl)</th>
                   <th className="px-3 py-3">Disc</th>
                   <th className="px-3 py-3">Net (incl)</th>
-
                   <th className="px-3 py-3">Taxable</th>
                   <th className="px-3 py-3">Tax</th>
                   <th className="px-3 py-3">Rate</th>
-
-                  <th className="px-3 py-3">Order total</th>
+                  <th className="px-3 py-3">Order total (final)</th>
                   <th className="px-3 py-3">Order disc</th>
                   <th className="px-3 py-3">Coupon</th>
                 </tr>
@@ -409,10 +430,7 @@ export default function SalesReportPage() {
                 {!loading &&
                   !error &&
                   rows.map((r, idx) => (
-                    <tr
-                      key={`${r.orderId}-${idx}`}
-                      className={idx % 2 === 0 ? "bg-white" : "bg-neutral-50"}
-                    >
+                    <tr key={`${r.orderId}-${idx}`} className={idx % 2 === 0 ? "bg-white" : "bg-neutral-50"}>
                       <td className="px-3 py-3">
                         <span
                           className="rounded-md px-2 py-1 text-xs font-semibold"
@@ -461,14 +479,14 @@ export default function SalesReportPage() {
               <span className="font-semibold text-black">{totals.orders}</span> delivered orders
             </div>
             <div className="text-xs text-neutral-600">
-              Month filter uses delivered date (shipment/tracking). Discount is allocated across items (pro-rata).
+              Month uses deliveredAt • Tax computed on post-discount line totals • HSN auto-filled when missing.
             </div>
           </div>
         </div>
 
         <div className="mt-3 text-xs text-neutral-500">
-          Notes: Discount uses <b>order.discount</b>. Item tax breakup computed on <b>net (after allocated discount)</b>{" "}
-          because prices are tax-inclusive.
+          Notes: <b>Order total</b> shows <b>finalPayable</b>. Line tax is computed on <b>net after allocated discount</b>{" "}
+          (prices are tax-inclusive). Missing HSN → <b>{DEFAULT_HSN}</b>.
         </div>
       </div>
     </div>

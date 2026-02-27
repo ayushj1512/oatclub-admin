@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, use } from "react";
-import { Pencil, Trash2, Save, ArrowLeft, Copy, Loader2 } from "lucide-react";
+import { Pencil, Trash2, Save, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import CategoryMultiSelect from "@/components/product/CategoryMultiSelect";
@@ -13,7 +13,7 @@ import ProductImagesEditor from "@/components/product/ProductImagesEditor";
 import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
 import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
-import FabricAdd from "@/components/product/FabricAdd";
+import FabricAdd from "@/components/product/FabricAdd"; // ✅ NEW (replaces ProductFabricAssignment)
 import OriginalProductLinkField from "@/components/product/OriginalProductLinkField";
 
 const BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
@@ -25,7 +25,9 @@ const n = (v, fb = 0) => {
   return Number.isFinite(x) ? x : fb;
 };
 const uniqLower = (arr) =>
-  Array.from(new Set((arr || []).map((x) => s(x).trim().toLowerCase()).filter(Boolean)));
+  Array.from(
+    new Set((arr || []).map((x) => s(x).trim().toLowerCase()).filter(Boolean)),
+  );
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
 const safeImages = (p) => safeArr(p?.images).filter(Boolean);
@@ -35,81 +37,6 @@ const isApparelCategory = (categories) =>
     .map((c) => s(c).trim().toLowerCase())
     .some((c) => ["apparel", "apparels", "clothing", "garments"].includes(c));
 
-/* ---------------- duplicate -> /products/add?dupKey=... ---------------- */
-function buildDupPrefill(product) {
-  const imgs = safeImages(product);
-
-  const attributes = safeArr(product?.attributes).map((a) => ({
-    attribute: a?.attribute || null,
-    key: s(a?.key).trim(),
-    values: safeArr(a?.values),
-    mode: a?.attribute ? "select" : "custom",
-  }));
-
-  // clear sku/barcode/patternNumber to avoid conflicts; remove _id
-  const variants = safeArr(product?.variants).map((v) => ({
-    sku: "",
-    barcode: "",
-    weight: n(v?.weight),
-    patternNumber: "",
-    attributes: safeArr(v?.attributes),
-  }));
-
-  const specificationsText = safeArr(product?.specifications)
-    .filter((r) => r && (r.key || r.value))
-    .map((r) => `${s(r.key).trim()}:${s(r.value).trim()}`)
-    .join(" | ");
-
-  return {
-    title: `${s(product?.title).trim()} (Copy)`,
-    price: s(product?.price ?? ""),
-    compareAtPrice: product?.compareAtPrice ?? "",
-    categories: safeArr(product?.categories),
-
-    hsnCode: s(product?.hsnCode || "62105000"),
-
-    shortDescription: s(product?.shortDescription),
-    howToStyle: s(product?.howToStyle),
-    fabricDetails: s(product?.fabricDetails),
-    keyFeaturesText: safeArr(product?.keyFeatures).filter(Boolean).join(", "),
-    specificationsText,
-
-    tagsText: safeArr(product?.tags).filter(Boolean).join(", "),
-
-    // you said you don't do color thing in variants → keep colors empty by default
-    colorsText: "",
-
-    fabrics: safeArr(product?.fabrics),
-
-    images: imgs,
-    thumbnail: imgs?.[0] || "",
-
-    crossSellProducts: safeArr(product?.crossSellProducts).map((x) =>
-      typeof x === "string" ? x : x?._id,
-    ),
-
-    attributes,
-    variants,
-
-    highlights: safeArr(product?.highlights),
-    collections: safeArr(product?.collections),
-    weight: n(product?.weight),
-    dimensions: product?.dimensions || { length: 0, width: 0, height: 0, unit: "cm" },
-
-    metaTitle: s(product?.metaTitle),
-    metaDescription: s(product?.metaDescription),
-    keywords: safeArr(product?.keywords),
-
-    // open as draft + inactive by default
-    isDraft: true,
-    isActive: false,
-    isFeatured: !!product?.isFeatured,
-
-    // your new field
-    originalProductLink: s(product?.originalProductLink),
-  };
-}
-
 export default function ProductDetailsPage({ params }) {
   const router = useRouter();
   const { slug } = use(params);
@@ -117,7 +44,6 @@ export default function ProductDetailsPage({ params }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [dupLoading, setDupLoading] = useState(false);
 
   const [product, setProduct] = useState(null);
   const [collections, setCollections] = useState([]);
@@ -145,7 +71,7 @@ export default function ProductDetailsPage({ params }) {
     images: [],
     thumbnail: "",
 
-    fabrics: [],
+    fabrics: [], // ✅ NEW
     crossSellProducts: [],
     collections: [],
     originalProductLink: "",
@@ -174,7 +100,9 @@ export default function ProductDetailsPage({ params }) {
         setLoading(true);
 
         const [pRes, cRes, aRes] = await Promise.all([
-          fetch(`${BACKEND}/api/products/details/${encodeURIComponent(slug)}`, { cache: "no-store" }),
+          fetch(`${BACKEND}/api/products/details/${encodeURIComponent(slug)}`, {
+            cache: "no-store",
+          }),
           fetch(`${BACKEND}/api/collections`, { cache: "no-store" }),
           fetch(`${BACKEND}/api/attributes`, { cache: "no-store" }),
         ]);
@@ -191,7 +119,8 @@ export default function ProductDetailsPage({ params }) {
         setVariantsDirty(false);
 
         const imgs = safeImages(pData);
-        const thumb = pData?.thumbnail && imgs.includes(pData.thumbnail) ? pData.thumbnail : imgs[0] || "";
+        const thumb =
+          pData?.thumbnail && imgs.includes(pData.thumbnail) ? pData.thumbnail : imgs[0] || "";
 
         setForm({
           title: s(pData?.title),
@@ -227,11 +156,12 @@ export default function ProductDetailsPage({ params }) {
           images: imgs,
           thumbnail: thumb,
 
-          fabrics: safeArr(pData?.fabrics),
-          crossSellProducts: safeArr(pData?.crossSellProducts).map((x) => (typeof x === "string" ? x : x?._id)),
+          fabrics: safeArr(pData?.fabrics), // ✅ NEW
+          crossSellProducts: safeArr(pData?.crossSellProducts).map((x) =>
+            typeof x === "string" ? x : x?._id,
+          ),
           collections: safeArr(pData?.collections),
-          originalProductLink: s(pData?.originalProductLink),
-
+ originalProductLink: s(pData?.originalProductLink),
           highlights: safeArr(pData?.highlights),
           weight: n(pData?.weight),
           dimensions: pData?.dimensions || { length: 0, width: 0, height: 0, unit: "cm" },
@@ -265,25 +195,6 @@ export default function ProductDetailsPage({ params }) {
     window.location.reload();
   };
 
-  const duplicateToAdd = () => {
-    if (!product?._id) return;
-    try {
-      setDupLoading(true);
-
-      const payload = buildDupPrefill(product);
-      const key = `dup_prefill_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-      localStorage.setItem(key, JSON.stringify(payload));
-
-      const url = `/products/add?dupKey=${encodeURIComponent(key)}`;
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (e) {
-      console.error("duplicateToAdd error:", e);
-      alert(e?.message || "Failed to duplicate");
-    } finally {
-      setDupLoading(false);
-    }
-  };
-
   /* ---------------- save ---------------- */
   const saveProduct = async () => {
     if (!product?._id) return;
@@ -308,12 +219,13 @@ export default function ProductDetailsPage({ params }) {
         patternNumber: s(v?.patternNumber).trim(),
       }));
 
+      // ✅ fabrics: only keep rows that have fabricName
       const cleanedFabrics = safeArr(form.fabrics)
         .map((f) => ({
           fabricName: s(f?.fabricName).trim(),
           fabricCode: s(f?.fabricCode).trim(),
           role: s(f?.role || "main").trim().toLowerCase(),
-          color: s(f?.color).trim(),
+          color: s(f?.color).trim(), // ✅ NEW: fabric color
         }))
         .filter((f) => !!f.fabricName);
 
@@ -342,14 +254,12 @@ export default function ProductDetailsPage({ params }) {
         tags: uniqLower(s(form.tagsText).split(",")),
         colors: uniqLower(s(form.colorsText).split(",")),
 
-        fabrics: cleanedFabrics,
+        fabrics: cleanedFabrics, // ✅ NEW
         attributes: cleanedAttributes,
         ...(variantsDirty ? { variants: cleanedVariants } : {}),
 
         crossSellProducts: safeArr(form.crossSellProducts).filter(Boolean),
         collections: safeArr(form.collections),
-
-        originalProductLink: s(form.originalProductLink).trim(),
 
         highlights: safeArr(form.highlights),
         weight: n(form.weight),
@@ -383,7 +293,6 @@ export default function ProductDetailsPage({ params }) {
         images: imgs,
         thumbnail: imgs[0] || "",
         fabrics: safeArr(updated?.fabrics),
-        originalProductLink: s(updated?.originalProductLink),
       }));
     } catch (e) {
       console.error("❌ save error:", e);
@@ -434,25 +343,13 @@ export default function ProductDetailsPage({ params }) {
 
           <div className="flex items-center gap-2 shrink-0">
             {!editing ? (
-              <>
-                <button
-                  onClick={duplicateToAdd}
-                  disabled={dupLoading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg text-gray-800 hover:bg-gray-50 disabled:opacity-60"
-                  title="Open Add Product in new tab with prefilled data"
-                >
-                  {dupLoading ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
-                  {dupLoading ? "Duplicating…" : "Duplicate"}
-                </button>
-
-                <button
-                  onClick={() => setEditing(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  <Pencil size={14} />
-                  Edit
-                </button>
-              </>
+              <button
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Pencil size={14} />
+                Edit
+              </button>
             ) : (
               <>
                 <button
@@ -491,11 +388,13 @@ export default function ProductDetailsPage({ params }) {
           <ProductImagesEditor
             value={form.images}
             folder="miray/products"
-            onChange={(urls) => setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))}
+            onChange={(urls) =>
+              setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))
+            }
           />
         </div>
 
-        {/* Original product link */}
+         {/* ✅ NEW: Original product link */}
         <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
           <OriginalProductLinkField
             value={editing ? form.originalProductLink : s(product?.originalProductLink)}
@@ -581,7 +480,10 @@ export default function ProductDetailsPage({ params }) {
               )}
             </div>
           ) : (
-            <CategoryMultiSelect value={form.categories} onChange={(next) => setForm((p) => ({ ...p, categories: next }))} />
+            <CategoryMultiSelect
+              value={form.categories}
+              onChange={(next) => setForm((p) => ({ ...p, categories: next }))}
+            />
           )}
         </div>
 
@@ -639,7 +541,7 @@ export default function ProductDetailsPage({ params }) {
           )}
         </div>
 
-        {/* Fabrics */}
+        {/* ✅ Fabrics (NEW component) */}
         <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
           <div>
             <h2 className="text-lg md:text-xl font-semibold">Fabrics</h2>
