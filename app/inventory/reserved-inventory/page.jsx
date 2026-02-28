@@ -43,6 +43,10 @@ export default function ReservedInventoryPage() {
   const [form, setForm] = useState(filters);
   const [reasonById, setReasonById] = useState({});
 
+  // ✅ bulk selection + bulk reason
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkReason, setBulkReason] = useState("");
+
   useEffect(() => {
     fetchReservations().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,9 +59,48 @@ export default function ReservedInventoryPage() {
       const sb = safe(b?.status);
       if (sa === "reserved" && sb !== "reserved") return -1;
       if (sb === "reserved" && sa !== "reserved") return 1;
-      return new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime();
+      return (
+        new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime()
+      );
     });
   }, [reservations]);
+
+  // ✅ only reserved rows are actionable/selectable
+  const reservedIds = useMemo(() => {
+    const s = new Set();
+    for (const r of list) {
+      if (safe(r?.status) === "reserved") s.add(safe(r?._id));
+    }
+    return s;
+  }, [list]);
+
+  const selectedCount = useMemo(() => {
+    let c = 0;
+    selectedIds.forEach((id) => {
+      if (reservedIds.has(id)) c += 1;
+    });
+    return c;
+  }, [selectedIds, reservedIds]);
+
+  const allReservedSelected = useMemo(() => {
+    if (!reservedIds.size) return false;
+    if (!selectedCount) return false;
+    return selectedCount === reservedIds.size;
+  }, [reservedIds.size, selectedCount]);
+
+  const anyReservedSelected = selectedCount > 0;
+
+  // ✅ if list changes due to filters/refresh, drop invalid selections
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (!prev?.size) return prev;
+      const next = new Set();
+      prev.forEach((id) => {
+        if (reservedIds.has(id)) next.add(id);
+      });
+      return next;
+    });
+  }, [reservedIds]);
 
   const applyFilters = async () => {
     clearError?.();
@@ -117,6 +160,53 @@ export default function ReservedInventoryPage() {
     } catch {}
   };
 
+  // ✅ selection handlers
+  const toggleOne = (id) => {
+    if (!id) return;
+    if (!reservedIds.has(id)) return; // only reserved selectable
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllReserved = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const shouldSelectAll = !allReservedSelected; // if not all selected => select all
+      // first remove all reserved ids
+      reservedIds.forEach((id) => next.delete(id));
+      // then if selecting all, add them back
+      if (shouldSelectAll) reservedIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // ✅ bulk action runner
+  const runBulk = async (type) => {
+    clearError?.();
+    const ids = Array.from(selectedIds).filter((id) => reservedIds.has(id));
+    if (!ids.length) return;
+
+    const reason = safe(bulkReason).trim();
+
+    try {
+      // sequential to avoid backend throttling; simple & safe
+      for (const id of ids) {
+        if (type === "release") await releaseReservation(id, reason);
+        if (type === "consume") await consumeReservation(id, reason);
+        if (type === "expire") await expireReservation(id);
+      }
+      clearSelection();
+      setBulkReason("");
+      await fetchReservations();
+    } catch {}
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       <div className="p-4 md:p-6 space-y-4">
@@ -155,10 +245,7 @@ export default function ReservedInventoryPage() {
           <div className="rounded-2xl border border-red-200 bg-red-50 p-3">
             <div className="text-sm font-semibold text-red-700">Error</div>
             <div className="text-sm text-red-700 mt-1">{error}</div>
-            <button
-              onClick={() => clearError?.()}
-              className="mt-2 text-xs underline text-red-700"
-            >
+            <button onClick={() => clearError?.()} className="mt-2 text-xs underline text-red-700">
               Dismiss
             </button>
           </div>
@@ -259,6 +346,83 @@ export default function ReservedInventoryPage() {
           </div>
         </div>
 
+        {/* ✅ Bulk Actions Bar */}
+        <div className="rounded-2xl bg-white ring-1 ring-black/10 p-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleAllReserved}
+                disabled={loading || actionLoading || reservedIds.size === 0}
+                className="h-10 px-4 rounded-xl bg-white ring-1 ring-black/10 hover:ring-black/20 disabled:opacity-60"
+                title="Select all RESERVED rows on this page"
+              >
+                {allReservedSelected ? "Unselect All" : "Select All"}
+              </button>
+
+              <button
+                onClick={clearSelection}
+                disabled={loading || actionLoading || !selectedIds.size}
+                className="h-10 px-4 rounded-xl bg-white ring-1 ring-black/10 hover:ring-black/20 disabled:opacity-60"
+              >
+                Clear Selection
+              </button>
+
+              <div className="text-sm text-gray-700">
+                Selected:{" "}
+                <span className="font-semibold">
+                  {selectedCount}/{reservedIds.size}
+                </span>{" "}
+                <span className="text-xs text-gray-500">(reserved only)</span>
+              </div>
+            </div>
+
+            <div className="flex-1" />
+
+            <div className="flex flex-col md:flex-row md:items-center gap-2">
+              <input
+                value={bulkReason}
+                onChange={(e) => setBulkReason(e.target.value)}
+                placeholder="bulk reason (optional)"
+                className="h-10 px-3 rounded-xl bg-gray-100/70 ring-1 ring-black/10 outline-none text-sm w-full md:w-[320px]"
+                disabled={actionLoading}
+              />
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => runBulk("release")}
+                  disabled={!anyReservedSelected || actionLoading || loading}
+                  className="h-10 px-4 rounded-xl bg-white ring-1 ring-black/10 hover:ring-black/20 disabled:opacity-50"
+                  title="Bulk Release selected reserved reservations"
+                >
+                  Bulk Release
+                </button>
+
+                <button
+                  onClick={() => runBulk("consume")}
+                  disabled={!anyReservedSelected || actionLoading || loading}
+                  className="h-10 px-4 rounded-xl bg-black text-white hover:bg-black/90 disabled:opacity-50"
+                  title="Bulk Consume selected reserved reservations"
+                >
+                  Bulk Consume
+                </button>
+
+                <button
+                  onClick={() => runBulk("expire")}
+                  disabled={!anyReservedSelected || actionLoading || loading}
+                  className="h-10 px-4 rounded-xl bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                  title="Bulk Expire selected reserved reservations"
+                >
+                  Bulk Expire
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2 text-xs text-gray-500">
+            Note: Bulk actions apply only to <span className="font-semibold">reserved</span> rows.
+          </div>
+        </div>
+
         {/* Table */}
         <div className="rounded-2xl bg-white ring-1 ring-black/10 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -272,6 +436,18 @@ export default function ReservedInventoryPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600">
                 <tr>
+                  {/* ✅ select column */}
+                  <th className="text-left font-semibold px-4 py-3 w-[56px]">
+                    <input
+                      type="checkbox"
+                      checked={allReservedSelected}
+                      onChange={toggleAllReserved}
+                      disabled={loading || actionLoading || reservedIds.size === 0}
+                      className="h-4 w-4 accent-black"
+                      title="Select all reserved"
+                    />
+                  </th>
+
                   <th className="text-left font-semibold px-4 py-3">Status</th>
                   <th className="text-left font-semibold px-4 py-3">Order</th>
                   <th className="text-left font-semibold px-4 py-3">Product</th>
@@ -288,7 +464,7 @@ export default function ReservedInventoryPage() {
               <tbody className="divide-y divide-gray-100">
                 {!list.length ? (
                   <tr>
-                    <td className="px-4 py-10 text-center text-gray-500" colSpan={10}>
+                    <td className="px-4 py-10 text-center text-gray-500" colSpan={11}>
                       {loading ? "Loading..." : "No reservations found"}
                     </td>
                   </tr>
@@ -303,8 +479,22 @@ export default function ReservedInventoryPage() {
                     const img = safe(r?.productImage);
                     const orderNo = safe(r?.orderNumber) || "-";
 
+                    const checked = selectedIds.has(id) && reservedIds.has(id);
+
                     return (
                       <tr key={id} className="hover:bg-gray-50/70">
+                        {/* ✅ row checkbox */}
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleOne(id)}
+                            disabled={!isReserved || loading || actionLoading}
+                            className="h-4 w-4 accent-black disabled:opacity-50"
+                            title={isReserved ? "Select" : "Only reserved rows selectable"}
+                          />
+                        </td>
+
                         <td className="px-4 py-3">
                           <span
                             className={[
@@ -399,9 +589,7 @@ export default function ReservedInventoryPage() {
                           <div className="flex flex-col gap-2 min-w-[220px]">
                             <input
                               value={safe(reasonById[id])}
-                              onChange={(e) =>
-                                setReasonById((m) => ({ ...m, [id]: e.target.value }))
-                              }
+                              onChange={(e) => setReasonById((m) => ({ ...m, [id]: e.target.value }))}
                               placeholder="reason (optional)"
                               className="h-9 px-3 rounded-xl bg-gray-100/70 ring-1 ring-black/10 outline-none text-xs"
                               disabled={!isReserved || actionLoading}
