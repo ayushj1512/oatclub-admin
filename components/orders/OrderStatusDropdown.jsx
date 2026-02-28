@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, ChevronDown } from "lucide-react";
 import { useOrderStore } from "@/store/orderStore";
 
-/* ✅ UPDATED STATUS LIST (added pickup_initiated before returned/refunded) */
+/* ✅ UPDATED STATUS LIST (includes failed + pickup_initiated) */
 const STATUS_OPTIONS = [
   { value: "processing", label: "Processing" },
   { value: "packed", label: "Packed" },
@@ -15,17 +15,19 @@ const STATUS_OPTIONS = [
 
   { value: "return_requested", label: "Return Requested" },
   { value: "exchange_requested", label: "Exchange Requested" },
-
-  { value: "pickup_initiated", label: "Pickup Initiated" }, // ✅ NEW (reverse pickup)
+  { value: "pickup_initiated", label: "Pickup Initiated" },
 
   { value: "returned", label: "Returned" },
-  { value: "refunded", label: "Refunded" }, // ✅ already
+  { value: "refunded", label: "Refunded" },
 
   { value: "rto", label: "RTO" },
   { value: "cancelled", label: "Cancelled" },
+
+  // ✅ NEW
+  { value: "failed", label: "Failed" },
 ];
 
-/* ✅ STATUS BADGE COLORS (added pickup_initiated) */
+/* ✅ STATUS BADGE COLORS (includes failed) */
 const statusStyle = (status) => {
   switch (status) {
     case "processing":
@@ -45,9 +47,8 @@ const statusStyle = (status) => {
       return "bg-orange-50 text-orange-700 ring-1 ring-orange-200";
     case "exchange_requested":
       return "bg-pink-50 text-pink-700 ring-1 ring-pink-200";
-
     case "pickup_initiated":
-      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200"; // ✅ NEW
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
 
     case "returned":
       return "bg-orange-100 text-orange-800 ring-1 ring-orange-200";
@@ -59,12 +60,19 @@ const statusStyle = (status) => {
     case "cancelled":
       return "bg-red-50 text-red-700 ring-1 ring-red-200";
 
+    case "failed":
+      return "bg-rose-100 text-rose-800 ring-1 ring-rose-300"; // ✅ NEW
+
     default:
       return "bg-gray-100 text-gray-700 ring-1 ring-gray-200";
   }
 };
 
-export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated }) {
+export default function OrderStatusDropdown({
+  orderId,
+  currentStatus,
+  onUpdated,
+}) {
   const { updateOrderStatus } = useOrderStore();
   const [loading, setLoading] = useState(false);
   const [value, setValue] = useState(currentStatus || "processing");
@@ -75,6 +83,10 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
 
   const handleChange = async (e) => {
     const newStatus = e.target.value;
+
+    // ✅ Prevent unnecessary API call
+    if (newStatus === value) return;
+
     setValue(newStatus);
 
     try {
@@ -82,6 +94,7 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
 
       let payload = { fulfillmentStatus: newStatus };
 
+      // ✅ Cancel handling
       if (newStatus === "cancelled") {
         payload = {
           fulfillmentStatus: "cancelled",
@@ -92,8 +105,20 @@ export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated 
         };
       }
 
+      // ✅ Refund sync payment
       if (newStatus === "refunded") {
-        payload = { fulfillmentStatus: "refunded", paymentStatus: "refunded" };
+        payload = {
+          fulfillmentStatus: "refunded",
+          paymentStatus: "refunded",
+        };
+      }
+
+      // ✅ Failed sync payment
+      if (newStatus === "failed") {
+        payload = {
+          fulfillmentStatus: "failed",
+          paymentStatus: "failed",
+        };
       }
 
       const updatedOrder = await updateOrderStatus(orderId, payload);
