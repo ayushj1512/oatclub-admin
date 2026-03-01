@@ -1,7 +1,7 @@
 // components/product/ProductImagesEditor.jsx
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import {
   ImagePlus,
   X,
@@ -11,6 +11,8 @@ import {
   Link2,
   ArrowUp,
   ArrowDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import MediaPickerModal from "@/components/media/MediaPickerModal";
 
@@ -20,6 +22,7 @@ import MediaPickerModal from "@/components/media/MediaPickerModal";
  * ✅ Quick URL add (paste/enter/blur) + Set Thumb
  * ✅ Copy URLs
  * ✅ Reorder: Drag & Drop + Up/Down buttons
+ * ✅ Lightbox (fullscreen) on click
  * - Thumbnail = index 0
  */
 export default function ProductImagesEditor({
@@ -44,6 +47,10 @@ export default function ProductImagesEditor({
 
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedOne, setCopiedOne] = useState("");
+
+  // ✅ lightbox
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const thumb = urls[0] || "";
   const gallery = urls.slice(1);
@@ -78,7 +85,16 @@ export default function ProductImagesEditor({
   };
 
   /* ---------------- remove / up-down reorder ---------------- */
-  const removeAt = (idx) => emit(urls.filter((_, i) => i !== idx));
+  const removeAt = (idx) => {
+    const next = urls.filter((_, i) => i !== idx);
+    emit(next);
+    // keep lightbox stable
+    if (lightboxOpen) {
+      if (!next.length) return closeLightbox();
+      const nextIdx = Math.min(lightboxIndex, next.length - 1);
+      setLightboxIndex(nextIdx);
+    }
+  };
 
   const move = (from, to) => {
     if (to < 0 || to >= urls.length) return;
@@ -87,6 +103,13 @@ export default function ProductImagesEditor({
     const [item] = next.splice(from, 1);
     next.splice(to, 0, item);
     emit(next);
+
+    // keep lightbox index consistent with reorder
+    if (lightboxOpen) {
+      if (lightboxIndex === from) setLightboxIndex(to);
+      else if (from < lightboxIndex && to >= lightboxIndex) setLightboxIndex((i) => i - 1);
+      else if (from > lightboxIndex && to <= lightboxIndex) setLightboxIndex((i) => i + 1);
+    }
   };
 
   /* ---------------- quick add ---------------- */
@@ -160,6 +183,42 @@ export default function ProductImagesEditor({
     move(from, to);
   };
 
+  /* ---------------- lightbox ---------------- */
+  const openLightbox = (idx) => {
+    if (!urls.length) return;
+    setLightboxIndex(Math.min(Math.max(0, idx), urls.length - 1));
+    setLightboxOpen(true);
+  };
+
+  const closeLightbox = () => setLightboxOpen(false);
+
+  const prevLb = () => setLightboxIndex((i) => (i - 1 + urls.length) % urls.length);
+  const nextLb = () => setLightboxIndex((i) => (i + 1) % urls.length);
+
+  // keyboard: esc, arrows
+  useEffect(() => {
+    if (!lightboxOpen) return;
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") closeLightbox();
+      if (e.key === "ArrowLeft") prevLb();
+      if (e.key === "ArrowRight") nextLb();
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    // prevent background scroll
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightboxOpen, urls.length]);
+
+  const lbUrl = urls[lightboxIndex] || "";
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -172,7 +231,7 @@ export default function ProductImagesEditor({
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Thumbnail first, then gallery. Drag or use Up/Down.
+            Thumbnail first, then gallery. Drag or use Up/Down. Click image for fullscreen.
           </p>
         </div>
 
@@ -283,30 +342,36 @@ export default function ProductImagesEditor({
               onDrop={onDrop(idx)}
               title="Drag to reorder"
             >
-              <div className="relative overflow-hidden rounded-2xl bg-slate-100">
+              <button
+                type="button"
+                onClick={() => openLightbox(idx)}
+                className="relative block w-full overflow-hidden rounded-2xl bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                title="Open fullscreen"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={url} alt="" className="aspect-square h-full w-full object-cover" />
 
                 <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-extrabold text-white backdrop-blur">
                   {idx === 0 ? "Thumbnail" : `Image ${idx + 1}`}
                 </span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => removeAt(idx)}
-                  className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/90 text-slate-800 shadow-sm backdrop-blur hover:bg-white"
-                  title="Remove"
-                >
-                  <X size={16} />
-                </button>
+              <button
+                type="button"
+                onClick={() => removeAt(idx)}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-900 hover:bg-slate-50"
+                title="Remove"
+              >
+                <X size={16} />
+                Remove
+              </button>
 
-                <div
-                  className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-2xl bg-white/90 px-2 py-1 text-[10px] font-extrabold text-slate-800 shadow-sm backdrop-blur"
-                  title="Drag to reorder"
-                >
-                  <GripVertical size={14} />
-                  Drag
-                </div>
+              <div
+                className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-2xl bg-slate-50 px-2 py-2 text-[11px] font-extrabold text-slate-700"
+                title="Drag to reorder"
+              >
+                <GripVertical size={14} />
+                Drag to reorder
               </div>
 
               {/* url + copy */}
@@ -371,6 +436,115 @@ export default function ProductImagesEditor({
         folder={`${folder}/gallery`}
         onSelect={onSelectGallery}
       />
+
+      {/* ✅ Lightbox */}
+      {lightboxOpen && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={(e) => {
+            // close only if clicking the backdrop
+            if (e.target === e.currentTarget) closeLightbox();
+          }}
+        >
+          {/* top bar */}
+          <div className="absolute left-0 right-0 top-0 flex items-center justify-between gap-2 p-3 sm:p-4">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-extrabold text-white">
+              <span>{urls.length ? lightboxIndex + 1 : 0}</span>
+              <span className="opacity-70">/</span>
+              <span className="opacity-90">{urls.length}</span>
+              <span className="ml-2 hidden max-w-[55vw] truncate text-[11px] font-semibold opacity-80 sm:inline">
+                {lbUrl}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(lbUrl);
+                    setCopiedOne(lbUrl);
+                    setTimeout(() => setCopiedOne(""), 700);
+                  } catch {}
+                }}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-3 py-2 text-xs font-extrabold text-white hover:bg-white/15"
+                title="Copy current URL"
+              >
+                {copiedOne === lbUrl ? <Check size={16} /> : <Clipboard size={16} />}
+                {copiedOne === lbUrl ? "Copied" : "Copy URL"}
+              </button>
+
+              <button
+                type="button"
+                onClick={closeLightbox}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-white hover:bg-white/15"
+                title="Close (Esc)"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* main */}
+          <div className="flex h-full w-full items-center justify-center px-3 py-16 sm:px-6">
+            <button
+              type="button"
+              onClick={prevLb}
+              className="absolute left-3 top-1/2 -translate-y-1/2 rounded-2xl bg-white/10 p-3 text-white hover:bg-white/15 sm:left-5"
+              title="Previous (←)"
+            >
+              <ChevronLeft size={22} />
+            </button>
+
+            <div className="relative max-h-[80vh] w-full max-w-5xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lbUrl}
+                alt=""
+                className="mx-auto max-h-[80vh] w-auto max-w-full rounded-2xl bg-white/5 object-contain shadow-2xl"
+                draggable={false}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={nextLb}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-2xl bg-white/10 p-3 text-white hover:bg-white/15 sm:right-5"
+              title="Next (→)"
+            >
+              <ChevronRight size={22} />
+            </button>
+          </div>
+
+          {/* bottom strip thumbnails */}
+          {urls.length > 1 && (
+            <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
+              <div className="mx-auto flex max-w-5xl gap-2 overflow-x-auto rounded-2xl bg-white/5 p-2">
+                {urls.map((u, i) => (
+                  <button
+                    key={u + i}
+                    type="button"
+                    onClick={() => setLightboxIndex(i)}
+                    className={[
+                      "relative h-14 w-14 flex-none overflow-hidden rounded-xl border",
+                      i === lightboxIndex ? "border-white/70" : "border-white/10 hover:border-white/25",
+                    ].join(" ")}
+                    title={`Go to ${i + 1}`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={u} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-center text-[11px] font-semibold text-white/70">
+                Esc to close • ←/→ to navigate
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
