@@ -3,28 +3,26 @@ import { toast } from "react-hot-toast";
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || "").trim();
 const apiBase = BASE_URL ? BASE_URL.replace(/\/+$/, "") : "";
-const API = `${apiBase}/api/orders`; // ✅ IMPORTANT FIX (api prefix)
+const API = `${apiBase}/api/orders`;
 
 /* ---------------- helpers ---------------- */
-
 const safeStr = (v) => String(v ?? "").trim();
 
 const toCSV = (v) => {
-  // supports: "a,b" | ["a","b"] | undefined
   if (v == null) return "";
   if (Array.isArray(v)) return v.map(safeStr).filter(Boolean).join(",");
-  const s = safeStr(v);
-  return s;
+  return safeStr(v);
+};
+
+const toBool = (v) => {
+  const s = safeStr(v).toLowerCase();
+  return s === "1" || s === "true" || s === "yes" || s === "y";
 };
 
 const buildQueryString = (params = {}) => {
   const qs = new URLSearchParams();
 
-  // ✅ multi filters supported by backend:
-  // fulfillmentStatus=processing,packed
-  // priority=high,medium
-  // orderType=shipment,parent
-  // provider=shiprocket
+  // ✅ multi filters supported by backend
   const fulfillmentStatus = toCSV(params.fulfillmentStatus);
   const priority = toCSV(params.priority);
   const orderType = toCSV(params.orderType);
@@ -43,12 +41,11 @@ const buildQueryString = (params = {}) => {
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
 
-  // pagination + sort
-  const page = Number(params.page || 1);
-  const limit = Number(params.limit || 50);
-  if (Number.isFinite(page) && page > 0) qs.set("page", String(page));
-  if (Number.isFinite(limit) && limit > 0) qs.set("limit", String(limit));
+  // ✅ all mode (new)
+  const all = params.all;
+  if (all != null) qs.set("all", toBool(all) ? "true" : "false");
 
+  // sort
   const sort = safeStr(params.sort); // e.g. "createdAt:desc"
   if (sort) qs.set("sort", sort);
 
@@ -61,7 +58,6 @@ export const useAdminProductionStore = create((set, get) => ({
   ============================================================ */
   queue: [],
 
-  // ✅ keep server summary flexible (you added more keys)
   summary: {
     processing: 0,
     packed: 0,
@@ -78,34 +74,29 @@ export const useAdminProductionStore = create((set, get) => ({
     exchanged: 0,
   },
 
-  // ✅ now can be string OR array in UI
   fulfillmentStatus: "processing",
 
-  // ✅ NEW: filters
+  // ✅ filters (no page/limit now)
   filters: {
     fulfillmentStatus: "processing",
-    priority: "",        // "high" | "medium" | "normal" | "" | ["high","medium"]
-    orderType: "",       // "shipment" | "parent" | ""
-    provider: "",        // "shiprocket" | "manual" | "xpressbees" | "ekart" | ""
+    priority: "",
+    orderType: "",
+    provider: "",
     q: "",
     from: "",
     to: "",
-    page: 1,
-    limit: 50,
     sort: "createdAt:desc",
+
+    // ✅ default: fetch ALL orders
+    all: true,
   },
 
-  // ✅ pagination meta (from backend)
+  // meta
   total: 0,
-  page: 1,
-  limit: 50,
-
   loadingQueue: false,
   loadingSummary: false,
-
   updatingPacked: false,
   updatingShipped: false,
-
   error: null,
 
   /* ============================================================
@@ -114,51 +105,34 @@ export const useAdminProductionStore = create((set, get) => ({
   setFulfillmentStatus: (status) =>
     set((state) => ({
       fulfillmentStatus: status,
-      filters: { ...state.filters, fulfillmentStatus: status, page: 1 },
+      filters: { ...state.filters, fulfillmentStatus: status },
     })),
 
   setFilters: (partial = {}) =>
     set((state) => ({
-      filters: {
-        ...state.filters,
-        ...partial,
-        // reset page when filters change (unless explicitly set)
-        page:
-          partial.page != null
-            ? partial.page
-            : partial.fulfillmentStatus != null ||
-              partial.priority != null ||
-              partial.orderType != null ||
-              partial.provider != null ||
-              partial.q != null ||
-              partial.from != null ||
-              partial.to != null ||
-              partial.sort != null ||
-              partial.limit != null
-            ? 1
-            : state.filters.page,
-      },
+      filters: { ...state.filters, ...partial },
     })),
 
   clearError: () => set({ error: null }),
 
   /* ============================================================
     ✅ FETCH PRODUCTION QUEUE
-    GET /api/orders/production/queue?fulfillmentStatus=processing,...
+    GET /api/orders/production/queue?....&all=true
   ============================================================ */
   fetchProductionQueue: async (params = {}) => {
     try {
       set({ loadingQueue: true, error: null });
 
       const state = get();
-      const merged = {
-        ...state.filters,
-        ...params,
-      };
+      const merged = { ...state.filters, ...params };
 
       // fallback: if someone calls with fulfillmentStatus only
-      const status = merged.fulfillmentStatus || state.fulfillmentStatus || "processing";
+      const status =
+        merged.fulfillmentStatus || state.fulfillmentStatus || "processing";
       merged.fulfillmentStatus = status;
+
+      // default all=true unless explicitly false
+      if (merged.all == null) merged.all = true;
 
       const query = buildQueryString(merged);
 
@@ -174,11 +148,7 @@ export const useAdminProductionStore = create((set, get) => ({
         queue: data.orders || [],
         fulfillmentStatus: status,
         filters: { ...s.filters, ...merged, fulfillmentStatus: status },
-
-        // ✅ pagination meta from backend
-        total: Number(data.total || 0),
-        page: Number(data.page || merged.page || 1),
-        limit: Number(data.limit || merged.limit || 50),
+        total: Number(data.total || (data.orders || []).length || 0),
       }));
 
       return data.orders || [];
@@ -230,7 +200,6 @@ export const useAdminProductionStore = create((set, get) => ({
   markOrderPacked: async (orderId) => {
     try {
       if (!orderId) throw new Error("Order id missing");
-
       set({ updatingPacked: true, error: null });
 
       const res = await fetch(`${API}/${orderId}/status`, {
@@ -245,7 +214,6 @@ export const useAdminProductionStore = create((set, get) => ({
 
       const updated = data.order;
 
-      // ✅ update queue instantly
       set((state) => ({
         queue: (state.queue || []).map((o) =>
           String(o._id) === String(orderId) ? updated : o
@@ -253,8 +221,6 @@ export const useAdminProductionStore = create((set, get) => ({
       }));
 
       toast.success("Order marked packed ✅");
-
-      // ✅ refresh summary silently
       get().fetchProductionSummary().catch(() => {});
       return updated;
     } catch (e) {
@@ -274,7 +240,6 @@ export const useAdminProductionStore = create((set, get) => ({
   markOrderShipped: async (orderId) => {
     try {
       if (!orderId) throw new Error("Order id missing");
-
       set({ updatingShipped: true, error: null });
 
       const res = await fetch(`${API}/production/${orderId}/shipped`, {
@@ -287,7 +252,6 @@ export const useAdminProductionStore = create((set, get) => ({
 
       const updated = data.order;
 
-      // ✅ Update local queue instantly
       set((state) => ({
         queue: (state.queue || []).map((o) =>
           String(o._id) === String(orderId) ? updated : o
@@ -295,8 +259,6 @@ export const useAdminProductionStore = create((set, get) => ({
       }));
 
       toast.success("Order marked shipped ✅");
-
-      // ✅ refresh summary (silent)
       get().fetchProductionSummary().catch(() => {});
       return updated;
     } catch (e) {

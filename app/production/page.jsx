@@ -328,13 +328,11 @@ export default function ProductionDashboardPage() {
   // Initial load
   useEffect(() => {
     fetchProductionSummary();
-    fetchProductionQueue({ fulfillmentStatus: "processing" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+fetchProductionQueue({ fulfillmentStatus: "processing", all: true });    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    fetchProductionQueue({ fulfillmentStatus });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+fetchProductionQueue({ fulfillmentStatus, all: true });    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fulfillmentStatus]);
 
   // Mirror store -> local (ONLY when store changes)
@@ -376,6 +374,8 @@ export default function ProductionDashboardPage() {
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localQueue]);
+
+  
 
   // ✅ Fetch reservations when queue present (but don't refetch after packing)
   useEffect(() => {
@@ -791,9 +791,19 @@ export default function ProductionDashboardPage() {
               />
             </div>
 
-            <button className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 md:ml-auto">
-              Apply
-            </button>
+            <button
+  onClick={() => {
+    // ✅ apply custom range -> fetch from backend (all orders)
+    const from = rangeFrom || "";
+    const to = rangeTo || "";
+    fetchProductionQueue({ fulfillmentStatus, all: true, from, to });
+    // optional: small feedback
+    // toast.success("Range applied");
+  }}
+  className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 md:ml-auto"
+>
+  Apply
+</button>
           </div>
         ) : null}
 
