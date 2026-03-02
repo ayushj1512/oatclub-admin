@@ -60,11 +60,12 @@ export const sidebarMenus = {
     { label: "Sales", href: "/accounts/sales" },
   ],
 
-  inventory: [
-    { label: "Inventory Dashboard", href: "/inventory" },
-    { label: "Stock Update", href: "/inventory/stock-update" },
-    { label: "Reserved Inventory", href: "/inventory/reserved-inventory" }, // ✅ new
-  ],
+ inventory: [
+  { label: "Inventory Dashboard", href: "/inventory" },
+  { label: "Stock Update", href: "/inventory/stock-update" },
+  { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" }, // ✅ new
+  { label: "Reserved Inventory", href: "/inventory/reserved-inventory" }, // ✅ new
+],
 
   media: [
     { label: "Media Library", href: "/media" },
@@ -140,27 +141,39 @@ export const sidebarMenus = {
 ],
 
   orders: [
+  // Main
   { label: "Orders Dashboard", href: "/orders" },
   { label: "All Orders", href: "/orders/all" },
-  { label: "Order Search", href: "/orders/search" }, // ✅ NEW
+  { label: "Order Search", href: "/orders/search" },
   { label: "Order Analytics", href: "/orders/report" },
 
   // Status Buckets
-  { label: "Pending Orders", href: "/orders/pending" },
   { label: "Processing", href: "/orders/processing" },
+  { label: "Packed", href: "/orders/packed" },
   { label: "Shipped", href: "/orders/shipped" },
   { label: "Delivered", href: "/orders/delivered" },
+  { label: "Failed", href: "/orders/failed" },
+  { label: "Cancelled", href: "/orders/cancelled" },
+  { label: "Refunded", href: "/orders/refunded" },
 
-  // Returns & Exceptions
-  { label: "Returned / Cancelled", href: "/orders/returns" },
+  // Returns & Exchanges
+  { label: "Returns", href: "/orders/returns" },
+  { label: "Returned", href: "/orders/returned" },
+  { label: "Return Requested", href: "/orders/return_requested" },
+  { label: "Exchanged", href: "/orders/exchanged" },
+  { label: "Exchange Requested", href: "/orders/exchange_requested" },
+
+  // Logistics
+  { label: "Pickup Initiated", href: "/orders/pickup_initiated" },
   { label: "RTO / NDR", href: "/orders/rto" },
-  { label: "Order Remark", href: "/orders/remark" },
-
-  // ✅ RMA
-  { label: "RMA Requests", href: "/rma" },
 
   // Other Tools
-  { label: "Order Tags", href: "/orders/tags" },
+  { label: "Order Remark", href: "/orders/remark" },
+  { label: "Invoice", href: "/orders/invoice" },
+  { label: "RMA Requests", href: "/orders/rma" },
+
+  // (Only if you create folder later)
+  // { label: "Order Tags", href: "/orders/tags" },
 ],
 
   // ✅ OPTIONAL: Separate RMA menu group (if you want sidebar items when on /rma)

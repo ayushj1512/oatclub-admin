@@ -18,6 +18,7 @@ import { useOrderStore } from "@/store/orderStore";
 import OrderPrintPanel from "@/components/orders/OrderPrintPanel";
 import OrderRmaMention from "../../../components/orders/OrderRma";
 import OrderTrackingCard from "@/components/orders/OrderTrackingCard";
+import OrderCreateRmaPanel from "@/components/orders/OrderCreateRmaPanel";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 const STORE_URL = "https://www.mirayfashions.com";
@@ -253,7 +254,7 @@ export default function OrderDetailsClient({ id }) {
 
   return (
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-8">
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto space-y-6">
         {/* BACK */}
         <button
           onClick={() => router.push("/orders/all")}
@@ -496,7 +497,12 @@ export default function OrderDetailsClient({ id }) {
           </p>
         </Card>
 
-        <OrderRmaMention orderId={order._id} />
+        <OrderCreateRmaPanel
+  order={order}
+  onCreated={() => fetchOrderById(order._id)}
+/>
+
+<OrderRmaMention orderId={order._id} />
 
         <OrderActionCenter
           order={order}

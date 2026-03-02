@@ -1,17 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Search,
-  Image as ImageIcon,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Search, Image as ImageIcon } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { useOrderStore } from "@/store/orderStore";
 import { useRmaStore } from "@/store/useRmaStore";
 
 /* theme */
@@ -27,8 +20,7 @@ const SIZE_OPTIONS = ["xs", "s", "m", "l", "xl"];
 /* helpers */
 const safe = (v) => (v == null ? "" : String(v));
 const lower = (v) => safe(v).trim().toLowerCase();
-const money = (n) =>
-  Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-IN") : "0";
+const money = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-IN") : "0");
 const fmtDT = (d) => {
   const dt = d ? new Date(d) : null;
   return !dt || Number.isNaN(dt.getTime())
@@ -45,8 +37,7 @@ const statusPill = (s) => {
   const v = lower(s);
   if (v === "delivered") return "bg-emerald-50 text-emerald-700";
   if (v === "shipped") return "bg-sky-50 text-sky-700";
-  if (v === "processing" || v === "confirmed")
-    return "bg-amber-50 text-amber-700";
+  if (v === "processing" || v === "confirmed") return "bg-amber-50 text-amber-700";
   if (v.includes("cancel")) return "bg-rose-50 text-rose-700";
   if (v.includes("return")) return "bg-purple-50 text-purple-700";
   if (v.includes("exchange")) return "bg-indigo-50 text-indigo-700";
@@ -60,7 +51,10 @@ const paymentBadge = (o) => {
   if (ps === "paid") return { label: "Paid", cls: "bg-emerald-50 text-emerald-700" };
   if (ps === "pending") return { label: "Pending", cls: "bg-amber-50 text-amber-700" };
   if (ps === "refunded") return { label: "Refunded", cls: "bg-purple-50 text-purple-700" };
-  return { label: safe(o?.paymentStatus || o?.paymentMethod || "-") || "-", cls: "bg-black/5 text-black/70" };
+  return {
+    label: safe(o?.paymentStatus || o?.paymentMethod || "-") || "-",
+    cls: "bg-black/5 text-black/70",
+  };
 };
 const pickImage = (it) => {
   const snap = it?.productSnapshot || {};
@@ -88,6 +82,14 @@ const pickSize = (it) => {
     ""
   );
 };
+const getDeliveredAt = (order) =>
+  order?.trackingDetails?.deliveredAt ||
+  order?.shipment?.deliveredAt ||
+  order?.shipment?.shiprocket?.deliveredAt ||
+  order?.shipment?.shiprocket?.delivered_date ||
+  order?.statusTimestamps?.deliveredAt ||
+  order?.deliveredAt ||
+  null;
 
 function ImgThumb({ src, alt }) {
   const s = safe(src);
@@ -99,14 +101,7 @@ function ImgThumb({ src, alt }) {
     );
   return (
     <div className="w-10 h-10 rounded-xl overflow-hidden bg-black/5">
-      <Image
-        src={s}
-        alt={alt || "product"}
-        width={40}
-        height={40}
-        className="w-10 h-10 object-cover"
-        unoptimized
-      />
+      <Image src={s} alt={alt || "product"} width={40} height={40} className="w-10 h-10 object-cover" unoptimized />
     </div>
   );
 }
@@ -118,20 +113,14 @@ function ItemRow({ it }) {
       <div className="col-span-5 flex items-center gap-2 min-w-0">
         <ImgThumb src={pickImage(it)} alt={snap?.title || it?.title} />
         <div className="min-w-0">
-          <div className="text-sm font-medium truncate">
-            {safe(snap?.title || it?.title || "-")}
-          </div>
-          <div className="text-xs text-black/55 truncate">
-            SKU: {safe(it?.variant?.sku || it?.sku || "-")}
-          </div>
+          <div className="text-sm font-medium truncate">{safe(snap?.title || it?.title || "-")}</div>
+          <div className="text-xs text-black/55 truncate">SKU: {safe(it?.variant?.sku || it?.sku || "-")}</div>
         </div>
       </div>
       <div className="col-span-2 text-sm text-black/80">{safe(it?.lineId || "-")}</div>
       <div className="col-span-2 text-sm text-black/80">{safe(pickSize(it) || "-")}</div>
       <div className="col-span-1 text-sm text-black/80">{Number(it?.quantity || 0)}</div>
-      <div className="col-span-2 text-sm text-black/80">
-        ₹{money(it?.price || it?.salePrice || 0)}
-      </div>
+      <div className="col-span-2 text-sm text-black/80">₹{money(it?.price || it?.salePrice || 0)}</div>
     </div>
   );
 }
@@ -160,7 +149,7 @@ function RmaCreatePanel({ order }) {
       const id = safe(it?.lineId);
       if (!id) continue;
       q[id] = 0;
-      s[id] = ""; // selected size
+      s[id] = "";
     }
     setQtyByLineId(q);
     setExchangeSizeByLineId(s);
@@ -183,12 +172,7 @@ function RmaCreatePanel({ order }) {
 
   const getProductIdForLine = (lineId) => {
     const it = items.find((x) => safe(x?.lineId) === safe(lineId));
-    return (
-      safe(it?.variant?.productId) ||
-      safe(it?.productId) ||
-      safe(it?.productSnapshot?.productId) ||
-      ""
-    );
+    return safe(it?.variant?.productId) || safe(it?.productId) || safe(it?.productSnapshot?.productId) || "";
   };
 
   const submit = async () => {
@@ -215,7 +199,7 @@ function RmaCreatePanel({ order }) {
 
       payload.exchangeTo = {
         productId,
-        variantId: "", // backend should resolve by productId + attributes(size)
+        variantId: "", // backend resolves by productId + attributes
         variantSku: "",
         note: `Size change to ${newSize.toUpperCase()}`,
         attributes: [{ key: "size", value: newSize }],
@@ -282,8 +266,7 @@ function RmaCreatePanel({ order }) {
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{title}</div>
                     <div className="text-xs text-black/55 truncate">
-                      SKU: {safe(it?.variant?.sku || "-")} • Size:{" "}
-                      {(currentSize || "-").toUpperCase()}
+                      SKU: {safe(it?.variant?.sku || "-")} • Size: {(currentSize || "-").toUpperCase()}
                     </div>
                   </div>
                 </div>
@@ -328,18 +311,14 @@ function RmaCreatePanel({ order }) {
                       >
                         <option value="">Select size</option>
                         {SIZE_OPTIONS.map((sz) => (
-                          <option
-                            key={sz}
-                            value={sz}
-                            disabled={lower(currentSize) === sz} // ✅ prevent same size
-                          >
+                          <option key={sz} value={sz} disabled={lower(currentSize) === sz}>
                             {sz.toUpperCase()}
                           </option>
                         ))}
                       </select>
                     </div>
                     <div className="col-span-12 md:col-span-6 text-xs text-black/45">
-                      Same product exchange. Backend should resolve correct variant by size.
+                      Same product exchange. Backend will resolve correct variant by size.
                     </div>
                   </div>
                 </div>
@@ -389,32 +368,93 @@ function RmaCreatePanel({ order }) {
   );
 }
 
+/* ============================================================
+   ✅ Page: server-side search + pagination (NO hard limit 140)
+   Uses backend getAllOrders:
+   /api/orders?fulfillmentStatus=delivered&customerName=...&page=1&limit=50
+============================================================ */
+const BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
+const API = `${BACKEND}/api/orders`;
+
+const buildQS = (obj = {}) => {
+  const qs = new URLSearchParams();
+  Object.entries(obj || {}).forEach(([k, v]) => {
+    if (v == null) return;
+    const s = String(v).trim();
+    if (!s) return;
+    qs.set(k, s);
+  });
+  const out = qs.toString();
+  return out ? `?${out}` : "";
+};
+
+async function fetchOrdersApi(params) {
+  const url = `${API}${buildQS(params)}`;
+  const res = await fetch(url, { cache: "no-store", credentials: "include" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
+  return data;
+}
+
 export default function CreateRmaAdminPage() {
   const router = useRouter();
-  const { orders, loading, error, fetchOrders } = useOrderStore();
+
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [expanded, setExpanded] = useState(() => new Set());
 
+  // server pagination
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+  const [orders, setOrders] = useState([]);
+
+  // debounce search (350ms)
   useEffect(() => {
-    fetchOrders?.({ limit: 140 });
+    const t = setTimeout(() => setDebouncedQ(q), 350);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const load = async ({ nextPage = 1, append = false } = {}) => {
+    try {
+      append ? setLoadingMore(true) : setLoading(true);
+      setError("");
+
+      const data = await fetchOrdersApi({
+        fulfillmentStatus: "delivered",
+        customerName: debouncedQ, // ✅ your backend searches orderNumber/fullName/email/phone here
+        page: nextPage,
+        limit: 50,
+      });
+
+      const list = Array.isArray(data?.orders) ? data.orders : [];
+      const meta = data?.meta || {};
+      const more = Boolean(meta?.hasMore);
+
+      setOrders((prev) => (append ? [...prev, ...list] : list));
+      setPage(nextPage);
+      setHasMore(more);
+
+      // collapse on new search
+      if (!append) setExpanded(new Set());
+    } catch (e) {
+      setError(e?.message || "Failed to fetch orders");
+      if (!append) setOrders([]);
+    } finally {
+      append ? setLoadingMore(false) : setLoading(false);
+    }
+  };
+
+  // initial + when debounced query changes
+  useEffect(() => {
+    load({ nextPage: 1, append: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [debouncedQ]);
 
-  const delivered = useMemo(() => {
-    const arr = Array.isArray(orders) ? orders : [];
-    return arr.filter((o) => lower(o?.fulfillmentStatus) === "delivered");
-  }, [orders]);
-
-  const list = useMemo(() => {
-    const query = lower(q);
-    if (!query) return delivered;
-    return delivered.filter((o) => {
-      const orderNumber = lower(o?.orderNumber);
-      const phone = lower(o?.shippingAddressSnapshot?.phone);
-      const email = lower(o?.shippingAddressSnapshot?.email);
-      return orderNumber.includes(query) || phone.includes(query) || email.includes(query);
-    });
-  }, [delivered, q]);
+  const list = useMemo(() => orders || [], [orders]);
 
   const toggle = (id) =>
     setExpanded((p) => {
@@ -434,15 +474,16 @@ export default function CreateRmaAdminPage() {
             <input
               className="pl-9 pr-3 py-2 rounded-2xl text-sm w-[340px] max-w-[80vw] bg-white border border-black/10 focus:outline-none focus:ring-2"
               style={{ outlineColor: ACCENT }}
-              placeholder="Search delivered: order no / phone / email"
+              placeholder="Search delivered: order no / phone / email / name"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
 
           <button
-            onClick={() => fetchOrders?.({ limit: 140 })}
-            className="px-3 py-2 rounded-2xl text-sm bg-white border border-black/10 hover:bg-black/[0.03]"
+            onClick={() => load({ nextPage: 1, append: false })}
+            disabled={loading || loadingMore}
+            className="px-3 py-2 rounded-2xl text-sm bg-white border border-black/10 hover:bg-black/[0.03] disabled:opacity-60"
           >
             Reload
           </button>
@@ -458,6 +499,7 @@ export default function CreateRmaAdminPage() {
 
       <div className="mt-2 text-sm text-black/60">
         Showing <span className="font-semibold text-black/80">{list.length}</span> delivered orders.
+        {hasMore ? <span className="ml-2 text-xs text-black/45">(more available)</span> : null}
       </div>
 
       <div className={`mt-4 rounded-3xl ${b1} ${card} overflow-hidden`}>
@@ -507,7 +549,8 @@ export default function CreateRmaAdminPage() {
                 const id = safe(o?._id);
                 const open = expanded.has(id);
                 const pay = paymentBadge(o);
-                const deliveredAt = o?.trackingDetails?.deliveredAt;
+                const deliveredAt = getDeliveredAt(o);
+
                 const itemsCount = Array.isArray(o?.items)
                   ? o.items.reduce((a, it) => a + Number(it?.quantity || 0), 0)
                   : 0;
@@ -542,16 +585,14 @@ export default function CreateRmaAdminPage() {
                       </td>
 
                       <td className="p-3 align-top">
-                        <span className={`inline-flex px-2 py-1 rounded-full text-xs ${pay.cls}`}>
-                          {pay.label}
-                        </span>
+                        <span className={`inline-flex px-2 py-1 rounded-full text-xs ${pay.cls}`}>{pay.label}</span>
                       </td>
 
                       <td className="p-3 align-top text-black/80">{itemsCount}</td>
                       <td className="p-3 align-top text-black/70">{fmtDT(deliveredAt)}</td>
 
                       <td className="p-3 align-top text-right font-semibold text-black/90">
-                        ₹{money(o?.totalAmount || o?.finalAmount || o?.grandTotal || 0)}
+                        ₹{money(o?.totalAmount || o?.finalAmount || o?.grandTotal || o?.finalPayable || 0)}
                       </td>
                     </tr>
 
@@ -572,11 +613,7 @@ export default function CreateRmaAdminPage() {
                                 <div className="col-span-1">Qty</div>
                                 <div className="col-span-2">Price</div>
                               </div>
-                              <div className="px-3">
-                                {(o?.items || []).map((it, idx) => (
-                                  <ItemRow it={it} key={`${safe(it?.lineId)}-${idx}`} />
-                                ))}
-                              </div>
+                              <div className="px-3">{(o?.items || []).map((it, idx) => <ItemRow it={it} key={`${safe(it?.lineId)}-${idx}`} />)}</div>
                             </div>
 
                             <RmaCreatePanel order={o} />
@@ -589,6 +626,29 @@ export default function CreateRmaAdminPage() {
               })
             )}
           </table>
+        </div>
+
+        {/* footer */}
+        <div className="p-3 border-t border-black/10 bg-white flex items-center justify-between">
+          <div className="text-xs text-black/45">
+            Tip: Search is server-side (works even if you have 10k delivered orders).
+          </div>
+          <button
+            disabled={!hasMore || loadingMore || loading}
+            onClick={() => load({ nextPage: page + 1, append: true })}
+            className="px-3 py-2 rounded-2xl text-sm bg-white border border-black/10 hover:bg-black/[0.03] disabled:opacity-60"
+          >
+            {loadingMore ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="animate-spin" size={16} />
+                Loading...
+              </span>
+            ) : hasMore ? (
+              "Load more"
+            ) : (
+              "No more"
+            )}
+          </button>
         </div>
       </div>
     </div>

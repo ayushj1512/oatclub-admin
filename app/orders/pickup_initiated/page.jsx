@@ -1,4 +1,4 @@
-// app/orders/processing/page.jsx
+// app/orders/pickup_initiated/page.jsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -18,7 +18,7 @@ const Card = ({ children, className = "" }) => (
 );
 
 /* ---------------------------------------------
-   ✅ CSV helpers (kept)
+   ✅ CSV helpers
 --------------------------------------------- */
 const escapeCSV = (value) => {
   if (value === null || value === undefined) return "";
@@ -40,11 +40,11 @@ const money = (n) => {
 const safe = (v) => (v === null || v === undefined ? "" : v);
 
 /* ---------------------------------------------
-   Page: Processing Orders
+   Page: Pickup Initiated
    - ✅ Only Searchbar (no filters)
-   - ✅ Backend: fulfillmentStatus=processing + customerName=search
+   - ✅ Backend: fulfillmentStatus=pickup_initiated + customerName=search
 --------------------------------------------- */
-export default function ProcessingOrdersPage() {
+export default function PickupInitiatedOrdersPage() {
   const orders = useOrderStore((s) => s.orders);
   const loading = useOrderStore((s) => s.loading);
   const ordersMeta = useOrderStore((s) => s.ordersMeta);
@@ -71,13 +71,11 @@ export default function ProcessingOrdersPage() {
   }, []);
 
   /* ---------------------------------------------
-     ✅ Backend filters (controller-aligned)
-     - only processing orders
-     - optional search via customerName
+     ✅ Backend filters
   --------------------------------------------- */
   const backendFilters = useMemo(() => {
     const f = {
-      fulfillmentStatus: "processing",
+      fulfillmentStatus: "pickup_initiated",
       page: 1,
       limit: pageSize,
     };
@@ -89,7 +87,7 @@ export default function ProcessingOrdersPage() {
     try {
       await fetchAllOrders(backendFilters);
     } catch (e) {
-      console.log("Processing Orders Fetch Error:", e);
+      console.log("Pickup Initiated Orders Fetch Error:", e);
     }
   }, [fetchAllOrders, backendFilters]);
 
@@ -98,15 +96,15 @@ export default function ProcessingOrdersPage() {
   }, [loadOrders]);
 
   /* ---------------------------------------------
-     ✅ Client-side search fallback (instant)
-     - also keeps list correct if backend returns older cached data
+     ✅ Client-side search fallback
   --------------------------------------------- */
   const filteredOrders = useMemo(() => {
     let data = Array.isArray(orders) ? [...orders] : [];
 
-    // Safety: keep only processing
+    // Safety: keep only pickup_initiated
     data = data.filter(
-      (o) => String(o?.fulfillmentStatus || "").toLowerCase() === "processing"
+      (o) =>
+        String(o?.fulfillmentStatus || "").toLowerCase() === "pickup_initiated"
     );
 
     const q = search.trim().toLowerCase();
@@ -134,6 +132,7 @@ export default function ProcessingOrdersPage() {
 
   /* ---------------------------------------------
      ✅ CSV export
+     - focuses on reverse pickup details from latest RMA
   --------------------------------------------- */
   const buildCsvRows = (ordersArr) => {
     const rows = [];
@@ -152,6 +151,12 @@ export default function ProcessingOrdersPage() {
         order?.customerId?.phone || order?.shippingAddressSnapshot?.phone
       );
 
+      const fulfillmentStatus = safe(order?.fulfillmentStatus);
+      const isConfirmed = order?.isConfirmed === true ? "YES" : "NO";
+
+      const payMethod = safe(order?.paymentMethod);
+      const payStatus = safe(order?.paymentStatus);
+
       const subtotal = money(order?.subtotal);
       const discount = money(order?.discount);
       const shippingFee = money(order?.shippingFee);
@@ -159,11 +164,25 @@ export default function ProcessingOrdersPage() {
       const totalAmount = money(order?.totalAmount);
       const finalPayable = money(order?.finalPayable);
 
-      const fulfillmentStatus = safe(order?.fulfillmentStatus);
-      const isConfirmed = order?.isConfirmed === true ? "YES" : "NO";
+      // Latest RMA reverse pickup details
+      const rmas = Array.isArray(order?.rmas) ? order.rmas : [];
+      const latestRma = rmas.length ? rmas[rmas.length - 1] : null;
 
-      const payMethod = safe(order?.paymentMethod);
-      const payStatus = safe(order?.paymentStatus);
+      const rmaNumber = safe(latestRma?.rmaNumber || "");
+      const rmaType = safe(latestRma?.type || "");
+      const rmaStatus = safe(latestRma?.status || "");
+      const rmaReason = safe(latestRma?.reason || "");
+
+      const reverseOrderId = safe(latestRma?.reverseShipment?.orderId || "");
+      const reverseShipmentId = safe(latestRma?.reverseShipment?.shipmentId || "");
+      const reverseAwb = safe(latestRma?.reverseShipment?.awb || "");
+      const reverseCourier = safe(latestRma?.reverseShipment?.courierName || "");
+      const reverseTrackingUrl = safe(latestRma?.reverseShipment?.trackingUrl || "");
+
+      const pickupScheduledAt = formatDateISO(
+        latestRma?.reverseShipment?.pickupScheduledAt || ""
+      );
+      const pickedAt = formatDateISO(latestRma?.reverseShipment?.pickedAt || "");
 
       const items = Array.isArray(order?.items) ? order.items : [];
 
@@ -179,6 +198,17 @@ export default function ProcessingOrdersPage() {
           fulfillmentStatus,
           paymentMethod: payMethod,
           paymentStatus: payStatus,
+          rmaNumber,
+          rmaType,
+          rmaStatus,
+          rmaReason,
+          reverseOrderId,
+          reverseShipmentId,
+          reverseAwb,
+          reverseCourier,
+          reverseTrackingUrl,
+          pickupScheduledAt,
+          pickedAt,
           subtotal,
           discount,
           shippingFee,
@@ -220,6 +250,17 @@ export default function ProcessingOrdersPage() {
           fulfillmentStatus,
           paymentMethod: payMethod,
           paymentStatus: payStatus,
+          rmaNumber,
+          rmaType,
+          rmaStatus,
+          rmaReason,
+          reverseOrderId,
+          reverseShipmentId,
+          reverseAwb,
+          reverseCourier,
+          reverseTrackingUrl,
+          pickupScheduledAt,
+          pickedAt,
           subtotal,
           discount,
           shippingFee,
@@ -241,7 +282,7 @@ export default function ProcessingOrdersPage() {
 
   const exportToCSV = () => {
     if (!filteredOrders?.length)
-      return alert("No processing orders to export.");
+      return alert("No pickup initiated orders to export.");
 
     const rows = buildCsvRows(filteredOrders);
 
@@ -256,6 +297,17 @@ export default function ProcessingOrdersPage() {
       "Fulfillment Status",
       "Payment Method",
       "Payment Status",
+      "RMA #",
+      "RMA Type",
+      "RMA Status",
+      "RMA Reason",
+      "Reverse OrderId",
+      "Reverse ShipmentId",
+      "Reverse AWB",
+      "Reverse Courier",
+      "Reverse Tracking URL",
+      "Pickup Scheduled At (ISO)",
+      "Picked At (ISO)",
       "Subtotal",
       "Discount",
       "Shipping Fee",
@@ -285,6 +337,17 @@ export default function ProcessingOrdersPage() {
           r.fulfillmentStatus,
           r.paymentMethod,
           r.paymentStatus,
+          r.rmaNumber,
+          r.rmaType,
+          r.rmaStatus,
+          r.rmaReason,
+          r.reverseOrderId,
+          r.reverseShipmentId,
+          r.reverseAwb,
+          r.reverseCourier,
+          r.reverseTrackingUrl,
+          r.pickupScheduledAt,
+          r.pickedAt,
           r.subtotal,
           r.discount,
           r.shippingFee,
@@ -312,7 +375,7 @@ export default function ProcessingOrdersPage() {
     const link = document.createElement("a");
     const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     link.href = url;
-    link.setAttribute("download", `processing-orders-${ts}.csv`);
+    link.setAttribute("download", `pickup-initiated-orders-${ts}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -354,10 +417,10 @@ export default function ProcessingOrdersPage() {
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-              Processing Orders
+              Pickup Initiated
             </h1>
             <p className="text-gray-500 mt-1">
-              Search and manage only <b>processing</b> orders.
+              Search and manage <b>pickup initiated</b> (reverse) orders.
             </p>
             <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
@@ -367,7 +430,7 @@ export default function ProcessingOrdersPage() {
                 Total ₹{totals.sum}
               </span>
               <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-800 font-semibold">
-                Status: processing
+                Status: pickup_initiated
               </span>
             </div>
           </div>
@@ -408,7 +471,7 @@ export default function ProcessingOrdersPage() {
           </div>
         </div>
 
-        {/* Load More / Refresh (compact) */}
+        {/* Load More / Refresh */}
         <Card>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="text-xs text-gray-500">
@@ -457,9 +520,7 @@ export default function ProcessingOrdersPage() {
                   <th className="py-4 px-5 text-left font-semibold">Order #</th>
                   <th className="py-4 px-5 text-left font-semibold">Customer</th>
                   <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">
-                    Fulfillment
-                  </th>
+                  <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
                   <th className="py-4 px-5 text-left font-semibold">Amount</th>
                   <th className="py-4 px-5 text-left font-semibold">Date</th>
                   <th className="py-4 px-5 text-left font-semibold">Action</th>
@@ -477,20 +538,13 @@ export default function ProcessingOrdersPage() {
                       const an = getNum(a);
                       const bn = getNum(b);
                       if (bn !== an) return bn - an;
-                      const ad = new Date(
-                        a?.createdAt || a?.orderDate || 0
-                      ).getTime();
-                      const bd = new Date(
-                        b?.createdAt || b?.orderDate || 0
-                      ).getTime();
+                      const ad = new Date(a?.createdAt || a?.orderDate || 0).getTime();
+                      const bd = new Date(b?.createdAt || b?.orderDate || 0).getTime();
                       return bd - ad;
                     })
                     .map((order, idx) => {
                       const rowKey =
-                        order?._id ||
-                        order?.id ||
-                        order?.orderNumber ||
-                        `order-${idx}`;
+                        order?._id || order?.id || order?.orderNumber || `order-${idx}`;
 
                       return (
                         <OrderRow
@@ -505,7 +559,7 @@ export default function ProcessingOrdersPage() {
                 ) : (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-gray-500">
-                      No processing orders found.
+                      No pickup initiated orders found.
                     </td>
                   </tr>
                 )}
@@ -515,14 +569,12 @@ export default function ProcessingOrdersPage() {
         </div>
       </div>
 
-      {/* Global loading overlay for fetches */}
+      {/* Global loading overlay */}
       {loading ? (
         <div className="fixed inset-0 bg-black/10 backdrop-blur-[1px] flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 px-5 py-4 flex items-center gap-3">
             <Loader2 size={18} className="animate-spin text-gray-700" />
-            <span className="text-sm font-semibold text-gray-800">
-              Loading...
-            </span>
+            <span className="text-sm font-semibold text-gray-800">Loading...</span>
           </div>
         </div>
       ) : null}
