@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Loader2, Search } from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 import { useOrderStore } from "@/store/orderStore";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useRef } from "react";
+import VirtualOrderRow from "@/components/orders/VirtualOrderRow";
 
 const IST_TZ = "Asia/Kolkata";
 const IST_OFFSET = "+05:30";
@@ -71,6 +74,17 @@ const money = (n) => {
 };
 
 const safe = (v) => (v === null || v === undefined ? "" : v);
+
+
+
+const toNumber = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatINR = (v) =>
+  toNumber(v).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+
 
 /* ---------------------------------------------
    Page
@@ -405,19 +419,23 @@ export default function OrdersListPage() {
      - if backend returns meta (totalCount/totalSum), show that
      - else fallback to current filtered list
   --------------------------------------------- */
-  const totals = useMemo(() => {
-    const metaCount = Number(ordersMeta?.totalCount);
-    const metaSum = Number(ordersMeta?.totalSum);
+ const totals = useMemo(() => {
+  const clientCount = filteredOrders.length;
 
-    const count = Number.isFinite(metaCount) && metaCount >= 0 ? metaCount : filteredOrders.length;
+  const clientSum = filteredOrders.reduce(
+    (acc, o) => acc + toNumber(o?.finalPayable),
+    0
+  );
 
-    const sum =
-      Number.isFinite(metaSum) && metaSum >= 0
-        ? metaSum
-        : filteredOrders.reduce((acc, o) => acc + (Number(o?.finalPayable) || 0), 0);
+  const metaCount = toNumber(ordersMeta?.totalCount);
+  const metaSum = toNumber(ordersMeta?.totalSum);
 
-    return { count, sum };
-  }, [ordersMeta, filteredOrders]);
+  return {
+    count: metaCount > 0 ? metaCount : clientCount,
+    // ✅ fallback if backend sends 0
+    sum: metaSum > 0 ? metaSum : clientSum,
+  };
+}, [ordersMeta, filteredOrders]);
 
   /* ---------------------------------------------
      ✅ Filter chips (✅ pickup_initiated included)
@@ -486,9 +504,7 @@ export default function OrdersListPage() {
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
                 {totals.count} Orders
               </span>
-              <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
-                Total ₹{totals.sum}
-              </span>
+       
             </div>
           </div>
 

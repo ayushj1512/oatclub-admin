@@ -16,7 +16,6 @@ import {
   CreditCard,
   Tag,
   User,
- 
 } from "lucide-react";
 import { useOrderStore } from "@/store/orderStore";
 import EditableAddressCard from "@/components/orders/EditableAddressCard";
@@ -32,7 +31,6 @@ const Badge = ({ className = "", children }) => (
     {children}
   </span>
 );
-
 
 const ItemRow = ({ item = {} }) => {
   const snap = item.productSnapshot || {};
@@ -62,11 +60,15 @@ const ItemRow = ({ item = {} }) => {
       <div className="min-w-0 flex-1">
         <div className="font-semibold text-gray-900 truncate">{title}</div>
         <div className="text-xs text-gray-500 mt-0.5">
-          SKU: <span className="font-medium">{safe(variant.sku || snap.sku) || "-"}</span>
+          SKU:{" "}
+          <span className="font-medium">
+            {safe(variant.sku || snap.sku) || "-"}
+          </span>
           {size ? (
             <>
               {" "}
-              • Size: <span className="font-medium uppercase">{size}</span>
+              • Size:{" "}
+              <span className="font-medium uppercase">{size}</span>
             </>
           ) : null}
         </div>
@@ -94,8 +96,10 @@ const ItemRow = ({ item = {} }) => {
 
 export default function CustomerConfirmationPage() {
   const { orders, loading, error, fetchAllOrders } = useOrderStore();
-
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+  // ✅ Local copy so we can patch single order without refetching everything
+  const [localOrders, setLocalOrders] = useState([]);
 
   // expanded order
   const [expandedId, setExpandedId] = useState(null);
@@ -107,7 +111,7 @@ export default function CustomerConfirmationPage() {
   const [successMsg, setSuccessMsg] = useState("");
 
   const [remarkDrafts, setRemarkDrafts] = useState({}); // { [orderId]: "text" }
-const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false }
+  const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false }
 
   // per-order loading (confirm + cancel)
   const [actionLoading, setActionLoading] = useState({
@@ -128,7 +132,7 @@ const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false
   const fetchOrders = useCallback(async () => {
     try {
       setLocalError(null);
-      await fetchAllOrders();
+      await fetchAllOrders(); // store update
     } catch (e) {
       setLocalError(e?.message || "Failed to fetch orders");
     }
@@ -138,20 +142,41 @@ const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false
     fetchOrders();
   }, [fetchOrders]);
 
+  // ✅ Sync store -> local (only when store changes)
+  useEffect(() => {
+    setLocalOrders(Array.isArray(orders) ? orders : []);
+  }, [orders]);
+
+  // ✅ Small helper to patch one order locally (no full refresh)
+  const patchLocalOrder = useCallback((orderIdStr, patch) => {
+    setLocalOrders((prev) =>
+      (prev || []).map((o) => {
+        const id = String(o?._id || o?.id || "");
+        if (id !== String(orderIdStr)) return o;
+        return { ...o, ...(typeof patch === "function" ? patch(o) : patch) };
+      })
+    );
+  }, []);
+
+  // ✅ Small helper to remove one order locally (if you prefer)
+  const removeLocalOrder = useCallback((orderIdStr) => {
+    setLocalOrders((prev) =>
+      (prev || []).filter((o) => String(o?._id || o?.id || "") !== String(orderIdStr))
+    );
+  }, []);
+
   // options for dropdown from data
   const paymentStatusOptions = useMemo(() => {
     const set = new Set();
-    (orders || []).forEach((o) => {
+    (localOrders || []).forEach((o) => {
       if (!o) return;
       set.add(safe(o.paymentStatus).toLowerCase() || "pending");
     });
     return ["ALL", ...Array.from(set).filter(Boolean)];
-  }, [orders]);
+  }, [localOrders]);
 
   /**
-   * ✅ filtered orders
-   * NOTE: Your sample order has fulfillmentStatus = "packed" (not "processing").
-   * If backend uses "packed" for COD confirmation stage, include it too.
+   * ✅ filtered orders (from localOrders)
    */
   const filteredOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -161,14 +186,14 @@ const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false
     const fd = fromDate ? new Date(fromDate).getTime() : null;
     const td = toDate ? new Date(toDate + "T23:59:59").getTime() : null;
 
-    return (orders || [])
+    return (localOrders || [])
       .filter((o) => {
         if (!o) return false;
 
         // ✅ COD only
         if (safe(o.paymentMethod).toLowerCase() !== "cod") return false;
 
-        // ✅ keep only "processing" OR "packed" (because your API response shows packed)
+        // ✅ keep only "processing" OR "packed"
         const fs = safe(o.fulfillmentStatus).toLowerCase();
         if (!["processing", "packed"].includes(fs)) return false;
 
@@ -207,7 +232,17 @@ const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false
         return true;
       })
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  }, [orders, search, paymentStatus, minAmt, maxAmt, city, state, fromDate, toDate]);
+  }, [
+    localOrders,
+    search,
+    paymentStatus,
+    minAmt,
+    maxAmt,
+    city,
+    state,
+    fromDate,
+    toDate,
+  ]);
 
   const clearFilters = () => {
     setSearch("");
@@ -220,24 +255,41 @@ const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false
     setToDate("");
   };
 
-  const handleConfirm = async (orderId) => {
+  const handleConfirm = async (orderIdStr) => {
+    const prev = localOrders;
     try {
       setLocalError(null);
       setSuccessMsg("");
-      setActionLoading((p) => ({ ...p, confirmId: orderId }));
+      setActionLoading((p) => ({ ...p, confirmId: orderIdStr }));
 
       if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
 
-      const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/confirm`, {
+      // ✅ Optimistic: mark confirmed locally (it will auto-disappear due to filter)
+      patchLocalOrder(orderIdStr, {
+        isConfirmed: true,
+        confirmedAt: new Date().toISOString(),
+      });
+
+      const res = await fetch(`${BACKEND_URL}/api/orders/${orderIdStr}/confirm`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
 
-      if (!res.ok) throw new Error((await res.text()) || "Confirm failed");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // rollback on failure
+        setLocalOrders(prev);
+        throw new Error(data?.message || (await res.text()) || "Confirm failed");
+      }
+
+      // ✅ If backend returns updated order, patch it (optional)
+      if (data?.order?._id || data?._id) {
+        const updated = data.order || data;
+        patchLocalOrder(orderIdStr, updated);
+      }
 
       setSuccessMsg("✅ Order Confirmed Successfully!");
-      await fetchOrders();
     } catch (e) {
       setLocalError(e?.message || "Confirm failed");
     } finally {
@@ -246,569 +298,641 @@ const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false
     }
   };
 
- const handleCancel = async (orderId) => {
-  try {
-    setLocalError(null);
-    setSuccessMsg("");
+  const handleCancel = async (orderIdStr) => {
+    const prev = localOrders;
+    try {
+      setLocalError(null);
+      setSuccessMsg("");
 
-    const ok = window.confirm("Are you sure you want to cancel this order?");
-    if (!ok) return;
+      const ok = window.confirm("Are you sure you want to cancel this order?");
+      if (!ok) return;
 
-    setActionLoading((p) => ({ ...p, cancelId: orderId }));
+      setActionLoading((p) => ({ ...p, cancelId: orderIdStr }));
 
-    if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
+      if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
 
-    const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      // ✅ Optimistic: mark cancelled locally (it will auto-disappear due to filter)
+      patchLocalOrder(orderIdStr, {
         fulfillmentStatus: "cancelled",
-        reason: "cancelled_by_admin",     // ✅ IMPORTANT
-        cancelledBy: "admin",             // ✅ IMPORTANT
-        adminRemarks: "cancelled_by_admin", // ✅ helps fallback logic
-        customerMessage: "",              // ✅ ensure customer msg not set
-      }),
-    });
+        cancelledBy: "admin",
+        adminRemarks: "cancelled_by_admin",
+        updatedAt: new Date().toISOString(),
+      });
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || "Cancel failed");
+      const res = await fetch(`${BACKEND_URL}/api/orders/${orderIdStr}/status`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fulfillmentStatus: "cancelled",
+          reason: "cancelled_by_admin",
+          cancelledBy: "admin",
+          adminRemarks: "cancelled_by_admin",
+          customerMessage: "",
+        }),
+      });
 
-    setSuccessMsg("❌ Order Cancelled (Admin)!");
-    await fetchOrders();
-  } catch (e) {
-    setLocalError(e?.message || "Cancel failed");
-  } finally {
-    setActionLoading((p) => ({ ...p, cancelId: null }));
-    setTimeout(() => setSuccessMsg(""), 2500);
-  }
-};
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // rollback on failure
+        setLocalOrders(prev);
+        throw new Error(data?.message || "Cancel failed");
+      }
 
-const saveCustomerCareRemark = async (orderIdStr) => {
-  try {
-    setLocalError(null);
-    setSuccessMsg("");
+      // ✅ If backend returns updated order, patch it (optional)
+      if (data?.order?._id || data?._id) {
+        const updated = data.order || data;
+        patchLocalOrder(orderIdStr, updated);
+      }
 
-    const remark = String(remarkDrafts?.[orderIdStr] ?? "").trim();
+      // ✅ If you want instant removal regardless of filter:
+      // removeLocalOrder(orderIdStr);
 
-    setRemarkSaving((p) => ({ ...p, [orderIdStr]: true }));
+      setSuccessMsg("❌ Order Cancelled (Admin)!");
+    } catch (e) {
+      setLocalError(e?.message || "Cancel failed");
+    } finally {
+      setActionLoading((p) => ({ ...p, cancelId: null }));
+      setTimeout(() => setSuccessMsg(""), 2500);
+    }
+  };
 
-    if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
+  const saveCustomerCareRemark = async (orderIdStr) => {
+    const prev = localOrders;
+    try {
+      setLocalError(null);
+      setSuccessMsg("");
 
-    const res = await fetch(`${BACKEND_URL}/api/orders/${orderIdStr}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customerSupportRemark: remark }),
-    });
+      const remark = String(remarkDrafts?.[orderIdStr] ?? "").trim();
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || "Remark update failed");
+      setRemarkSaving((p) => ({ ...p, [orderIdStr]: true }));
 
-    setSuccessMsg("✅ Customer Care Remark Saved!");
-    await fetchOrders();
-  } catch (e) {
-    setLocalError(e?.message || "Remark update failed");
-  } finally {
-    setRemarkSaving((p) => ({ ...p, [orderIdStr]: false }));
-    setTimeout(() => setSuccessMsg(""), 2500);
-  }
-};
+      if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
 
+      // ✅ Optimistic: update remark locally (no refresh)
+      patchLocalOrder(orderIdStr, { customerSupportRemark: remark });
 
+      const res = await fetch(`${BACKEND_URL}/api/orders/${orderIdStr}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerSupportRemark: remark }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // rollback on failure
+        setLocalOrders(prev);
+        throw new Error(data?.message || "Remark update failed");
+      }
+
+      // ✅ If backend returns updated order, patch it (optional)
+      if (data?.order?._id || data?._id) {
+        const updated = data.order || data;
+        patchLocalOrder(orderIdStr, updated);
+      }
+
+      setSuccessMsg("✅ Customer Care Remark Saved!");
+    } catch (e) {
+      setLocalError(e?.message || "Remark update failed");
+    } finally {
+      setRemarkSaving((p) => ({ ...p, [orderIdStr]: false }));
+      setTimeout(() => setSuccessMsg(""), 2500);
+    }
+  };
 
   return (
-   <div className="min-h-screen bg-gray-50 px-2 sm:px-6 py-3 sm:py-6">
-  <div className="mx-auto  space-y-3 sm:space-y-5">
-    {/* Header */}
-    <div className="flex items-start justify-between gap-2">
-      <div className="min-w-0">
-        <h1 className="text-base sm:text-2xl font-extrabold text-gray-900 leading-tight">
-          COD Processing
-        </h1>
-        <p className="text-[11px] sm:text-sm text-gray-600 mt-0.5">
-          COD + <b>processing/packed</b> • confirmed hidden
-        </p>
-      </div>
+    <div className="min-h-screen bg-gray-50 px-2 sm:px-6 py-3 sm:py-6">
+      <div className="mx-auto space-y-3 sm:space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-2xl font-extrabold text-gray-900 leading-tight">
+              COD Processing
+            </h1>
+            <p className="text-[11px] sm:text-sm text-gray-600 mt-0.5">
+              COD + <b>processing/packed</b> • confirmed hidden
+            </p>
+          </div>
 
-      <button
-        onClick={fetchOrders}
-        disabled={loading}
-        className="shrink-0 inline-flex justify-center items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 shadow-sm disabled:opacity-60"
-      >
-        <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-        <span className="hidden sm:inline">Refresh</span>
-      </button>
-    </div>
-
-    {/* SUCCESS MESSAGE */}
-    <AnimatePresence>
-      {successMsg && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 8 }}
-          className="p-2.5 sm:p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 font-semibold text-sm"
-        >
-          {successMsg}
-        </motion.div>
-      )}
-    </AnimatePresence>
-
-    {/* Filters (mobile-compact) */}
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-2.5 sm:p-4">
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 sm:gap-3">
-        {/* search (full width on mobile) */}
-        <div className="relative col-span-2 lg:col-span-2">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search order/email/phone"
-            className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-200 text-sm"
-          />
+          <button
+            onClick={fetchOrders}
+            disabled={loading}
+            className="shrink-0 inline-flex justify-center items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 shadow-sm disabled:opacity-60"
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
         </div>
 
-        <select
-          value={paymentStatus}
-          onChange={(e) => setPaymentStatus(e.target.value)}
-          className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm outline-none"
-        >
-          {paymentStatusOptions.map((x) => (
-            <option key={x} value={x}>
-              {x === "ALL" ? "All Payment" : x}
-            </option>
-          ))}
-        </select>
-
-        <input
-          value={minAmt}
-          onChange={(e) => setMinAmt(e.target.value)}
-          placeholder="Min ₹"
-          inputMode="numeric"
-          className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
-        />
-        <input
-          value={maxAmt}
-          onChange={(e) => setMaxAmt(e.target.value)}
-          placeholder="Max ₹"
-          inputMode="numeric"
-          className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
-        />
-
-        {/* City/State side-by-side on mobile */}
-        <input
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          placeholder="City"
-          className="col-span-1 lg:col-span-2 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
-        />
-        <input
-          value={state}
-          onChange={(e) => setState(e.target.value)}
-          placeholder="State"
-          className="col-span-1 lg:col-span-2 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
-        />
-
-        {/* Dates: side-by-side on mobile */}
-        <input
-          type="date"
-          value={fromDate}
-          onChange={(e) => setFromDate(e.target.value)}
-          className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
-        />
-        <input
-          type="date"
-          value={toDate}
-          onChange={(e) => setToDate(e.target.value)}
-          className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
-        />
-
-        {/* Clear: full width on mobile, right aligned on lg */}
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="col-span-2 lg:col-span-2 w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-semibold hover:bg-gray-50"
-        >
-          Clear
-        </button>
-      </div>
-
-      {/* counts + errors (compact) */}
-      <div className="mt-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs sm:text-sm text-gray-500">
-        <div>
-          Showing{" "}
-          <span className="font-semibold text-gray-800">{filteredOrders.length}</span>
-        </div>
-
+        {/* SUCCESS MESSAGE */}
         <AnimatePresence>
-          {(error || localError) && (
+          {successMsg && (
             <motion.div
-              initial={{ opacity: 0, y: 6 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
-              className="flex items-start gap-2 text-red-700"
+              exit={{ opacity: 0, y: 8 }}
+              className="p-2.5 sm:p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 font-semibold text-sm"
             >
-              <AlertTriangle size={16} className="mt-0.5" />
-              <span className="text-sm">{error || localError}</span>
+              {successMsg}
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
-    </div>
 
-    {/* loading / empty */}
-    {loading && <div className="text-center text-gray-500 py-10">Loading orders…</div>}
+        {/* Filters (mobile-compact) */}
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-2.5 sm:p-4">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 sm:gap-3">
+            {/* search */}
+            <div className="relative col-span-2 lg:col-span-2">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search order/email/phone"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-200 text-sm"
+              />
+            </div>
 
-    {!loading && filteredOrders.length === 0 && (
-      <div className="text-center text-gray-500 py-12 bg-white border border-gray-200 rounded-2xl shadow-sm">
-        ✅ No COD processing orders found.
-      </div>
-    )}
-
-    {/* Orders list */}
-    <div className="space-y-2.5 sm:space-y-3">
-      <AnimatePresence>
-        {filteredOrders.map((order, idx) => {
-          const orderId = order?._id || order?.id;
-          const orderIdStr = String(orderId || "");
-          const oid = orderIdStr || String(order?.orderNumber || `${idx}`);
-
-          const isExpanded = expandedId === orderIdStr;
-
-          const ship = order?.shippingAddressSnapshot || {};
-          const bill = order?.billingAddressSnapshot || {};
-
-          const isConfirmLoading = actionLoading.confirmId === orderIdStr;
-          const isCancelLoading = actionLoading.cancelId === orderIdStr;
-
-          const shipment = order?.shipment || {};
-          const shiprocket = shipment?.shiprocket || {};
-          const tracking = order?.trackingDetails || {};
-          const coupon = order?.coupon || {};
-
-          return (
-            <motion.div
-              key={oid}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
-              className="bg-white border border-gray-200 rounded-2xl shadow-sm p-2.5 sm:p-4"
+            <select
+              value={paymentStatus}
+              onChange={(e) => setPaymentStatus(e.target.value)}
+              className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm outline-none"
             >
-              {/* top row (mobile tight) */}
-              <div className="flex flex-col gap-2">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <div className="font-bold text-gray-900 text-sm sm:text-base">
-                      {safe(order.orderNumber)}
+              {paymentStatusOptions.map((x) => (
+                <option key={x} value={x}>
+                  {x === "ALL" ? "All Payment" : x}
+                </option>
+              ))}
+            </select>
+
+            <input
+              value={minAmt}
+              onChange={(e) => setMinAmt(e.target.value)}
+              placeholder="Min ₹"
+              inputMode="numeric"
+              className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
+            />
+            <input
+              value={maxAmt}
+              onChange={(e) => setMaxAmt(e.target.value)}
+              placeholder="Max ₹"
+              inputMode="numeric"
+              className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
+            />
+
+            <input
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="City"
+              className="col-span-1 lg:col-span-2 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
+            />
+            <input
+              value={state}
+              onChange={(e) => setState(e.target.value)}
+              placeholder="State"
+              className="col-span-1 lg:col-span-2 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
+            />
+
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
+            />
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="col-span-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
+            />
+
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="col-span-2 lg:col-span-2 w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-semibold hover:bg-gray-50"
+            >
+              Clear
+            </button>
+          </div>
+
+          {/* counts + errors */}
+          <div className="mt-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs sm:text-sm text-gray-500">
+            <div>
+              Showing{" "}
+              <span className="font-semibold text-gray-800">
+                {filteredOrders.length}
+              </span>
+            </div>
+
+            <AnimatePresence>
+              {(error || localError) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  className="flex items-start gap-2 text-red-700"
+                >
+                  <AlertTriangle size={16} className="mt-0.5" />
+                  <span className="text-sm">{error || localError}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* loading / empty */}
+        {loading && (
+          <div className="text-center text-gray-500 py-10">
+            Loading orders…
+          </div>
+        )}
+
+        {!loading && filteredOrders.length === 0 && (
+          <div className="text-center text-gray-500 py-12 bg-white border border-gray-200 rounded-2xl shadow-sm">
+            ✅ No COD processing orders found.
+          </div>
+        )}
+
+        {/* Orders list */}
+        <div className="space-y-2.5 sm:space-y-3">
+          <AnimatePresence>
+            {filteredOrders.map((order, idx) => {
+              const orderId = order?._id || order?.id;
+              const orderIdStr = String(orderId || "");
+              const oid = orderIdStr || String(order?.orderNumber || `${idx}`);
+
+              const isExpanded = expandedId === orderIdStr;
+
+              const ship = order?.shippingAddressSnapshot || {};
+              const bill = order?.billingAddressSnapshot || {};
+
+              const isConfirmLoading = actionLoading.confirmId === orderIdStr;
+              const isCancelLoading = actionLoading.cancelId === orderIdStr;
+
+              const shipment = order?.shipment || {};
+              const shiprocket = shipment?.shiprocket || {};
+              const tracking = order?.trackingDetails || {};
+              const coupon = order?.coupon || {};
+
+              return (
+                <motion.div
+                  key={oid}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  className="bg-white border border-gray-200 rounded-2xl shadow-sm p-2.5 sm:p-4"
+                >
+                  {/* top row */}
+                  <div className="flex flex-col gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="font-bold text-gray-900 text-sm sm:text-base">
+                          {safe(order.orderNumber)}
+                        </div>
+
+                        <Badge className="bg-gray-100 border-gray-200 text-gray-700">
+                          {safe(order.fulfillmentStatus) || "Processing"}
+                        </Badge>
+
+                        <Badge className="bg-gray-100 border-gray-200 text-gray-700">
+                          COD
+                        </Badge>
+
+                        <Badge className="bg-blue-50 border-blue-200 text-blue-700">
+                          ₹ {money(order.finalPayable)}
+                        </Badge>
+
+                        <Badge className="bg-yellow-50 border-yellow-200 text-yellow-700">
+                          Not Confirmed
+                        </Badge>
+                      </div>
+
+                      <div className="text-[12px] sm:text-sm text-gray-600 mt-1 wrap-break-word">
+                        {safe(ship.fullName) || "Customer"} •{" "}
+                        {safe(ship.phone) || "N/A"} • {safe(ship.email) || "N/A"}
+                      </div>
+
+                      <div className="text-[11px] sm:text-xs text-gray-500 mt-1">
+                        Created: <b>{fmtDate(order.createdAt)}</b> • Payment:{" "}
+                        <b>{safe(order.paymentStatus) || "-"}</b>
+                      </div>
                     </div>
 
-                    <Badge className="bg-gray-100 border-gray-200 text-gray-700">
-                      {safe(order.fulfillmentStatus) || "Processing"}
-                    </Badge>
+                    {/* actions */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => handleConfirm(orderIdStr)}
+                        disabled={loading || isConfirmLoading || isCancelLoading}
+                        className="col-span-1 inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-xl bg-green-600 text-white text-xs sm:text-sm font-semibold hover:bg-green-700 disabled:opacity-60"
+                      >
+                        {isConfirmLoading ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <CheckCircle2 size={16} />
+                        )}
+                        <span className="hidden sm:inline">Confirm</span>
+                        <span className="sm:hidden">Ok</span>
+                      </button>
 
-                    <Badge className="bg-gray-100 border-gray-200 text-gray-700">COD</Badge>
+                      <button
+                        onClick={() => handleCancel(orderIdStr)}
+                        disabled={loading || isCancelLoading || isConfirmLoading}
+                        className="col-span-1 inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-xl bg-red-600 text-white text-xs sm:text-sm font-semibold hover:bg-red-700 disabled:opacity-60"
+                      >
+                        {isCancelLoading ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <XCircle size={16} />
+                        )}
+                        <span className="hidden sm:inline">Cancel</span>
+                        <span className="sm:hidden">No</span>
+                      </button>
 
-                    <Badge className="bg-blue-50 border-blue-200 text-blue-700">
-                      ₹ {money(order.finalPayable)}
-                    </Badge>
-
-                    <Badge className="bg-yellow-50 border-yellow-200 text-yellow-700">
-                      Not Confirmed
-                    </Badge>
+                      <button
+                        onClick={() =>
+                          setExpandedId((p) => (p === orderIdStr ? null : orderIdStr))
+                        }
+                        className="col-span-1 inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-xl bg-white border border-gray-200 text-xs sm:text-sm font-semibold hover:bg-gray-50"
+                      >
+                        {isExpanded ? (
+                          <>
+                            Hide <ChevronUp size={16} />
+                          </>
+                        ) : (
+                          <>
+                            View <ChevronDown size={16} />
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="text-[12px] sm:text-sm text-gray-600 mt-1 wrap-break-word">
-                    {safe(ship.fullName) || "Customer"} • {safe(ship.phone) || "N/A"} •{" "}
-                    {safe(ship.email) || "N/A"}
-                  </div>
-
-                  <div className="text-[11px] sm:text-xs text-gray-500 mt-1">
-                    Created: <b>{fmtDate(order.createdAt)}</b> • Payment:{" "}
-                    <b>{safe(order.paymentStatus) || "-"}</b>
-                  </div>
-                </div>
-
-                {/* actions (mobile: 2x2 grid, compact buttons) */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => handleConfirm(orderIdStr)}
-                    disabled={loading || isConfirmLoading || isCancelLoading}
-                    className="col-span-1 inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-xl bg-green-600 text-white text-xs sm:text-sm font-semibold hover:bg-green-700 disabled:opacity-60"
-                  >
-                    {isConfirmLoading ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <CheckCircle2 size={16} />
-                    )}
-                    <span className="hidden sm:inline">Confirm</span>
-                    <span className="sm:hidden">Ok</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleCancel(orderIdStr)}
-                    disabled={loading || isCancelLoading || isConfirmLoading}
-                    className="col-span-1 inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-xl bg-red-600 text-white text-xs sm:text-sm font-semibold hover:bg-red-700 disabled:opacity-60"
-                  >
-                    {isCancelLoading ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <XCircle size={16} />
-                    )}
-                    <span className="hidden sm:inline">Cancel</span>
-                    <span className="sm:hidden">No</span>
-                  </button>
-
-                  <button
-                    onClick={() => setExpandedId((p) => (p === orderIdStr ? null : orderIdStr))}
-                    className="col-span-1 inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-xl bg-white border border-gray-200 text-xs sm:text-sm font-semibold hover:bg-gray-50"
-                  >
-                    {isExpanded ? (
-                      <>
-                        Hide <ChevronUp size={16} />
-                      </>
-                    ) : (
-                      <>
-                        View <ChevronDown size={16} />
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* ✅ EXPANDED DETAILS (more compact for mobile) */}
-              <AnimatePresence initial={false}>
-                {isExpanded && (
-                  <motion.div
-                    key="expanded"
-                    initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                    animate={{ opacity: 1, height: "auto", marginTop: 10 }}
-                    exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-2.5 sm:p-4 space-y-3">
-                      {/* meta: 1 col on mobile, 3 on lg */}
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
-                        <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                          <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                            <User size={16} /> Customer
-                          </div>
-                          <div className="mt-2 text-sm text-gray-700">
-                            <div className="font-semibold">
-                              {safe(order?.customerId?.name) || safe(ship.fullName) || "-"}
+                  {/* expanded */}
+                  <AnimatePresence initial={false}>
+                    {isExpanded && (
+                      <motion.div
+                        key="expanded"
+                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                        animate={{ opacity: 1, height: "auto", marginTop: 10 }}
+                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-2.5 sm:p-4 space-y-3">
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                <User size={16} /> Customer
+                              </div>
+                              <div className="mt-2 text-sm text-gray-700">
+                                <div className="font-semibold">
+                                  {safe(order?.customerId?.name) ||
+                                    safe(ship.fullName) ||
+                                    "-"}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1 wrap-break-word">
+                                  {safe(order?.customerId?.email) ||
+                                    safe(ship.email) ||
+                                    "N/A"}
+                                  {" • "}
+                                  {safe(ship.phone) || "N/A"}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-2">
+                                  Order Date: <b>{fmtDate(order.orderDate)}</b>
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-xs text-gray-500 mt-1 wrap-break-word">
-                              {safe(order?.customerId?.email) || safe(ship.email) || "N/A"}
-                              {" • "}
-                              {safe(ship.phone) || "N/A"}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-2">
-                              Order Date: <b>{fmtDate(order.orderDate)}</b>
-                            </div>
-                          </div>
-                        </div>
 
-                        <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                          <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                            <CreditCard size={16} /> Payment
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <Badge className="bg-gray-100 border-gray-200 text-gray-700">
-                              {safe(order.paymentMethod) || "-"}
-                            </Badge>
-                            <Badge className="bg-yellow-50 border-yellow-200 text-yellow-700">
-                              {safe(order.paymentStatus) || "-"}
-                            </Badge>
-                            <Badge className="bg-blue-50 border-blue-200 text-blue-700">
-                              ₹ {money(order.finalPayable)}
-                            </Badge>
-                          </div>
+                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                <CreditCard size={16} /> Payment
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge className="bg-gray-100 border-gray-200 text-gray-700">
+                                  {safe(order.paymentMethod) || "-"}
+                                </Badge>
+                                <Badge className="bg-yellow-50 border-yellow-200 text-yellow-700">
+                                  {safe(order.paymentStatus) || "-"}
+                                </Badge>
+                                <Badge className="bg-blue-50 border-blue-200 text-blue-700">
+                                  ₹ {money(order.finalPayable)}
+                                </Badge>
+                              </div>
 
-                          <div className="mt-3 text-xs text-gray-600 space-y-1">
-                            <div>
-                              Subtotal: <b>₹ {money(order.subtotal)}</b>
+                              <div className="mt-3 text-xs text-gray-600 space-y-1">
+                                <div>
+                                  Subtotal: <b>₹ {money(order.subtotal)}</b>
+                                </div>
+                                <div>
+                                  Discount: <b>₹ {money(order.discount)}</b>
+                                </div>
+                                <div>
+                                  Shipping: <b>₹ {money(order.shippingFee)}</b>
+                                </div>
+                                <div>
+                                  Tax: <b>₹ {money(order.tax)}</b>
+                                </div>
+                                <div className="pt-1 border-t border-gray-200">
+                                  Total: <b>₹ {money(order.totalAmount)}</b>
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              Discount: <b>₹ {money(order.discount)}</b>
-                            </div>
-                            <div>
-                              Shipping: <b>₹ {money(order.shippingFee)}</b>
-                            </div>
-                            <div>
-                              Tax: <b>₹ {money(order.tax)}</b>
-                            </div>
-                            <div className="pt-1 border-t border-gray-200">
-                              Total: <b>₹ {money(order.totalAmount)}</b>
+
+                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                <Truck size={16} /> Shipment
+                              </div>
+                              <div className="mt-2 text-xs text-gray-600 space-y-1">
+                                <div>
+                                  Provider: <b>{safe(shipment.provider) || "-"}</b>
+                                </div>
+                                <div>
+                                  Status: <b>{safe(shipment.status) || "-"}</b>
+                                </div>
+                                <div>
+                                  AWB:{" "}
+                                  <b>
+                                    {safe(shiprocket.awb) ||
+                                      safe(tracking.trackingId) ||
+                                      "-"}
+                                  </b>
+                                </div>
+                                <div>
+                                  Courier:{" "}
+                                  <b>
+                                    {safe(shiprocket.courierName) ||
+                                      safe(tracking.courierName) ||
+                                      "-"}
+                                  </b>
+                                </div>
+                                {safe(shiprocket.trackingUrl) ? (
+                                  <a
+                                    href={safe(shiprocket.trackingUrl)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex mt-2 text-blue-700 font-semibold hover:underline text-sm"
+                                  >
+                                    Track →
+                                  </a>
+                                ) : null}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                          <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                            <Truck size={16} /> Shipment
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+                            <EditableAddressCard
+                              orderId={orderIdStr}
+                              type="shipping"
+                              address={ship}
+                              onRefresh={fetchOrders} // still available if you want manual refresh after editing
+                            />
+                            <EditableAddressCard
+                              orderId={orderIdStr}
+                              type="billing"
+                              address={bill}
+                              onRefresh={fetchOrders}
+                            />
                           </div>
-                          <div className="mt-2 text-xs text-gray-600 space-y-1">
-                            <div>
-                              Provider: <b>{safe(shipment.provider) || "-"}</b>
-                            </div>
-                            <div>
-                              Status: <b>{safe(shipment.status) || "-"}</b>
-                            </div>
-                            <div>
-                              AWB:{" "}
-                              <b>{safe(shiprocket.awb) || safe(tracking.trackingId) || "-"}</b>
-                            </div>
-                            <div>
-                              Courier:{" "}
-                              <b>
-                                {safe(shiprocket.courierName) || safe(tracking.courierName) || "-"}
-                              </b>
-                            </div>
-                            {safe(shiprocket.trackingUrl) ? (
-                              <a
-                                href={safe(shiprocket.trackingUrl)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex mt-2 text-blue-700 font-semibold hover:underline text-sm"
+
+                          {/* Customer Care Remark */}
+                          <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-sm font-bold text-gray-900">
+                                Customer Care Remark
+                              </div>
+
+                              <button
+                                onClick={() => saveCustomerCareRemark(orderIdStr)}
+                                disabled={remarkSaving?.[orderIdStr]}
+                                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs sm:text-sm font-semibold hover:bg-blue-700 disabled:opacity-60"
                               >
-                                Track →
-                              </a>
-                            ) : null}
+                                {remarkSaving?.[orderIdStr] ? (
+                                  <Loader2 size={16} className="animate-spin" />
+                                ) : null}
+                                Save
+                              </button>
+                            </div>
+
+                            <textarea
+                              rows={3}
+                              value={
+                                remarkDrafts?.[orderIdStr] ??
+                                safe(order?.customerSupportRemark) ??
+                                ""
+                              }
+                              onChange={(e) =>
+                                setRemarkDrafts((p) => ({
+                                  ...p,
+                                  [orderIdStr]: e.target.value,
+                                }))
+                              }
+                              placeholder="Write internal remark for customer care..."
+                              className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                            />
+
+                            <div className="mt-2 text-[11px] sm:text-xs text-gray-500">
+                              Internal note (customer ko nahi dikhega).
+                            </div>
+                          </div>
+
+                          {/* items */}
+                          <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                <Package size={16} /> Items
+                              </div>
+                              <div className="text-[11px] sm:text-xs text-gray-500">
+                                <b>
+                                  {Number(
+                                    order?.analytics?.totalItems ||
+                                      order?.items?.length ||
+                                      0
+                                  )}
+                                </b>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 space-y-2">
+                              {(order?.items || []).map((it, i) => (
+                                <ItemRow key={safe(it.lineId) || i} item={it} />
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* coupon */}
+                          {safe(coupon?.code) ? (
+                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                <Tag size={16} /> Coupon
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge className="bg-green-50 border-green-200 text-green-700">
+                                  {safe(coupon.code)}
+                                </Badge>
+                                <Badge className="bg-blue-50 border-blue-200 text-blue-700">
+                                  ₹ {money(coupon.discount)}
+                                </Badge>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {/* system */}
+                          <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                            <div className="text-sm font-bold text-gray-900">
+                              System
+                            </div>
+                            <div className="mt-2 text-[11px] sm:text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              <div>
+                                Order ID:{" "}
+                                <b className="text-gray-800">
+                                  {safe(orderIdStr) || "-"}
+                                </b>
+                              </div>
+                              <div>
+                                Created:{" "}
+                                <b className="text-gray-800">
+                                  {fmtDate(order.createdAt)}
+                                </b>
+                              </div>
+                              <div>
+                                Updated:{" "}
+                                <b className="text-gray-800">
+                                  {fmtDate(order.updatedAt)}
+                                </b>
+                              </div>
+                              <div>
+                                Confirmed:{" "}
+                                <b className="text-gray-800">
+                                  {fmtDate(order.confirmedAt)}
+                                </b>
+                              </div>
+                              <div>
+                                Source:{" "}
+                                <b className="text-gray-800">
+                                  {safe(order.source) || "-"}
+                                </b>
+                              </div>
+                              <div>
+                                Currency:{" "}
+                                <b className="text-gray-800">
+                                  {safe(order.currency) || "INR"}
+                                </b>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-
-                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-  <EditableAddressCard
-    orderId={orderIdStr}
-    type="shipping"
-    address={ship}
-    onRefresh={fetchOrders}
-  />
-
-  <EditableAddressCard
-    orderId={orderIdStr}
-    type="billing"
-    address={bill}
-    onRefresh={fetchOrders}
-  />
-</div>
-
-{/* ✅ Customer Care Remark (ADD HERE) */}
-<div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-  <div className="flex items-center justify-between gap-2">
-    <div className="text-sm font-bold text-gray-900">
-      Customer Care Remark
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
-
-    <button
-      onClick={() => saveCustomerCareRemark(orderIdStr)}
-      disabled={remarkSaving?.[orderIdStr]}
-      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs sm:text-sm font-semibold hover:bg-blue-700 disabled:opacity-60"
-    >
-      {remarkSaving?.[orderIdStr] ? (
-        <Loader2 size={16} className="animate-spin" />
-      ) : null}
-      Save
-    </button>
-  </div>
-
-  <textarea
-    rows={3}
-    value={
-      remarkDrafts?.[orderIdStr] ??
-      safe(order?.customerSupportRemark) ??
-      ""
-    }
-    onChange={(e) =>
-      setRemarkDrafts((p) => ({
-        ...p,
-        [orderIdStr]: e.target.value,
-      }))
-    }
-    placeholder="Write internal remark for customer care..."
-    className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-  />
-
-  <div className="mt-2 text-[11px] sm:text-xs text-gray-500">
-    Internal note (customer ko nahi dikhega).
-  </div>
-</div>
-
-                      {/* items */}
-                      <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                            <Package size={16} /> Items
-                          </div>
-                          <div className="text-[11px] sm:text-xs text-gray-500">
-                            <b>{Number(order?.analytics?.totalItems || order?.items?.length || 0)}</b>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 space-y-2">
-                          {(order?.items || []).map((it, i) => (
-                            <ItemRow key={safe(it.lineId) || i} item={it} />
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* optional coupon (compact, only if exists) */}
-                      {safe(coupon?.code) ? (
-                        <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                          <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                            <Tag size={16} /> Coupon
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <Badge className="bg-green-50 border-green-200 text-green-700">
-                              {safe(coupon.code)}
-                            </Badge>
-                            <Badge className="bg-blue-50 border-blue-200 text-blue-700">
-                              ₹ {money(coupon.discount)}
-                            </Badge>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {/* system (compact grid) */}
-                      <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                        <div className="text-sm font-bold text-gray-900">System</div>
-                        <div className="mt-2 text-[11px] sm:text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                          <div>
-                            Order ID: <b className="text-gray-800">{safe(orderIdStr) || "-"}</b>
-                          </div>
-                          <div>
-                            Created: <b className="text-gray-800">{fmtDate(order.createdAt)}</b>
-                          </div>
-                          <div>
-                            Updated: <b className="text-gray-800">{fmtDate(order.updatedAt)}</b>
-                          </div>
-                          <div>
-                            Confirmed: <b className="text-gray-800">{fmtDate(order.confirmedAt)}</b>
-                          </div>
-                          <div>
-                            Source: <b className="text-gray-800">{safe(order.source) || "-"}</b>
-                          </div>
-                          <div>
-                            Currency: <b className="text-gray-800">{safe(order.currency) || "INR"}</b>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-    </div>
-  </div>
-</div>
-
   );
 }

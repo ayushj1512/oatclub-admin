@@ -58,17 +58,22 @@ const clampRange = (from, to) => {
 const getOrderDateYMD = (o) => ymdInIST(o?.placedAt || o?.createdAt || o?.orderDate || o?.paidAt);
 
 const getOrderRevenue = (o) => {
+  // ✅ use FINAL PAYABLE as primary revenue
   const candidates = [
-    o?.totalAmount,
-    o?.total,
-    o?.grandTotal,
+    o?.finalPayable,                 // ✅ MAIN (what you want)
+    o?.pricing?.finalPayable,        // optional fallback
+    o?.coupon?.finalTotal,           // optional (if you store it reliably)
+    // ---- fallbacks only if above not present ----
     o?.amountPaid,
-    o?.netAmount,
     o?.payableAmount,
-    o?.pricing?.total,
-    o?.pricing?.grandTotal,
+    o?.netAmount,
     o?.pricing?.payable,
+    o?.pricing?.grandTotal,
+    o?.grandTotal,
+    o?.total,
+    o?.totalAmount,                  // keep LAST (avoid using it)
   ];
+
   const val = candidates.find((x) => Number.isFinite(Number(x)));
   return Number(val || 0);
 };
