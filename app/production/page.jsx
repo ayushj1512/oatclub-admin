@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";import { useRouter } from "next/navigation";
 import useAdminProductionStore from "@/store/adminProductionStore";
 import { useInventoryReservationStore } from "@/store/inventoryReservationStore";
 import SyncInventoryButton from "@/components/production/SyncInventoryButton";
@@ -325,15 +324,47 @@ export default function ProductionDashboardPage() {
   const [packingIds, setPackingIds] = useState(() => new Set()); // per-order loading
   const [bulkPacking, setBulkPacking] = useState(false);
 
-  // Initial load
-  useEffect(() => {
-    fetchProductionSummary();
-fetchProductionQueue({ fulfillmentStatus: "processing", all: true });    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  useEffect(() => {
-fetchProductionQueue({ fulfillmentStatus, all: true });    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fulfillmentStatus]);
+  // ✅ guards to prevent "loaded then refresh/jump"
+const didMountRef = useRef(false);
+
+// ✅ build params from current UI state
+const buildQueueParams = useCallback(() => {
+  const base = { fulfillmentStatus, all: true };
+
+  // if custom range is active, send from/to
+  if (useCustomRange) {
+    return { ...base, from: rangeFrom || "", to: rangeTo || "" };
+  }
+
+  return base;
+}, [fulfillmentStatus, useCustomRange, rangeFrom, rangeTo]);
+
+// ✅ safe refresh (avoid prodStore.refreshAll if it resets status internally)
+const safeRefresh = useCallback(async () => {
+  try {
+    await fetchProductionSummary();
+    await fetchProductionQueue(buildQueueParams());
+  } catch (e) {
+    console.error("safeRefresh failed:", e);
+  }
+}, [fetchProductionSummary, fetchProductionQueue, buildQueueParams]);
+
+// ✅ Initial load (ONE time) - uses current fulfillmentStatus (no hard-coded processing)
+useEffect(() => {
+  safeRefresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+// ✅ On status change - fetch queue (skip first run to avoid double)
+useEffect(() => {
+  if (!didMountRef.current) {
+    didMountRef.current = true;
+    return;
+  }
+  fetchProductionQueue(buildQueueParams());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [fulfillmentStatus]);
 
   // Mirror store -> local (ONLY when store changes)
  useEffect(() => {
@@ -690,12 +721,12 @@ fetchProductionQueue({ fulfillmentStatus, all: true });    // eslint-disable-nex
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => refreshAll()}
-            className="px-3 py-2 rounded-xl bg-white text-xs text-gray-800 shadow-sm hover:shadow transition"
-          >
-            Refresh
-          </button>
+      <button
+  onClick={safeRefresh}
+  className="px-3 py-2 rounded-xl bg-white text-xs text-gray-800 shadow-sm hover:shadow transition"
+>
+  Refresh
+</button>
 
           <SyncInventoryButton />
 
@@ -791,14 +822,16 @@ fetchProductionQueue({ fulfillmentStatus, all: true });    // eslint-disable-nex
               />
             </div>
 
-            <button
+          <button
   onClick={() => {
-    // ✅ apply custom range -> fetch from backend (all orders)
-    const from = rangeFrom || "";
-    const to = rangeTo || "";
-    fetchProductionQueue({ fulfillmentStatus, all: true, from, to });
-    // optional: small feedback
-    // toast.success("Range applied");
+    // ✅ apply custom range and fetch with from/to
+    setUseCustomRange(true);
+    fetchProductionQueue({
+      fulfillmentStatus,
+      all: true,
+      from: rangeFrom || "",
+      to: rangeTo || "",
+    });
   }}
   className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 md:ml-auto"
 >
