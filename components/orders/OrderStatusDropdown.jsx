@@ -1,6 +1,7 @@
+// components/orders/OrderStatusDropdown.jsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Loader2, ChevronDown } from "lucide-react";
 import { useOrderStore } from "@/store/orderStore";
 
@@ -23,7 +24,6 @@ const STATUS_OPTIONS = [
   { value: "rto", label: "RTO" },
   { value: "cancelled", label: "Cancelled" },
 
-  // ✅ NEW
   { value: "failed", label: "Failed" },
 ];
 
@@ -61,71 +61,101 @@ const statusStyle = (status) => {
       return "bg-red-50 text-red-700 ring-1 ring-red-200";
 
     case "failed":
-      return "bg-rose-100 text-rose-800 ring-1 ring-rose-300"; // ✅ NEW
+      return "bg-rose-100 text-rose-800 ring-1 ring-rose-300";
 
     default:
       return "bg-gray-100 text-gray-700 ring-1 ring-gray-200";
   }
 };
 
-export default function OrderStatusDropdown({
-  orderId,
-  currentStatus,
-  onUpdated,
-}) {
+export default function OrderStatusDropdown({ orderId, currentStatus, onUpdated }) {
   const { updateOrderStatus } = useOrderStore();
+
+  const normalizedPropStatus = useMemo(
+    () => String(currentStatus || "processing").toLowerCase(),
+    [currentStatus]
+  );
+
   const [loading, setLoading] = useState(false);
-  const [value, setValue] = useState(currentStatus || "processing");
+  const [value, setValue] = useState(normalizedPropStatus);
+
+  // ✅ Track last prop we applied, to avoid repetitive resets
+  const lastAppliedRef = useRef({ orderId: null, status: null });
 
   useEffect(() => {
-    setValue(currentStatus || "processing");
-  }, [currentStatus]);
+    // ✅ If order changes, always sync immediately
+    if (lastAppliedRef.current.orderId !== orderId) {
+      lastAppliedRef.current = { orderId, status: normalizedPropStatus };
+      setValue(normalizedPropStatus);
+      return;
+    }
+
+    // ✅ While loading: DON'T overwrite local optimistic value
+    if (loading) return;
+
+    // ✅ Only update local value if prop actually changed
+    if (lastAppliedRef.current.status !== normalizedPropStatus) {
+      lastAppliedRef.current.status = normalizedPropStatus;
+      setValue(normalizedPropStatus);
+    }
+  }, [orderId, normalizedPropStatus, loading]);
+
+  const buildPayload = useCallback((newStatus) => {
+    let payload = { fulfillmentStatus: newStatus };
+
+    if (newStatus === "cancelled") {
+      payload = {
+        fulfillmentStatus: "cancelled",
+        reason: "cancelled_by_admin",
+        cancelledBy: "admin",
+        adminRemarks: "cancelled_by_admin",
+        customerMessage: "",
+      };
+    }
+
+    if (newStatus === "refunded") {
+      payload = { fulfillmentStatus: "refunded", paymentStatus: "refunded" };
+    }
+
+    if (newStatus === "failed") {
+      payload = { fulfillmentStatus: "failed", paymentStatus: "failed" };
+    }
+
+    return payload;
+  }, []);
 
   const handleChange = async (e) => {
-    const newStatus = e.target.value;
+    const newStatus = String(e.target.value || "").toLowerCase();
 
     // ✅ Prevent unnecessary API call
     if (newStatus === value) return;
 
+    // ✅ Optimistic UI (no reset by prop during loading due to effect guard)
     setValue(newStatus);
 
     try {
       setLoading(true);
-
-      let payload = { fulfillmentStatus: newStatus };
-
-      // ✅ Cancel handling
-      if (newStatus === "cancelled") {
-        payload = {
-          fulfillmentStatus: "cancelled",
-          reason: "cancelled_by_admin",
-          cancelledBy: "admin",
-          adminRemarks: "cancelled_by_admin",
-          customerMessage: "",
-        };
-      }
-
-      // ✅ Refund sync payment
-      if (newStatus === "refunded") {
-        payload = {
-          fulfillmentStatus: "refunded",
-          paymentStatus: "refunded",
-        };
-      }
-
-      // ✅ Failed sync payment
-      if (newStatus === "failed") {
-        payload = {
-          fulfillmentStatus: "failed",
-          paymentStatus: "failed",
-        };
-      }
+      const payload = buildPayload(newStatus);
 
       const updatedOrder = await updateOrderStatus(orderId, payload);
+
+      // ✅ After success, align lastApplied with what server returned (if any)
+      const serverStatus = String(
+        updatedOrder?.order?.fulfillmentStatus ??
+          updatedOrder?.fulfillmentStatus ??
+          newStatus
+      ).toLowerCase();
+
+      lastAppliedRef.current = { orderId, status: serverStatus };
+      setValue(serverStatus);
+
       onUpdated?.(updatedOrder);
     } catch (err) {
       alert(err?.message || "Failed to update status");
-      setValue(currentStatus || "processing");
+
+      // ✅ Revert to latest prop status
+      lastAppliedRef.current = { orderId, status: normalizedPropStatus };
+      setValue(normalizedPropStatus);
     } finally {
       setLoading(false);
     }

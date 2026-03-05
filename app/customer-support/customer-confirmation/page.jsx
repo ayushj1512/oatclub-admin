@@ -95,8 +95,8 @@ const ItemRow = ({ item = {} }) => {
 };
 
 export default function CustomerConfirmationPage() {
-  const { orders, loading, error, fetchAllOrders } = useOrderStore();
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+const { orders, ordersMeta, loading, error, fetchAllOrders, fetchNextOrdersPage } = useOrderStore();  
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   // ✅ Local copy so we can patch single order without refetching everything
   const [localOrders, setLocalOrders] = useState([]);
@@ -128,15 +128,51 @@ export default function CustomerConfirmationPage() {
   const [state, setState] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const LIMIT = 200;
+const [pageLoading, setPageLoading] = useState(false);
 
-  const fetchOrders = useCallback(async () => {
-    try {
-      setLocalError(null);
-      await fetchAllOrders(); // store update
-    } catch (e) {
-      setLocalError(e?.message || "Failed to fetch orders");
-    }
-  }, [fetchAllOrders]);
+// ✅ server-side base filters (so backend returns only relevant orders)
+const BASE_SERVER_FILTERS = useMemo(
+  () => ({
+    paymentMethod: "cod",
+    fulfillmentStatus: ["processing", "packed"], // backend updated to support array
+    confirmFilter: "not_confirmed",
+    page: 1,
+    limit: LIMIT,
+  }),
+  []
+);
+
+
+ const fetchOrders = useCallback(async () => {
+  try {
+    setLocalError(null);
+    setSuccessMsg("");
+
+    await fetchAllOrders(BASE_SERVER_FILTERS);
+  } catch (e) {
+    setLocalError(e?.message || "Failed to fetch orders");
+  }
+}, [fetchAllOrders, BASE_SERVER_FILTERS]);
+
+const loadMore = useCallback(async () => {
+  try {
+    if (!ordersMeta?.hasMore) return;
+    setLocalError(null);
+    setPageLoading(true);
+
+    await fetchNextOrdersPage({
+      paymentMethod: "cod",
+      fulfillmentStatus: ["processing", "packed"],
+      confirmFilter: "not_confirmed",
+      limit: LIMIT,
+    });
+  } catch (e) {
+    setLocalError(e?.message || "Failed to load more");
+  } finally {
+    setPageLoading(false);
+  }
+}, [fetchNextOrdersPage, ordersMeta, LIMIT]);
 
   useEffect(() => {
     fetchOrders();
@@ -932,6 +968,21 @@ export default function CustomerConfirmationPage() {
             })}
           </AnimatePresence>
         </div>
+
+        {/* Load more */}
+{!loading && filteredOrders.length > 0 && (
+  <div className="flex justify-center py-4">
+    <button
+      onClick={loadMore}
+      disabled={pageLoading || !ordersMeta?.hasMore}
+      className="px-4 py-2 rounded-xl border border-gray-200 bg-white font-semibold hover:bg-gray-50 disabled:opacity-60"
+    >
+      {pageLoading ? "Loading..." : ordersMeta?.hasMore ? "Load More" : "No More"}
+    </button>
+  </div>
+)}
+
+
       </div>
     </div>
   );

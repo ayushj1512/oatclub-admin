@@ -237,13 +237,11 @@ export default function OrderRow({ order, onUpdated }) {
         </td>
 
         <td className="py-4 px-5">
-          <OrderStatusDropdown
-            orderId={orderId}
-            currentStatus={effectiveStatus}
-            statuses={FULFILLMENT_STATUSES}
-            labels={STATUS_LABELS}
-            onUpdated={(u) => onUpdated?.(u?.order ?? u)}
-          />
+         <OrderStatusDropdown
+  orderId={orderId}
+  currentStatus={effectiveStatus}
+  onUpdated={(u) => onUpdated?.(u?.order ?? u)}
+/>
         </td>
 
         <td className="py-4 px-5 font-semibold text-gray-900">

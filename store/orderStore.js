@@ -231,14 +231,22 @@ export const useOrderStore = create((set, get) => ({
    * - supports pagination: filters.page, filters.limit
    */
   fetchAllOrders: async (filters = {}) => {
-    const qs = buildQueryString(filters);
-    const data = await get()._get(`/api/orders${qs}`);
+  const f = { ...(filters || {}) };
 
-    const { orders, meta } = normalizeOrdersPayload(data);
+  // ✅ ensure pagination params always go
+  if (f.page == null) f.page = 1;
 
-    set({ orders, ordersMeta: meta || null });
-    return orders;
-  },
+  // ✅ backend cap is 200, so default 200
+  if (f.limit == null) f.limit = 200;
+
+  const qs = buildQueryString(f);
+  const data = await get()._get(`/api/orders${qs}`);
+
+  const { orders, meta } = normalizeOrdersPayload(data);
+
+  set({ orders, ordersMeta: meta || null });
+  return orders;
+},
 
   /**
    * ✅ NEW: load next page and APPEND
