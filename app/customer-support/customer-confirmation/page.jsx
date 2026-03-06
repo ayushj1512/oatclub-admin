@@ -95,95 +95,59 @@ const ItemRow = ({ item = {} }) => {
 };
 
 export default function CustomerConfirmationPage() {
-const { orders, ordersMeta, loading, error, fetchAllOrders, fetchNextOrdersPage } = useOrderStore();  
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+  const {
+    orders,
+    ordersMeta,
+    loading,
+    error,
+    customerSupportOrderDetails,
 
-  // ✅ Local copy so we can patch single order without refetching everything
+    fetchCustomerSupportOrders,
+    fetchNextCustomerSupportOrdersPage,
+    fetchCustomerSupportOrderDetail,
+
+    updateOrder,
+    confirmOrder,
+    updateOrderStatus,
+  } = useOrderStore();
+
   const [localOrders, setLocalOrders] = useState([]);
-
-  // expanded order
   const [expandedId, setExpandedId] = useState(null);
-
-  // local error
   const [localError, setLocalError] = useState(null);
-
-  // success msg
   const [successMsg, setSuccessMsg] = useState("");
 
-  const [remarkDrafts, setRemarkDrafts] = useState({}); // { [orderId]: "text" }
-  const [remarkSaving, setRemarkSaving] = useState({}); // { [orderId]: true/false }
+  const [remarkDrafts, setRemarkDrafts] = useState({});
+  const [remarkSaving, setRemarkSaving] = useState({});
+  const [detailLoading, setDetailLoading] = useState({});
 
-  // per-order loading (confirm + cancel)
   const [actionLoading, setActionLoading] = useState({
     confirmId: null,
     cancelId: null,
   });
 
-  // filters
   const [search, setSearch] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("ALL"); // ALL | pending | paid | failed ...
+  const [paymentStatus, setPaymentStatus] = useState("ALL");
   const [minAmt, setMinAmt] = useState("");
   const [maxAmt, setMaxAmt] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const LIMIT = 200;
-const [pageLoading, setPageLoading] = useState(false);
 
-// ✅ server-side base filters (so backend returns only relevant orders)
-const BASE_SERVER_FILTERS = useMemo(
-  () => ({
-    paymentMethod: "cod",
-    fulfillmentStatus: ["processing", "packed"], // backend updated to support array
-    confirmFilter: "not_confirmed",
-    page: 1,
-    limit: LIMIT,
-  }),
-  []
-);
+  const LIMIT = 50;
+  const [pageLoading, setPageLoading] = useState(false);
 
-
- const fetchOrders = useCallback(async () => {
-  try {
-    setLocalError(null);
-    setSuccessMsg("");
-
-    await fetchAllOrders(BASE_SERVER_FILTERS);
-  } catch (e) {
-    setLocalError(e?.message || "Failed to fetch orders");
-  }
-}, [fetchAllOrders, BASE_SERVER_FILTERS]);
-
-const loadMore = useCallback(async () => {
-  try {
-    if (!ordersMeta?.hasMore) return;
-    setLocalError(null);
-    setPageLoading(true);
-
-    await fetchNextOrdersPage({
+  const BASE_SERVER_FILTERS = useMemo(
+    () => ({
       paymentMethod: "cod",
       fulfillmentStatus: ["processing", "packed"],
       confirmFilter: "not_confirmed",
+      page: 1,
       limit: LIMIT,
-    });
-  } catch (e) {
-    setLocalError(e?.message || "Failed to load more");
-  } finally {
-    setPageLoading(false);
-  }
-}, [fetchNextOrdersPage, ordersMeta, LIMIT]);
+    }),
+    []
+  );
 
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
-
-  // ✅ Sync store -> local (only when store changes)
-  useEffect(() => {
-    setLocalOrders(Array.isArray(orders) ? orders : []);
-  }, [orders]);
-
-  // ✅ Small helper to patch one order locally (no full refresh)
   const patchLocalOrder = useCallback((orderIdStr, patch) => {
     setLocalOrders((prev) =>
       (prev || []).map((o) => {
@@ -194,14 +158,43 @@ const loadMore = useCallback(async () => {
     );
   }, []);
 
-  // ✅ Small helper to remove one order locally (if you prefer)
-  const removeLocalOrder = useCallback((orderIdStr) => {
-    setLocalOrders((prev) =>
-      (prev || []).filter((o) => String(o?._id || o?.id || "") !== String(orderIdStr))
-    );
-  }, []);
+  const fetchOrders = useCallback(async () => {
+    try {
+      setLocalError(null);
+      setSuccessMsg("");
+      await fetchCustomerSupportOrders(BASE_SERVER_FILTERS);
+    } catch (e) {
+      setLocalError(e?.message || "Failed to fetch orders");
+    }
+  }, [fetchCustomerSupportOrders, BASE_SERVER_FILTERS]);
 
-  // options for dropdown from data
+  const loadMore = useCallback(async () => {
+    try {
+      if (!ordersMeta?.hasMore) return;
+      setLocalError(null);
+      setPageLoading(true);
+
+      await fetchNextCustomerSupportOrdersPage({
+        paymentMethod: "cod",
+        fulfillmentStatus: ["processing", "packed"],
+        confirmFilter: "not_confirmed",
+        limit: LIMIT,
+      });
+    } catch (e) {
+      setLocalError(e?.message || "Failed to load more");
+    } finally {
+      setPageLoading(false);
+    }
+  }, [fetchNextCustomerSupportOrdersPage, ordersMeta]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  useEffect(() => {
+    setLocalOrders(Array.isArray(orders) ? orders : []);
+  }, [orders]);
+
   const paymentStatusOptions = useMemo(() => {
     const set = new Set();
     (localOrders || []).forEach((o) => {
@@ -211,9 +204,6 @@ const loadMore = useCallback(async () => {
     return ["ALL", ...Array.from(set).filter(Boolean)];
   }, [localOrders]);
 
-  /**
-   * ✅ filtered orders (from localOrders)
-   */
   const filteredOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
     const min = minAmt ? Number(minAmt) : null;
@@ -226,17 +216,13 @@ const loadMore = useCallback(async () => {
       .filter((o) => {
         if (!o) return false;
 
-        // ✅ COD only
         if (safe(o.paymentMethod).toLowerCase() !== "cod") return false;
 
-        // ✅ keep only "processing" OR "packed"
         const fs = safe(o.fulfillmentStatus).toLowerCase();
         if (!["processing", "packed"].includes(fs)) return false;
 
-        // ✅ confirmed orders hide
         if (o.isConfirmed === true) return false;
 
-        // search
         if (q) {
           const orderNumber = safe(o.orderNumber).toLowerCase();
           const email = safe(o.shippingAddressSnapshot?.email).toLowerCase();
@@ -245,22 +231,18 @@ const loadMore = useCallback(async () => {
             return false;
         }
 
-        // payment status filter
         const ps = safe(o.paymentStatus).toLowerCase();
         if (paymentStatus !== "ALL" && ps !== paymentStatus.toLowerCase()) return false;
 
-        // amount filter
         const amt = Number(o.finalPayable || 0);
         if (min != null && !Number.isNaN(min) && amt < min) return false;
         if (max != null && !Number.isNaN(max) && amt > max) return false;
 
-        // city/state filters
         const sc = safe(o.shippingAddressSnapshot?.city).toLowerCase();
         const ss = safe(o.shippingAddressSnapshot?.state).toLowerCase();
         if (city && !sc.includes(city.toLowerCase())) return false;
         if (state && !ss.includes(state.toLowerCase())) return false;
 
-        // date range (createdAt)
         const ct = o.createdAt ? new Date(o.createdAt).getTime() : null;
         if (fd != null && ct != null && ct < fd) return false;
         if (td != null && ct != null && ct > td) return false;
@@ -291,6 +273,28 @@ const loadMore = useCallback(async () => {
     setToDate("");
   };
 
+  const toggleExpand = async (orderIdStr) => {
+    try {
+      if (!orderIdStr) return;
+
+      if (expandedId === orderIdStr) {
+        setExpandedId(null);
+        return;
+      }
+
+      setExpandedId(orderIdStr);
+
+      if (!customerSupportOrderDetails?.[orderIdStr]) {
+        setDetailLoading((p) => ({ ...p, [orderIdStr]: true }));
+        await fetchCustomerSupportOrderDetail(orderIdStr);
+      }
+    } catch (e) {
+      setLocalError(e?.message || "Failed to load order detail");
+    } finally {
+      setDetailLoading((p) => ({ ...p, [orderIdStr]: false }));
+    }
+  };
+
   const handleConfirm = async (orderIdStr) => {
     const prev = localOrders;
     try {
@@ -298,35 +302,20 @@ const loadMore = useCallback(async () => {
       setSuccessMsg("");
       setActionLoading((p) => ({ ...p, confirmId: orderIdStr }));
 
-      if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
-
-      // ✅ Optimistic: mark confirmed locally (it will auto-disappear due to filter)
       patchLocalOrder(orderIdStr, {
         isConfirmed: true,
         confirmedAt: new Date().toISOString(),
       });
 
-      const res = await fetch(`${BACKEND_URL}/api/orders/${orderIdStr}/confirm`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
+      const updated = await confirmOrder(orderIdStr);
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        // rollback on failure
-        setLocalOrders(prev);
-        throw new Error(data?.message || (await res.text()) || "Confirm failed");
-      }
-
-      // ✅ If backend returns updated order, patch it (optional)
-      if (data?.order?._id || data?._id) {
-        const updated = data.order || data;
+      if (updated?._id) {
         patchLocalOrder(orderIdStr, updated);
       }
 
       setSuccessMsg("✅ Order Confirmed Successfully!");
     } catch (e) {
+      setLocalOrders(prev);
       setLocalError(e?.message || "Confirm failed");
     } finally {
       setActionLoading((p) => ({ ...p, confirmId: null }));
@@ -345,9 +334,6 @@ const loadMore = useCallback(async () => {
 
       setActionLoading((p) => ({ ...p, cancelId: orderIdStr }));
 
-      if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
-
-      // ✅ Optimistic: mark cancelled locally (it will auto-disappear due to filter)
       patchLocalOrder(orderIdStr, {
         fulfillmentStatus: "cancelled",
         cancelledBy: "admin",
@@ -355,37 +341,21 @@ const loadMore = useCallback(async () => {
         updatedAt: new Date().toISOString(),
       });
 
-      const res = await fetch(`${BACKEND_URL}/api/orders/${orderIdStr}/status`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fulfillmentStatus: "cancelled",
-          reason: "cancelled_by_admin",
-          cancelledBy: "admin",
-          adminRemarks: "cancelled_by_admin",
-          customerMessage: "",
-        }),
+      const updated = await updateOrderStatus(orderIdStr, {
+        fulfillmentStatus: "cancelled",
+        reason: "cancelled_by_admin",
+        cancelledBy: "admin",
+        adminRemarks: "cancelled_by_admin",
+        customerMessage: "",
       });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        // rollback on failure
-        setLocalOrders(prev);
-        throw new Error(data?.message || "Cancel failed");
-      }
-
-      // ✅ If backend returns updated order, patch it (optional)
-      if (data?.order?._id || data?._id) {
-        const updated = data.order || data;
+      if (updated?._id) {
         patchLocalOrder(orderIdStr, updated);
       }
 
-      // ✅ If you want instant removal regardless of filter:
-      // removeLocalOrder(orderIdStr);
-
       setSuccessMsg("❌ Order Cancelled (Admin)!");
     } catch (e) {
+      setLocalOrders(prev);
       setLocalError(e?.message || "Cancel failed");
     } finally {
       setActionLoading((p) => ({ ...p, cancelId: null }));
@@ -400,36 +370,21 @@ const loadMore = useCallback(async () => {
       setSuccessMsg("");
 
       const remark = String(remarkDrafts?.[orderIdStr] ?? "").trim();
-
       setRemarkSaving((p) => ({ ...p, [orderIdStr]: true }));
 
-      if (!BACKEND_URL) throw new Error("NEXT_PUBLIC_BACKEND_URL is missing");
-
-      // ✅ Optimistic: update remark locally (no refresh)
       patchLocalOrder(orderIdStr, { customerSupportRemark: remark });
 
-      const res = await fetch(`${BACKEND_URL}/api/orders/${orderIdStr}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerSupportRemark: remark }),
+      const updated = await updateOrder(orderIdStr, {
+        customerSupportRemark: remark,
       });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        // rollback on failure
-        setLocalOrders(prev);
-        throw new Error(data?.message || "Remark update failed");
-      }
-
-      // ✅ If backend returns updated order, patch it (optional)
-      if (data?.order?._id || data?._id) {
-        const updated = data.order || data;
+      if (updated?._id) {
         patchLocalOrder(orderIdStr, updated);
       }
 
       setSuccessMsg("✅ Customer Care Remark Saved!");
     } catch (e) {
+      setLocalOrders(prev);
       setLocalError(e?.message || "Remark update failed");
     } finally {
       setRemarkSaving((p) => ({ ...p, [orderIdStr]: false }));
@@ -440,7 +395,6 @@ const loadMore = useCallback(async () => {
   return (
     <div className="min-h-screen bg-gray-50 px-2 sm:px-6 py-3 sm:py-6">
       <div className="mx-auto space-y-3 sm:space-y-5">
-        {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h1 className="text-base sm:text-2xl font-extrabold text-gray-900 leading-tight">
@@ -461,7 +415,6 @@ const loadMore = useCallback(async () => {
           </button>
         </div>
 
-        {/* SUCCESS MESSAGE */}
         <AnimatePresence>
           {successMsg && (
             <motion.div
@@ -475,10 +428,8 @@ const loadMore = useCallback(async () => {
           )}
         </AnimatePresence>
 
-        {/* Filters (mobile-compact) */}
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-2.5 sm:p-4">
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 sm:gap-3">
-            {/* search */}
             <div className="relative col-span-2 lg:col-span-2">
               <Search
                 size={16}
@@ -554,7 +505,6 @@ const loadMore = useCallback(async () => {
             </button>
           </div>
 
-          {/* counts + errors */}
           <div className="mt-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs sm:text-sm text-gray-500">
             <div>
               Showing{" "}
@@ -579,7 +529,6 @@ const loadMore = useCallback(async () => {
           </div>
         </div>
 
-        {/* loading / empty */}
         {loading && (
           <div className="text-center text-gray-500 py-10">
             Loading orders…
@@ -592,26 +541,27 @@ const loadMore = useCallback(async () => {
           </div>
         )}
 
-        {/* Orders list */}
         <div className="space-y-2.5 sm:space-y-3">
           <AnimatePresence>
             {filteredOrders.map((order, idx) => {
               const orderId = order?._id || order?.id;
               const orderIdStr = String(orderId || "");
               const oid = orderIdStr || String(order?.orderNumber || `${idx}`);
-
               const isExpanded = expandedId === orderIdStr;
 
-              const ship = order?.shippingAddressSnapshot || {};
-              const bill = order?.billingAddressSnapshot || {};
+              const detailOrder =
+                customerSupportOrderDetails?.[orderIdStr] || order;
+
+              const ship = detailOrder?.shippingAddressSnapshot || {};
+              const bill = detailOrder?.billingAddressSnapshot || {};
+              const shipment = detailOrder?.shipment || {};
+              const shiprocket = shipment?.shiprocket || {};
+              const tracking = detailOrder?.trackingDetails || {};
+              const coupon = detailOrder?.coupon || {};
 
               const isConfirmLoading = actionLoading.confirmId === orderIdStr;
               const isCancelLoading = actionLoading.cancelId === orderIdStr;
-
-              const shipment = order?.shipment || {};
-              const shiprocket = shipment?.shiprocket || {};
-              const tracking = order?.trackingDetails || {};
-              const coupon = order?.coupon || {};
+              const isDetailLoading = !!detailLoading?.[orderIdStr];
 
               return (
                 <motion.div
@@ -621,7 +571,6 @@ const loadMore = useCallback(async () => {
                   exit={{ opacity: 0, y: 6 }}
                   className="bg-white border border-gray-200 rounded-2xl shadow-sm p-2.5 sm:p-4"
                 >
-                  {/* top row */}
                   <div className="flex flex-col gap-2">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -647,8 +596,9 @@ const loadMore = useCallback(async () => {
                       </div>
 
                       <div className="text-[12px] sm:text-sm text-gray-600 mt-1 wrap-break-word">
-                        {safe(ship.fullName) || "Customer"} •{" "}
-                        {safe(ship.phone) || "N/A"} • {safe(ship.email) || "N/A"}
+                        {safe(order?.shippingAddressSnapshot?.fullName) || "Customer"} •{" "}
+                        {safe(order?.shippingAddressSnapshot?.phone) || "N/A"} •{" "}
+                        {safe(order?.shippingAddressSnapshot?.email) || "N/A"}
                       </div>
 
                       <div className="text-[11px] sm:text-xs text-gray-500 mt-1">
@@ -657,7 +607,6 @@ const loadMore = useCallback(async () => {
                       </div>
                     </div>
 
-                    {/* actions */}
                     <div className="grid grid-cols-3 gap-2">
                       <button
                         onClick={() => handleConfirm(orderIdStr)}
@@ -688,9 +637,7 @@ const loadMore = useCallback(async () => {
                       </button>
 
                       <button
-                        onClick={() =>
-                          setExpandedId((p) => (p === orderIdStr ? null : orderIdStr))
-                        }
+                        onClick={() => toggleExpand(orderIdStr)}
                         className="col-span-1 inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-xl bg-white border border-gray-200 text-xs sm:text-sm font-semibold hover:bg-gray-50"
                       >
                         {isExpanded ? (
@@ -706,7 +653,6 @@ const loadMore = useCallback(async () => {
                     </div>
                   </div>
 
-                  {/* expanded */}
                   <AnimatePresence initial={false}>
                     {isExpanded && (
                       <motion.div
@@ -717,249 +663,259 @@ const loadMore = useCallback(async () => {
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-2.5 sm:p-4 space-y-3">
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
-                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                                <User size={16} /> Customer
-                              </div>
-                              <div className="mt-2 text-sm text-gray-700">
-                                <div className="font-semibold">
-                                  {safe(order?.customerId?.name) ||
-                                    safe(ship.fullName) ||
-                                    "-"}
+                        {isDetailLoading ? (
+                          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                            Loading order details...
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-2.5 sm:p-4 space-y-3">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+                              <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                                <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                  <User size={16} /> Customer
                                 </div>
-                                <div className="text-xs text-gray-500 mt-1 wrap-break-word">
-                                  {safe(order?.customerId?.email) ||
-                                    safe(ship.email) ||
-                                    "N/A"}
-                                  {" • "}
-                                  {safe(ship.phone) || "N/A"}
-                                </div>
-                                <div className="text-xs text-gray-500 mt-2">
-                                  Order Date: <b>{fmtDate(order.orderDate)}</b>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                                <CreditCard size={16} /> Payment
-                              </div>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <Badge className="bg-gray-100 border-gray-200 text-gray-700">
-                                  {safe(order.paymentMethod) || "-"}
-                                </Badge>
-                                <Badge className="bg-yellow-50 border-yellow-200 text-yellow-700">
-                                  {safe(order.paymentStatus) || "-"}
-                                </Badge>
-                                <Badge className="bg-blue-50 border-blue-200 text-blue-700">
-                                  ₹ {money(order.finalPayable)}
-                                </Badge>
-                              </div>
-
-                              <div className="mt-3 text-xs text-gray-600 space-y-1">
-                                <div>
-                                  Subtotal: <b>₹ {money(order.subtotal)}</b>
-                                </div>
-                                <div>
-                                  Discount: <b>₹ {money(order.discount)}</b>
-                                </div>
-                                <div>
-                                  Shipping: <b>₹ {money(order.shippingFee)}</b>
-                                </div>
-                                <div>
-                                  Tax: <b>₹ {money(order.tax)}</b>
-                                </div>
-                                <div className="pt-1 border-t border-gray-200">
-                                  Total: <b>₹ {money(order.totalAmount)}</b>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                                <Truck size={16} /> Shipment
-                              </div>
-                              <div className="mt-2 text-xs text-gray-600 space-y-1">
-                                <div>
-                                  Provider: <b>{safe(shipment.provider) || "-"}</b>
-                                </div>
-                                <div>
-                                  Status: <b>{safe(shipment.status) || "-"}</b>
-                                </div>
-                                <div>
-                                  AWB:{" "}
-                                  <b>
-                                    {safe(shiprocket.awb) ||
-                                      safe(tracking.trackingId) ||
+                                <div className="mt-2 text-sm text-gray-700">
+                                  <div className="font-semibold">
+                                    {safe(detailOrder?.customerId?.name) ||
+                                      safe(ship.fullName) ||
                                       "-"}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1 wrap-break-word">
+                                    {safe(detailOrder?.customerId?.email) ||
+                                      safe(ship.email) ||
+                                      "N/A"}
+                                    {" • "}
+                                    {safe(ship.phone) || "N/A"}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-2">
+                                    Order Date: <b>{fmtDate(detailOrder?.orderDate)}</b>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                                <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                  <CreditCard size={16} /> Payment
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <Badge className="bg-gray-100 border-gray-200 text-gray-700">
+                                    {safe(detailOrder?.paymentMethod) || "-"}
+                                  </Badge>
+                                  <Badge className="bg-yellow-50 border-yellow-200 text-yellow-700">
+                                    {safe(detailOrder?.paymentStatus) || "-"}
+                                  </Badge>
+                                  <Badge className="bg-blue-50 border-blue-200 text-blue-700">
+                                    ₹ {money(detailOrder?.finalPayable)}
+                                  </Badge>
+                                </div>
+
+                                <div className="mt-3 text-xs text-gray-600 space-y-1">
+                                  <div>
+                                    Subtotal: <b>₹ {money(detailOrder?.subtotal)}</b>
+                                  </div>
+                                  <div>
+                                    Discount: <b>₹ {money(detailOrder?.discount)}</b>
+                                  </div>
+                                  <div>
+                                    Shipping: <b>₹ {money(detailOrder?.shippingFee)}</b>
+                                  </div>
+                                  <div>
+                                    Tax: <b>₹ {money(detailOrder?.tax)}</b>
+                                  </div>
+                                  <div className="pt-1 border-t border-gray-200">
+                                    Total: <b>₹ {money(detailOrder?.totalAmount)}</b>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                                <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                  <Truck size={16} /> Shipment
+                                </div>
+                                <div className="mt-2 text-xs text-gray-600 space-y-1">
+                                  <div>
+                                    Provider: <b>{safe(shipment.provider) || "-"}</b>
+                                  </div>
+                                  <div>
+                                    Status: <b>{safe(shipment.status) || "-"}</b>
+                                  </div>
+                                  <div>
+                                    AWB:{" "}
+                                    <b>
+                                      {safe(shiprocket.awb) ||
+                                        safe(tracking.trackingId) ||
+                                        "-"}
+                                    </b>
+                                  </div>
+                                  <div>
+                                    Courier:{" "}
+                                    <b>
+                                      {safe(shiprocket.courierName) ||
+                                        safe(tracking.courierName) ||
+                                        "-"}
+                                    </b>
+                                  </div>
+                                  {safe(shiprocket.trackingUrl) ? (
+                                    <a
+                                      href={safe(shiprocket.trackingUrl)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex mt-2 text-blue-700 font-semibold hover:underline text-sm"
+                                    >
+                                      Track →
+                                    </a>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+                              <EditableAddressCard
+                                orderId={orderIdStr}
+                                type="shipping"
+                                address={ship}
+                                onRefresh={() =>
+                                  fetchCustomerSupportOrderDetail(orderIdStr, {
+                                    force: true,
+                                  })
+                                }
+                              />
+                              <EditableAddressCard
+                                orderId={orderIdStr}
+                                type="billing"
+                                address={bill}
+                                onRefresh={() =>
+                                  fetchCustomerSupportOrderDetail(orderIdStr, {
+                                    force: true,
+                                  })
+                                }
+                              />
+                            </div>
+
+                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-sm font-bold text-gray-900">
+                                  Customer Care Remark
+                                </div>
+
+                                <button
+                                  onClick={() => saveCustomerCareRemark(orderIdStr)}
+                                  disabled={remarkSaving?.[orderIdStr]}
+                                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs sm:text-sm font-semibold hover:bg-blue-700 disabled:opacity-60"
+                                >
+                                  {remarkSaving?.[orderIdStr] ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                  ) : null}
+                                  Save
+                                </button>
+                              </div>
+
+                              <textarea
+                                rows={3}
+                                value={
+                                  remarkDrafts?.[orderIdStr] ??
+                                  safe(detailOrder?.customerSupportRemark) ??
+                                  ""
+                                }
+                                onChange={(e) =>
+                                  setRemarkDrafts((p) => ({
+                                    ...p,
+                                    [orderIdStr]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Write internal remark for customer care..."
+                                className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                              />
+
+                              <div className="mt-2 text-[11px] sm:text-xs text-gray-500">
+                                Internal note (customer ko nahi dikhega).
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                  <Package size={16} /> Items
+                                </div>
+                                <div className="text-[11px] sm:text-xs text-gray-500">
+                                  <b>
+                                    {Number(
+                                      detailOrder?.analytics?.totalItems ||
+                                        detailOrder?.items?.length ||
+                                        0
+                                    )}
                                   </b>
                                 </div>
-                                <div>
-                                  Courier:{" "}
-                                  <b>
-                                    {safe(shiprocket.courierName) ||
-                                      safe(tracking.courierName) ||
-                                      "-"}
-                                  </b>
-                                </div>
-                                {safe(shiprocket.trackingUrl) ? (
-                                  <a
-                                    href={safe(shiprocket.trackingUrl)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex mt-2 text-blue-700 font-semibold hover:underline text-sm"
-                                  >
-                                    Track →
-                                  </a>
-                                ) : null}
+                              </div>
+
+                              <div className="mt-3 space-y-2">
+                                {(detailOrder?.items || []).map((it, i) => (
+                                  <ItemRow key={safe(it.lineId) || i} item={it} />
+                                ))}
                               </div>
                             </div>
-                          </div>
 
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                            <EditableAddressCard
-                              orderId={orderIdStr}
-                              type="shipping"
-                              address={ship}
-                              onRefresh={fetchOrders} // still available if you want manual refresh after editing
-                            />
-                            <EditableAddressCard
-                              orderId={orderIdStr}
-                              type="billing"
-                              address={bill}
-                              onRefresh={fetchOrders}
-                            />
-                          </div>
+                            {safe(coupon?.code) ? (
+                              <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
+                                <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                                  <Tag size={16} /> Coupon
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <Badge className="bg-green-50 border-green-200 text-green-700">
+                                    {safe(coupon.code)}
+                                  </Badge>
+                                  <Badge className="bg-blue-50 border-blue-200 text-blue-700">
+                                    ₹ {money(coupon.discount)}
+                                  </Badge>
+                                </div>
+                              </div>
+                            ) : null}
 
-                          {/* Customer Care Remark */}
-                          <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
                               <div className="text-sm font-bold text-gray-900">
-                                Customer Care Remark
+                                System
                               </div>
-
-                              <button
-                                onClick={() => saveCustomerCareRemark(orderIdStr)}
-                                disabled={remarkSaving?.[orderIdStr]}
-                                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs sm:text-sm font-semibold hover:bg-blue-700 disabled:opacity-60"
-                              >
-                                {remarkSaving?.[orderIdStr] ? (
-                                  <Loader2 size={16} className="animate-spin" />
-                                ) : null}
-                                Save
-                              </button>
-                            </div>
-
-                            <textarea
-                              rows={3}
-                              value={
-                                remarkDrafts?.[orderIdStr] ??
-                                safe(order?.customerSupportRemark) ??
-                                ""
-                              }
-                              onChange={(e) =>
-                                setRemarkDrafts((p) => ({
-                                  ...p,
-                                  [orderIdStr]: e.target.value,
-                                }))
-                              }
-                              placeholder="Write internal remark for customer care..."
-                              className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                            />
-
-                            <div className="mt-2 text-[11px] sm:text-xs text-gray-500">
-                              Internal note (customer ko nahi dikhega).
-                            </div>
-                          </div>
-
-                          {/* items */}
-                          <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                                <Package size={16} /> Items
-                              </div>
-                              <div className="text-[11px] sm:text-xs text-gray-500">
-                                <b>
-                                  {Number(
-                                    order?.analytics?.totalItems ||
-                                      order?.items?.length ||
-                                      0
-                                  )}
-                                </b>
-                              </div>
-                            </div>
-
-                            <div className="mt-3 space-y-2">
-                              {(order?.items || []).map((it, i) => (
-                                <ItemRow key={safe(it.lineId) || i} item={it} />
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* coupon */}
-                          {safe(coupon?.code) ? (
-                            <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                              <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                                <Tag size={16} /> Coupon
-                              </div>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <Badge className="bg-green-50 border-green-200 text-green-700">
-                                  {safe(coupon.code)}
-                                </Badge>
-                                <Badge className="bg-blue-50 border-blue-200 text-blue-700">
-                                  ₹ {money(coupon.discount)}
-                                </Badge>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {/* system */}
-                          <div className="rounded-xl bg-white border border-gray-200 p-2.5 sm:p-3">
-                            <div className="text-sm font-bold text-gray-900">
-                              System
-                            </div>
-                            <div className="mt-2 text-[11px] sm:text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                              <div>
-                                Order ID:{" "}
-                                <b className="text-gray-800">
-                                  {safe(orderIdStr) || "-"}
-                                </b>
-                              </div>
-                              <div>
-                                Created:{" "}
-                                <b className="text-gray-800">
-                                  {fmtDate(order.createdAt)}
-                                </b>
-                              </div>
-                              <div>
-                                Updated:{" "}
-                                <b className="text-gray-800">
-                                  {fmtDate(order.updatedAt)}
-                                </b>
-                              </div>
-                              <div>
-                                Confirmed:{" "}
-                                <b className="text-gray-800">
-                                  {fmtDate(order.confirmedAt)}
-                                </b>
-                              </div>
-                              <div>
-                                Source:{" "}
-                                <b className="text-gray-800">
-                                  {safe(order.source) || "-"}
-                                </b>
-                              </div>
-                              <div>
-                                Currency:{" "}
-                                <b className="text-gray-800">
-                                  {safe(order.currency) || "INR"}
-                                </b>
+                              <div className="mt-2 text-[11px] sm:text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                <div>
+                                  Order ID:{" "}
+                                  <b className="text-gray-800">
+                                    {safe(orderIdStr) || "-"}
+                                  </b>
+                                </div>
+                                <div>
+                                  Created:{" "}
+                                  <b className="text-gray-800">
+                                    {fmtDate(detailOrder?.createdAt)}
+                                  </b>
+                                </div>
+                                <div>
+                                  Updated:{" "}
+                                  <b className="text-gray-800">
+                                    {fmtDate(detailOrder?.updatedAt)}
+                                  </b>
+                                </div>
+                                <div>
+                                  Confirmed:{" "}
+                                  <b className="text-gray-800">
+                                    {fmtDate(detailOrder?.confirmedAt)}
+                                  </b>
+                                </div>
+                                <div>
+                                  Source:{" "}
+                                  <b className="text-gray-800">
+                                    {safe(detailOrder?.source) || "-"}
+                                  </b>
+                                </div>
+                                <div>
+                                  Currency:{" "}
+                                  <b className="text-gray-800">
+                                    {safe(detailOrder?.currency) || "INR"}
+                                  </b>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -969,20 +925,21 @@ const loadMore = useCallback(async () => {
           </AnimatePresence>
         </div>
 
-        {/* Load more */}
-{!loading && filteredOrders.length > 0 && (
-  <div className="flex justify-center py-4">
-    <button
-      onClick={loadMore}
-      disabled={pageLoading || !ordersMeta?.hasMore}
-      className="px-4 py-2 rounded-xl border border-gray-200 bg-white font-semibold hover:bg-gray-50 disabled:opacity-60"
-    >
-      {pageLoading ? "Loading..." : ordersMeta?.hasMore ? "Load More" : "No More"}
-    </button>
-  </div>
-)}
-
-
+        {!loading && filteredOrders.length > 0 && (
+          <div className="flex justify-center py-4">
+            <button
+              onClick={loadMore}
+              disabled={pageLoading || !ordersMeta?.hasMore}
+              className="px-4 py-2 rounded-xl border border-gray-200 bg-white font-semibold hover:bg-gray-50 disabled:opacity-60"
+            >
+              {pageLoading
+                ? "Loading..."
+                : ordersMeta?.hasMore
+                ? "Load More"
+                : "No More"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

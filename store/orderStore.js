@@ -71,8 +71,10 @@ const normalizeOrdersPayload = (data) => {
   // 3) { orders:[...] } (some routes)
   // 4) { data:[...] } (rare)
   if (Array.isArray(data)) return { orders: data, meta: null };
-  if (data && Array.isArray(data.orders)) return { orders: data.orders, meta: data.meta || null };
-  if (data && Array.isArray(data.data)) return { orders: data.data, meta: data.meta || null };
+  if (data && Array.isArray(data.orders))
+    return { orders: data.orders, meta: data.meta || null };
+  if (data && Array.isArray(data.data))
+    return { orders: data.data, meta: data.meta || null };
   return { orders: [], meta: data?.meta || null };
 };
 
@@ -85,8 +87,11 @@ export const useOrderStore = create((set, get) => ({
   loading: false,
   error: null,
 
-  // ✅ NEW: pagination meta for orders list
+  // ✅ pagination meta for orders list
   ordersMeta: null, // { page, limit, totalCount, totalSum, hasMore }
+
+  // ✅ customer support detail cache
+  customerSupportOrderDetails: {}, // { [orderId]: fullOrder }
 
   /* =========================
      UI HELPERS
@@ -108,8 +113,21 @@ export const useOrderStore = create((set, get) => ({
     if (!updatedOrder?._id) return;
     set((s) => ({
       orders: (s.orders || []).map((o) =>
-        String(o?._id) === String(updatedOrder._id) ? updatedOrder : o
+        String(o?._id) === String(updatedOrder._id) ? { ...o, ...updatedOrder } : o
       ),
+    }));
+  },
+
+  _syncCustomerSupportDetail: (updatedOrder) => {
+    if (!updatedOrder?._id) return;
+    set((s) => ({
+      customerSupportOrderDetails: {
+        ...(s.customerSupportOrderDetails || {}),
+        [String(updatedOrder._id)]: {
+          ...(s.customerSupportOrderDetails?.[String(updatedOrder._id)] || {}),
+          ...updatedOrder,
+        },
+      },
     }));
   },
 
@@ -227,36 +245,30 @@ export const useOrderStore = create((set, get) => ({
 
   /**
    * ✅ GET /api/orders?filters
-   * - supports old backend (array) and new backend ({orders, meta})
-   * - supports pagination: filters.page, filters.limit
+   * generic admin list
    */
   fetchAllOrders: async (filters = {}) => {
-  const f = { ...(filters || {}) };
+    const f = { ...(filters || {}) };
 
-  // ✅ ensure pagination params always go
-  if (f.page == null) f.page = 1;
+    if (f.page == null) f.page = 1;
+    if (f.limit == null) f.limit = 200;
 
-  // ✅ backend cap is 200, so default 200
-  if (f.limit == null) f.limit = 200;
+    const qs = buildQueryString(f);
+    const data = await get()._get(`/api/orders${qs}`);
 
-  const qs = buildQueryString(f);
-  const data = await get()._get(`/api/orders${qs}`);
+    const { orders, meta } = normalizeOrdersPayload(data);
 
-  const { orders, meta } = normalizeOrdersPayload(data);
-
-  set({ orders, ordersMeta: meta || null });
-  return orders;
-},
+    set({ orders, ordersMeta: meta || null });
+    return orders;
+  },
 
   /**
-   * ✅ NEW: load next page and APPEND
-   * - uses existing filters + increments page
-   * - if backend doesn't return meta, it falls back to simple append without hasMore
+   * ✅ generic next page for /api/orders
    */
   fetchNextOrdersPage: async (filters = {}) => {
     const currMeta = get().ordersMeta;
     const nextPage = Math.max(1, Number(currMeta?.page || filters?.page || 1) + 1);
-    const limit = Number(filters?.limit || currMeta?.limit || 500);
+    const limit = Number(filters?.limit || currMeta?.limit || 200);
 
     const qs = buildQueryString({ ...(filters || {}), page: nextPage, limit });
     const data = await get()._get(`/api/orders${qs}`);
@@ -271,6 +283,81 @@ export const useOrderStore = create((set, get) => ({
     return nextOrders || [];
   },
 
+  /**
+   * ✅ NEW: customer support lightweight list
+   * GET /api/orders/customer-support?filters
+   */
+  fetchCustomerSupportOrders: async (filters = {}) => {
+    const f = { ...(filters || {}) };
+
+    if (f.page == null) f.page = 1;
+    if (f.limit == null) f.limit = 50;
+
+    const qs = buildQueryString(f);
+    const data = await get()._get(`/api/orders/customer-support${qs}`);
+
+    const { orders, meta } = normalizeOrdersPayload(data);
+
+    set({
+      orders,
+      ordersMeta: meta || null,
+    });
+
+    return orders;
+  },
+
+  /**
+   * ✅ NEW: next page for customer support list
+   * GET /api/orders/customer-support?page=2...
+   */
+  fetchNextCustomerSupportOrdersPage: async (filters = {}) => {
+    const currMeta = get().ordersMeta;
+    const nextPage = Math.max(1, Number(currMeta?.page || filters?.page || 1) + 1);
+    const limit = Number(filters?.limit || currMeta?.limit || 50);
+
+    const qs = buildQueryString({ ...(filters || {}), page: nextPage, limit });
+    const data = await get()._get(`/api/orders/customer-support${qs}`);
+
+    const { orders: nextOrders, meta } = normalizeOrdersPayload(data);
+
+    set((s) => ({
+      orders: [...(s.orders || []), ...(nextOrders || [])],
+      ordersMeta: meta || s.ordersMeta || null,
+    }));
+
+    return nextOrders || [];
+  },
+
+  /**
+   * ✅ NEW: customer support full detail by id
+   * GET /api/orders/customer-support/:id
+   */
+  fetchCustomerSupportOrderDetail: async (orderId, { force = false } = {}) => {
+    if (!orderId) return null;
+
+    const key = String(orderId);
+    const cached = get().customerSupportOrderDetails?.[key];
+
+    if (cached && !force) {
+      return cached;
+    }
+
+    const data = await get()._get(`/api/orders/customer-support/${orderId}`);
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set((s) => ({
+        order,
+        customerSupportOrderDetails: {
+          ...(s.customerSupportOrderDetails || {}),
+          [String(order._id)]: order,
+        },
+      }));
+    }
+
+    return order;
+  },
+
   // PATCH /api/orders/:id/status
   updateOrderStatus: async (orderId, payload) => {
     if (!orderId) return null;
@@ -283,11 +370,7 @@ export const useOrderStore = create((set, get) => ({
 
     set({ order });
     get()._syncOrderInList(order);
-
-    // ✅ optional: if order is now terminal & your current list is "active only", remove it.
-    // (won't break anything if you don't use it)
-    // const fs = String(order?.fulfillmentStatus || "").toLowerCase();
-    // if (["cancelled", "refunded"].includes(fs)) get()._removeOrderFromList(orderId);
+    get()._syncCustomerSupportDetail(order);
 
     return order;
   },
@@ -301,6 +384,7 @@ export const useOrderStore = create((set, get) => ({
 
     set({ order });
     get()._syncOrderInList(order);
+    get()._syncCustomerSupportDetail(order);
     return order;
   },
 
@@ -313,6 +397,7 @@ export const useOrderStore = create((set, get) => ({
 
     set({ order });
     get()._syncOrderInList(order);
+    get()._syncCustomerSupportDetail(order);
     return order;
   },
 
@@ -334,6 +419,7 @@ export const useOrderStore = create((set, get) => ({
     if (order?._id) {
       set({ order });
       get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
     }
 
     return order;
@@ -358,6 +444,7 @@ export const useOrderStore = create((set, get) => ({
     if (order?._id) {
       set({ order });
       get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
     }
 
     return order;
@@ -376,6 +463,7 @@ export const useOrderStore = create((set, get) => ({
     if (order?._id) {
       set({ order });
       get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
     }
 
     return order;
@@ -386,15 +474,11 @@ export const useOrderStore = create((set, get) => ({
     if (!orderId) return null;
 
     const data = await get()._post(`/api/orders/${orderId}/duplicate-exchange`, payload);
-
-    // backend returns { order: newOrder }
     const newOrder = get()._normalizeOrder(data);
 
     if (newOrder?._id) {
-      // set as current order (optional)
       set({ order: newOrder });
 
-      // add to list on top (optional)
       set((s) => ({
         orders: [newOrder, ...(s.orders || [])],
       }));
@@ -406,7 +490,6 @@ export const useOrderStore = create((set, get) => ({
   /**
    * ✅ Manual Shiprocket booking (only if missing)
    * Router: POST /api/orders/:id/shiprocket/book
-   * Backend already checks: not parent + confirmed + packed + prepaid paid
    */
   bookShiprocketIfMissing: async (orderId) => {
     if (!orderId) return null;
@@ -417,6 +500,7 @@ export const useOrderStore = create((set, get) => ({
     if (order?._id) {
       set({ order });
       get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
     } else {
       await get().fetchOrderById(orderId);
     }
@@ -444,7 +528,17 @@ export const useOrderStore = create((set, get) => ({
      RESET
   ========================= */
   clearOrder: () => set({ order: null }),
-  clearOrders: () => set({ orders: [], ordersMeta: null }),
+
+  clearOrders: () =>
+    set({
+      orders: [],
+      ordersMeta: null,
+    }),
+
+  clearCustomerSupportOrderDetails: () =>
+    set({
+      customerSupportOrderDetails: {},
+    }),
 
   resetStore: () =>
     set({
@@ -453,5 +547,6 @@ export const useOrderStore = create((set, get) => ({
       loading: false,
       error: null,
       ordersMeta: null,
+      customerSupportOrderDetails: {},
     }),
 }));
