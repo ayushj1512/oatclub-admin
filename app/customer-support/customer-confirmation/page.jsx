@@ -828,7 +828,7 @@ export default function CustomerConfirmationPage() {
                               />
 
                               <div className="mt-2 text-[11px] sm:text-xs text-gray-500">
-                                Internal note (customer ko nahi dikhega).
+                                Internal note (customer wont see it).
                               </div>
                             </div>
 
