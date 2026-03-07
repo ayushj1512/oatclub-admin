@@ -59,14 +59,15 @@ export const sidebarMenus = {
     { label: "Accounts Dashboard", href: "/accounts" },
     { label: "Sales", href: "/accounts/sales" },
   ],
-
- inventory: [
+inventory: [
   { label: "Inventory Dashboard", href: "/inventory" },
   { label: "Stock Update", href: "/inventory/stock-update" },
   { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
   { label: "Reserved Inventory", href: "/inventory/reserved-inventory" },
 
   // ✅ NEW
+  { label: "On Demand Inventory", href: "/inventory/on-demand-inventory" },
+
   { label: "Zero Inventory", href: "/inventory/zero-inventory" },
 ],
 
@@ -261,9 +262,11 @@ export const sidebarMenus = {
 
   // ✅ NEW: REPORTS SIDEBAR GROUP
  reports: [
-  { label: "Reports Home", href: "/reports" }, // app/reports/page.jsx
-  { label: "ROAS", href: "/reports/ROAS" },    // app/reports/ROAS/page.jsx
-  { label: "Orders", href: "/reports/Orders" }, // ✅ app/reports/Orders/page.jsx
+  { label: "Reports Home", href: "/reports" },            // app/reports/page.jsx
+  { label: "ROAS", href: "/reports/ROAS" },               // app/reports/ROAS/page.jsx
+  { label: "Orders", href: "/reports/Orders" },           // app/reports/Orders/page.jsx
+  { label: "RTO", href: "/reports/RTO" },                 // app/reports/RTO/page.jsx
+  { label: "Cancellation", href: "/reports/Cancellation" }, // app/reports/Cancellation/page.jsx
 ],
 
   account_user: [
