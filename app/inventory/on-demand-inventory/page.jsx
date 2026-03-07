@@ -253,7 +253,7 @@ export default function OnDemandInventoryPage() {
 
   return (
     <div className="min-h-screen bg-[#fcfcfc] text-black">
-      <div className="mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8">
+      <div className="mx-auto px-4 py-6 md:px-6 md:py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">
             On Demand Inventory Update
