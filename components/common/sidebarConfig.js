@@ -63,8 +63,11 @@ export const sidebarMenus = {
  inventory: [
   { label: "Inventory Dashboard", href: "/inventory" },
   { label: "Stock Update", href: "/inventory/stock-update" },
-  { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" }, // ✅ new
-  { label: "Reserved Inventory", href: "/inventory/reserved-inventory" }, // ✅ new
+  { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
+  { label: "Reserved Inventory", href: "/inventory/reserved-inventory" },
+
+  // ✅ NEW
+  { label: "Zero Inventory", href: "/inventory/zero-inventory" },
 ],
 
   media: [

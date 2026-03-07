@@ -1353,4 +1353,74 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
+    /* ============================================================
+    ✅ ZERO ALL VARIANT STOCK
+    PATCH /api/products/bulk/variant-stock/zero-all
+  ============================================================ */
+  zeroAllVariantStock: async () => {
+    try {
+      set({ saving: true, error: null });
+
+      const res = await fetch(`${API}/bulk/variant-stock/zero-all`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to zero all variant stock");
+      }
+
+      // ✅ current single product refresh (if open on edit page)
+      if (get().product) {
+        const current = get().product;
+        const nextVariants = Array.isArray(current.variants)
+          ? current.variants.map((v) => ({
+              ...v,
+              stock: 0,
+              isInStock: false,
+            }))
+          : current.variants;
+
+        set({
+          product: {
+            ...current,
+            variants: nextVariants,
+            stock: Array.isArray(nextVariants) ? 0 : current.stock,
+            isInStock: false,
+          },
+        });
+      }
+
+      // ✅ products list refresh in store
+      set((state) => ({
+        products: (state.products || []).map((p) => {
+          const hasVariants = Array.isArray(p.variants) && p.variants.length > 0;
+          if (!hasVariants) return p;
+
+          return {
+            ...p,
+            variants: p.variants.map((v) => ({
+              ...v,
+              stock: 0,
+              isInStock: false,
+            })),
+            stock: 0,
+            isInStock: false,
+          };
+        }),
+      }));
+
+      toast.success("All variant stock marked as 0 ✅");
+      return data;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
 }));
