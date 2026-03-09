@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Search } from "lucide-react";
+import { CalendarDays, Download, Loader2, Search } from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 import { useOrderStore } from "@/store/orderStore";
 
@@ -39,10 +39,59 @@ const money = (n) => {
 
 const safe = (v) => (v === null || v === undefined ? "" : v);
 
+const formatDateLabel = (value) => {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const getOrderDate = (order) => {
+  const raw =
+    order?.deliveredAt ||
+    order?.shipment?.deliveredAt ||
+    order?.statusTimestamps?.deliveredAt ||
+    order?.updatedAt ||
+    order?.createdAt ||
+    order?.orderDate;
+
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
+const getMonthRange = (monthValue) => {
+  if (!monthValue) return { start: null, end: null };
+  const [y, m] = String(monthValue).split("-").map(Number);
+  if (!y || !m) return { start: null, end: null };
+
+  const start = new Date(y, m - 1, 1, 0, 0, 0, 0);
+  const end = new Date(y, m, 0, 23, 59, 59, 999);
+  return { start, end };
+};
+
+const normalizeDateStart = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(`${dateStr}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const normalizeDateEnd = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(`${dateStr}T23:59:59.999`);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
 /* ---------------------------------------------
    Page: Delivered Orders
-   - ✅ Only Searchbar (no filters)
-   - ✅ Backend: fulfillmentStatus=delivered + customerName=search
+   - ✅ Search
+   - ✅ Month filter
+   - ✅ From / To date filter
 --------------------------------------------- */
 export default function DeliveredOrdersPage() {
   const orders = useOrderStore((s) => s.orders);
@@ -53,25 +102,46 @@ export default function DeliveredOrdersPage() {
   const fetchNextOrdersPage = useOrderStore((s) => s.fetchNextOrdersPage);
   const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
 
-  // Search (button based)
+  // Search
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+
+  // Date / Month filters
+  const [monthInput, setMonthInput] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+
+  const [fromDateInput, setFromDateInput] = useState("");
+  const [toDateInput, setToDateInput] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   // pagination
   const [pageSize] = useState(500);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const applySearch = useCallback(() => {
+  const applyFilters = useCallback(() => {
     setSearch(searchInput.trim());
-  }, [searchInput]);
+    setSelectedMonth(monthInput);
+    setFromDate(fromDateInput);
+    setToDate(toDateInput);
+  }, [searchInput, monthInput, fromDateInput, toDateInput]);
 
-  const clearSearch = useCallback(() => {
+  const clearFilters = useCallback(() => {
     setSearchInput("");
     setSearch("");
+    setMonthInput("");
+    setSelectedMonth("");
+    setFromDateInput("");
+    setToDateInput("");
+    setFromDate("");
+    setToDate("");
   }, []);
 
   /* ---------------------------------------------
      ✅ Backend filters
+     Keep delivered filter on backend
+     Search on backend
+     Month/date filters on client-side for safety
   --------------------------------------------- */
   const backendFilters = useMemo(() => {
     const f = {
@@ -79,7 +149,9 @@ export default function DeliveredOrdersPage() {
       page: 1,
       limit: pageSize,
     };
+
     if (search) f.customerName = search;
+
     return f;
   }, [search, pageSize]);
 
@@ -96,7 +168,7 @@ export default function DeliveredOrdersPage() {
   }, [loadOrders]);
 
   /* ---------------------------------------------
-     ✅ Client-side search fallback
+     ✅ Client-side filtering
   --------------------------------------------- */
   const filteredOrders = useMemo(() => {
     let data = Array.isArray(orders) ? [...orders] : [];
@@ -106,38 +178,95 @@ export default function DeliveredOrdersPage() {
       (o) => String(o?.fulfillmentStatus || "").toLowerCase() === "delivered"
     );
 
+    // Search
     const q = search.trim().toLowerCase();
-    if (!q) return data;
+    if (q) {
+      data = data.filter((o) => {
+        const orderNumber = String(o?.orderNumber || "").toLowerCase();
+        const name = String(
+          o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
+        ).toLowerCase();
+        const email = String(
+          o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
+        ).toLowerCase();
+        const phone = String(
+          o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
+        ).toLowerCase();
 
-    return data.filter((o) => {
-      const orderNumber = String(o?.orderNumber || "").toLowerCase();
-      const name = String(
-        o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
-      ).toLowerCase();
-      const email = String(
-        o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
-      ).toLowerCase();
-      const phone = String(
-        o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
-      ).toLowerCase();
-      return (
-        orderNumber.includes(q) ||
-        name.includes(q) ||
-        email.includes(q) ||
-        phone.includes(q)
-      );
+        return (
+          orderNumber.includes(q) ||
+          name.includes(q) ||
+          email.includes(q) ||
+          phone.includes(q)
+        );
+      });
+    }
+
+    // Month filter
+    if (selectedMonth) {
+      const { start, end } = getMonthRange(selectedMonth);
+      if (start && end) {
+        data = data.filter((o) => {
+          const dt = getOrderDate(o);
+          if (!dt) return false;
+          return dt >= start && dt <= end;
+        });
+      }
+    }
+
+    // From / To date filters
+    const from = normalizeDateStart(fromDate);
+    const to = normalizeDateEnd(toDate);
+
+    if (from || to) {
+      data = data.filter((o) => {
+        const dt = getOrderDate(o);
+        if (!dt) return false;
+
+        if (from && dt < from) return false;
+        if (to && dt > to) return false;
+
+        return true;
+      });
+    }
+
+    return data;
+  }, [orders, search, selectedMonth, fromDate, toDate]);
+
+  const sortedOrders = useMemo(() => {
+    return [...filteredOrders].sort((a, b) => {
+      const getNum = (o) => {
+        const m = String(o?.orderNumber || "").match(/(\d+)$/);
+        return m ? Number(m[1]) : 0;
+      };
+
+      const an = getNum(a);
+      const bn = getNum(b);
+      if (bn !== an) return bn - an;
+
+      const ad = getOrderDate(a)?.getTime() || 0;
+      const bd = getOrderDate(b)?.getTime() || 0;
+      return bd - ad;
     });
-  }, [orders, search]);
+  }, [filteredOrders]);
 
   /* ---------------------------------------------
      ✅ CSV export
   --------------------------------------------- */
   const buildCsvRows = (ordersArr) => {
     const rows = [];
+
     for (const order of ordersArr || []) {
       const orderId = safe(order?._id || order?.id);
       const orderNumber = safe(order?.orderNumber);
-      const orderDate = formatDateISO(order?.createdAt || order?.orderDate);
+      const orderDate = formatDateISO(
+        order?.deliveredAt ||
+          order?.shipment?.deliveredAt ||
+          order?.statusTimestamps?.deliveredAt ||
+          order?.updatedAt ||
+          order?.createdAt ||
+          order?.orderDate
+      );
 
       const customerName = safe(
         order?.customerId?.name || order?.shippingAddressSnapshot?.fullName
@@ -199,10 +328,12 @@ export default function DeliveredOrdersPage() {
         const attrs = Array.isArray(item?.variant?.attributes)
           ? item.variant.attributes
           : [];
+
         const attrSize =
           attrs.find((a) => String(a?.key || "").toLowerCase() === "size")?.value ||
           attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")?.value ||
           "";
+
         const itemSku = safe(item?.variant?.sku || snap?.sku || "");
         const itemSize = safe(item?.selectedSize || attrSize || "");
 
@@ -233,19 +364,22 @@ export default function DeliveredOrdersPage() {
         });
       });
     }
+
     return rows;
   };
 
   const exportToCSV = () => {
-    if (!filteredOrders?.length)
-      return alert("No delivered orders to export.");
+    if (!sortedOrders?.length) {
+      alert("No delivered orders to export.");
+      return;
+    }
 
-    const rows = buildCsvRows(filteredOrders);
+    const rows = buildCsvRows(sortedOrders);
 
     const headers = [
       "Order DB Id",
       "Order #",
-      "Order Date (ISO)",
+      "Delivered/Order Date (ISO)",
       "Customer Name",
       "Customer Email",
       "Customer Phone",
@@ -304,10 +438,11 @@ export default function DeliveredOrdersPage() {
     const blob = new Blob([csvLines.join("\r\n")], {
       type: "text/csv;charset=utf-8;",
     });
-    const url = URL.createObjectURL(blob);
 
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+
     link.href = url;
     link.setAttribute("download", `delivered-orders-${ts}.csv`);
     document.body.appendChild(link);
@@ -317,19 +452,14 @@ export default function DeliveredOrdersPage() {
   };
 
   const totals = useMemo(() => {
-    const metaCount = Number(ordersMeta?.totalCount);
-    const metaSum = Number(ordersMeta?.totalSum);
-
-    const count =
-      Number.isFinite(metaCount) && metaCount >= 0 ? metaCount : filteredOrders.length;
-
-    const sum =
-      Number.isFinite(metaSum) && metaSum >= 0
-        ? metaSum
-        : filteredOrders.reduce((acc, o) => acc + (Number(o?.finalPayable) || 0), 0);
-
-    return { count, sum };
-  }, [ordersMeta, filteredOrders]);
+    return {
+      count: sortedOrders.length,
+      sum: sortedOrders.reduce(
+        (acc, o) => acc + (Number(o?.finalPayable) || 0),
+        0
+      ),
+    };
+  }, [sortedOrders]);
 
   const hasMore = !!ordersMeta?.hasMore;
 
@@ -348,70 +478,151 @@ export default function DeliveredOrdersPage() {
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
       <div className="mx-auto space-y-8">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
+        <div className="flex flex-col xl:flex-row justify-between xl:items-start gap-6">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">
               Delivered Orders
             </h1>
             <p className="text-gray-500 mt-1">
-              Search and manage only <b>delivered</b> orders.
+              Search and manage only <b>delivered</b> orders with month and date
+              filters.
             </p>
-            <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
+
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
               <span className="px-3 py-1 rounded-full bg-green-50 text-green-700 font-semibold">
                 {totals.count} Orders
               </span>
               <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
-                Total ₹{totals.sum}
+                Total ₹{Number(totals.sum || 0).toLocaleString("en-IN")}
               </span>
               <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 font-semibold">
                 Status: delivered
               </span>
+              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
+                Loaded: {orders.length}
+              </span>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 w-full md:w-80">
-              <Search size={18} className="text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search order # / name / email / phone..."
-                className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && applySearch()}
-              />
+          <div className="w-full xl:max-w-[980px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
+              {/* Search */}
+              <div className="xl:col-span-2 flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
+                <Search size={18} className="text-gray-400 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search order # / name / email / phone..."
+                  className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && applyFilters()}
+                />
+              </div>
+
+              {/* Month */}
+              <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
+                <CalendarDays size={18} className="text-gray-400 shrink-0" />
+                <input
+                  type="month"
+                  className="outline-none w-full bg-transparent text-sm text-gray-700"
+                  value={monthInput}
+                  onChange={(e) => setMonthInput(e.target.value)}
+                />
+              </div>
+
+              {/* From Date */}
+              <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
+                <span className="text-xs font-semibold text-gray-500 shrink-0">
+                  From
+                </span>
+                <input
+                  type="date"
+                  className="outline-none w-full bg-transparent text-sm text-gray-700"
+                  value={fromDateInput}
+                  onChange={(e) => setFromDateInput(e.target.value)}
+                />
+              </div>
+
+              {/* To Date */}
+              <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
+                <span className="text-xs font-semibold text-gray-500 shrink-0">
+                  To
+                </span>
+                <input
+                  type="date"
+                  className="outline-none w-full bg-transparent text-sm text-gray-700"
+                  value={toDateInput}
+                  onChange={(e) => setToDateInput(e.target.value)}
+                />
+              </div>
+
+              {/* Apply */}
+              <button
+                onClick={applyFilters}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-gray-200 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition"
+              >
+                <Search size={18} /> Apply
+              </button>
             </div>
 
-            <button
-              onClick={applySearch}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-gray-200 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition"
-            >
-              <Search size={18} /> Search
-            </button>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                onClick={clearFilters}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-200 active:scale-[0.98] transition"
+              >
+                Clear Filters
+              </button>
 
-            <button
-              onClick={clearSearch}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-200 active:scale-[0.98] transition"
-            >
-              Clear
-            </button>
-
-            <button
-              onClick={exportToCSV}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
-            >
-              <Download size={18} /> Export CSV
-            </button>
+              <button
+                onClick={exportToCSV}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
+              >
+                <Download size={18} /> Export CSV
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Active filter summary */}
+        {(search || selectedMonth || fromDate || toDate) && (
+          <Card>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-semibold text-gray-700">Active Filters:</span>
+
+              {search ? (
+                <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">
+                  Search: {search}
+                </span>
+              ) : null}
+
+              {selectedMonth ? (
+                <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-medium">
+                  Month: {selectedMonth}
+                </span>
+              ) : null}
+
+              {fromDate ? (
+                <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-medium">
+                  From: {fromDate}
+                </span>
+              ) : null}
+
+              {toDate ? (
+                <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-medium">
+                  To: {toDate}
+                </span>
+              ) : null}
+            </div>
+          </Card>
+        )}
 
         {/* Load More / Refresh */}
         <Card>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="text-xs text-gray-500">
               {ordersMeta?.page
-                ? `Page ${ordersMeta.page} • Showing ${orders.length} orders`
-                : `Showing ${orders.length} orders`}
+                ? `Page ${ordersMeta.page} • Loaded ${orders.length} orders • Visible ${sortedOrders.length} orders`
+                : `Loaded ${orders.length} orders • Visible ${sortedOrders.length} orders`}
             </div>
 
             <div className="flex items-center gap-3">
@@ -462,34 +673,21 @@ export default function DeliveredOrdersPage() {
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-                {filteredOrders.length ? (
-                  [...filteredOrders]
-                    .sort((a, b) => {
-                      const getNum = (o) => {
-                        const m = String(o?.orderNumber || "").match(/(\d+)$/);
-                        return m ? Number(m[1]) : 0;
-                      };
-                      const an = getNum(a);
-                      const bn = getNum(b);
-                      if (bn !== an) return bn - an;
-                      const ad = new Date(a?.createdAt || a?.orderDate || 0).getTime();
-                      const bd = new Date(b?.createdAt || b?.orderDate || 0).getTime();
-                      return bd - ad;
-                    })
-                    .map((order, idx) => {
-                      const rowKey =
-                        order?._id || order?.id || order?.orderNumber || `order-${idx}`;
+                {sortedOrders.length ? (
+                  sortedOrders.map((order, idx) => {
+                    const rowKey =
+                      order?._id || order?.id || order?.orderNumber || `order-${idx}`;
 
-                      return (
-                        <OrderRow
-                          key={String(rowKey)}
-                          order={order}
-                          onUpdated={(updatedOrder) => {
-                            if (updatedOrder?._id) syncOrderInList(updatedOrder);
-                          }}
-                        />
-                      );
-                    })
+                    return (
+                      <OrderRow
+                        key={String(rowKey)}
+                        order={order}
+                        onUpdated={(updatedOrder) => {
+                          if (updatedOrder?._id) syncOrderInList(updatedOrder);
+                        }}
+                      />
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-gray-500">
@@ -501,6 +699,16 @@ export default function DeliveredOrdersPage() {
             </table>
           </div>
         </div>
+
+        {/* Small filter result note */}
+        {sortedOrders.length > 0 && (
+          <div className="text-xs text-gray-500 px-1">
+            Showing filtered delivered orders. Latest visible order date:{" "}
+            <span className="font-medium text-gray-700">
+              {formatDateLabel(getOrderDate(sortedOrders[0])) || "-"}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Global loading overlay */}
