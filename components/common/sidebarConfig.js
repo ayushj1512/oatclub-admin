@@ -76,15 +76,14 @@ export const sidebarMenus = {
     { label: "Manage Reels", href: "/reels/manage" },
   ],
 
-  blogs: [
-    { label: "Blogs Dashboard", href: "/blogs" },
-    { label: "All Blogs", href: "/blogs/all" },
-    { label: "Create Blog", href: "/blogs/create" },
-    { label: "Categories", href: "/blogs/categories" },
-    { label: "Drafts", href: "/blogs/drafts" },
-    { label: "SEO (Blogs)", href: "/blogs/seo" },
-    { label: "Comments / Moderation", href: "/blogs/comments" },
-  ],
+ blogs: [
+  { label: "Blogs Dashboard", href: "/blogs" },
+  { label: "All Blogs", href: "/blogs/all" },
+  { label: "Create Blog", href: "/blogs/create" },
+  { label: "Drafts", href: "/blogs/drafts" },
+  { label: "Categories", href: "/blogs/categories" },
+  { label: "Analytics", href: "/blogs/analytics" },
+],
 
   products: [
     { label: "Product Dashboard", href: "/products" },
