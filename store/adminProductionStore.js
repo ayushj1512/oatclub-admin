@@ -36,12 +36,12 @@ const buildQueryString = (params = {}) => {
   // search + date range
   const q = safeStr(params.q);
   const from = safeStr(params.from); // YYYY-MM-DD
-  const to = safeStr(params.to);     // YYYY-MM-DD
+  const to = safeStr(params.to); // YYYY-MM-DD
   if (q) qs.set("q", q);
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
 
-  // ✅ all mode (new)
+  // ✅ all mode
   const all = params.all;
   if (all != null) qs.set("all", toBool(all) ? "true" : "false");
 
@@ -76,7 +76,7 @@ export const useAdminProductionStore = create((set, get) => ({
 
   fulfillmentStatus: "processing",
 
-  // ✅ filters (no page/limit now)
+  // ✅ filters
   filters: {
     fulfillmentStatus: "processing",
     priority: "",
@@ -86,8 +86,6 @@ export const useAdminProductionStore = create((set, get) => ({
     from: "",
     to: "",
     sort: "createdAt:desc",
-
-    // ✅ default: fetch ALL orders
     all: true,
   },
 
@@ -97,6 +95,7 @@ export const useAdminProductionStore = create((set, get) => ({
   loadingSummary: false,
   updatingPacked: false,
   updatingShipped: false,
+  updatingBulkShipped: false,
   error: null,
 
   /* ============================================================
@@ -126,12 +125,10 @@ export const useAdminProductionStore = create((set, get) => ({
       const state = get();
       const merged = { ...state.filters, ...params };
 
-      // fallback: if someone calls with fulfillmentStatus only
       const status =
         merged.fulfillmentStatus || state.fulfillmentStatus || "processing";
       merged.fulfillmentStatus = status;
 
-      // default all=true unless explicitly false
       if (merged.all == null) merged.all = true;
 
       const query = buildQueryString(merged);
@@ -141,8 +138,9 @@ export const useAdminProductionStore = create((set, get) => ({
       });
 
       const data = await res.json();
-      if (!res.ok)
+      if (!res.ok) {
         throw new Error(data.message || "Failed to fetch production queue");
+      }
 
       set((s) => ({
         queue: data.orders || [],
@@ -175,8 +173,9 @@ export const useAdminProductionStore = create((set, get) => ({
       });
 
       const data = await res.json();
-      if (!res.ok)
+      if (!res.ok) {
         throw new Error(data.message || "Failed to fetch production summary");
+      }
 
       set((state) => ({
         summary: { ...state.summary, ...(data.summary || {}) },
@@ -268,6 +267,93 @@ export const useAdminProductionStore = create((set, get) => ({
       throw e;
     } finally {
       set({ updatingShipped: false });
+    }
+  },
+
+  /* ============================================================
+    ✅ BULK MARK ALL PACKED AS SHIPPED
+    PATCH /api/orders/production/packed/mark-all-shipped
+    Uses current filters by default
+  ============================================================ */
+  markAllPackedAsShipped: async (params = {}) => {
+    try {
+      set({ updatingBulkShipped: true, error: null });
+
+      const state = get();
+
+      // ✅ always bulk only for packed orders
+      const merged = {
+        ...state.filters,
+        ...params,
+        fulfillmentStatus: "packed",
+      };
+
+      const query = buildQueryString({
+        q: merged.q,
+        from: merged.from,
+        to: merged.to,
+        provider: merged.provider,
+        priority: merged.priority,
+        orderType: merged.orderType,
+        sort: merged.sort,
+        all: true,
+      });
+
+      const res = await fetch(
+        `${API}/production/packed/mark-all-shipped${query ? `?${query}` : ""}`,
+        {
+          method: "PATCH",
+          credentials: "include",
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to mark all packed orders as shipped");
+      }
+
+      const modifiedCount = Number(data.modifiedCount || 0);
+
+      // ✅ remove/update packed queue instantly on frontend
+      set((state) => {
+        const shippedIdSet = new Set((data.orderIds || []).map((id) => String(id)));
+
+        const nextQueue =
+          String(state.fulfillmentStatus || "").toLowerCase() === "packed"
+            ? (state.queue || []).filter((o) => !shippedIdSet.has(String(o?._id)))
+            : state.queue || [];
+
+        return {
+          queue: nextQueue,
+          total:
+            String(state.fulfillmentStatus || "").toLowerCase() === "packed"
+              ? Math.max(0, Number(state.total || 0) - modifiedCount)
+              : state.total,
+        };
+      });
+
+      toast.success(
+        modifiedCount > 0
+          ? `${modifiedCount} packed order(s) marked shipped ✅`
+          : "No packed orders found to mark shipped"
+      );
+
+      await Promise.allSettled([
+        get().fetchProductionSummary(),
+        get().fetchProductionQueue({
+          ...get().filters,
+          fulfillmentStatus: get().fulfillmentStatus || "processing",
+        }),
+      ]);
+
+      return data;
+    } catch (e) {
+      console.error("❌ markAllPackedAsShipped error:", e);
+      set({ error: e.message });
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ updatingBulkShipped: false });
     }
   },
 

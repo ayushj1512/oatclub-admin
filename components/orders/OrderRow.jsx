@@ -1,4 +1,3 @@
-// components/orders/OrderRow.jsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -141,6 +140,9 @@ export default function OrderRow({ order, onUpdated }) {
     [order?.createdAt, order?.orderDate]
   );
 
+  const firstItem = items?.[0] || null;
+  const firstTitle = firstItem?.productSnapshot?.title || "";
+
   const toggleOpen = () => setOpen((v) => !v);
 
   const goToOrder = () => {
@@ -184,10 +186,8 @@ export default function OrderRow({ order, onUpdated }) {
           </div>
 
           <p className="text-xs text-gray-500 mt-1">
-            {items?.[0]?.productSnapshot?.title
-              ? `${items[0].productSnapshot.title}${
-                  items.length > 1 ? ` +${items.length - 1} more` : ""
-                }`
+            {firstTitle
+              ? `${firstTitle}${items.length > 1 ? ` +${items.length - 1} more` : ""}`
               : "No items"}
           </p>
 
@@ -237,11 +237,11 @@ export default function OrderRow({ order, onUpdated }) {
         </td>
 
         <td className="py-4 px-5">
-         <OrderStatusDropdown
-  orderId={orderId}
-  currentStatus={effectiveStatus}
-  onUpdated={(u) => onUpdated?.(u?.order ?? u)}
-/>
+          <OrderStatusDropdown
+            orderId={orderId}
+            currentStatus={effectiveStatus}
+            onUpdated={(u) => onUpdated?.(u?.order ?? u)}
+          />
         </td>
 
         <td className="py-4 px-5 font-semibold text-gray-900">
@@ -297,10 +297,14 @@ export default function OrderRow({ order, onUpdated }) {
                       const v = it?.variant || {};
                       const size = it?.selectedSize || "";
                       const color = it?.selectedColor || "";
+                      const productCode = safe(snap?.productCode).trim();
 
                       const variantText =
                         size || color
-                          ? [size ? `Size: ${size}` : "", color ? `Color: ${color}` : ""]
+                          ? [
+                              size ? `Size: ${size}` : "",
+                              color ? `Color: ${color}` : "",
+                            ]
                               .filter(Boolean)
                               .join(" • ")
                           : Array.isArray(v?.attributes)
@@ -326,10 +330,11 @@ export default function OrderRow({ order, onUpdated }) {
                               loading="lazy"
                             />
                             <div className="min-w-0">
-                              <div className="flex items-center gap-2 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
                                 <p className="text-sm font-semibold text-gray-900 truncate">
                                   {snap.title || "-"}
                                 </p>
+
                                 {productUrl ? (
                                   <a
                                     href={productUrl}
@@ -349,6 +354,14 @@ export default function OrderRow({ order, onUpdated }) {
                                     ? `SKU: ${v?.sku || snap?.sku}`
                                     : "")}
                               </p>
+
+                              {productCode ? (
+                                <div className="mt-1">
+                                  <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#800020]/8 text-[#800020] border border-[#800020]/15">
+                                    Code: {productCode}
+                                  </span>
+                                </div>
+                              ) : null}
                             </div>
                           </div>
 

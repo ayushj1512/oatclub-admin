@@ -29,7 +29,7 @@ import {
   RotateCcw,
   Handshake,
   Footprints,
-  Star, // ✅ NEW for Reviews
+  Star,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -63,11 +63,11 @@ const DOMAIN_LIST = [
 
   { id: "orders", name: "Orders", icon: ClipboardList, route: "/orders" },
 
-  // ✅ Shiprocket
   { id: "shiprocket", name: "Shiprocket", icon: Package, route: "/shiprocket" },
 
-  // ✅ NEW: Reviews
-  // NOTE: route ko apne actual admin reviews page se match kar dena
+  // ✅ NEW: Blue Dart shipping module
+  { id: "bluedart", name: "Blue Dart", icon: Truck, route: "/bluedart" },
+
   { id: "reviews", name: "Reviews", icon: Star, route: "/reviews" },
 
   { id: "rma", name: "RMA Requests", icon: RotateCcw, route: "/rma" },
@@ -86,7 +86,6 @@ const DOMAIN_LIST = [
   { id: "tickets", name: "Tickets / Issues", icon: Ticket, route: "/tickets" },
   { id: "coupons", name: "Coupons", icon: TicketPercent, route: "/coupons" },
   { id: "wordpress", name: "WordPress Orders", icon: Globe, route: "/wordpress" },
-
   { id: "collaboration", name: "Influencer Collaborations", icon: Handshake, route: "/collaboration" },
 ];
 
@@ -117,39 +116,43 @@ export default function HomeDashboard() {
   }, []);
 
   const allowedDomains = useMemo(() => {
-    return DOMAIN_LIST.filter((d) => hasPermission(permissions, DOMAIN_PERMISSIONS[d.id]));
+    return DOMAIN_LIST.filter((d) =>
+      hasPermission(permissions, DOMAIN_PERMISSIONS[d.id])
+    );
   }, [permissions]);
 
   const [sortBy, setSortBy] = useState("name_asc");
 
   const sortedDomains = useMemo(() => {
     const arr = [...allowedDomains];
-    if (sortBy === "default" || sortBy === "name_asc")
+    if (sortBy === "default" || sortBy === "name_asc") {
       return arr.sort((a, b) => a.name.localeCompare(b.name));
-    if (sortBy === "name_desc")
+    }
+    if (sortBy === "name_desc") {
       return arr.sort((a, b) => b.name.localeCompare(a.name));
+    }
     return arr;
   }, [allowedDomains, sortBy]);
 
   return (
-    <div className="min-h-screen bg-gray-50 px-3 sm:px-6 md:px-8 py-6 sm:py-10">
-      <div className="mx-auto ">
+    <div className="min-h-screen bg-gray-50 px-3 py-6 sm:px-6 sm:py-10 md:px-8">
+      <div className="mx-auto">
         {/* Quote Bar */}
         <div className="mb-6">
-          <div className="w-full rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-4 sm:px-5 py-4 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex items-start gap-3 min-w-0">
-                <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-white border border-blue-100 shrink-0 shadow-sm">
+          <div className="w-full rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-4 py-4 shadow-sm sm:px-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
                   <Sparkles size={18} className="text-blue-700" />
                 </span>
 
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="font-semibold text-gray-900">Daily Focus</div>
-                    <span className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-blue-600 text-white">
+                    <span className="hidden items-center gap-1 rounded-full bg-blue-600 px-2 py-1 text-[11px] text-white sm:inline-flex">
                       <Quote size={12} /> Quote
                     </span>
-                    <span className="inline-flex items-center text-[11px] px-2 py-1 rounded-full border border-blue-100 bg-white text-blue-700">
+                    <span className="inline-flex items-center rounded-full border border-blue-100 bg-white px-2 py-1 text-[11px] text-blue-700">
                       {quote.tag}
                     </span>
                   </div>
@@ -161,34 +164,34 @@ export default function HomeDashboard() {
                       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                       exit={{ opacity: 0, y: -10, filter: "blur(2px)" }}
                       transition={{ duration: 0.28 }}
-                      className="mt-1 text-gray-700 leading-snug text-sm sm:text-[15px] break-words"
+                      className="mt-1 break-words text-sm leading-snug text-gray-700 sm:text-[15px]"
                     >
-                      <span className="text-blue-700 font-semibold">“</span>
+                      <span className="font-semibold text-blue-700">“</span>
                       {quote.text}
-                      <span className="text-blue-700 font-semibold">”</span>
+                      <span className="font-semibold text-blue-700">”</span>
                     </motion.div>
                   </AnimatePresence>
                 </div>
               </div>
 
-              <div className="flex w-full md:w-auto items-center gap-2">
+              <div className="flex w-full items-center gap-2 md:w-auto">
                 <button
                   type="button"
                   onClick={pickQuote}
-                  className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-white border border-gray-200 hover:bg-gray-50 shadow-sm"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm hover:bg-gray-50"
                 >
                   <RefreshCw size={16} />
                 </button>
 
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                  <div className="hidden md:flex items-center gap-2 text-xs text-gray-500">
+                <div className="flex w-full items-center gap-2 md:w-auto">
+                  <div className="hidden items-center gap-2 text-xs text-gray-500 md:flex">
                     <ArrowUpDown size={14} /> Sort
                   </div>
 
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full md:w-auto bg-white border border-gray-200 rounded-2xl px-3 py-3 text-sm outline-none hover:bg-gray-50 shadow-sm"
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none shadow-sm hover:bg-gray-50 md:w-auto"
                   >
                     <option value="default">Default (A → Z)</option>
                     <option value="name_asc">Name (A → Z)</option>
@@ -202,7 +205,7 @@ export default function HomeDashboard() {
 
         {/* Domains */}
         {sortedDomains.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 text-center text-gray-600">
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-600">
             You don’t have access to any modules yet.
           </div>
         ) : (
@@ -221,43 +224,48 @@ export default function HomeDashboard() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                  className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col items-center justify-center group px-4 py-6 min-h-[170px]"
+                  className="group flex min-h-[170px] flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white px-4 py-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
                 >
-                  <div className="p-4 rounded-xl text-white shadow-md group-hover:scale-110 transition-transform bg-gradient-to-br from-blue-600 to-blue-500">
+                  <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 p-4 text-white shadow-md transition-transform group-hover:scale-110">
                     <Icon size={30} />
                   </div>
 
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 mt-4 group-hover:text-blue-700 text-center">
+                  <h2 className="mt-4 text-center text-base font-semibold text-gray-900 group-hover:text-blue-700 sm:text-lg">
                     {name}
                   </h2>
 
                   {id === "rma" && (
-                    <p className="text-xs text-gray-500 mt-1 text-center">
+                    <p className="mt-1 text-center text-xs text-gray-500">
                       View Return / Exchange requests
                     </p>
                   )}
 
                   {id === "collaboration" && (
-                    <p className="text-xs text-gray-500 mt-1 text-center">
+                    <p className="mt-1 text-center text-xs text-gray-500">
                       Track ongoing influencer collaborations
                     </p>
                   )}
 
                   {id === "footwear" && (
-                    <p className="text-xs text-gray-500 mt-1 text-center">
+                    <p className="mt-1 text-center text-xs text-gray-500">
                       Manage footwear catalog & variants
                     </p>
                   )}
 
                   {id === "shiprocket" && (
-                    <p className="text-xs text-gray-500 mt-1 text-center">
+                    <p className="mt-1 text-center text-xs text-gray-500">
                       Manage Shiprocket sync, labels & tracking
                     </p>
                   )}
 
-                  {/* ✅ Reviews hint */}
+                  {id === "bluedart" && (
+                    <p className="mt-1 text-center text-xs text-gray-500">
+                      Manage Blue Dart shipments, labels & tracking
+                    </p>
+                  )}
+
                   {id === "reviews" && (
-                    <p className="text-xs text-gray-500 mt-1 text-center">
+                    <p className="mt-1 text-center text-xs text-gray-500">
                       Moderate product reviews & ratings
                     </p>
                   )}

@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Search } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Loader2,
+  Search,
+} from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 import { useOrderStore } from "@/store/orderStore";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef } from "react";
-import VirtualOrderRow from "@/components/orders/VirtualOrderRow";
 
 const IST_TZ = "Asia/Kolkata";
 const IST_OFFSET = "+05:30";
@@ -50,7 +53,6 @@ const yesterdayYMD_IST = () => {
 const istStartISO = (ymd) => (ymd ? `${ymd}T00:00:00.000${IST_OFFSET}` : "");
 const istEndISO = (ymd) => (ymd ? `${ymd}T23:59:59.999${IST_OFFSET}` : "");
 
-// Normalize small enums safely
 const norm = (v) => String(v ?? "").trim().toLowerCase();
 
 /* ---------------------------------------------
@@ -75,16 +77,155 @@ const money = (n) => {
 
 const safe = (v) => (v === null || v === undefined ? "" : v);
 
-
-
 const toNumber = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
 
-const formatINR = (v) =>
-  toNumber(v).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+/* ---------------------------------------------
+   ✅ Pagination helpers
+--------------------------------------------- */
+const getPaginationItems = (currentPage, totalPages) => {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
 
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "...", totalPages];
+  }
+
+  if (currentPage >= totalPages - 3) {
+    return [
+      1,
+      "...",
+      totalPages - 4,
+      totalPages - 3,
+      totalPages - 2,
+      totalPages - 1,
+      totalPages,
+    ];
+  }
+
+  return [
+    1,
+    "...",
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    "...",
+    totalPages,
+  ];
+};
+
+/* ---------------------------------------------
+   ✅ Shared Pagination UI
+--------------------------------------------- */
+function PaginationBar({
+  currentPage,
+  totalPages,
+  totalCount,
+  pageSize,
+  loading,
+  onRefresh,
+  onPageChange,
+}) {
+  const canGoPrev = currentPage > 1;
+  const canGoNext = currentPage < totalPages;
+  const paginationItems = getPaginationItems(currentPage, totalPages);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="text-sm text-gray-600">
+          Page <span className="font-semibold">{currentPage}</span> of{" "}
+          <span className="font-semibold">{totalPages}</span>
+          {totalCount > 0 ? (
+            <>
+              {" "}
+              • Total <span className="font-semibold">{totalCount}</span> orders
+            </>
+          ) : null}
+          <span className="text-gray-400"> • {pageSize} per page</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              loading
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
+            }`}
+          >
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 size={16} className="animate-spin" />
+                Refreshing...
+              </span>
+            ) : (
+              "Refresh"
+            )}
+          </button>
+
+          <button
+            disabled={!canGoPrev || loading}
+            onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              !canGoPrev || loading
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
+            }`}
+          >
+            <ChevronLeft size={16} />
+            Prev
+          </button>
+
+          <button
+            disabled={!canGoNext || loading}
+            onClick={() => onPageChange(Math.min(currentPage + 1, totalPages))}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              !canGoNext || loading
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
+            }`}
+          >
+            Next
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {paginationItems.map((item, idx) =>
+          item === "..." ? (
+            <span
+              key={`dots-${idx}`}
+              className="px-3 py-2 text-sm text-gray-500"
+            >
+              ...
+            </span>
+          ) : (
+            <button
+              key={item}
+              onClick={() => onPageChange(item)}
+              disabled={loading}
+              className={`min-w-[42px] px-3 py-2 rounded-xl text-sm font-semibold transition ${
+                currentPage === item
+                  ? "bg-black text-white shadow-sm"
+                  : loading
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                  : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              {item}
+            </button>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ---------------------------------------------
    Page
@@ -95,10 +236,9 @@ export default function OrdersListPage() {
   const ordersMeta = useOrderStore((s) => s.ordersMeta);
 
   const fetchAllOrders = useOrderStore((s) => s.fetchAllOrders);
-  const fetchNextOrdersPage = useOrderStore((s) => s.fetchNextOrdersPage);
   const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
 
-  // Search (button based)
+  // Search
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
@@ -117,21 +257,30 @@ export default function OrdersListPage() {
   const [priority, setPriority] = useState("");
   const [quickDate, setQuickDate] = useState("");
 
-  // pagination
-  const [pageSize, setPageSize] = useState(500);
-  const [loadingMore, setLoadingMore] = useState(false);
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 100;
 
-  const applySearch = useCallback(
-    () => setSearch(searchInput.trim()),
-    [searchInput]
-  );
+  const applySearch = useCallback(() => {
+    setCurrentPage(1);
+    setSearch(searchInput.trim());
+  }, [searchInput]);
 
   const clearSearch = useCallback(() => {
     setSearchInput("");
     setSearch("");
+    setStartDate("");
+    setEndDate("");
+    setMinAmount("");
+    setMaxAmount("");
+    setPaymentMethod("");
+    setStatus("");
+    setConfirmFilter("");
+    setPriority("");
+    setQuickDate("");
+    setCurrentPage(1);
   }, []);
 
-  // ✅ When quickDate changes, auto-set dates using IST calendar day
   useEffect(() => {
     if (quickDate === "today") {
       const t = todayYMD_IST();
@@ -147,10 +296,6 @@ export default function OrdersListPage() {
     }
   }, [quickDate]);
 
-  /* ---------------------------------------------
-     ✅ Build backend filters (IST-correct)
-     NOTE: we send BOTH startDate/endDate + startAt/endAt (as your backend supports)
-  --------------------------------------------- */
   const backendFilters = useMemo(() => {
     const f = {};
 
@@ -161,6 +306,7 @@ export default function OrdersListPage() {
       f.startAt = istStartISO(startDate);
       f.tz = IST_TZ;
     }
+
     if (endDate) {
       f.endDate = endDate;
       f.endAt = istEndISO(endDate);
@@ -175,8 +321,7 @@ export default function OrdersListPage() {
     if (confirmFilter) f.confirmFilter = confirmFilter;
     if (priority) f.priority = priority;
 
-    // pagination (works only if backend supports; store handles old backend too)
-    f.page = 1;
+    f.page = currentPage;
     f.limit = pageSize;
 
     return f;
@@ -190,17 +335,13 @@ export default function OrdersListPage() {
     status,
     confirmFilter,
     priority,
-    pageSize,
+    currentPage,
   ]);
 
-  /* ---------------------------------------------
-     ✅ Fetch orders (via store)
-  --------------------------------------------- */
   const loadOrders = useCallback(async () => {
     try {
       await fetchAllOrders(backendFilters);
     } catch (e) {
-      // store already sets error; keep page safe
       console.log("Orders Fetch Error:", e);
     }
   }, [fetchAllOrders, backendFilters]);
@@ -209,18 +350,20 @@ export default function OrdersListPage() {
     loadOrders();
   }, [loadOrders]);
 
-  /* ---------------------------------------------
-     ✅ Client-side filters (kept)
-  --------------------------------------------- */
   const filteredOrders = useMemo(() => {
     let data = Array.isArray(orders) ? [...orders] : [];
 
-    if (confirmFilter === "confirmed")
+    if (confirmFilter === "confirmed") {
       data = data.filter((o) => o?.isConfirmed === true);
-    if (confirmFilter === "not_confirmed")
-      data = data.filter((o) => o?.isConfirmed !== true);
+    }
 
-    if (priority) data = data.filter((o) => norm(o?.priority) === norm(priority));
+    if (confirmFilter === "not_confirmed") {
+      data = data.filter((o) => o?.isConfirmed !== true);
+    }
+
+    if (priority) {
+      data = data.filter((o) => norm(o?.priority) === norm(priority));
+    }
 
     const q = search.trim().toLowerCase();
     if (!q) return data;
@@ -236,6 +379,7 @@ export default function OrdersListPage() {
       const phone = String(
         o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
       ).toLowerCase();
+
       return (
         orderNumber.includes(q) ||
         name.includes(q) ||
@@ -245,19 +389,23 @@ export default function OrdersListPage() {
     });
   }, [orders, confirmFilter, priority, search]);
 
-  /* ---------------------------------------------
-     ✅ CSV export (kept)
-  --------------------------------------------- */
   const buildCsvRows = (ordersArr) => {
     const rows = [];
+
     for (const order of ordersArr || []) {
       const orderId = safe(order?._id || order?.id);
       const orderNumber = safe(order?.orderNumber);
       const orderDate = formatDateISO(order?.createdAt || order?.orderDate);
 
-      const customerName = safe(order?.customerId?.name);
-      const customerEmail = safe(order?.customerId?.email);
-      const customerPhone = safe(order?.customerId?.phone);
+      const customerName = safe(
+        order?.customerId?.name || order?.shippingAddressSnapshot?.fullName
+      );
+      const customerEmail = safe(
+        order?.customerId?.email || order?.shippingAddressSnapshot?.email
+      );
+      const customerPhone = safe(
+        order?.customerId?.phone || order?.shippingAddressSnapshot?.phone
+      );
 
       const subtotal = money(order?.subtotal);
       const discount = money(order?.discount);
@@ -304,10 +452,14 @@ export default function OrdersListPage() {
         const attrs = Array.isArray(item?.variant?.attributes)
           ? item.variant.attributes
           : [];
+
         const attrSize =
-          attrs.find((a) => String(a?.key || "").toLowerCase() === "size")?.value ||
-          attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")?.value ||
+          attrs.find((a) => String(a?.key || "").toLowerCase() === "size")
+            ?.value ||
+          attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")
+            ?.value ||
           "";
+
         const itemSku = safe(item?.variant?.sku || snap?.sku || "");
         const itemSize = safe(item?.selectedSize || attrSize || "");
 
@@ -336,12 +488,14 @@ export default function OrdersListPage() {
         });
       });
     }
+
     return rows;
   };
 
   const exportToCSV = () => {
-    if (!filteredOrders?.length)
-      return alert("No orders to export for the current filters.");
+    if (!filteredOrders?.length) {
+      return alert("No orders to export for the current page / filters.");
+    }
 
     const rows = buildCsvRows(filteredOrders);
     const headers = [
@@ -402,44 +556,23 @@ export default function OrdersListPage() {
     const blob = new Blob([csvLines.join("\r\n")], {
       type: "text/csv;charset=utf-8;",
     });
-    const url = URL.createObjectURL(blob);
 
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+
     link.href = url;
-    link.setAttribute("download", `orders-${ts}.csv`);
+    link.setAttribute("download", `orders-page-${currentPage}-${ts}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  /* ---------------------------------------------
-     ✅ Totals
-     - if backend returns meta (totalCount/totalSum), show that
-     - else fallback to current filtered list
-  --------------------------------------------- */
- const totals = useMemo(() => {
-  const clientCount = filteredOrders.length;
+  const totalCount = toNumber(ordersMeta?.totalCount);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const currentMetaPage = toNumber(ordersMeta?.page) || currentPage;
 
-  const clientSum = filteredOrders.reduce(
-    (acc, o) => acc + toNumber(o?.finalPayable),
-    0
-  );
-
-  const metaCount = toNumber(ordersMeta?.totalCount);
-  const metaSum = toNumber(ordersMeta?.totalSum);
-
-  return {
-    count: metaCount > 0 ? metaCount : clientCount,
-    // ✅ fallback if backend sends 0
-    sum: metaSum > 0 ? metaSum : clientSum,
-  };
-}, [ordersMeta, filteredOrders]);
-
-  /* ---------------------------------------------
-     ✅ Filter chips (✅ pickup_initiated included)
-  --------------------------------------------- */
   const chips = [
     { key: "", label: "All", type: "all" },
     { key: "processing", label: "Processing", type: "status" },
@@ -450,7 +583,7 @@ export default function OrdersListPage() {
     { key: "delivered", label: "Delivered", type: "status" },
     { key: "return_requested", label: "Return Requested", type: "status" },
     { key: "exchange_requested", label: "Exchange Requested", type: "status" },
-    { key: "pickup_initiated", label: "Pickup Initiated", type: "status" }, // ✅ NEW
+    { key: "pickup_initiated", label: "Pickup Initiated", type: "status" },
     { key: "returned", label: "Returned", type: "status" },
     { key: "rto", label: "RTO", type: "status" },
     { key: "cancelled", label: "Cancelled", type: "status" },
@@ -464,30 +597,6 @@ export default function OrdersListPage() {
     { key: "yesterday", label: "Yesterday", type: "quickDate" },
   ];
 
-  const hasMore = !!ordersMeta?.hasMore;
-
-  const loadMore = async () => {
-    try {
-      setLoadingMore(true);
-      await fetchNextOrdersPage({ ...backendFilters, page: undefined }); // store calculates next page from meta
-    } catch (e) {
-      console.log("Load more error:", e);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  /* ---------------------------------------------
-     Render
-  --------------------------------------------- */
-  if (loading) {
-    return (
-      <div className="p-10 flex justify-center">
-        <Loader2 size={32} className="animate-spin text-gray-600" />
-      </div>
-    );
-  }
-
   return (
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
       <div className="mx-auto space-y-8">
@@ -500,11 +609,14 @@ export default function OrdersListPage() {
             <p className="text-gray-500 mt-1">
               View, filter and manage all customer orders.
             </p>
-            <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
+
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-                {totals.count} Orders
+                {totalCount || filteredOrders.length} Orders
               </span>
-       
+              <span className="px-3 py-1 rounded-full bg-violet-50 text-violet-700 font-semibold">
+                Page {currentMetaPage} of {totalPages}
+              </span>
             </div>
           </div>
 
@@ -554,7 +666,10 @@ export default function OrdersListPage() {
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={quickDate}
-                onChange={(e) => setQuickDate(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setQuickDate(e.target.value);
+                }}
               >
                 <option value="">All</option>
                 <option value="today">Today</option>
@@ -574,6 +689,7 @@ export default function OrdersListPage() {
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={startDate}
                 onChange={(e) => {
+                  setCurrentPage(1);
                   setQuickDate("");
                   setStartDate(e.target.value);
                 }}
@@ -589,6 +705,7 @@ export default function OrdersListPage() {
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={endDate}
                 onChange={(e) => {
+                  setCurrentPage(1);
                   setQuickDate("");
                   setEndDate(e.target.value);
                 }}
@@ -604,7 +721,10 @@ export default function OrdersListPage() {
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 placeholder="₹0"
                 value={minAmount}
-                onChange={(e) => setMinAmount(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setMinAmount(e.target.value);
+                }}
               />
             </div>
 
@@ -617,7 +737,10 @@ export default function OrdersListPage() {
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 placeholder="₹5000"
                 value={maxAmount}
-                onChange={(e) => setMaxAmount(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setMaxAmount(e.target.value);
+                }}
               />
             </div>
 
@@ -628,7 +751,10 @@ export default function OrdersListPage() {
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setPaymentMethod(e.target.value);
+                }}
               >
                 <option value="">All</option>
                 <option value="cod">Cash on Delivery</option>
@@ -644,7 +770,10 @@ export default function OrdersListPage() {
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={confirmFilter}
-                onChange={(e) => setConfirmFilter(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setConfirmFilter(e.target.value);
+                }}
               >
                 <option value="">All</option>
                 <option value="confirmed">Confirmed</option>
@@ -659,7 +788,10 @@ export default function OrdersListPage() {
               <select
                 className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setPriority(e.target.value);
+                }}
               >
                 <option value="">All</option>
                 <option value="normal">Normal</option>
@@ -668,22 +800,18 @@ export default function OrdersListPage() {
               </select>
             </div>
 
-            {/* optional: page size */}
             <div>
               <label className="text-sm font-semibold text-gray-700">
-                Page Size
+                Per Page
               </label>
-              <select
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-                value={String(pageSize)}
-                onChange={(e) => setPageSize(Number(e.target.value) || 500)}
-              >
-                <option value="200">200</option>
-                <option value="500">500</option>
-                <option value="1000">1000</option>
-              </select>
+              <input
+                type="text"
+                value="100"
+                disabled
+                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 border border-gray-200 outline-none text-gray-500 cursor-not-allowed"
+              />
               <p className="mt-1 text-xs text-gray-500">
-                Applies on next fetch.
+                Fixed to 100 orders per page for better performance.
               </p>
             </div>
           </div>
@@ -705,6 +833,8 @@ export default function OrdersListPage() {
                     quickDate === "";
 
               const onClick = () => {
+                setCurrentPage(1);
+
                 if (s.type === "all") {
                   setStatus("");
                   setConfirmFilter("");
@@ -712,13 +842,22 @@ export default function OrdersListPage() {
                   setQuickDate("");
                   return;
                 }
-                if (s.type === "status") setStatus((prev) => (prev === s.key ? "" : s.key));
-                if (s.type === "confirm")
+
+                if (s.type === "status") {
+                  setStatus((prev) => (prev === s.key ? "" : s.key));
+                }
+
+                if (s.type === "confirm") {
                   setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
-                if (s.type === "priority")
+                }
+
+                if (s.type === "priority") {
                   setPriority((prev) => (prev === s.key ? "" : s.key));
-                if (s.type === "quickDate")
+                }
+
+                if (s.type === "quickDate") {
                   setQuickDate((prev) => (prev === s.key ? "" : s.key));
+                }
               };
 
               return (
@@ -737,42 +876,17 @@ export default function OrdersListPage() {
             })}
           </div>
 
-          {/* Load More */}
-          <div className="mt-6 flex items-center justify-between gap-3">
-            <div className="text-xs text-gray-500">
-              {ordersMeta?.page
-                ? `Page ${ordersMeta.page} • Showing ${orders.length} orders`
-                : `Showing ${orders.length} orders`}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={loadOrders}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98] transition"
-              >
-                Refresh
-              </button>
-
-              <button
-                disabled={!hasMore || loadingMore}
-                onClick={loadMore}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  !hasMore || loadingMore
-                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                    : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
-                }`}
-              >
-                {loadingMore ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin" /> Loading...
-                  </span>
-                ) : hasMore ? (
-                  "Load More"
-                ) : (
-                  "No More"
-                )}
-              </button>
-            </div>
+          {/* Top Pagination */}
+          <div className="mt-6">
+            <PaginationBar
+              currentPage={currentMetaPage}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              pageSize={pageSize}
+              loading={loading}
+              onRefresh={loadOrders}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </Card>
 
@@ -785,7 +899,9 @@ export default function OrdersListPage() {
                   <th className="py-4 px-5 text-left font-semibold">Order #</th>
                   <th className="py-4 px-5 text-left font-semibold">Customer</th>
                   <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
+                  <th className="py-4 px-5 text-left font-semibold">
+                    Fulfillment
+                  </th>
                   <th className="py-4 px-5 text-left font-semibold">Amount</th>
                   <th className="py-4 px-5 text-left font-semibold">Date</th>
                   <th className="py-4 px-5 text-left font-semibold">Action</th>
@@ -793,31 +909,47 @@ export default function OrdersListPage() {
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-                {filteredOrders.length ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="py-14 text-center text-gray-500">
+                      <div className="inline-flex items-center gap-2">
+                        <Loader2 size={18} className="animate-spin" />
+                        Loading orders...
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredOrders.length ? (
                   [...filteredOrders]
                     .sort((a, b) => {
-                      // keep your original sorting (orderNumber numeric desc, then date desc)
                       const getNum = (o) => {
                         const m = String(o?.orderNumber || "").match(/(\d+)$/);
                         return m ? Number(m[1]) : 0;
                       };
+
                       const an = getNum(a);
                       const bn = getNum(b);
                       if (bn !== an) return bn - an;
-                      const ad = new Date(a?.createdAt || a?.orderDate || 0).getTime();
-                      const bd = new Date(b?.createdAt || b?.orderDate || 0).getTime();
+
+                      const ad = new Date(
+                        a?.createdAt || a?.orderDate || 0
+                      ).getTime();
+                      const bd = new Date(
+                        b?.createdAt || b?.orderDate || 0
+                      ).getTime();
                       return bd - ad;
                     })
                     .map((order, idx) => {
                       const rowKey =
-                        order?._id || order?.id || order?.orderNumber || `order-${idx}`;
+                        order?._id ||
+                        order?.id ||
+                        order?.orderNumber ||
+                        `order-${idx}`;
 
                       return (
                         <OrderRow
                           key={String(rowKey)}
                           order={order}
                           onUpdated={(updatedOrder) => {
-                            // ✅ store-level sync (keeps all existing behavior, no local setOrders needed)
                             if (updatedOrder?._id) syncOrderInList(updatedOrder);
                           }}
                         />
@@ -834,6 +966,19 @@ export default function OrdersListPage() {
             </table>
           </div>
         </div>
+
+        {/* Bottom Pagination */}
+        <Card>
+          <PaginationBar
+            currentPage={currentMetaPage}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            pageSize={pageSize}
+            loading={loading}
+            onRefresh={loadOrders}
+            onPageChange={setCurrentPage}
+          />
+        </Card>
       </div>
     </section>
   );

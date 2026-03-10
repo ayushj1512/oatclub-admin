@@ -12,10 +12,13 @@ export const DOMAIN_PERMISSIONS = {
 
   orders: "manageOrders",
 
-  // ✅ Shiprocket (tie with Orders permission)
+  // ✅ Shiprocket
   shiprocket: "manageOrders",
 
-  // ✅ Reviews (Admin moderation / management)
+  // ✅ Blue Dart
+  bluedart: "manageOrders",
+
+  // ✅ Reviews
   reviews: "manageReviews",
 
   rma: "manageRMA",

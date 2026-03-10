@@ -25,30 +25,25 @@ export const sidebarMenus = {
   ],
 
   designing: [
-  { label: "Design Home", href: "/designing" },
-  { label: "Banners Manager", href: "/designing/banners" },
-  { label: "Top Categories", href: "/designing/top-categories" },
-  { label: "Collections Editor", href: "/designing/collection" },
-  { label: "Marquee Manager", href: "/designing/marquee" },
-],
+    { label: "Design Home", href: "/designing" },
+    { label: "Banners Manager", href: "/designing/banners" },
+    { label: "Top Categories", href: "/designing/top-categories" },
+    { label: "Collections Editor", href: "/designing/collection" },
+    { label: "Marquee Manager", href: "/designing/marquee" },
+  ],
 
   production: [
     { label: "Production Dashboard", href: "/production" },
     { label: "Packed Orders", href: "/production/packed" },
-
     { label: "Sampling", href: "/production/sampling" },
     { label: "Stock Update", href: "/production/stock-update" },
     { label: "Pattern Number", href: "/production/pattern-number" },
     { label: "Fabric", href: "/production/fabric" },
-
     { label: "Product Detail", href: "/production/product-detail" },
     { label: "Missing Patterns", href: "/production/missing-patterns" },
-
-    // ✅ NEW
     { label: "Barcode Generator", href: "/production/barcode" },
   ],
 
-  // ✅ NEW: REVIEWS SIDEBAR GROUP
   reviews: [
     { label: "Reviews Dashboard", href: "/reviews" },
     { label: "Manage Reviews", href: "/reviews/manage" },
@@ -59,17 +54,15 @@ export const sidebarMenus = {
     { label: "Accounts Dashboard", href: "/accounts" },
     { label: "Sales", href: "/accounts/sales" },
   ],
-inventory: [
-  { label: "Inventory Dashboard", href: "/inventory" },
-  { label: "Stock Update", href: "/inventory/stock-update" },
-  { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
-  { label: "Reserved Inventory", href: "/inventory/reserved-inventory" },
 
-  // ✅ NEW
-  { label: "On Demand Inventory", href: "/inventory/on-demand-inventory" },
-
-  { label: "Zero Inventory", href: "/inventory/zero-inventory" },
-],
+  inventory: [
+    { label: "Inventory Dashboard", href: "/inventory" },
+    { label: "Stock Update", href: "/inventory/stock-update" },
+    { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
+    { label: "Reserved Inventory", href: "/inventory/reserved-inventory" },
+    { label: "On Demand Inventory", href: "/inventory/on-demand-inventory" },
+    { label: "Zero Inventory", href: "/inventory/zero-inventory" },
+  ],
 
   media: [
     { label: "Media Library", href: "/media" },
@@ -94,96 +87,64 @@ inventory: [
   ],
 
   products: [
-  { label: "Product Dashboard", href: "/products" },
-  { label: "Add New Product", href: "/products/add" },
-  { label: "Manage Products", href: "/products/manage" },
-
-  // ✅ NEW: Product Search (by Product Code)
-  { label: "Search Product", href: "/products/search" },
-
-  { label: "Analytics", href: "/products/analytics" },
-
-  // Categories
-  { label: "Categories", href: "/products/category" },
-  { label: "Category Analytics", href: "/products/category-analytics" },
-
-  // Bestseller
-  { label: "Bestsellers", href: "/products/bestseller" },
-
-  // ✅ NEW: Coming Soon
-  { label: "Coming Soon", href: "/products/comingsoon" },
-
-  // Attributes / Variants
-  { label: "Size Charts", href: "/products/size-charts" },
-  { label: "Attributes", href: "/products/attributes" },
-  { label: "Variants", href: "/products/variants" },
-  { label: "Collections", href: "/products/collections" },
-  { label: "Fabric", href: "/products/fabric" },
-
-  // ✅ NEW: Product Colors
-  { label: "Product Colors", href: "/products/colors" },
-
-  // ✅ NEW: Bulk Name Editor
-  { label: "Name Edit", href: "/products/name-edit" },
-
-  // Bulk Operations
-  { label: "Bulk Import", href: "/products/bulk-import" },
-  { label: "Bulk Export", href: "/products/bulk-export" },
-  { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
-
-  // Inventory & Pricing
-  { label: "Inventory Sync", href: "/products/inventory-sync" },
-  { label: "Price Updates", href: "/products/pricing" },
-
-  // Marketing
-  { label: "Offers & Discounts", href: "/products/offers" },
-  { label: "SEO Manager", href: "/products/seo" },
-  { label: "Reviews & Ratings", href: "/products/reviews" },
-
-  // Media
-  { label: "Media Library", href: "/media" },
-],
+    { label: "Product Dashboard", href: "/products" },
+    { label: "Add New Product", href: "/products/add" },
+    { label: "Manage Products", href: "/products/manage" },
+    { label: "Search Product", href: "/products/search" },
+    { label: "Analytics", href: "/products/analytics" },
+    { label: "Categories", href: "/products/category" },
+    { label: "Category Analytics", href: "/products/category-analytics" },
+    { label: "Bestsellers", href: "/products/bestseller" },
+    { label: "Coming Soon", href: "/products/comingsoon" },
+    { label: "Size Charts", href: "/products/size-charts" },
+    { label: "Attributes", href: "/products/attributes" },
+    { label: "Variants", href: "/products/variants" },
+    { label: "Collections", href: "/products/collections" },
+    { label: "Fabric", href: "/products/fabric" },
+    { label: "Product Colors", href: "/products/colors" },
+    { label: "Name Edit", href: "/products/name-edit" },
+    { label: "Bulk Import", href: "/products/bulk-import" },
+    { label: "Bulk Export", href: "/products/bulk-export" },
+    { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
+    { label: "Inventory Sync", href: "/products/inventory-sync" },
+    { label: "Price Updates", href: "/products/pricing" },
+    { label: "Offers & Discounts", href: "/products/offers" },
+    { label: "SEO Manager", href: "/products/seo" },
+    { label: "Reviews & Ratings", href: "/products/reviews" },
+    { label: "Media Library", href: "/media" },
+  ],
 
   orders: [
-  // Main
-  { label: "Orders Dashboard", href: "/orders" },
-  { label: "All Orders", href: "/orders/all" },
-  { label: "Order Search", href: "/orders/search" },
-  { label: "Order Analytics", href: "/orders/report" },
+    { label: "Orders Dashboard", href: "/orders" },
+    { label: "All Orders", href: "/orders/all" },
+    { label: "Order Search", href: "/orders/search" },
+    { label: "Order Analytics", href: "/orders/report" },
 
-  // Status Buckets
-  { label: "Processing", href: "/orders/processing" },
-  { label: "Packed", href: "/orders/packed" },
-  { label: "Shipped", href: "/orders/shipped" },
-  { label: "Delivered", href: "/orders/delivered" },
-  { label: "Failed", href: "/orders/failed" },
-  { label: "Cancelled", href: "/orders/cancelled" },
-  { label: "Refunded", href: "/orders/refunded" },
+    { label: "Processing", href: "/orders/processing" },
+    { label: "Packed", href: "/orders/packed" },
+    { label: "Shipped", href: "/orders/shipped" },
+    { label: "Delivered", href: "/orders/delivered" },
+    { label: "Failed", href: "/orders/failed" },
+    { label: "Cancelled", href: "/orders/cancelled" },
+    { label: "Refunded", href: "/orders/refunded" },
 
-  // Returns & Exchanges
-  { label: "Returns", href: "/orders/returns" },
-  { label: "Returned", href: "/orders/returned" },
-  { label: "Return Requested", href: "/orders/return_requested" },
-  { label: "Exchanged", href: "/orders/exchanged" },
-  { label: "Exchange Requested", href: "/orders/exchange_requested" },
+    { label: "Returns", href: "/orders/returns" },
+    { label: "Returned", href: "/orders/returned" },
+    { label: "Return Requested", href: "/orders/return_requested" },
+    { label: "Exchanged", href: "/orders/exchanged" },
+    { label: "Exchange Requested", href: "/orders/exchange_requested" },
 
-  // Logistics
-  { label: "Pickup Initiated", href: "/orders/pickup_initiated" },
-  { label: "RTO / NDR", href: "/orders/rto" },
+    { label: "Pickup Initiated", href: "/orders/pickup_initiated" },
+    { label: "RTO / NDR", href: "/orders/rto" },
 
-  // Other Tools
-  { label: "Order Remark", href: "/orders/remark" },
-  { label: "Invoice", href: "/orders/invoice" },
-  { label: "RMA Requests", href: "/orders/rma" },
+    { label: "Order Remark", href: "/orders/remark" },
+    { label: "Invoice", href: "/orders/invoice" },
+    { label: "RMA Requests", href: "/orders/rma" },
+  ],
 
-  // (Only if you create folder later)
-  // { label: "Order Tags", href: "/orders/tags" },
-],
-
-  // ✅ OPTIONAL: Separate RMA menu group (if you want sidebar items when on /rma)
   rma: [
     { label: "RMA Requests", href: "/rma" },
-    { label: "Create RMA", href: "/rma/create-rma" }, // ✅ NEW PATH
+    { label: "Create RMA", href: "/rma/create-rma" },
   ],
 
   coupons: [
@@ -209,38 +170,33 @@ inventory: [
     { label: "Marketing Dashboard", href: "/marketing" },
     { label: "Email Marketing", href: "/marketing/email" },
     { label: "Marketing Spend", href: "/marketing/marketingSpend" },
-    { label: "ROAS Report", href: "/marketing/ROAS" }, // ✅ Added
+    { label: "ROAS Report", href: "/marketing/ROAS" },
   ],
 
- customers: [
-  { label: "Customer Dashboard", href: "/customers/dashboard" },
-  { label: "Customer List", href: "/customers" },
-  { label: "Banking / Refund Details", href: "/customers/bankingDetails" },
-  { label: "Customer / Address", href: "/customers/address" },
-  { label: "Cart Adds", href: "/customers/cart-adds" },
-  { label: "Abandoned Carts", href: "/customers/abandoned-carts" },
-  { label: "Wishlist", href: "/customers/wishlist" },
-  { label: "Tickets & Support", href: "/customers/support" },
-  { label: "Newsletter Subscribers", href: "/customers/newsletter" },
-  { label: "Analytics", href: "/customers/analytics" },
-],
+  customers: [
+    { label: "Customer Dashboard", href: "/customers/dashboard" },
+    { label: "Customer List", href: "/customers" },
+    { label: "Banking / Refund Details", href: "/customers/bankingDetails" },
+    { label: "Customer / Address", href: "/customers/address" },
+    { label: "Cart Adds", href: "/customers/cart-adds" },
+    { label: "Abandoned Carts", href: "/customers/abandoned-carts" },
+    { label: "Wishlist", href: "/customers/wishlist" },
+    { label: "Tickets & Support", href: "/customers/support" },
+    { label: "Newsletter Subscribers", href: "/customers/newsletter" },
+    { label: "Analytics", href: "/customers/analytics" },
+  ],
 
   customer_support: [
     { label: "Support Dashboard", href: "/customer-support" },
     { label: "Search", href: "/customer-support/search" },
-
     { label: "Customer Confirmation", href: "/customer-support/customer-confirmation" },
     { label: "Order Remark", href: "/customer-support/remark" },
-
-    // ✅ NEW
     { label: "All Orders", href: "/customer-support/all-orders" },
-
     { label: "All Tickets", href: "/customer-support/all" },
     { label: "Open Tickets", href: "/customer-support/open" },
     { label: "In Progress", href: "/customer-support/in-progress" },
     { label: "Resolved", href: "/customer-support/resolved" },
     { label: "Closed", href: "/customer-support/closed" },
-
     { label: "SLA / Reports", href: "/customer-support/reports" },
   ],
 
@@ -257,17 +213,21 @@ inventory: [
   shiprocket: [
     { label: "Shiprocket Dashboard", href: "/shiprocket" },
     { label: "Authentication API", href: "/shiprocket/authentication-api" },
-    { label: "Not Deliverables", href: "/shiprocket/not-deliverables" }, // ✅ NEW
+    { label: "Not Deliverables", href: "/shiprocket/not-deliverables" },
   ],
 
-  // ✅ NEW: REPORTS SIDEBAR GROUP
- reports: [
-  { label: "Reports Home", href: "/reports" },            // app/reports/page.jsx
-  { label: "ROAS", href: "/reports/ROAS" },               // app/reports/ROAS/page.jsx
-  { label: "Orders", href: "/reports/Orders" },           // app/reports/Orders/page.jsx
-  { label: "RTO", href: "/reports/RTO" },                 // app/reports/RTO/page.jsx
-  { label: "Cancellation", href: "/reports/Cancellation" }, // app/reports/Cancellation/page.jsx
-],
+  // ✅ NEW: Blue Dart sidebar group (abhi sirf ek page)
+  bluedart: [
+    { label: "Blue Dart Dashboard", href: "/bluedart" },
+  ],
+
+  reports: [
+    { label: "Reports Home", href: "/reports" },
+    { label: "ROAS", href: "/reports/ROAS" },
+    { label: "Orders", href: "/reports/Orders" },
+    { label: "RTO", href: "/reports/RTO" },
+    { label: "Cancellation", href: "/reports/Cancellation" },
+  ],
 
   account_user: [
     { label: "Profile", href: "/account/profile" },
@@ -298,10 +258,8 @@ inventory: [
 
 export const routeSidebarMap = [
   { prefix: "/superadmin", key: "superadmin" },
-
   { prefix: "/customer-support", key: "customer_support" },
 
-  // ✅ NEW: reports should be above other broad prefixes
   { prefix: "/reports", key: "reports" },
 
   { prefix: "/inventory", key: "inventory" },
@@ -310,6 +268,9 @@ export const routeSidebarMap = [
   { prefix: "/marketing", key: "marketing" },
   { prefix: "/collaboration", key: "collaboration" },
   { prefix: "/shiprocket", key: "shiprocket" },
+
+  // ✅ NEW: Blue Dart route map
+  { prefix: "/bluedart", key: "bluedart" },
 
   { prefix: "/dashboard", key: "dashboard" },
   { prefix: "/designing", key: "designing" },
@@ -321,7 +282,6 @@ export const routeSidebarMap = [
   { prefix: "/reviews", key: "reviews" },
   { prefix: "/wordpress", key: "wordpress" },
 
-  // ✅ NEW: /rma route should show sidebar as RMA (or orders if you prefer)
   { prefix: "/rma", key: "rma" },
 
   { prefix: "/orders", key: "orders" },
