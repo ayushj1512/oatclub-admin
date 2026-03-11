@@ -217,8 +217,10 @@ export const sidebarMenus = {
 
   // ✅ NEW: Blue Dart sidebar group (abhi sirf ek page)
   bluedart: [
-    { label: "Blue Dart Dashboard", href: "/bluedart" },
-  ],
+  { label: "Blue Dart Dashboard", href: "/bluedart" },
+  { label: "Book Shipments", href: "/bluedart" },
+  { label: "All Shipments", href: "/bluedart/shipments" },
+],
 
   reports: [
     { label: "Reports Home", href: "/reports" },
