@@ -216,10 +216,17 @@ export const sidebarMenus = {
   ],
 
   // ✅ NEW: Blue Dart sidebar group (abhi sirf ek page)
-  bluedart: [
-  { label: "Blue Dart Dashboard", href: "/bluedart" },
-  { label: "Book Shipments", href: "/bluedart" },
+bluedart: [
+  { label: "BlueDart Dashboard", href: "/bluedart" },
+
+  { label: "Create Shipment", href: "/bluedart/create" },
   { label: "All Shipments", href: "/bluedart/shipments" },
+
+  { label: "External Orders", href: "/bluedart/external-orders" },
+
+  { label: "EDD Prediction", href: "/bluedart/edd" },
+
+  { label: "Analytics", href: "/bluedart/analytics" },
 ],
 
   reports: [
