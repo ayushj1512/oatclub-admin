@@ -47,8 +47,15 @@ const normalizeProductPayload = (payload) => {
   delete out.productLink;
 
   // ✅ NEW: allow sending (backend may recompute from variants)
+  // ✅ NEW: allow sending (backend may recompute from variants)
   if (out.isPatternReady !== undefined) out.isPatternReady = toBool(out.isPatternReady);
 
+  // ✅ boolean hygiene
+  if (out.isBestSeller !== undefined) out.isBestSeller = toBool(out.isBestSeller);
+  if (out.isTrending !== undefined) out.isTrending = toBool(out.isTrending);
+  if (out.isSamplingDone !== undefined) out.isSamplingDone = toBool(out.isSamplingDone);
+  if (out.isActive !== undefined) out.isActive = toBool(out.isActive);
+  if (out.isDraft !== undefined) out.isDraft = toBool(out.isDraft);
   // ✅ HSN Code hygiene: trim + digits-only (allow empty)
   if (out.hsnCode !== undefined) {
     const hsn = toStr(out.hsnCode);
@@ -1304,6 +1311,111 @@ export const useAdminProductStore = create((set, get) => ({
 
       toast.success(
         updated?.isBestSeller ? "Marked Best Seller ✅" : "Removed Best Seller ✅"
+      );
+
+      return updated;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
+
+
+    /* ============================================================
+    ✅ TOGGLE TRENDING
+    PATCH /api/products/:id/trending
+    - body empty => toggle
+    - body { isTrending: true/false } => force set
+  ============================================================ */
+  toggleTrending: async (productId, nextValue) => {
+    try {
+      set({ saving: true, error: null });
+
+      const body =
+        typeof nextValue === "boolean" ? { isTrending: nextValue } : {};
+
+      const res = await fetch(`${API}/${productId}/trending`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Trending update failed");
+
+      const updated = data.product;
+
+      // edit page
+      if (get().product?._id === productId) set({ product: updated });
+
+      // grid list
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          p._id === productId
+            ? { ...p, isTrending: !!updated?.isTrending }
+            : p
+        ),
+      }));
+
+      toast.success(
+        updated?.isTrending ? "Marked Trending ✅" : "Removed Trending ✅"
+      );
+
+      return updated;
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+      throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
+
+    /* ============================================================
+    ✅ TOGGLE TRENDING
+    PATCH /api/products/:id/trending
+    - body empty => toggle
+    - body { isTrending: true/false } => force set
+  ============================================================ */
+  toggleTrending: async (productId, nextValue) => {
+    try {
+      set({ saving: true, error: null });
+
+      const body =
+        typeof nextValue === "boolean" ? { isTrending: nextValue } : {};
+
+      const res = await fetch(`${API}/${productId}/trending`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Trending update failed");
+
+      const updated = data.product;
+
+      // edit page
+      if (get().product?._id === productId) set({ product: updated });
+
+      // grid list
+      set((state) => ({
+        products: (state.products || []).map((p) =>
+          p._id === productId
+            ? { ...p, isTrending: !!updated?.isTrending }
+            : p
+        ),
+      }));
+
+      toast.success(
+        updated?.isTrending ? "Marked Trending ✅" : "Removed Trending ✅"
       );
 
       return updated;
