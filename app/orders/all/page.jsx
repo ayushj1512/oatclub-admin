@@ -250,6 +250,51 @@ function PaginationBar({
   );
 }
 
+
+const applyClientFiltersToOrders = ({
+  orders,
+  confirmFilter,
+  priority,
+  search,
+}) => {
+  let data = Array.isArray(orders) ? [...orders] : [];
+
+  if (confirmFilter === "confirmed") {
+    data = data.filter((o) => o?.isConfirmed === true);
+  }
+
+  if (confirmFilter === "not_confirmed") {
+    data = data.filter((o) => o?.isConfirmed !== true);
+  }
+
+  if (priority) {
+    data = data.filter((o) => norm(o?.priority) === norm(priority));
+  }
+
+  const q = String(search || "").trim().toLowerCase();
+  if (!q) return data;
+
+  return data.filter((o) => {
+    const orderNumber = String(o?.orderNumber || "").toLowerCase();
+    const name = String(
+      o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
+    ).toLowerCase();
+    const email = String(
+      o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
+    ).toLowerCase();
+    const phone = String(
+      o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
+    ).toLowerCase();
+
+    return (
+      orderNumber.includes(q) ||
+      name.includes(q) ||
+      email.includes(q) ||
+      phone.includes(q)
+    );
+  });
+};
+
 /* ---------------------------------------------
    Page
 --------------------------------------------- */
@@ -260,7 +305,7 @@ export default function OrdersListPage() {
 
   const fetchAllOrders = useOrderStore((s) => s.fetchAllOrders);
   const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
-
+const [exportLoading, setExportLoading] = useState(false);
   // Search
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -305,19 +350,25 @@ export default function OrdersListPage() {
   }, []);
 
   useEffect(() => {
-    if (quickDate === "today") {
-      const t = todayYMD_IST();
-      setStartDate(t);
-      setEndDate(t);
-      return;
-    }
-    if (quickDate === "yesterday") {
-      const y = yesterdayYMD_IST();
-      setStartDate(y);
-      setEndDate(y);
-      return;
-    }
-  }, [quickDate]);
+  if (quickDate === "today") {
+    const t = todayYMD_IST();
+    setStartDate(t);
+    setEndDate(t);
+    return;
+  }
+
+  if (quickDate === "yesterday") {
+    const y = yesterdayYMD_IST();
+    setStartDate(y);
+    setEndDate(y);
+    return;
+  }
+
+  if (quickDate === "") {
+    setStartDate("");
+    setEndDate("");
+  }
+}, [quickDate]);
 
   const backendFilters = useMemo(() => {
     const f = {};
@@ -374,43 +425,13 @@ export default function OrdersListPage() {
   }, [loadOrders]);
 
   const filteredOrders = useMemo(() => {
-    let data = Array.isArray(orders) ? [...orders] : [];
-
-    if (confirmFilter === "confirmed") {
-      data = data.filter((o) => o?.isConfirmed === true);
-    }
-
-    if (confirmFilter === "not_confirmed") {
-      data = data.filter((o) => o?.isConfirmed !== true);
-    }
-
-    if (priority) {
-      data = data.filter((o) => norm(o?.priority) === norm(priority));
-    }
-
-    const q = search.trim().toLowerCase();
-    if (!q) return data;
-
-    return data.filter((o) => {
-      const orderNumber = String(o?.orderNumber || "").toLowerCase();
-      const name = String(
-        o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
-      ).toLowerCase();
-      const email = String(
-        o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
-      ).toLowerCase();
-      const phone = String(
-        o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
-      ).toLowerCase();
-
-      return (
-        orderNumber.includes(q) ||
-        name.includes(q) ||
-        email.includes(q) ||
-        phone.includes(q)
-      );
-    });
-  }, [orders, confirmFilter, priority, search]);
+  return applyClientFiltersToOrders({
+    orders,
+    confirmFilter,
+    priority,
+    search,
+  });
+}, [orders, confirmFilter, priority, search]);
 
     const totalRevenue = useMemo(() => {
     return filteredOrders.reduce((sum, order) => {
@@ -521,12 +542,71 @@ export default function OrdersListPage() {
     return rows;
   };
 
-  const exportToCSV = () => {
-    if (!filteredOrders?.length) {
-      return alert("No orders to export for the current page / filters.");
+  const exportToCSV = useCallback(async () => {
+  if (exportLoading || loading) return;
+
+  let originalFilters = null;
+  setExportLoading(true);
+
+  try {
+    originalFilters = { ...backendFilters };
+    const exportLimit = 500;
+
+    const baseFilters = { ...backendFilters };
+    delete baseFilters.page;
+    delete baseFilters.limit;
+
+    let page = 1;
+    let totalPagesToFetch = 1;
+    let allOrders = [];
+
+    do {
+      await fetchAllOrders({
+        ...baseFilters,
+        page,
+        limit: exportLimit,
+      });
+
+      const state = useOrderStore.getState();
+      const pageOrders = Array.isArray(state.orders) ? state.orders : [];
+      const meta = state.ordersMeta || {};
+
+      allOrders.push(...pageOrders);
+
+      const totalCountFromMeta = toNumber(meta?.totalCount);
+      const totalPagesFromMeta =
+        toNumber(meta?.totalPages) ||
+        Math.max(1, Math.ceil(totalCountFromMeta / exportLimit));
+
+      totalPagesToFetch = totalPagesFromMeta;
+      page += 1;
+    } while (page <= totalPagesToFetch);
+
+    const uniqueOrdersMap = new Map();
+
+    for (const order of allOrders) {
+      const key = order?._id || order?.id || order?.orderNumber;
+      if (key && !uniqueOrdersMap.has(key)) {
+        uniqueOrdersMap.set(key, order);
+      }
     }
 
-    const rows = buildCsvRows(filteredOrders);
+    const uniqueOrders = Array.from(uniqueOrdersMap.values());
+
+    const exportOrders = applyClientFiltersToOrders({
+      orders: uniqueOrders,
+      confirmFilter,
+      priority,
+      search,
+    });
+
+    if (!exportOrders.length) {
+      alert("No orders found to export for the applied filters.");
+      return;
+    }
+
+    const rows = buildCsvRows(exportOrders);
+
     const headers = [
       "Order DB Id",
       "Order #",
@@ -591,12 +671,36 @@ export default function OrdersListPage() {
     const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 
     link.href = url;
-    link.setAttribute("download", `orders-page-${currentPage}-${ts}.csv`);
+    link.setAttribute("download", `orders-all-pages-${ts}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  };
+  } catch (error) {
+    console.error("CSV export failed:", error);
+    alert("Failed to export all orders.");
+  } finally {
+    if (originalFilters) {
+      try {
+        await fetchAllOrders(originalFilters);
+      } catch (restoreError) {
+        console.error(
+          "Failed to restore current page after export:",
+          restoreError
+        );
+      }
+    }
+    setExportLoading(false);
+  }
+}, [
+  exportLoading,
+  loading,
+  backendFilters,
+  fetchAllOrders,
+  confirmFilter,
+  priority,
+  search,
+]);
 
   const totalCount = toNumber(ordersMeta?.totalCount);
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -681,12 +785,26 @@ export default function OrdersListPage() {
               Clear
             </button>
 
-            <button
-              onClick={exportToCSV}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
-            >
-              <Download size={18} /> Export CSV
-            </button>
+          <button
+  onClick={exportToCSV}
+  disabled={exportLoading || loading}
+  className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold shadow-sm active:scale-[0.98] transition ${
+    exportLoading || loading
+      ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+      : "bg-black text-white hover:opacity-90"
+  }`}
+>
+  {exportLoading ? (
+    <>
+      <Loader2 size={18} className="animate-spin" />
+      Exporting All...
+    </>
+  ) : (
+    <>
+      <Download size={18} /> Export CSV
+    </>
+  )}
+</button>
           </div>
         </div>
 
