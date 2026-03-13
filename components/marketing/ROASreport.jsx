@@ -32,7 +32,11 @@ const prettyDate = (ymd) => {
   if (!ymd) return "—";
   const [y, m, d] = ymd.split("-").map((x) => parseInt(x, 10));
   const dt = new Date(y, (m || 1) - 1, d || 1);
-  return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return dt.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 };
 
 const money0 = (n) => {
@@ -54,16 +58,26 @@ const clampRange = (from, to) => {
   return f > t ? { from: t, to: f } : { from: f, to: t };
 };
 
+const isWithinRangeYMD = (ymd, from, to) => {
+  if (!ymd) return false;
+  const f = safe(from).trim();
+  const t = safe(to).trim();
+
+  if (f && t) return ymd >= f && ymd <= t;
+  if (f) return ymd >= f;
+  if (t) return ymd <= t;
+  return true;
+};
+
 /* ================= business rules ================= */
-const getOrderDateYMD = (o) => ymdInIST(o?.placedAt || o?.createdAt || o?.orderDate || o?.paidAt);
+const getOrderDateYMD = (o) =>
+  ymdInIST(o?.placedAt || o?.createdAt || o?.orderDate || o?.paidAt);
 
 const getOrderRevenue = (o) => {
-  // ✅ use FINAL PAYABLE as primary revenue
   const candidates = [
-    o?.finalPayable,                 // ✅ MAIN (what you want)
-    o?.pricing?.finalPayable,        // optional fallback
-    o?.coupon?.finalTotal,           // optional (if you store it reliably)
-    // ---- fallbacks only if above not present ----
+    o?.finalPayable,
+    o?.pricing?.finalPayable,
+    o?.coupon?.finalTotal,
     o?.amountPaid,
     o?.payableAmount,
     o?.netAmount,
@@ -71,20 +85,30 @@ const getOrderRevenue = (o) => {
     o?.pricing?.grandTotal,
     o?.grandTotal,
     o?.total,
-    o?.totalAmount,                  // keep LAST (avoid using it)
+    o?.totalAmount,
   ];
 
   const val = candidates.find((x) => Number.isFinite(Number(x)));
   return Number(val || 0);
 };
 
-const isCancelledOrder = (o) => {
-  const fs = String(o?.fulfillmentStatus || o?.status || "").toLowerCase();
-  const ps = String(o?.paymentStatus || "").toLowerCase();
-  return fs === "cancelled" || fs === "canceled" || ps === "cancelled" || ps === "canceled";
+const isExcludedOrder = (o) => {
+  const values = [
+    o?.fulfillmentStatus,
+    o?.paymentStatus,
+    o?.status,
+    o?.shipment?.status,
+  ]
+    .map((v) => String(v || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  return values.some(
+    (v) => v === "cancelled" || v === "canceled" || v === "failed"
+  );
 };
 
-const getSpendDateYMD = (s) => ymdInIST(s?.spentAt || s?.date || s?.createdAt || s?.updatedAt);
+const getSpendDateYMD = (s) =>
+  ymdInIST(s?.spentAt || s?.date || s?.createdAt || s?.updatedAt);
 
 const getSpendAmount = (s) => {
   const candidates = [s?.amount, s?.spend, s?.cost, s?.value, s?.total];
@@ -101,8 +125,13 @@ const Pill = ({ children, tone = "slate" }) => {
     rose: "bg-rose-50 text-rose-700 ring-rose-200",
     amber: "bg-amber-50 text-amber-800 ring-amber-200",
   };
+
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${toneMap[tone] || toneMap.slate}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+        toneMap[tone] || toneMap.slate
+      }`}
+    >
       {children}
     </span>
   );
@@ -116,8 +145,9 @@ const Stat = ({ title, value, sub, tone = "slate" }) => {
     rose: "from-rose-600/15",
     amber: "from-amber-500/20",
   }[tone];
+
   return (
-    <div className="relative rounded-3xl bg-white shadow-[0_14px_45px_rgba(0,0,0,0.06)] ring-1 ring-black/5 overflow-hidden">
+    <div className="relative overflow-hidden rounded-3xl bg-white shadow-[0_14px_45px_rgba(0,0,0,0.06)] ring-1 ring-black/5">
       <div className={`h-1.5 w-full bg-gradient-to-r ${bar} to-transparent`} />
       <div className="p-5">
         <div className="text-xs text-gray-600">{title}</div>
@@ -129,12 +159,23 @@ const Stat = ({ title, value, sub, tone = "slate" }) => {
 };
 
 export default function ROASreport() {
-  const { orders, loading: ordersLoading, error: ordersError, fetchAllOrders, fetchNextOrdersPage } = useOrderStore();
+  const {
+    orders,
+    loading: ordersLoading,
+    error: ordersError,
+    fetchAllOrders,
+    fetchNextOrdersPage,
+  } = useOrderStore();
 
-  const { spends, loading: spendsLoading, error: spendsError, hasMore: spendsHasMore, fetchSpends, fetchMoreSpends } =
-    useAdminMarketingSpendStore();
+  const {
+    spends,
+    loading: spendsLoading,
+    error: spendsError,
+    hasMore: spendsHasMore,
+    fetchSpends,
+    fetchMoreSpends,
+  } = useAdminMarketingSpendStore();
 
-  // ✅ Default ALL TIME (blank filters)
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [source, setSource] = useState("");
@@ -155,19 +196,20 @@ export default function ROASreport() {
         const spendFilters = {
           page: 1,
           limit: 50,
-          ...(range.from && range.to ? { from: range.from, to: range.to } : {}),
+          ...(range.from || range.to ? { from: range.from, to: range.to } : {}),
           ...(cleanSource ? { source: cleanSource } : {}),
         };
 
         const orderFilters = {
           page: 1,
           limit: 500,
-          ...(range.from && range.to ? { from: range.from, to: range.to } : {}),
+          ...(range.from || range.to ? { from: range.from, to: range.to } : {}),
         };
 
         await fetchSpends(spendFilters);
 
         await fetchAllOrders(orderFilters);
+
         let guard = 0;
         while (guard < 200) {
           guard += 1;
@@ -178,6 +220,7 @@ export default function ROASreport() {
             ...orderFilters,
             limit: Number(meta?.limit || orderFilters.limit || 500),
           });
+
           if (!Array.isArray(next) || next.length === 0) break;
         }
       } finally {
@@ -187,14 +230,13 @@ export default function ROASreport() {
     [from, to, source, fetchSpends, fetchAllOrders, fetchNextOrdersPage]
   );
 
-  // ✅ only once on mount (NO auto refresh on calendar change)
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ spends infinite scroll
   const sentinelRef = useRef(null);
+
   useEffect(() => {
     if (!sentinelRef.current) return;
     const el = sentinelRef.current;
@@ -224,70 +266,136 @@ export default function ROASreport() {
     return ["", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [spends]);
 
+  /* ================= exact filtered data for UI ================= */
+  const filteredOrders = useMemo(() => {
+    const range = clampRange(from, to);
+    return (Array.isArray(orders) ? orders : []).filter((o) => {
+      const ymd = getOrderDateYMD(o);
+      return isWithinRangeYMD(ymd, range.from, range.to);
+    });
+  }, [orders, from, to]);
+
+  const filteredSpends = useMemo(() => {
+    const range = clampRange(from, to);
+    const cleanSource = safe(source).trim().toLowerCase();
+
+    return (Array.isArray(spends) ? spends : []).filter((s) => {
+      const ymd = getSpendDateYMD(s);
+      const sourceOk = cleanSource
+        ? String(s?.source || "").trim().toLowerCase() === cleanSource
+        : true;
+
+      return isWithinRangeYMD(ymd, range.from, range.to) && sourceOk;
+    });
+  }, [spends, from, to, source]);
+
   const overall = useMemo(() => {
-    const oList = Array.isArray(orders) ? orders : [];
-    const sList = Array.isArray(spends) ? spends : [];
+    const oList = filteredOrders;
+    const sList = filteredSpends;
+
     const spendTotal = sList.reduce((sum, s) => sum + getSpendAmount(s), 0);
 
-    let revenueAll = 0,
-      revenueNoCancel = 0,
-      ordersAll = 0,
-      ordersNoCancel = 0;
+    let revenueAll = 0;
+    let revenueValid = 0;
+    let ordersAll = 0;
+    let ordersValid = 0;
 
     for (const o of oList) {
       const rev = getOrderRevenue(o);
       revenueAll += rev;
       ordersAll += 1;
-      if (!isCancelledOrder(o)) {
-        revenueNoCancel += rev;
-        ordersNoCancel += 1;
+
+      if (!isExcludedOrder(o)) {
+        revenueValid += rev;
+        ordersValid += 1;
       }
     }
 
     return {
       spendTotal,
       revenueAll,
-      revenueNoCancel,
+      revenueValid,
       ordersAll,
-      ordersNoCancel,
+      ordersValid,
       roasAll: spendTotal > 0 ? revenueAll / spendTotal : 0,
-      roasNoCancel: spendTotal > 0 ? revenueNoCancel / spendTotal : 0,
+      roasValid: spendTotal > 0 ? revenueValid / spendTotal : 0,
     };
-  }, [orders, spends]);
+  }, [filteredOrders, filteredSpends]);
 
   const dayWise = useMemo(() => {
     const map = new Map();
+
     const row = (ymd) => {
-      if (!map.has(ymd)) map.set(ymd, { ymd, spend: 0, revenueAll: 0, revenueNoCancel: 0, ordersAll: 0, ordersNoCancel: 0 });
+      if (!map.has(ymd)) {
+        map.set(ymd, {
+          ymd,
+          spend: 0,
+          revenueAll: 0,
+          revenueValid: 0,
+          ordersAll: 0,
+          ordersValid: 0,
+        });
+      }
       return map.get(ymd);
     };
 
-    (spends || []).forEach((s) => {
+    filteredSpends.forEach((s) => {
       const ymd = getSpendDateYMD(s);
-      if (ymd) row(ymd).spend += getSpendAmount(s);
+      if (ymd) {
+        row(ymd).spend += getSpendAmount(s);
+      }
     });
 
-    (orders || []).forEach((o) => {
+    filteredOrders.forEach((o) => {
       const ymd = getOrderDateYMD(o);
       if (!ymd) return;
+
       const r = row(ymd);
       const rev = getOrderRevenue(o);
+
       r.revenueAll += rev;
       r.ordersAll += 1;
-      if (!isCancelledOrder(o)) {
-        r.revenueNoCancel += rev;
-        r.ordersNoCancel += 1;
+
+      if (!isExcludedOrder(o)) {
+        r.revenueValid += rev;
+        r.ordersValid += 1;
       }
     });
 
     return Array.from(map.values())
+      .filter((r) => isWithinRangeYMD(r.ymd, from, to))
       .sort((a, b) => (a.ymd < b.ymd ? 1 : -1))
       .map((r) => ({
         ...r,
         roasAll: r.spend > 0 ? r.revenueAll / r.spend : 0,
-        roasNoCancel: r.spend > 0 ? r.revenueNoCancel / r.spend : 0,
+        roasValid: r.spend > 0 ? r.revenueValid / r.spend : 0,
       }));
-  }, [orders, spends]);
+  }, [filteredOrders, filteredSpends, from, to]);
+
+  const spendDayWise = useMemo(() => {
+    const map = new Map();
+
+    filteredSpends.forEach((s) => {
+      const ymd = getSpendDateYMD(s);
+      if (!ymd) return;
+
+      if (!map.has(ymd)) {
+        map.set(ymd, {
+          ymd,
+          spend: 0,
+          entries: 0,
+        });
+      }
+
+      const row = map.get(ymd);
+      row.spend += getSpendAmount(s);
+      row.entries += 1;
+    });
+
+    return Array.from(map.values())
+      .filter((r) => isWithinRangeYMD(r.ymd, from, to))
+      .sort((a, b) => (a.ymd < b.ymd ? 1 : -1));
+  }, [filteredSpends, from, to]);
 
   const downloadExcel = useCallback(async () => {
     try {
@@ -304,70 +412,96 @@ export default function ROASreport() {
         { header: "Source", key: "source", width: 18 },
         { header: "Spend", key: "spend", width: 14 },
         { header: "Revenue (All)", key: "revAll", width: 18 },
-        { header: "Revenue (No Cancel)", key: "revNo", width: 22 },
+        { header: "Revenue (Valid Only)", key: "revValid", width: 22 },
         { header: "Orders (All)", key: "oAll", width: 14 },
-        { header: "Orders (No Cancel)", key: "oNo", width: 18 },
+        { header: "Orders (Valid Only)", key: "oValid", width: 18 },
         { header: "ROAS (All)", key: "roasAll", width: 12 },
-        { header: "ROAS (No Cancel)", key: "roasNo", width: 16 },
+        { header: "ROAS (Valid Only)", key: "roasValid", width: 16 },
       ];
+
       ws1.addRow({
         from: range.from || "ALL",
         to: range.to || "ALL",
         source: source || "All",
         spend: overall.spendTotal,
         revAll: overall.revenueAll,
-        revNo: overall.revenueNoCancel,
+        revValid: overall.revenueValid,
         oAll: overall.ordersAll,
-        oNo: overall.ordersNoCancel,
+        oValid: overall.ordersValid,
         roasAll: overall.roasAll,
-        roasNo: overall.roasNoCancel,
+        roasValid: overall.roasValid,
       });
       ws1.getRow(1).font = { bold: true };
 
-      const ws2 = wb.addWorksheet("Day-wise");
+      const ws2 = wb.addWorksheet("ROAS Day-wise");
       ws2.columns = [
         { header: "Date (YMD)", key: "ymd", width: 14 },
         { header: "Date", key: "pretty", width: 18 },
         { header: "Spend", key: "spend", width: 14 },
         { header: "Revenue (All)", key: "revAll", width: 18 },
-        { header: "Revenue (No Cancel)", key: "revNo", width: 22 },
+        { header: "Revenue (Valid Only)", key: "revValid", width: 22 },
         { header: "Orders (All)", key: "oAll", width: 14 },
-        { header: "Orders (No Cancel)", key: "oNo", width: 18 },
+        { header: "Orders (Valid Only)", key: "oValid", width: 18 },
         { header: "ROAS (All)", key: "roasAll", width: 12 },
-        { header: "ROAS (No Cancel)", key: "roasNo", width: 16 },
+        { header: "ROAS (Valid Only)", key: "roasValid", width: 16 },
       ];
+
       dayWise.forEach((r) =>
         ws2.addRow({
           ymd: r.ymd,
           pretty: prettyDate(r.ymd),
           spend: r.spend,
           revAll: r.revenueAll,
-          revNo: r.revenueNoCancel,
+          revValid: r.revenueValid,
           oAll: r.ordersAll,
-          oNo: r.ordersNoCancel,
+          oValid: r.ordersValid,
           roasAll: r.roasAll,
-          roasNo: r.roasNoCancel,
+          roasValid: r.roasValid,
         })
       );
+
       ws2.getRow(1).font = { bold: true };
       ws2.views = [{ state: "frozen", ySplit: 1 }];
 
+      const ws3 = wb.addWorksheet("Marketing Spend Day-wise");
+      ws3.columns = [
+        { header: "Date (YMD)", key: "ymd", width: 14 },
+        { header: "Date", key: "pretty", width: 18 },
+        { header: "Spend", key: "spend", width: 14 },
+        { header: "Entries", key: "entries", width: 12 },
+      ];
+
+      spendDayWise.forEach((r) =>
+        ws3.addRow({
+          ymd: r.ymd,
+          pretty: prettyDate(r.ymd),
+          spend: r.spend,
+          entries: r.entries,
+        })
+      );
+
+      ws3.getRow(1).font = { bold: true };
+      ws3.views = [{ state: "frozen", ySplit: 1 }];
+
       const buf = await wb.xlsx.writeBuffer();
-      saveAs(new Blob([buf]), `ROAS_${range.from || "ALL"}_to_${range.to || "ALL"}.xlsx`);
+      saveAs(
+        new Blob([buf]),
+        `ROAS_${range.from || "ALL"}_to_${range.to || "ALL"}.xlsx`
+      );
     } catch (e) {
       alert(e?.message || "Excel download failed");
     } finally {
       setDownloading(false);
     }
-  }, [from, to, source, overall, dayWise]);
+  }, [from, to, source, overall, dayWise, spendDayWise]);
 
   return (
     <>
       <div className="w-full space-y-4">
         {/* Header */}
-        <div className="rounded-[28px] bg-white shadow ring-1 ring-black/5 p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex flex-col gap-4 rounded-[28px] bg-white p-6 shadow ring-1 ring-black/5 md:flex-row md:items-center md:justify-between">
           <div className="flex gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-black text-white flex items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-black text-white">
               <TrendingUp className="h-5 w-5" />
             </div>
             <div>
@@ -385,7 +519,7 @@ export default function ROASreport() {
               className="inline-flex items-center gap-2 rounded-2xl bg-black px-4 py-2 text-sm text-white"
               type="button"
             >
-              <PlusCircle className="w-4 h-4" />
+              <PlusCircle className="h-4 w-4" />
               Add Spend
             </button>
 
@@ -395,7 +529,11 @@ export default function ROASreport() {
               className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm ring-1 ring-black/10 disabled:opacity-60"
               type="button"
             >
-              {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {downloading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
               Excel
             </button>
 
@@ -405,17 +543,21 @@ export default function ROASreport() {
               className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm ring-1 ring-black/10 disabled:opacity-60"
               type="button"
             >
-              {loadingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+              {loadingAll ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCcw className="h-4 w-4" />
+              )}
               Refresh
             </button>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="rounded-[28px] bg-white shadow ring-1 ring-black/5 p-5">
-          <div className="flex flex-col md:flex-row md:items-end gap-3">
+        <div className="rounded-[28px] bg-white p-5 shadow ring-1 ring-black/5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
-              <div className="text-xs text-gray-600 mb-1">From (IST)</div>
+              <div className="mb-1 text-xs text-gray-600">From (IST)</div>
               <input
                 type="date"
                 value={from}
@@ -425,7 +567,7 @@ export default function ROASreport() {
             </div>
 
             <div className="flex-1">
-              <div className="text-xs text-gray-600 mb-1">To (IST)</div>
+              <div className="mb-1 text-xs text-gray-600">To (IST)</div>
               <input
                 type="date"
                 value={to}
@@ -435,7 +577,7 @@ export default function ROASreport() {
             </div>
 
             <div className="flex-1">
-              <div className="text-xs text-gray-600 mb-1">Spend Source</div>
+              <div className="mb-1 text-xs text-gray-600">Spend Source</div>
               <select
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
@@ -471,7 +613,7 @@ export default function ROASreport() {
               >
                 {loadingAll ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Applying…
                   </span>
                 ) : (
@@ -488,34 +630,46 @@ export default function ROASreport() {
           ) : null}
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <Pill tone="indigo">Orders: {money0((orders || []).length)}</Pill>
-            <Pill tone="amber">Spends (loaded): {money0((spends || []).length)}</Pill>
+            <Pill tone="indigo">Orders in range: {money0(filteredOrders.length)}</Pill>
+            <Pill tone="amber">Spends in range: {money0(filteredSpends.length)}</Pill>
           </div>
         </div>
 
         {/* Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Stat tone="amber" title="Spend" value={`₹ ${money0(overall.spendTotal)}`} sub={source ? `Source: ${source}` : "All sources"} />
-          <Stat tone="indigo" title="Revenue (All)" value={`₹ ${money0(overall.revenueAll)}`} sub={`ROAS: ${pct2(overall.roasAll)}x`} />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Stat
+            tone="amber"
+            title="Marketing Spend"
+            value={`₹ ${money0(overall.spendTotal)}`}
+            sub={source ? `Source: ${source}` : "All sources"}
+          />
+          <Stat
+            tone="indigo"
+            title="Revenue (All Orders in Range)"
+            value={`₹ ${money0(overall.revenueAll)}`}
+            sub={`ROAS: ${pct2(overall.roasAll)}x`}
+          />
           <Stat
             tone="emerald"
-            title="Revenue (No Cancel)"
-            value={`₹ ${money0(overall.revenueNoCancel)}`}
-            sub={`ROAS: ${pct2(overall.roasNoCancel)}x`}
+            title="Revenue (Excluding Failed/Cancelled)"
+            value={`₹ ${money0(overall.revenueValid)}`}
+            sub={`ROAS: ${pct2(overall.roasValid)}x`}
           />
         </div>
 
-        {/* Day-wise table */}
-        <div className="rounded-[28px] bg-white shadow ring-1 ring-black/5 overflow-hidden">
-          <div className="px-6 py-4 border-b border-black/10 bg-gray-50 flex items-center justify-between">
+        {/* ROAS day-wise table */}
+        <div className="overflow-hidden rounded-[28px] bg-white shadow ring-1 ring-black/5">
+          <div className="flex items-center justify-between border-b border-black/10 bg-gray-50 px-6 py-4">
             <div>
               <div className="text-sm font-semibold text-black">Day-wise ROAS</div>
-              <div className="text-xs text-gray-500">Latest dates first • IST grouping</div>
+              <div className="text-xs text-gray-500">
+                Selected range only • IST grouping
+              </div>
             </div>
 
             {inlineLoading ? (
               <div className="inline-flex items-center gap-2 text-xs text-gray-600">
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Loading…
               </div>
             ) : null}
@@ -524,13 +678,13 @@ export default function ROASreport() {
           <div className="overflow-auto">
             <table className="min-w-[980px] w-full">
               <thead className="bg-white">
-                <tr className="text-left text-xs text-gray-600 border-b border-black/10">
+                <tr className="border-b border-black/10 text-left text-xs text-gray-600">
                   <th className="px-6 py-3 font-medium">Date</th>
                   <th className="px-6 py-3 font-medium">Spend</th>
                   <th className="px-6 py-3 font-medium">Revenue (All)</th>
                   <th className="px-6 py-3 font-medium">ROAS (All)</th>
-                  <th className="px-6 py-3 font-medium">Revenue (No Cancel)</th>
-                  <th className="px-6 py-3 font-medium">ROAS (No Cancel)</th>
+                  <th className="px-6 py-3 font-medium">Revenue (Valid)</th>
+                  <th className="px-6 py-3 font-medium">ROAS (Valid)</th>
                   <th className="px-6 py-3 font-medium">Orders</th>
                 </tr>
               </thead>
@@ -539,7 +693,7 @@ export default function ROASreport() {
                 {dayWise.length === 0 ? (
                   <tr>
                     <td className="px-6 py-8 text-sm text-gray-600" colSpan={7}>
-                      No data found.
+                      No data found for selected range.
                     </td>
                   </tr>
                 ) : (
@@ -549,19 +703,26 @@ export default function ROASreport() {
                         <div className="font-medium text-black">{prettyDate(r.ymd)}</div>
                         <div className="text-xs text-gray-500">{r.ymd}</div>
                       </td>
-                      <td className="px-6 py-4 font-medium text-black">₹ {money0(r.spend)}</td>
+                      <td className="px-6 py-4 font-medium text-black">
+                        ₹ {money0(r.spend)}
+                      </td>
                       <td className="px-6 py-4">₹ {money0(r.revenueAll)}</td>
                       <td className="px-6 py-4">
-                        <Pill tone={r.roasAll >= 2 ? "emerald" : r.roasAll >= 1 ? "amber" : "rose"}>{pct2(r.roasAll)}x</Pill>
+                        <Pill tone={r.roasAll >= 2 ? "emerald" : r.roasAll >= 1 ? "amber" : "rose"}>
+                          {pct2(r.roasAll)}x
+                        </Pill>
                       </td>
-                      <td className="px-6 py-4">₹ {money0(r.revenueNoCancel)}</td>
+                      <td className="px-6 py-4">₹ {money0(r.revenueValid)}</td>
                       <td className="px-6 py-4">
-                        <Pill tone={r.roasNoCancel >= 2 ? "emerald" : r.roasNoCancel >= 1 ? "amber" : "rose"}>
-                          {pct2(r.roasNoCancel)}x
+                        <Pill tone={r.roasValid >= 2 ? "emerald" : r.roasValid >= 1 ? "amber" : "rose"}>
+                          {pct2(r.roasValid)}x
                         </Pill>
                       </td>
                       <td className="px-6 py-4">
-                        {money0(r.ordersAll)} <span className="text-xs text-gray-500">(No-cancel: {money0(r.ordersNoCancel)})</span>
+                        {money0(r.ordersAll)}{" "}
+                        <span className="text-xs text-gray-500">
+                          (Valid: {money0(r.ordersValid)})
+                        </span>
                       </td>
                     </tr>
                   ))
@@ -571,13 +732,15 @@ export default function ROASreport() {
 
             <div ref={sentinelRef} className="h-10" />
             {spendsHasMore ? (
-              <div className="px-6 pb-6 text-xs text-gray-500 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
+              <div className="flex items-center gap-2 px-6 pb-6 text-xs text-gray-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Loading more spends…
               </div>
             ) : null}
           </div>
         </div>
+
+  
       </div>
 
       <MarketingSpendModal

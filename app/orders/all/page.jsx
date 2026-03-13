@@ -82,6 +82,26 @@ const toNumber = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const getOrderRevenue = (order) => {
+  // Keep this aligned with whatever "Amount" column actually shows in OrderRow
+  return toNumber(
+    order?.finalPayable ??
+      order?.totalAmount ??
+      order?.grandTotal ??
+      order?.amount ??
+      0
+  );
+};
+
+const formatINR = (value) => {
+  const n = toNumber(value);
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(n);
+};
+
 /* ---------------------------------------------
    ✅ Pagination helpers
 --------------------------------------------- */
@@ -128,6 +148,7 @@ function PaginationBar({
   loading,
   onRefresh,
   onPageChange,
+    totalRevenue,
 }) {
   const canGoPrev = currentPage > 1;
   const canGoNext = currentPage < totalPages;
@@ -136,17 +157,19 @@ function PaginationBar({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div className="text-sm text-gray-600">
-          Page <span className="font-semibold">{currentPage}</span> of{" "}
-          <span className="font-semibold">{totalPages}</span>
-          {totalCount > 0 ? (
-            <>
-              {" "}
-              • Total <span className="font-semibold">{totalCount}</span> orders
-            </>
-          ) : null}
-          <span className="text-gray-400"> • {pageSize} per page</span>
-        </div>
+      <div className="text-sm text-gray-600">
+  Page <span className="font-semibold">{currentPage}</span> of{" "}
+  <span className="font-semibold">{totalPages}</span>
+  {totalCount > 0 ? (
+    <>
+      {" "}
+      • Total <span className="font-semibold">{totalCount}</span> orders
+    </>
+  ) : null}
+  {" • "}
+  Revenue <span className="font-semibold">{formatINR(totalRevenue)}</span>
+  <span className="text-gray-400"> • {pageSize} per page</span>
+</div>
 
         <div className="flex flex-wrap items-center gap-3">
           <button
@@ -389,6 +412,12 @@ export default function OrdersListPage() {
     });
   }, [orders, confirmFilter, priority, search]);
 
+    const totalRevenue = useMemo(() => {
+    return filteredOrders.reduce((sum, order) => {
+      return sum + getOrderRevenue(order);
+    }, 0);
+  }, [filteredOrders]);
+
   const buildCsvRows = (ordersArr) => {
     const rows = [];
 
@@ -610,14 +639,19 @@ export default function OrdersListPage() {
               View, filter and manage all customer orders.
             </p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
-              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-                {totalCount || filteredOrders.length} Orders
-              </span>
-              <span className="px-3 py-1 rounded-full bg-violet-50 text-violet-700 font-semibold">
-                Page {currentMetaPage} of {totalPages}
-              </span>
-            </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+  <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
+    {totalCount || filteredOrders.length} Orders
+  </span>
+
+  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
+    Revenue: {formatINR(totalRevenue)}
+  </span>
+
+  <span className="px-3 py-1 rounded-full bg-violet-50 text-violet-700 font-semibold">
+    Page {currentMetaPage} of {totalPages}
+  </span>
+</div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -878,15 +912,16 @@ export default function OrdersListPage() {
 
           {/* Top Pagination */}
           <div className="mt-6">
-            <PaginationBar
-              currentPage={currentMetaPage}
-              totalPages={totalPages}
-              totalCount={totalCount}
-              pageSize={pageSize}
-              loading={loading}
-              onRefresh={loadOrders}
-              onPageChange={setCurrentPage}
-            />
+           <PaginationBar
+  currentPage={currentMetaPage}
+  totalPages={totalPages}
+  totalCount={totalCount}
+  pageSize={pageSize}
+  loading={loading}
+  onRefresh={loadOrders}
+  onPageChange={setCurrentPage}
+  totalRevenue={totalRevenue}
+/>
           </div>
         </Card>
 
@@ -969,15 +1004,16 @@ export default function OrdersListPage() {
 
         {/* Bottom Pagination */}
         <Card>
-          <PaginationBar
-            currentPage={currentMetaPage}
-            totalPages={totalPages}
-            totalCount={totalCount}
-            pageSize={pageSize}
-            loading={loading}
-            onRefresh={loadOrders}
-            onPageChange={setCurrentPage}
-          />
+         <PaginationBar
+  currentPage={currentMetaPage}
+  totalPages={totalPages}
+  totalCount={totalCount}
+  pageSize={pageSize}
+  loading={loading}
+  onRefresh={loadOrders}
+  onPageChange={setCurrentPage}
+  totalRevenue={totalRevenue}
+/>
         </Card>
       </div>
     </section>
