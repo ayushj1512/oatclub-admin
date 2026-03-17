@@ -8,27 +8,6 @@ import { useInventoryReservationStore } from "@/store/inventoryReservationStore"
 import StockCsvUploader from "../../components/inventory/StockCsvUploader.jsx";
 import InventoryBulkQuickUpdater from "@/components/inventory/InventoryBulkQuickUpdater.jsx";
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-const triggerReconcile = async ({ productId, variantId = null }) => {
-  try {
-    const res = await fetch(`${BACKEND}/api/inventory-reservations/reconcile`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ productId, variantId }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || "Reconcile failed");
-
-    return data;
-  } catch (e) {
-    console.log("[RECONCILE_FAIL]", e?.message || e);
-    return null;
-  }
-};
-
 const safeArr = (v) => (Array.isArray(v) ? v : []);
 const str = (v) => (v == null ? "" : String(v));
 const t = (v) => str(v).trim();
@@ -85,7 +64,6 @@ export default function ProductionStockUpdate({
 }) {
   const {
     products,
-    product,
     categories,
     total,
     page,
@@ -97,13 +75,14 @@ export default function ProductionStockUpdate({
     saving,
     fetchProducts,
     fetchCategories,
-    updateSimpleStock,
-    updateVariantStockBySize,
     applyFiltersAndFetch,
     clearFiltersAndFetch,
     goToPage,
     refresh,
   } = useAdminProductInventoryStore();
+
+  const { addStockAndReconcile, actionLoading: reservationActionLoading } =
+    useInventoryReservationStore();
 
   const [qDraft, setQDraft] = useState("");
   const [catDraft, setCatDraft] = useState("");
@@ -171,7 +150,7 @@ export default function ProductionStockUpdate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isBusy = loading || loadingCategories;
+  const isBusy = loading || loadingCategories || saving || reservationActionLoading;
 
   const categoryOptions = useMemo(() => {
     const list = safeArr(categories)
@@ -332,20 +311,20 @@ export default function ProductionStockUpdate({
   /* ---------- Draft getters/setters ---------- */
   const getSimpleDraft = (p) => {
     const pid = t(p?._id);
-    const v = draft?.[pid]?.simpleStock;
-    return v != null ? v : Number(p?.stock ?? 0);
+    const v = draft?.[pid]?.simpleAddQty;
+    return v != null ? v : 0;
   };
 
   const setSimpleDraft = (pid, val) =>
     setDraft((prev) => ({
       ...prev,
-      [pid]: { ...(prev[pid] || {}), simpleStock: val },
+      [pid]: { ...(prev[pid] || {}), simpleAddQty: val },
     }));
 
-  const getVariantDraft = (pid, size, fallbackStock) => {
+  const getVariantDraft = (pid, size) => {
     const key = normalizeSize(size);
-    const v = draft?.[pid]?.variantStocks?.[key];
-    return v != null ? v : Number(fallbackStock ?? 0);
+    const v = draft?.[pid]?.variantAddQty?.[key];
+    return v != null ? v : 0;
   };
 
   const setVariantDraft = (pid, size, val) => {
@@ -354,9 +333,32 @@ export default function ProductionStockUpdate({
       ...prev,
       [pid]: {
         ...(prev[pid] || {}),
-        variantStocks: {
-          ...((prev[pid] || {}).variantStocks || {}),
+        variantAddQty: {
+          ...((prev[pid] || {}).variantAddQty || {}),
           [key]: val,
+        },
+      },
+    }));
+  };
+
+  const clearSimpleDraft = (pid) =>
+    setDraft((prev) => ({
+      ...prev,
+      [pid]: {
+        ...(prev[pid] || {}),
+        simpleAddQty: 0,
+      },
+    }));
+
+  const clearVariantDraft = (pid, size) => {
+    const key = normalizeSize(size);
+    setDraft((prev) => ({
+      ...prev,
+      [pid]: {
+        ...(prev[pid] || {}),
+        variantAddQty: {
+          ...((prev[pid] || {}).variantAddQty || {}),
+          [key]: 0,
         },
       },
     }));
@@ -368,13 +370,25 @@ export default function ProductionStockUpdate({
     if (!pid) return;
 
     try {
-      const nextStock = toNonNegInt(getSimpleDraft(p), 0);
-      const result = await updateSimpleStock(pid, nextStock);
+      const addQty = toNonNegInt(getSimpleDraft(p), 0);
+      if (addQty <= 0) {
+        toast.error("Add stock should be greater than 0");
+        return;
+      }
+
+      const currentStock = Number(p?.stock ?? 0);
+      const finalStock = currentStock + addQty;
+
+      const result = await addStockAndReconcile({
+        productId: pid,
+        qty: addQty,
+        reason: `Manual add stock from production panel | current=${currentStock} add=${addQty} final=${finalStock}`,
+      });
+
       if (!result) return;
 
-      await triggerReconcile({ productId: pid });
-
-      toast.success("Saved ✅");
+      clearSimpleDraft(pid);
+      toast.success(`Stock updated: ${currentStock} + ${addQty} = ${finalStock} ✅`);
       await refresh();
     } catch (e) {
       toast.error(e?.message || "Failed");
@@ -394,14 +408,32 @@ export default function ProductionStockUpdate({
     }
 
     try {
-      const nextStock = toNonNegInt(getVariantDraft(pid, size, v?.stock), 0);
-      const result = await updateVariantStockBySize(pid, size, nextStock);
-      if (!result) return;
+      const addQty = toNonNegInt(getVariantDraft(pid, size), 0);
+      if (addQty <= 0) {
+        toast.error("Add stock should be greater than 0");
+        return;
+      }
 
       const variantId = t(v?._id);
-      if (variantId) await triggerReconcile({ productId: pid, variantId });
+      if (!variantId) {
+        toast.error("Variant id missing");
+        return;
+      }
 
-      toast.success(`Saved ✅ (${size})`);
+      const currentStock = Number(v?.stock ?? 0);
+      const finalStock = currentStock + addQty;
+
+      const result = await addStockAndReconcile({
+        productId: pid,
+        variantId,
+        qty: addQty,
+        reason: `Manual add stock for size ${size} | current=${currentStock} add=${addQty} final=${finalStock}`,
+      });
+
+      if (!result) return;
+
+      clearVariantDraft(pid, size);
+      toast.success(`Stock updated (${size}): ${currentStock} + ${addQty} = ${finalStock} ✅`);
       await refresh();
     } catch (e) {
       toast.error(e?.message || "Failed");
@@ -414,21 +446,40 @@ export default function ProductionStockUpdate({
     if (!pid || !variants.length) return;
 
     try {
+      let anyUpdated = false;
+
       for (const v of variants) {
         const size = normalizeSize(getVariantSize(v));
         if (!size) continue;
 
-        const nextStock = toNonNegInt(getVariantDraft(pid, size, v?.stock), 0);
-        const result = await updateVariantStockBySize(pid, size, nextStock);
-        if (!result) throw new Error(`Failed for size ${size}`);
+        const addQty = toNonNegInt(getVariantDraft(pid, size), 0);
+        if (addQty <= 0) continue;
 
         const variantId = t(v?._id);
-        if (variantId) {
-          await triggerReconcile({ productId: pid, variantId });
-        }
+        if (!variantId) continue;
+
+        const currentStock = Number(v?.stock ?? 0);
+        const finalStock = currentStock + addQty;
+
+        const result = await addStockAndReconcile({
+          productId: pid,
+          variantId,
+          qty: addQty,
+          reason: `Bulk add stock for size ${size} | current=${currentStock} add=${addQty} final=${finalStock}`,
+        });
+
+        if (!result) throw new Error(`Failed for size ${size}`);
+
+        clearVariantDraft(pid, size);
+        anyUpdated = true;
       }
 
-      toast.success("All sizes saved ✅");
+      if (!anyUpdated) {
+        toast.error("Please enter add stock quantity greater than 0 for at least one size");
+        return;
+      }
+
+      toast.success("All sizes updated ✅");
       await refresh();
     } catch (e) {
       toast.error(e?.message || "Failed");
@@ -442,7 +493,6 @@ export default function ProductionStockUpdate({
 
   return (
     <div className="min-h-screen bg-white text-black">
-      {/* Controls */}
       <div className="border-b border-black/10 bg-white">
         <div className="p-4 md:p-5">
           <div className="flex flex-col gap-3">
@@ -460,7 +510,6 @@ export default function ProductionStockUpdate({
 
               <div className="w-full md:w-auto">
                 <div className="flex flex-col gap-2">
-                  {/* Search row */}
                   <div className="flex flex-col xl:flex-row gap-2">
                     <div className="flex w-full xl:w-[520px]">
                       <input
@@ -522,7 +571,6 @@ export default function ProductionStockUpdate({
                     </div>
                   </div>
 
-                  {/* Advanced filters */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-2">
                     <select
                       className="px-3 py-2 text-sm bg-gray-50 border border-black/10 focus:border-black outline-none rounded"
@@ -610,55 +658,80 @@ export default function ProductionStockUpdate({
                       Apply Filters
                     </button>
                     <div className="px-3 py-2 text-[11px] text-gray-500 border border-dashed border-black/10 rounded flex items-center">
-                      Fast search is now backend based with pagination.
+                      Add Stock mode: entered qty gets added to current stock.
                     </div>
                   </div>
 
                   <div className="text-[11px] text-gray-500">
-                    Tip: Variable products save stock by <b>size</b>. Bulk updater supports
-                    SKU/Barcode/ProductCode + Excel/CSV.
+                    Tip: this screen now uses <b>Add Stock</b> mode. Example: current 5 + add 2 = final 7.
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Bulk Quick Updater */}
           <div className="mt-4">
             <InventoryBulkQuickUpdater
               products={visibleProducts}
-              saving={saving}
+              saving={isBusy}
               updateProductStock={async (productId, stock) => {
-                return await updateSimpleStock(productId, stock);
+                return await addStockAndReconcile({
+                  productId,
+                  qty: toNonNegInt(stock, 0),
+                  reason: "Bulk quick updater add stock",
+                });
               }}
               updateVariantStock={async (productId, size, stock) => {
-                return await updateVariantStockBySize(productId, size, stock);
+                const product = visibleProducts.find((x) => t(x?._id) === t(productId));
+                const variant = safeArr(product?.variants).find(
+                  (v) => normalizeSize(getVariantSize(v)) === normalizeSize(size)
+                );
+                if (!variant?._id) throw new Error(`Variant not found for size ${size}`);
+
+                return await addStockAndReconcile({
+                  productId,
+                  variantId: t(variant._id),
+                  qty: toNonNegInt(stock, 0),
+                  reason: `Bulk quick updater add stock for size ${size}`,
+                });
               }}
               loadAll={refresh}
-              triggerReconcile={triggerReconcile}
             />
           </div>
 
-          {/* CSV uploader */}
           <div className="mt-4">
             <StockCsvUploader
               products={visibleProducts}
               updateProductStock={async (productId, stock) => {
-                return await updateSimpleStock(productId, stock);
+                return await addStockAndReconcile({
+                  productId,
+                  qty: toNonNegInt(stock, 0),
+                  reason: "CSV uploader add stock",
+                });
               }}
               updateVariantStock={async (productId, size, stock) => {
-                return await updateVariantStockBySize(productId, size, stock);
+                const product = visibleProducts.find((x) => t(x?._id) === t(productId));
+                const variant = safeArr(product?.variants).find(
+                  (v) => normalizeSize(getVariantSize(v)) === normalizeSize(size)
+                );
+                if (!variant?._id) throw new Error(`Variant not found for size ${size}`);
+
+                return await addStockAndReconcile({
+                  productId,
+                  variantId: t(variant._id),
+                  qty: toNonNegInt(stock, 0),
+                  reason: `CSV uploader add stock for size ${size}`,
+                });
               }}
               loadAll={refresh}
-              saving={saving}
+              saving={isBusy}
             />
           </div>
         </div>
       </div>
 
-      {/* Body */}
       <div className="p-4 md:p-6 space-y-3">
-        {isBusy ? (
+        {isBusy && visibleProducts.length === 0 ? (
           <div className="p-4 text-sm text-gray-600">Loading…</div>
         ) : visibleProducts.length === 0 ? (
           <div className="p-4 text-sm text-gray-600">No products found</div>
@@ -685,9 +758,7 @@ export default function ProductionStockUpdate({
                   key={pid}
                   className="border border-black/10 rounded-lg overflow-hidden bg-white"
                 >
-                  {/* Header Row */}
                   <div className="p-3 md:p-4 flex flex-col md:flex-row gap-3 md:gap-4 md:items-start">
-                    {/* Image */}
                     <div className="w-full md:w-[150px] shrink-0">
                       <div className="flex items-center gap-2">
                         <button
@@ -700,7 +771,6 @@ export default function ProductionStockUpdate({
 
                         <div className="w-[92px] h-[68px] bg-gray-50 border border-black/10 overflow-hidden flex items-center justify-center rounded">
                           {url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={url}
                               alt={t(p?.title) || "product"}
@@ -728,7 +798,6 @@ export default function ProductionStockUpdate({
                       )}
                     </div>
 
-                    {/* Info + Actions */}
                     <div className="flex-1 min-w-0 flex flex-col gap-3">
                       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
                         <div className="min-w-0">
@@ -790,7 +859,7 @@ export default function ProductionStockUpdate({
                             <button
                               className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 disabled:opacity-50 rounded"
                               onClick={() => saveAllVariants(p)}
-                              disabled={saving}
+                              disabled={isBusy}
                             >
                               Save All
                             </button>
@@ -798,7 +867,7 @@ export default function ProductionStockUpdate({
                             <button
                               className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 disabled:opacity-50 rounded"
                               onClick={() => saveSimple(p)}
-                              disabled={saving}
+                              disabled={isBusy}
                             >
                               Save
                             </button>
@@ -806,7 +875,6 @@ export default function ProductionStockUpdate({
                         </div>
                       </div>
 
-                      {/* Simple product fields */}
                       {!isVariable && (
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                           <div>
@@ -831,7 +899,7 @@ export default function ProductionStockUpdate({
                           </div>
 
                           <div>
-                            <div className="text-[11px] text-gray-500 mb-1">Stock</div>
+                            <div className="text-[11px] text-gray-500 mb-1">Add Stock</div>
                             <input
                               className="px-3 py-2 text-sm border bg-gray-50 border-black/10 focus:border-black outline-none w-full rounded"
                               value={getSimpleDraft(p)}
@@ -840,7 +908,8 @@ export default function ProductionStockUpdate({
                               placeholder="0"
                             />
                             <div className="text-[11px] text-gray-500 mt-1">
-                              Saved as integer (negative not allowed).
+                              Current {simpleStock} + Add {toNonNegInt(getSimpleDraft(p), 0)} = Final{" "}
+                              {simpleStock + toNonNegInt(getSimpleDraft(p), 0)}
                             </div>
                           </div>
                         </div>
@@ -848,7 +917,6 @@ export default function ProductionStockUpdate({
                     </div>
                   </div>
 
-                  {/* Variants */}
                   {opened && isVariable && (
                     <div className="border-t border-black/10 bg-gray-50">
                       <div className="p-3 md:p-4 overflow-x-auto">
@@ -862,7 +930,7 @@ export default function ProductionStockUpdate({
                               <th className="p-3 w-[120px] font-semibold">Current</th>
                               <th className="p-3 w-[120px] font-semibold">Reserved</th>
                               <th className="p-3 w-[120px] font-semibold">Available</th>
-                              <th className="p-3 w-[170px] font-semibold">New Stock</th>
+                              <th className="p-3 w-[170px] font-semibold">Add Stock</th>
                               <th className="p-3 w-[130px] font-semibold">Action</th>
                             </tr>
                           </thead>
@@ -887,7 +955,7 @@ export default function ProductionStockUpdate({
                                 .slice(0, 4)
                                 .join(" • ");
 
-                              const newStock = getVariantDraft(pid, size, current);
+                              const addQty = toNonNegInt(getVariantDraft(pid, size), 0);
 
                               return (
                                 <tr key={`${pid}-v-${size || i}`} className="hover:bg-gray-50">
@@ -938,7 +1006,7 @@ export default function ProductionStockUpdate({
                                   <td className="p-3">
                                     <input
                                       className="px-3 py-2 text-sm border bg-gray-50 border-black/10 focus:border-black outline-none w-full rounded"
-                                      value={newStock}
+                                      value={getVariantDraft(pid, size)}
                                       onChange={(e) =>
                                         setVariantDraft(pid, size, e.target.value)
                                       }
@@ -946,13 +1014,16 @@ export default function ProductionStockUpdate({
                                       placeholder="0"
                                       disabled={!size}
                                     />
+                                    <div className="text-[11px] text-gray-500 mt-1">
+                                      {current} + {addQty} = {current + addQty}
+                                    </div>
                                   </td>
 
                                   <td className="p-3">
                                     <button
                                       className="px-3 py-2 text-sm bg-black text-white hover:bg-black/90 w-full disabled:opacity-50 rounded"
                                       onClick={() => saveOneVariant(p, v)}
-                                      disabled={saving || !size}
+                                      disabled={isBusy || !size}
                                       title={!size ? "Cannot update without size" : ""}
                                     >
                                       Save
@@ -975,7 +1046,6 @@ export default function ProductionStockUpdate({
               );
             })}
 
-            {/* Pagination */}
             <div className="pt-2">
               <div className="border border-black/10 rounded-xl bg-white p-3 md:p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div className="text-sm text-gray-600">

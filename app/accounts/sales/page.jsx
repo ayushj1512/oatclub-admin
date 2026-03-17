@@ -33,7 +33,9 @@ const StatCard = ({ label, value, hint = "" }) => (
 );
 
 const Th = ({ children, className = "" }) => (
-  <th className={`px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide ${className}`}>
+  <th
+    className={`px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide ${className}`}
+  >
     {children}
   </th>
 );
@@ -58,22 +60,46 @@ export default function SalesReportPage() {
     downloadSalesReportCsv,
   } = useOrderAccountsStore();
 
-  const [searchInput, setSearchInput] = useState(filters.search || "");
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const safeTotals = totals || {};
+  const safeMeta = meta || {};
+  const safeFilters = filters || {};
+
+  const month = safeFilters.month || "";
+  const search = safeFilters.search || "";
+  const page = Number(safeFilters.page || 1);
+  const limit = Number(safeFilters.limit || 100);
+  const startDate = safeFilters.startDate || "";
+  const endDate = safeFilters.endDate || "";
+
+  const [searchInput, setSearchInput] = useState(search);
+
+  /* -----------------------------
+     Keep local search input synced
+  ------------------------------ */
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
 
   /* -----------------------------
      Initial load
   ------------------------------ */
   useEffect(() => {
-    const month = filters.month || currentMonthKey();
+    const resolvedMonth = month || currentMonthKey();
 
-    if (!filters.month) setMonth(month);
+    if (!month) {
+      setMonth(resolvedMonth);
+    }
 
     fetchSalesReport({
-      month,
+      month: resolvedMonth,
       page: 1,
-      limit: filters.limit || 100,
-      search: filters.search || "",
+      limit: limit || 100,
+      search: search || "",
+      startDate: startDate || "",
+      endDate: endDate || "",
     }).catch(() => {});
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -82,104 +108,136 @@ export default function SalesReportPage() {
   ------------------------------ */
   useEffect(() => {
     const timer = setTimeout(() => {
-      const next = searchInput.trim();
-      if (next === (filters.search || "")) return;
+      const nextSearch = searchInput.trim();
 
-      setSearch(next);
+      if (nextSearch === search) return;
+
+      setSearch(nextSearch);
+
       fetchSalesReport({
-        ...filters,
-        search: next,
+        month: month || currentMonthKey(),
+        search: nextSearch,
         page: 1,
+        limit: limit || 100,
+        startDate: startDate || "",
+        endDate: endDate || "",
       }).catch(() => {});
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [searchInput, filters, setSearch, fetchSalesReport]);
+  }, [
+    searchInput,
+    search,
+    month,
+    limit,
+    startDate,
+    endDate,
+    setSearch,
+    fetchSalesReport,
+  ]);
 
   const pageSummary = useMemo(() => {
-    const currentPage = Number(meta?.page || 1);
-    const totalPages = Number(meta?.totalPages || 1);
-    const totalOrders = Number(meta?.totalOrders || 0);
+    const currentPage = Number(safeMeta.page || page || 1);
+    const totalPages = Number(safeMeta.totalPages || 1);
+    const totalOrders = Number(safeMeta.totalOrders || 0);
+    const totalRows = Number(safeMeta.totalRows || 0);
 
-    return `Showing page ${currentPage} of ${totalPages} • ${rows.length} rows on this page • ${totalOrders} matched orders overall`;
-  }, [meta, rows.length]);
+    if (totalRows > 0) {
+      return `Showing page ${currentPage} of ${totalPages} • ${safeRows.length} rows on this page • ${totalRows} matched rows • ${totalOrders} matched orders overall`;
+    }
+
+    return `Showing page ${currentPage} of ${totalPages} • ${safeRows.length} rows on this page • ${totalOrders} matched orders overall`;
+  }, [safeMeta.page, safeMeta.totalPages, safeMeta.totalOrders, safeMeta.totalRows, page, safeRows.length]);
 
   const handleMonthChange = async (e) => {
     const value = e.target.value;
     setMonth(value);
 
     await fetchSalesReport({
-      ...filters,
       month: value,
+      search: search || "",
       page: 1,
+      limit: limit || 100,
+      startDate: startDate || "",
+      endDate: endDate || "",
     }).catch(() => {});
   };
 
   const handleRefresh = async () => {
     await fetchSalesReport({
-      month: filters.month,
-      search: filters.search,
-      page: filters.page,
-      limit: filters.limit,
+      month: month || currentMonthKey(),
+      search: search || "",
+      page: page || 1,
+      limit: limit || 100,
+      startDate: startDate || "",
+      endDate: endDate || "",
     }).catch(() => {});
   };
 
   const handlePrev = async () => {
-    if (!meta?.hasPrevPage || loading) return;
+    if (!safeMeta?.hasPrevPage || loading) return;
 
-    const nextPage = Math.max(1, Number(filters.page || 1) - 1);
+    const nextPage = Math.max(1, page - 1);
     setPage(nextPage);
 
     await fetchSalesReport({
-      ...filters,
+      month: month || currentMonthKey(),
+      search: search || "",
       page: nextPage,
+      limit: limit || 100,
+      startDate: startDate || "",
+      endDate: endDate || "",
     }).catch(() => {});
   };
 
   const handleNext = async () => {
-    if (!meta?.hasNextPage || loading) return;
+    if (!safeMeta?.hasNextPage || loading) return;
 
-    const nextPage = Number(filters.page || 1) + 1;
+    const nextPage = page + 1;
     setPage(nextPage);
 
     await fetchSalesReport({
-      ...filters,
+      month: month || currentMonthKey(),
+      search: search || "",
       page: nextPage,
+      limit: limit || 100,
+      startDate: startDate || "",
+      endDate: endDate || "",
     }).catch(() => {});
   };
 
   const handleDownload = async () => {
     await downloadSalesReportCsv({
-      month: filters.month,
-      search: filters.search,
+      month: month || currentMonthKey(),
+      search: search || "",
+      startDate: startDate || "",
+      endDate: endDate || "",
     }).catch(() => {});
   };
 
   return (
     <div className="min-h-screen bg-white text-black">
       <div className="px-4 py-6">
-        {/* Header */}
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Sales Report</h1>
             <p className="mt-1 text-sm text-neutral-600">
-              Delivered orders only • Month level reporting • Paginated table • Full month CSV download
+              Delivered orders only • Month level reporting • Paginated table • Full month CSV
+              download
             </p>
           </div>
 
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            {/* Month */}
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-neutral-700">Month</label>
               <input
                 type="month"
-                value={filters.month || ""}
+                value={month || currentMonthKey()}
                 onChange={handleMonthChange}
                 className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-black"
               />
             </div>
 
-            {/* Search */}
             <div className="relative w-full lg:w-96">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
               <input
@@ -190,7 +248,6 @@ export default function SalesReportPage() {
               />
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-2">
               <button
                 onClick={handleRefresh}
@@ -213,36 +270,34 @@ export default function SalesReportPage() {
           </div>
         </div>
 
-        {/* Current page snapshot */}
         <div className="mt-5">
-          <div className="mb-2 text-sm font-semibold text-black">Current Page Snapshot</div>
+          <div className="mb-2 text-sm font-semibold text-black">Sales Snapshot</div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-            <StatCard label="Rows" value={totals?.rows || 0} hint="Current page only" />
-            <StatCard label="Orders" value={totals?.orders || 0} hint="Current page only" />
+            <StatCard label="Rows" value={safeTotals.rows || 0} hint="Matched dataset" />
+            <StatCard label="Orders" value={safeTotals.orders || 0} hint="Matched dataset" />
             <StatCard
               label="Allocated Discount"
-              value={`₹ ${money(totals?.disc)}`}
-              hint="Current page only"
+              value={`₹ ${money(safeTotals.disc)}`}
+              hint="Matched dataset"
             />
             <StatCard
               label="Net (incl)"
-              value={`₹ ${money(totals?.net)}`}
-              hint="Current page only"
+              value={`₹ ${money(safeTotals.net)}`}
+              hint="Matched dataset"
             />
             <StatCard
               label="Taxable (excl)"
-              value={`₹ ${money(totals?.taxable)}`}
-              hint="Current page only"
+              value={`₹ ${money(safeTotals.taxable)}`}
+              hint="Matched dataset"
             />
             <StatCard
               label="Tax (5%)"
-              value={`₹ ${money(totals?.tax)}`}
-              hint="Current page only"
+              value={`₹ ${money(safeTotals.tax)}`}
+              hint="Matched dataset"
             />
           </div>
         </div>
 
-        {/* Table */}
         <div className="mt-5 overflow-hidden rounded-2xl border border-neutral-200 bg-white">
           <div className="overflow-auto">
             <table className="min-w-[2100px] w-full border-collapse">
@@ -288,7 +343,7 @@ export default function SalesReportPage() {
                   </tr>
                 )}
 
-                {!loading && !error && rows.length === 0 && (
+                {!loading && !error && safeRows.length === 0 && (
                   <tr>
                     <td colSpan={20} className="px-4 py-8 text-center text-neutral-500">
                       No delivered orders found for the selected filters.
@@ -298,53 +353,52 @@ export default function SalesReportPage() {
 
                 {!loading &&
                   !error &&
-                  rows.map((row, idx) => (
+                  safeRows.map((row, idx) => (
                     <tr
-                      key={`${row.orderId}-${idx}`}
+                      key={`${row?.orderId || "order"}-${idx}`}
                       className={idx % 2 === 0 ? "bg-white" : "bg-neutral-50"}
                     >
                       <Td>
                         <span className="rounded-lg bg-neutral-100 px-2 py-1 text-xs font-semibold">
-                          {row.orderId}
+                          {row?.orderId || "-"}
                         </span>
                       </Td>
-                      <Td>{row.deliveredMonth}</Td>
-                      <Td>{row.customerName || "-"}</Td>
-                      <Td>{row.customerState || "-"}</Td>
-                      <Td>{row.paymentMode || "-"}</Td>
-                      <Td>{row.paymentMethod || "-"}</Td>
-                      <Td>{row.courierName || "-"}</Td>
-                      <Td>{row.productType || "-"}</Td>
-                      <Td>{row.hsnCode || DEFAULT_HSN}</Td>
-                      <Td>{row.productSize || "-"}</Td>
-                      <Td>{row.qty}</Td>
-                      <Td>₹ {money(row.sellingPrice)}</Td>
+                      <Td>{row?.deliveredMonth || "-"}</Td>
+                      <Td>{row?.customerName || "-"}</Td>
+                      <Td>{row?.customerState || "-"}</Td>
+                      <Td>{row?.paymentMode || "-"}</Td>
+                      <Td>{row?.paymentMethod || "-"}</Td>
+                      <Td>{row?.courierName || "-"}</Td>
+                      <Td>{row?.productType || "-"}</Td>
+                      <Td>{row?.hsnCode || DEFAULT_HSN}</Td>
+                      <Td>{row?.productSize || "-"}</Td>
+                      <Td>{row?.qty ?? 0}</Td>
+                      <Td>₹ {money(row?.sellingPrice)}</Td>
                       <Td>
                         <span className="inline-flex rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium">
-                          ₹ {money(row.allocatedDiscount)}
+                          ₹ {money(row?.allocatedDiscount)}
                         </span>
                       </Td>
-                      <Td className="font-medium">₹ {money(row.netLine)}</Td>
-                      <Td>₹ {money(row.taxableValue)}</Td>
-                      <Td>₹ {money(row.taxAmount)}</Td>
-                      <Td>{row.taxRate || "5%"}</Td>
-                      <Td>₹ {money(row.orderTotalAmount)}</Td>
-                      <Td>₹ {money(row.orderDiscount)}</Td>
-                      <Td>{row.couponCode || "-"}</Td>
+                      <Td className="font-medium">₹ {money(row?.netLine)}</Td>
+                      <Td>₹ {money(row?.taxableValue)}</Td>
+                      <Td>₹ {money(row?.taxAmount)}</Td>
+                      <Td>{row?.taxRate || "5%"}</Td>
+                      <Td>₹ {money(row?.orderTotalAmount)}</Td>
+                      <Td>₹ {money(row?.orderDiscount)}</Td>
+                      <Td>{row?.couponCode || "-"}</Td>
                     </tr>
                   ))}
               </tbody>
             </table>
           </div>
 
-          {/* Footer */}
           <div className="flex flex-col gap-3 border-t border-neutral-200 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-xs text-neutral-600">{pageSummary}</div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePrev}
-                disabled={!meta?.hasPrevPage || loading}
+                disabled={!safeMeta?.hasPrevPage || loading}
                 className="inline-flex items-center gap-2 rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm font-medium hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -352,12 +406,12 @@ export default function SalesReportPage() {
               </button>
 
               <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-medium">
-                {meta?.page || 1} / {meta?.totalPages || 1}
+                {safeMeta?.page || page || 1} / {safeMeta?.totalPages || 1}
               </div>
 
               <button
                 onClick={handleNext}
-                disabled={!meta?.hasNextPage || loading}
+                disabled={!safeMeta?.hasNextPage || loading}
                 className="inline-flex items-center gap-2 rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm font-medium hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next
@@ -367,7 +421,6 @@ export default function SalesReportPage() {
           </div>
         </div>
 
-        {/* Notes */}
         <div className="mt-3 text-xs text-neutral-500">
           Notes: table paginated hai, lekin <b>Download Full CSV</b> selected month/search ke
           according <b>saara matched data</b> export karega, sirf current page nahi. Missing HSN

@@ -22,7 +22,6 @@ const toBool = (v) => {
 const buildQueryString = (params = {}) => {
   const qs = new URLSearchParams();
 
-  // ✅ multi filters supported by backend
   const fulfillmentStatus = toCSV(params.fulfillmentStatus);
   const priority = toCSV(params.priority);
   const orderType = toCSV(params.orderType);
@@ -33,23 +32,38 @@ const buildQueryString = (params = {}) => {
   if (orderType) qs.set("orderType", orderType);
   if (provider) qs.set("provider", provider);
 
-  // search + date range
   const q = safeStr(params.q);
-  const from = safeStr(params.from); // YYYY-MM-DD
-  const to = safeStr(params.to); // YYYY-MM-DD
+  const from = safeStr(params.from);
+  const to = safeStr(params.to);
+
   if (q) qs.set("q", q);
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
 
-  // ✅ all mode
-  const all = params.all;
-  if (all != null) qs.set("all", toBool(all) ? "true" : "false");
+  if (params.all != null) qs.set("all", toBool(params.all) ? "true" : "false");
 
-  // sort
-  const sort = safeStr(params.sort); // e.g. "createdAt:desc"
+  const sort = safeStr(params.sort);
   if (sort) qs.set("sort", sort);
 
   return qs.toString();
+};
+
+const parseJson = async (res) => {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || "Request failed");
+  return data;
+};
+
+const DEFAULT_FILTERS = {
+  fulfillmentStatus: "processing",
+  priority: "",
+  orderType: "",
+  provider: "",
+  q: "",
+  from: "",
+  to: "",
+  sort: "createdAt:desc",
+  all: true,
 };
 
 export const useAdminProductionStore = create((set, get) => ({
@@ -75,21 +89,8 @@ export const useAdminProductionStore = create((set, get) => ({
   },
 
   fulfillmentStatus: "processing",
+  filters: { ...DEFAULT_FILTERS },
 
-  // ✅ filters
-  filters: {
-    fulfillmentStatus: "processing",
-    priority: "",
-    orderType: "",
-    provider: "",
-    q: "",
-    from: "",
-    to: "",
-    sort: "createdAt:desc",
-    all: true,
-  },
-
-  // meta
   total: 0,
   loadingQueue: false,
   loadingSummary: false,
@@ -101,10 +102,15 @@ export const useAdminProductionStore = create((set, get) => ({
   /* ============================================================
     HELPERS
   ============================================================ */
+  clearError: () => set({ error: null }),
+
   setFulfillmentStatus: (status) =>
     set((state) => ({
-      fulfillmentStatus: status,
-      filters: { ...state.filters, fulfillmentStatus: status },
+      fulfillmentStatus: status || "processing",
+      filters: {
+        ...state.filters,
+        fulfillmentStatus: status || "processing",
+      },
     })),
 
   setFilters: (partial = {}) =>
@@ -112,11 +118,24 @@ export const useAdminProductionStore = create((set, get) => ({
       filters: { ...state.filters, ...partial },
     })),
 
-  clearError: () => set({ error: null }),
+  setSearch: (q = "") =>
+    set((state) => ({
+      filters: { ...state.filters, q: safeStr(q) },
+    })),
+
+  setDateRange: ({ from = "", to = "" } = {}) =>
+    set((state) => ({
+      filters: { ...state.filters, from: safeStr(from), to: safeStr(to) },
+    })),
+
+  resetFilters: () =>
+    set({
+      fulfillmentStatus: "processing",
+      filters: { ...DEFAULT_FILTERS },
+    }),
 
   /* ============================================================
-    ✅ FETCH PRODUCTION QUEUE
-    GET /api/orders/production/queue?....&all=true
+    FETCH PRODUCTION QUEUE
   ============================================================ */
   fetchProductionQueue: async (params = {}) => {
     try {
@@ -124,35 +143,29 @@ export const useAdminProductionStore = create((set, get) => ({
 
       const state = get();
       const merged = { ...state.filters, ...params };
+      const status = merged.fulfillmentStatus || state.fulfillmentStatus || "processing";
 
-      const status =
-        merged.fulfillmentStatus || state.fulfillmentStatus || "processing";
       merged.fulfillmentStatus = status;
-
       if (merged.all == null) merged.all = true;
 
       const query = buildQueryString(merged);
-
       const res = await fetch(`${API}/production/queue?${query}`, {
         credentials: "include",
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to fetch production queue");
-      }
+      const data = await parseJson(res);
 
       set((s) => ({
         queue: data.orders || [],
+        total: Number(data.total || (data.orders || []).length || 0),
         fulfillmentStatus: status,
         filters: { ...s.filters, ...merged, fulfillmentStatus: status },
-        total: Number(data.total || (data.orders || []).length || 0),
       }));
 
       return data.orders || [];
     } catch (e) {
       console.error("❌ fetchProductionQueue error:", e);
-      set({ error: e.message });
+      set({ error: e.message, queue: [] });
       toast.error(e.message);
       return [];
     } finally {
@@ -161,8 +174,7 @@ export const useAdminProductionStore = create((set, get) => ({
   },
 
   /* ============================================================
-    ✅ FETCH PRODUCTION SUMMARY
-    GET /api/orders/production/summary
+    FETCH PRODUCTION SUMMARY
   ============================================================ */
   fetchProductionSummary: async () => {
     try {
@@ -172,10 +184,7 @@ export const useAdminProductionStore = create((set, get) => ({
         credentials: "include",
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to fetch production summary");
-      }
+      const data = await parseJson(res);
 
       set((state) => ({
         summary: { ...state.summary, ...(data.summary || {}) },
@@ -193,12 +202,13 @@ export const useAdminProductionStore = create((set, get) => ({
   },
 
   /* ============================================================
-    ✅ MARK ORDER PACKED
-    PATCH /api/orders/:id/status
+    MARK ORDER PACKED
+    backend handles reservation consume on packed
   ============================================================ */
   markOrderPacked: async (orderId) => {
     try {
       if (!orderId) throw new Error("Order id missing");
+
       set({ updatingPacked: true, error: null });
 
       const res = await fetch(`${API}/${orderId}/status`, {
@@ -208,9 +218,7 @@ export const useAdminProductionStore = create((set, get) => ({
         body: JSON.stringify({ fulfillmentStatus: "packed" }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to mark packed");
-
+      const data = await parseJson(res);
       const updated = data.order;
 
       set((state) => ({
@@ -220,7 +228,12 @@ export const useAdminProductionStore = create((set, get) => ({
       }));
 
       toast.success("Order marked packed ✅");
-      get().fetchProductionSummary().catch(() => {});
+
+      await Promise.allSettled([
+        get().fetchProductionSummary(),
+        get().fetchProductionQueue(get().filters),
+      ]);
+
       return updated;
     } catch (e) {
       console.error("❌ markOrderPacked error:", e);
@@ -233,12 +246,13 @@ export const useAdminProductionStore = create((set, get) => ({
   },
 
   /* ============================================================
-    ✅ MARK ORDER SHIPPED FROM PRODUCTION
-    POST /api/orders/production/:id/shipped
+    MARK ORDER SHIPPED FROM PRODUCTION
+    backend only allows packed/picked -> shipped
   ============================================================ */
   markOrderShipped: async (orderId) => {
     try {
       if (!orderId) throw new Error("Order id missing");
+
       set({ updatingShipped: true, error: null });
 
       const res = await fetch(`${API}/production/${orderId}/shipped`, {
@@ -246,9 +260,7 @@ export const useAdminProductionStore = create((set, get) => ({
         credentials: "include",
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to mark shipped");
-
+      const data = await parseJson(res);
       const updated = data.order;
 
       set((state) => ({
@@ -258,7 +270,12 @@ export const useAdminProductionStore = create((set, get) => ({
       }));
 
       toast.success("Order marked shipped ✅");
-      get().fetchProductionSummary().catch(() => {});
+
+      await Promise.allSettled([
+        get().fetchProductionSummary(),
+        get().fetchProductionQueue(get().filters),
+      ]);
+
       return updated;
     } catch (e) {
       console.error("❌ markOrderShipped error:", e);
@@ -271,17 +288,13 @@ export const useAdminProductionStore = create((set, get) => ({
   },
 
   /* ============================================================
-    ✅ BULK MARK ALL PACKED AS SHIPPED
-    PATCH /api/orders/production/packed/mark-all-shipped
-    Uses current filters by default
+    BULK MARK ALL PACKED AS SHIPPED
   ============================================================ */
   markAllPackedAsShipped: async (params = {}) => {
     try {
       set({ updatingBulkShipped: true, error: null });
 
       const state = get();
-
-      // ✅ always bulk only for packed orders
       const merged = {
         ...state.filters,
         ...params,
@@ -307,14 +320,9 @@ export const useAdminProductionStore = create((set, get) => ({
         }
       );
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to mark all packed orders as shipped");
-      }
-
+      const data = await parseJson(res);
       const modifiedCount = Number(data.modifiedCount || 0);
 
-      // ✅ remove/update packed queue instantly on frontend
       set((state) => {
         const shippedIdSet = new Set((data.orderIds || []).map((id) => String(id)));
 
@@ -358,7 +366,7 @@ export const useAdminProductionStore = create((set, get) => ({
   },
 
   /* ============================================================
-    ✅ REFRESH ALL (Queue + Summary)
+    REFRESH ALL
   ============================================================ */
   refreshAll: async () => {
     const state = get();

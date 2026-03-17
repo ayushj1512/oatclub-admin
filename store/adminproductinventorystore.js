@@ -11,15 +11,6 @@ const API = `${BASE_URL}/api/products/admin/inventory`;
 ============================================================ */
 const s = (v) => String(v ?? "").trim();
 
-const toBool = (v, fallback = undefined) => {
-  if (typeof v === "boolean") return v;
-  const x = s(v).toLowerCase();
-  if (!x) return fallback;
-  if (["true", "1", "yes"].includes(x)) return true;
-  if (["false", "0", "no"].includes(x)) return false;
-  return fallback;
-};
-
 const toNonNegInt = (v, fallback = 0) => {
   const n = Math.floor(Number(v));
   if (!Number.isFinite(n) || n < 0) return fallback;
@@ -108,8 +99,6 @@ const defaultFilters = () => ({
   q: "",
   category: "",
   categories: [],
-  hideFootwear: true,
-  footwearKeys: ["footwear", "shoes", "sneakers", "slippers", "sandals"],
   sort: "updated_desc",
   productType: "",
   hasVariants: undefined,
@@ -131,9 +120,6 @@ const filtersToParams = (filters = {}, page = 1, limit = 70) => ({
   q: filters.q,
   category: filters.category,
   categories: filters.categories,
-  hideFootwear:
-    typeof filters.hideFootwear === "boolean" ? String(filters.hideFootwear) : undefined,
-  footwearKeys: filters.footwearKeys,
   sort: filters.sort,
   productType: filters.productType,
   hasVariants:

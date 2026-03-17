@@ -48,10 +48,20 @@ const emptySummary = () => ({
   lowestRevenueDay: null,
 });
 
+const emptyTotals = () => ({
+  rows: 0,
+  orders: 0,
+  disc: 0,
+  net: 0,
+  taxable: 0,
+  tax: 0,
+});
+
 const emptyMeta = () => ({
   page: 1,
   limit: 50,
   totalOrders: 0,
+  totalRows: 0,
   totalPages: 1,
   hasNextPage: false,
   hasPrevPage: false,
@@ -72,7 +82,30 @@ const normalizeSummary = (src = {}) => ({
   lowestRevenueDay: src.lowestRevenueDay || null,
 });
 
-const csvHeaders = [
+const normalizeTotals = (src = {}) => ({
+  rows: toNum(src.rows),
+  orders: toNum(src.orders),
+  disc: toNum(src.disc),
+  net: toNum(src.net),
+  taxable: toNum(src.taxable),
+  tax: toNum(src.tax),
+});
+
+const normalizeMeta = (src = {}, fallback = {}) => ({
+  page: toNum(src.page, fallback.page || 1),
+  limit: toNum(src.limit, fallback.limit || 50),
+  totalOrders: toNum(src.totalOrders, 0),
+  totalRows: toNum(src.totalRows, 0),
+  totalPages: Math.max(1, toNum(src.totalPages, 1)),
+  hasNextPage: Boolean(src.hasNextPage),
+  hasPrevPage: Boolean(src.hasPrevPage),
+  month: String(src.month || fallback.month || ""),
+  search: String(src.search || fallback.search || ""),
+  startDate: String(src.startDate || fallback.startDate || ""),
+  endDate: String(src.endDate || fallback.endDate || ""),
+});
+
+const revenueCsvHeaders = [
   "Order Number",
   "Date",
   "Payment Method",
@@ -81,14 +114,37 @@ const csvHeaders = [
   "Discount",
 ];
 
+const salesCsvHeaders = [
+  "Order ID",
+  "Month",
+  "Customer",
+  "State",
+  "Pay",
+  "Payment Method",
+  "Courier",
+  "Product Type",
+  "HSN",
+  "Size",
+  "Qty",
+  "Unit (incl)",
+  "Disc",
+  "Net (incl)",
+  "Taxable",
+  "Tax",
+  "Rate",
+  "Order Total",
+  "Order Disc",
+  "Coupon",
+];
+
 const escapeCsv = (value) => {
   const s = String(value ?? "");
   return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-const ordersToCsv = (orders = []) =>
+const revenueOrdersToCsv = (orders = []) =>
   [
-    csvHeaders.join(","),
+    revenueCsvHeaders.join(","),
     ...orders.map((o) =>
       [
         o.orderNumber,
@@ -97,6 +153,37 @@ const ordersToCsv = (orders = []) =>
         o.fulfillmentStatus,
         o.revenue,
         o.discount,
+      ]
+        .map(escapeCsv)
+        .join(",")
+    ),
+  ].join("\n");
+
+const salesRowsToCsv = (rows = []) =>
+  [
+    salesCsvHeaders.join(","),
+    ...rows.map((row) =>
+      [
+        row.orderId,
+        row.deliveredMonth,
+        row.customerName,
+        row.customerState,
+        row.paymentMode,
+        row.paymentMethod,
+        row.courierName,
+        row.productType,
+        row.hsnCode,
+        row.productSize,
+        row.qty,
+        row.sellingPrice,
+        row.allocatedDiscount,
+        row.netLine,
+        row.taxableValue,
+        row.taxAmount,
+        row.taxRate,
+        row.orderTotalAmount,
+        row.orderDiscount,
+        row.couponCode,
       ]
         .map(escapeCsv)
         .join(",")
@@ -151,9 +238,17 @@ const fetchJson = async (url, label = "report") => {
 export const useOrderAccountsStore = create((set, get) => ({
   reportType: "revenue",
 
-  orders: [], // current page
-  allOrders: [], // all pages
+  // revenue
+  orders: [],
+  allOrders: [],
   summary: emptySummary(),
+
+  // sales
+  rows: [],
+  allRows: [],
+  totals: emptyTotals(),
+
+  // shared
   meta: emptyMeta(),
   filters: initialFilters(),
 
@@ -167,7 +262,10 @@ export const useOrderAccountsStore = create((set, get) => ({
       reportType: reportType === "sales" ? "sales" : "revenue",
       orders: [],
       allOrders: [],
+      rows: [],
+      allRows: [],
       summary: emptySummary(),
+      totals: emptyTotals(),
       meta: emptyMeta(),
       error: "",
     }),
@@ -204,7 +302,11 @@ export const useOrderAccountsStore = create((set, get) => ({
 
   setLimit: (limit = 50) =>
     set((state) => ({
-      filters: { ...state.filters, limit: Math.max(1, Number(limit) || 50), page: 1 },
+      filters: {
+        ...state.filters,
+        limit: Math.max(1, Number(limit) || 50),
+        page: 1,
+      },
     })),
 
   resetFilters: () =>
@@ -212,7 +314,10 @@ export const useOrderAccountsStore = create((set, get) => ({
       filters: initialFilters(),
       orders: [],
       allOrders: [],
+      rows: [],
+      allRows: [],
       summary: emptySummary(),
+      totals: emptyTotals(),
       meta: emptyMeta(),
       error: "",
     }),
@@ -221,12 +326,47 @@ export const useOrderAccountsStore = create((set, get) => ({
     const reportType = type || get().reportType || "revenue";
     const endpoint = REPORT_ENDPOINTS[reportType] || REPORT_ENDPOINTS.revenue;
 
+    const baseFilters = {
+      ...initialFilters(),
+      ...filters,
+      page: 1,
+      limit: 250,
+    };
+
     const firstData = await fetchJson(
-      buildFetchUrl(endpoint, { ...filters, page: 1, limit: 250 }),
+      buildFetchUrl(endpoint, baseFilters),
       `${reportType} report`
     );
 
     const totalPages = Math.max(1, toNum(firstData?.meta?.totalPages, 1));
+
+    if (reportType === "sales") {
+      let allRows = Array.isArray(firstData?.rows) ? [...firstData.rows] : [];
+
+      if (totalPages > 1) {
+        const requests = [];
+        for (let page = 2; page <= totalPages; page++) {
+          requests.push(
+            fetchJson(
+              buildFetchUrl(endpoint, { ...baseFilters, page, limit: 250 }),
+              `${reportType} report page ${page}`
+            ).then((data) => (Array.isArray(data?.rows) ? data.rows : []))
+          );
+        }
+
+        const pages = await Promise.all(requests);
+        pages.forEach((pageRows) => {
+          allRows.push(...pageRows);
+        });
+      }
+
+      return {
+        allRows,
+        meta: normalizeMeta(firstData?.meta, baseFilters),
+        totals: normalizeTotals(firstData?.totals),
+      };
+    }
+
     let allOrders = Array.isArray(firstData?.orders) ? [...firstData.orders] : [];
 
     if (totalPages > 1) {
@@ -234,20 +374,22 @@ export const useOrderAccountsStore = create((set, get) => ({
       for (let page = 2; page <= totalPages; page++) {
         requests.push(
           fetchJson(
-            buildFetchUrl(endpoint, { ...filters, page, limit: 250 }),
+            buildFetchUrl(endpoint, { ...baseFilters, page, limit: 250 }),
             `${reportType} report page ${page}`
           ).then((data) => (Array.isArray(data?.orders) ? data.orders : []))
         );
       }
 
       const pages = await Promise.all(requests);
-      pages.forEach((pageOrders) => allOrders.push(...pageOrders));
+      pages.forEach((pageOrders) => {
+        allOrders.push(...pageOrders);
+      });
     }
 
     return {
       allOrders,
-      meta: firstData?.meta || {},
-      summary: firstData?.summary || {},
+      meta: normalizeMeta(firstData?.meta, baseFilters),
+      summary: normalizeSummary(firstData?.summary),
     };
   },
 
@@ -260,34 +402,64 @@ export const useOrderAccountsStore = create((set, get) => ({
     set({ loading: true, error: "" });
 
     try {
-      const data = await fetchJson(
-        buildFetchUrl(endpoint, filters),
-        `${reportType} report`
-      );
+      const data = await fetchJson(buildFetchUrl(endpoint, filters), `${reportType} report`);
+
+      const normalizedMeta = normalizeMeta(data?.meta, filters);
+
+      if (reportType === "sales") {
+        set({
+          reportType,
+          rows: Array.isArray(data?.rows) ? data.rows : [],
+          allRows: fetchOverall ? get().allRows : [],
+          totals: normalizeTotals(data?.totals),
+          orders: [],
+          allOrders: [],
+          summary: emptySummary(),
+          meta: normalizedMeta,
+          filters: {
+            month: normalizedMeta.month,
+            search: normalizedMeta.search,
+            startDate: normalizedMeta.startDate,
+            endDate: normalizedMeta.endDate,
+            page: normalizedMeta.page,
+            limit: normalizedMeta.limit,
+          },
+          loading: false,
+          error: "",
+        });
+
+        if (fetchOverall) {
+          set({ hydratingAll: true });
+          try {
+            const overall = await get().fetchAllPages({ type: reportType, filters });
+            set({
+              allRows: Array.isArray(overall?.allRows) ? overall.allRows : [],
+              hydratingAll: false,
+            });
+          } catch {
+            set({ hydratingAll: false });
+          }
+        }
+
+        return data;
+      }
 
       set({
         reportType,
         orders: Array.isArray(data?.orders) ? data.orders : [],
+        allOrders: fetchOverall ? get().allOrders : [],
         summary: normalizeSummary(data?.summary),
-        meta: {
-          page: toNum(data?.meta?.page, filters.page),
-          limit: toNum(data?.meta?.limit, filters.limit),
-          totalOrders: toNum(data?.meta?.totalOrders, 0),
-          totalPages: Math.max(1, toNum(data?.meta?.totalPages, 1)),
-          hasNextPage: Boolean(data?.meta?.hasNextPage),
-          hasPrevPage: Boolean(data?.meta?.hasPrevPage),
-          month: String(data?.meta?.month || filters.month || ""),
-          search: String(data?.meta?.search || filters.search || ""),
-          startDate: String(data?.meta?.startDate || filters.startDate || ""),
-          endDate: String(data?.meta?.endDate || filters.endDate || ""),
-        },
+        rows: [],
+        allRows: [],
+        totals: emptyTotals(),
+        meta: normalizedMeta,
         filters: {
-          month: String(data?.meta?.month || filters.month || ""),
-          search: String(data?.meta?.search || filters.search || ""),
-          startDate: String(data?.meta?.startDate || filters.startDate || ""),
-          endDate: String(data?.meta?.endDate || filters.endDate || ""),
-          page: toNum(data?.meta?.page, filters.page),
-          limit: toNum(data?.meta?.limit, filters.limit),
+          month: normalizedMeta.month,
+          search: normalizedMeta.search,
+          startDate: normalizedMeta.startDate,
+          endDate: normalizedMeta.endDate,
+          page: normalizedMeta.page,
+          limit: normalizedMeta.limit,
         },
         loading: false,
         error: "",
@@ -298,10 +470,10 @@ export const useOrderAccountsStore = create((set, get) => ({
         try {
           const overall = await get().fetchAllPages({ type: reportType, filters });
           set({
-            allOrders: overall.allOrders,
+            allOrders: Array.isArray(overall?.allOrders) ? overall.allOrders : [],
             hydratingAll: false,
           });
-        } catch (e) {
+        } catch {
           set({ hydratingAll: false });
         }
       }
@@ -331,17 +503,35 @@ export const useOrderAccountsStore = create((set, get) => ({
     set({ downloading: true, error: "" });
 
     try {
+      if (reportType === "sales") {
+        let allRows = state.allRows;
+
+        if (!Array.isArray(allRows) || !allRows.length) {
+          const overall = await get().fetchAllPages({ type: reportType, filters });
+          allRows = Array.isArray(overall?.allRows) ? overall.allRows : [];
+          set({ allRows });
+        }
+
+        downloadBlob(
+          salesRowsToCsv(allRows),
+          `sales-report-${filters.month || "all"}.csv`
+        );
+
+        set({ downloading: false });
+        return true;
+      }
+
       let allOrders = state.allOrders;
 
       if (!Array.isArray(allOrders) || !allOrders.length) {
         const overall = await get().fetchAllPages({ type: reportType, filters });
-        allOrders = overall.allOrders;
+        allOrders = Array.isArray(overall?.allOrders) ? overall.allOrders : [];
         set({ allOrders });
       }
 
       downloadBlob(
-        ordersToCsv(allOrders),
-        `${reportType}-report-${filters.month || "all"}.csv`
+        revenueOrdersToCsv(allOrders),
+        `revenue-report-${filters.month || "all"}.csv`
       );
 
       set({ downloading: false });
@@ -365,7 +555,10 @@ export const useOrderAccountsStore = create((set, get) => ({
     set({
       orders: [],
       allOrders: [],
+      rows: [],
+      allRows: [],
       summary: emptySummary(),
+      totals: emptyTotals(),
       meta: emptyMeta(),
       error: "",
     }),

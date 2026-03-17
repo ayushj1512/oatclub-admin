@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";import { useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import useAdminProductionStore from "@/store/adminProductionStore";
 import { useInventoryReservationStore } from "@/store/inventoryReservationStore";
 import SyncInventoryButton from "@/components/production/SyncInventoryButton";
 import { toast } from "react-hot-toast";
-// ✅ Product Store for images (bulk fetch)
 import { useAdminProductStore } from "@/store/adminProductStore";
 
-// ✅ Excel Export libs
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
@@ -31,7 +30,7 @@ const DATE_PRESETS = [
 ];
 
 /* ============================
-   ✅ Date helpers
+   Date helpers
 ============================ */
 const startOfDay = (d) => {
   const x = new Date(d);
@@ -78,11 +77,11 @@ const getPresetRange = (key) => {
     return { from: startOfDay(from), to: todayEnd };
   }
 
-  return { from: null, to: null }; // all
+  return { from: null, to: null };
 };
 
 /* ============================
-   ✅ URL + Proxy Helpers
+   URL + Proxy Helpers
 ============================ */
 const toAbsoluteUrl = (url) => {
   const u = String(url || "").trim();
@@ -100,11 +99,12 @@ const proxifyImage = (url) => {
 };
 
 const getProductId = (item) => String(item?.productId?._id || item?.productId || "");
+const getVariantIdFromItem = (item) => String(item?.variant?.variantId || "");
+const safeId = (v) => String(v?._id || v || "").trim();
 
 const resolveItemImage = (item, productMap) => {
   const pid = getProductId(item);
   const product = productMap?.[pid];
-
   const variantId = item?.variant?.variantId ? String(item.variant.variantId) : "";
 
   if (product && variantId && Array.isArray(product?.variants)) {
@@ -113,7 +113,9 @@ const resolveItemImage = (item, productMap) => {
   }
 
   if (product?.thumbnail) return proxifyImage(product.thumbnail);
-  if (Array.isArray(product?.images) && product.images.length) return proxifyImage(product.images[0]);
+  if (Array.isArray(product?.images) && product.images.length) {
+    return proxifyImage(product.images[0]);
+  }
 
   return proxifyImage(
     item?.variant?.image ||
@@ -122,9 +124,6 @@ const resolveItemImage = (item, productMap) => {
       ""
   );
 };
-
-const getVariantIdFromItem = (item) => String(item?.variant?.variantId || "");
-const safeId = (v) => String(v?._id || v || "").trim();
 
 const getReservedQtyForItem = (orderId, item, reservationList) => {
   const oid = String(orderId || "").trim();
@@ -147,21 +146,6 @@ const getReservedQtyForItem = (orderId, item, reservationList) => {
     .reduce((sum, r) => sum + Number(r?.qty || 0), 0);
 };
 
-const getOrderReservationIds = (orderId, reservationList = []) => {
-  const oid = String(orderId || "").trim();
-  if (!oid) return [];
-
-  return (reservationList || [])
-    .filter((r) => {
-      if (!r) return false;
-      if (String(r?.status) !== "reserved") return false;
-      if (String(r?.refType) !== "order") return false;
-      return String(r?.refId) === oid;
-    })
-    .map((r) => String(r?._id || "").trim())
-    .filter(Boolean);
-};
-
 const getOrderPackability = (order, reservationList = []) => {
   const items = order?.items || [];
   for (const it of items) {
@@ -169,14 +153,17 @@ const getOrderPackability = (order, reservationList = []) => {
     const resv = getReservedQtyForItem(order?._id, it, reservationList);
     if (resv < req) {
       const title = it?.productSnapshot?.title || "Item";
-      return { fullyReserved: false, reason: `Not fully reserved: ${title} (${resv}/${req})` };
+      return {
+        fullyReserved: false,
+        reason: `Not fully reserved: ${title} (${resv}/${req})`,
+      };
     }
   }
   return { fullyReserved: true, reason: "" };
 };
 
 /* ============================================================
-   ✅ Excel Export With Embedded Images (via Proxy)
+   Excel Export
 ============================================================ */
 async function exportProductionXLSX(orders, productMap, filename = "production.xlsx") {
   if (!orders?.length) return;
@@ -252,7 +239,7 @@ async function exportProductionXLSX(orders, productMap, filename = "production.x
             tl: { col: 0, row: rowIndex - 1 },
             ext: { width: 70, height: 70 },
           });
-        } catch (e) {
+        } catch {
           console.warn("Image embed failed:", imageUrl);
         }
       }
@@ -283,7 +270,6 @@ export default function ProductionDashboardPage() {
     setFulfillmentStatus,
     fetchProductionQueue,
     fetchProductionSummary,
-    refreshAll,
     clearError,
   } = prodStore;
 
@@ -295,15 +281,11 @@ export default function ProductionDashboardPage() {
     prodStore?.setOrderStatus ||
     null;
 
-  const {
-    reservations: storeReservations,
-    fetchReservations: fetchInventoryReservations,
-    consumeReservation,
-  } = useInventoryReservationStore();
+  const { reservations: storeReservations, fetchReservations: fetchInventoryReservations } =
+    useInventoryReservationStore();
 
   const { fetchProductsByIds } = useAdminProductStore();
 
-  // ✅ Local UI state
   const [search, setSearch] = useState("");
   const [datePreset, setDatePreset] = useState("today");
   const [exporting, setExporting] = useState(false);
@@ -313,66 +295,58 @@ export default function ProductionDashboardPage() {
   const [useCustomRange, setUseCustomRange] = useState(false);
 
   const [productMap, setProductMap] = useState({});
-
-  // ✅ IMPORTANT: local list & local reservations so UI doesn't "refresh"
   const [localQueue, setLocalQueue] = useState([]);
   const [localReservations, setLocalReservations] = useState([]);
   const [localSummary, setLocalSummary] = useState({});
 
-  // ✅ Selection states
   const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const [packingIds, setPackingIds] = useState(() => new Set()); // per-order loading
+  const [packingIds, setPackingIds] = useState(() => new Set());
   const [bulkPacking, setBulkPacking] = useState(false);
 
+  const didMountRef = useRef(false);
 
-  // ✅ guards to prevent "loaded then refresh/jump"
-const didMountRef = useRef(false);
+  const buildQueueParams = useCallback(() => {
+    const base = { fulfillmentStatus, all: true };
 
-// ✅ build params from current UI state
-const buildQueueParams = useCallback(() => {
-  const base = { fulfillmentStatus, all: true };
+    if (useCustomRange) {
+      return {
+        ...base,
+        from: rangeFrom || "",
+        to: rangeTo || "",
+      };
+    }
 
-  // if custom range is active, send from/to
-  if (useCustomRange) {
-    return { ...base, from: rangeFrom || "", to: rangeTo || "" };
-  }
+    return base;
+  }, [fulfillmentStatus, useCustomRange, rangeFrom, rangeTo]);
 
-  return base;
-}, [fulfillmentStatus, useCustomRange, rangeFrom, rangeTo]);
+  const safeRefresh = useCallback(async () => {
+    try {
+      await fetchProductionSummary();
+      await fetchProductionQueue(buildQueueParams());
+    } catch (e) {
+      console.error("safeRefresh failed:", e);
+      toast.error("Refresh failed");
+    }
+  }, [fetchProductionSummary, fetchProductionQueue, buildQueueParams]);
 
-// ✅ safe refresh (avoid prodStore.refreshAll if it resets status internally)
-const safeRefresh = useCallback(async () => {
-  try {
-    await fetchProductionSummary();
-    await fetchProductionQueue(buildQueueParams());
-  } catch (e) {
-    console.error("safeRefresh failed:", e);
-  }
-}, [fetchProductionSummary, fetchProductionQueue, buildQueueParams]);
+  useEffect(() => {
+    safeRefresh();
+  }, [safeRefresh]);
 
-// ✅ Initial load (ONE time) - uses current fulfillmentStatus (no hard-coded processing)
-useEffect(() => {
-  safeRefresh();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    fetchProductionQueue(buildQueueParams());
+  }, [fulfillmentStatus, fetchProductionQueue, buildQueueParams]);
 
-// ✅ On status change - fetch queue (skip first run to avoid double)
-useEffect(() => {
-  if (!didMountRef.current) {
-    didMountRef.current = true;
-    return;
-  }
-  fetchProductionQueue(buildQueueParams());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [fulfillmentStatus]);
-
-  // Mirror store -> local (ONLY when store changes)
- useEffect(() => {
-  const onlyConfirmed = (Array.isArray(storeQueue) ? storeQueue : []).filter(
-    (o) => o?.isConfirmed === true
-  );
-  setLocalQueue(onlyConfirmed);
-}, [storeQueue]);
+  useEffect(() => {
+    const onlyConfirmed = (Array.isArray(storeQueue) ? storeQueue : []).filter(
+      (o) => o?.isConfirmed === true
+    );
+    setLocalQueue(onlyConfirmed);
+  }, [storeQueue]);
 
   useEffect(() => {
     setLocalSummary(storeSummary || {});
@@ -382,7 +356,6 @@ useEffect(() => {
     setLocalReservations(Array.isArray(storeReservations) ? storeReservations : []);
   }, [storeReservations]);
 
-  // ✅ Build productMap whenever localQueue changes
   useEffect(() => {
     const run = async () => {
       const ids = Array.from(
@@ -392,6 +365,7 @@ useEffect(() => {
             .filter(Boolean)
         )
       );
+
       if (!ids.length) return;
 
       const products = await fetchProductsByIds(ids);
@@ -403,37 +377,32 @@ useEffect(() => {
     };
 
     run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localQueue]);
+  }, [localQueue, fetchProductsByIds]);
 
-  
-
-  // ✅ Fetch reservations when queue present (but don't refetch after packing)
   useEffect(() => {
-  const run = async () => {
-    if (!localQueue?.length) return;
+    const run = async () => {
+      if (!localQueue?.length) return;
 
-    const refIds = localQueue
-      .map((o) => String(o?._id || "").trim())
-      .filter(Boolean);
+      const refIds = localQueue
+        .map((o) => String(o?._id || "").trim())
+        .filter(Boolean);
 
-    // ✅ If your backend/store supports refIds filter, it will reduce load.
-    // ✅ If it doesn't support, fallback to old call.
-    try {
-      await fetchInventoryReservations({
-        status: "reserved",
-        refType: "order",
-        refIds, // ✅ NEW (optional)
-      });
-    } catch (e) {
-      // fallback (backward compatible)
-      await fetchInventoryReservations({ status: "reserved", refType: "order" });
-    }
-  };
+      try {
+        await fetchInventoryReservations({
+          status: "reserved",
+          refType: "order",
+          refIds,
+        });
+      } catch {
+        await fetchInventoryReservations({
+          status: "reserved",
+          refType: "order",
+        });
+      }
+    };
 
-  run();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [localQueue]);
+    run();
+  }, [localQueue, fetchInventoryReservations]);
 
   const activeDateRange = useMemo(() => {
     if (useCustomRange) {
@@ -445,39 +414,37 @@ useEffect(() => {
   }, [datePreset, useCustomRange, rangeFrom, rangeTo]);
 
   const filteredQueue = useMemo(() => {
-  const q = Array.isArray(localQueue) ? localQueue.slice() : [];
-  const term = String(search || "").trim().toLowerCase();
-  const { from, to } = activeDateRange;
+    const q = Array.isArray(localQueue) ? localQueue.slice() : [];
+    const term = String(search || "").trim().toLowerCase();
+    const { from, to } = activeDateRange;
 
-  return q.filter((o) => {
-    // ✅ ONLY confirmed orders on this page
-    if (o?.isConfirmed !== true) return false;
+    return q.filter((o) => {
+      if (o?.isConfirmed !== true) return false;
 
-    const created = new Date(o?.createdAt || o?.orderDate || Date.now());
-    const inRange = (!from || created >= from) && (!to || created <= to);
-    if (!inRange) return false;
+      const created = new Date(o?.createdAt || o?.orderDate || Date.now());
+      const inRange = (!from || created >= from) && (!to || created <= to);
+      if (!inRange) return false;
 
-    if (!term) return true;
+      if (!term) return true;
 
-    const orderNumber = String(o?.orderNumber || "").toLowerCase();
-    const name = String(o?.shippingAddressSnapshot?.fullName || "").toLowerCase();
-    const phone = String(o?.shippingAddressSnapshot?.phone || "").toLowerCase();
+      const orderNumber = String(o?.orderNumber || "").toLowerCase();
+      const name = String(o?.shippingAddressSnapshot?.fullName || "").toLowerCase();
+      const phone = String(o?.shippingAddressSnapshot?.phone || "").toLowerCase();
 
-    const itemsText = (o?.items || [])
-      .map((it) => it?.productSnapshot?.title || "")
-      .join(" ")
-      .toLowerCase();
+      const itemsText = (o?.items || [])
+        .map((it) => it?.productSnapshot?.title || "")
+        .join(" ")
+        .toLowerCase();
 
-    return (
-      orderNumber.includes(term) ||
-      name.includes(term) ||
-      phone.includes(term) ||
-      itemsText.includes(term)
-    );
-  });
-}, [localQueue, search, activeDateRange]);
+      return (
+        orderNumber.includes(term) ||
+        name.includes(term) ||
+        phone.includes(term) ||
+        itemsText.includes(term)
+      );
+    });
+  }, [localQueue, search, activeDateRange]);
 
-  // ✅ Packability map for current filtered list (for selection UI)
   const packabilityMap = useMemo(() => {
     const map = {};
     for (const o of filteredQueue) {
@@ -487,33 +454,28 @@ useEffect(() => {
   }, [filteredQueue, localReservations]);
 
   const packableFilteredIds = useMemo(() => {
-  return (filteredQueue || [])
-    .filter((o) => {
-      if (!o) return false;
+    return (filteredQueue || [])
+      .filter((o) => {
+        if (!o) return false;
+        const id = String(o?._id || "");
+        const p = packabilityMap?.[id];
 
-      const id = String(o?._id || "");
-      const p = packabilityMap?.[id];
+        if (o?.isConfirmed !== true) return false;
+        if (String(o?.fulfillmentStatus) !== "processing") return false;
+        if (!p?.fullyReserved) return false;
 
-      // ✅ Only confirmed orders
-      if (o?.isConfirmed !== true) return false;
+        return true;
+      })
+      .map((o) => String(o?._id));
+  }, [filteredQueue, packabilityMap]);
 
-      // ✅ Only processing stage
-      if (String(o?.fulfillmentStatus) !== "processing") return false;
-
-      // ✅ Fully reserved required
-      if (!p?.fullyReserved) return false;
-
-      return true;
-    })
-    .map((o) => String(o?._id));
-}, [filteredQueue, packabilityMap]);
-
-  // ✅ Keep selection clean when list changes
   useEffect(() => {
     setSelectedIds((prev) => {
       const next = new Set();
       const visible = new Set(filteredQueue.map((o) => String(o?._id)));
-      for (const id of prev) if (visible.has(String(id))) next.add(String(id));
+      for (const id of prev) {
+        if (visible.has(String(id))) next.add(String(id));
+      }
       return next;
     });
   }, [filteredQueue]);
@@ -524,122 +486,95 @@ useEffect(() => {
     router.push(`/production/order/${orderId}`);
   };
 
-  const applyLocalRemovalAfterPacked = useCallback(
-    (orderId) => {
-      // If you're viewing "processing" list, packed orders should disappear
-      setLocalQueue((prev) => prev.filter((o) => String(o?._id) !== String(orderId)));
+  const applyLocalRemovalAfterPacked = useCallback((orderId) => {
+    setLocalQueue((prev) => prev.filter((o) => String(o?._id) !== String(orderId)));
 
-      // Also remove reservations for that order locally (so pills don't flicker)
-      setLocalReservations((prev) =>
-        (prev || []).filter((r) => String(r?.refId) !== String(orderId))
-      );
+    setLocalReservations((prev) =>
+      (prev || []).filter((r) => String(r?.refId) !== String(orderId))
+    );
 
-      // Optimistic summary update
-      setLocalSummary((prev) => {
-        const p = { ...(prev || {}) };
-        p.processing = Math.max(0, Number(p.processing || 0) - 1);
-        p.packed = Number(p.packed || 0) + 1;
-        return p;
-      });
-    },
-    []
-  );
+    setLocalSummary((prev) => {
+      const p = { ...(prev || {}) };
+      p.processing = Math.max(0, Number(p.processing || 0) - 1);
+      p.packed = Number(p.packed || 0) + 1;
+      return p;
+    });
+  }, []);
 
   const doMarkPacked = useCallback(
-  async (orderId) => {
-    if (!orderId) return;
-    if (!markPackedFn) {
-      console.error("No mark packed function found in production store");
-      return;
-    }
-
-    const oid = String(orderId);
-
-    // ✅ ONLY confirmed orders can be packed + reserved
-    const order = (localQueue || []).find((o) => String(o?._id) === oid);
-    if (!order) {
-      console.error("Order not found in localQueue:", oid);
-      return;
-    }
-    if (order?.isConfirmed !== true) {
-      // toast optional
-      // toast.error("Only confirmed orders can be packed.");
-      console.warn("Blocked packing for unconfirmed order:", oid);
-      return;
-    }
-
-    // ✅ Guard: only allow packing from processing
-    if (String(order?.fulfillmentStatus) !== "processing") {
-      console.warn("Blocked packing. Not in processing:", oid, order?.fulfillmentStatus);
-      return;
-    }
-
-    // ✅ Guard: avoid double click
-    if (packingIds.has(oid)) return;
-
-    // Loading state for this order
-    setPackingIds((prev) => {
-      const next = new Set(prev);
-      next.add(oid);
-      return next;
-    });
-
-    try {
-      const isStatusFn =
-        markPackedFn === prodStore.updateOrderStatus ||
-        markPackedFn === prodStore.setOrderStatus;
-
-      if (isStatusFn) await markPackedFn(oid, "packed");
-      else await markPackedFn(oid);
-
-      const orderNo = String(order?.orderNumber || "").trim();
-
-      // ✅ consume ONLY this order’s reservations
-      const reservationIds = getOrderReservationIds(oid, localReservations);
-
-      if (reservationIds.length) {
-        for (const rid of reservationIds) {
-          try {
-            await consumeReservation(
-              rid,
-              `Packed from production (${orderNo || oid})`
-            );
-          } catch (err) {
-            console.error("consumeReservation failed:", rid, err);
-          }
-        }
+    async (orderId) => {
+      if (!orderId) return;
+      if (!markPackedFn) {
+        console.error("No mark packed function found in production store");
+        toast.error("Pack action not available");
+        return;
       }
 
-      // ✅ NO REFRESH: just remove from UI
-      applyLocalRemovalAfterPacked(oid);
+      const oid = String(orderId);
+      const order = (localQueue || []).find((o) => String(o?._id) === oid);
 
-      // Also unselect it if selected
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(oid);
-        return next;
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
+      if (!order) {
+        console.error("Order not found in localQueue:", oid);
+        return;
+      }
+
+      if (order?.isConfirmed !== true) {
+        console.warn("Blocked packing for unconfirmed order:", oid);
+        toast.error("Only confirmed orders can be packed");
+        return;
+      }
+
+      if (String(order?.fulfillmentStatus) !== "processing") {
+        console.warn("Blocked packing. Not in processing:", oid, order?.fulfillmentStatus);
+        toast.error("Only processing orders can be packed");
+        return;
+      }
+
+      if (packingIds.has(oid)) return;
+
       setPackingIds((prev) => {
         const next = new Set(prev);
-        next.delete(oid);
+        next.add(oid);
         return next;
       });
-    }
-  },
-  [
-    applyLocalRemovalAfterPacked,
-    consumeReservation,
-    localQueue,
-    localReservations,
-    markPackedFn,
-    prodStore.updateOrderStatus,
-    prodStore.setOrderStatus,
-    packingIds,
-  ]
-);
+
+      try {
+        const isStatusFn =
+          markPackedFn === prodStore.updateOrderStatus ||
+          markPackedFn === prodStore.setOrderStatus;
+
+        if (isStatusFn) await markPackedFn(oid, "packed");
+        else await markPackedFn(oid);
+
+        applyLocalRemovalAfterPacked(oid);
+
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(oid);
+          return next;
+        });
+
+        toast.success(`Order packed: ${order?.orderNumber || oid}`);
+      } catch (e) {
+        console.error(e);
+        toast.error(e?.message || "Failed to mark packed");
+      } finally {
+        setPackingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(oid);
+          return next;
+        });
+      }
+    },
+    [
+      applyLocalRemovalAfterPacked,
+      localQueue,
+      markPackedFn,
+      packingIds,
+      prodStore.updateOrderStatus,
+      prodStore.setOrderStatus,
+    ]
+  );
 
   const onMarkPacked = (orderId) => doMarkPacked(orderId);
 
@@ -679,7 +614,6 @@ useEffect(() => {
   const onBulkMarkPacked = async () => {
     if (bulkPacking) return;
 
-    // only packable + processing
     const ids = Array.from(selectedIds).filter((id) => {
       const p = packabilityMap[String(id)];
       return p?.fullyReserved;
@@ -689,11 +623,9 @@ useEffect(() => {
 
     setBulkPacking(true);
     try {
-      // sequential to be safe with backend / inventory
       for (const id of ids) {
         await doMarkPacked(id);
       }
-      // after done, selection already cleaned in doMarkPacked
     } finally {
       setBulkPacking(false);
     }
@@ -706,6 +638,7 @@ useEffect(() => {
       await exportProductionXLSX(filteredQueue, productMap, filename);
     } catch (e) {
       console.error("Export error:", e);
+      toast.error("Export failed");
     } finally {
       setExporting(false);
     }
@@ -713,20 +646,21 @@ useEffect(() => {
 
   return (
     <div className="px-3 md:px-6 py-5 space-y-4 bg-gray-50 min-h-screen">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-semibold text-gray-900">Production</h1>
-          <p className="text-xs text-gray-500">Confirmed orders only • Fully reserved orders can be packed in bulk</p>
+          <p className="text-xs text-gray-500">
+            Confirmed orders only • Fully reserved orders can be packed in bulk
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
-      <button
-  onClick={safeRefresh}
-  className="px-3 py-2 rounded-xl bg-white text-xs text-gray-800 shadow-sm hover:shadow transition"
->
-  Refresh
-</button>
+          <button
+            onClick={safeRefresh}
+            className="px-3 py-2 rounded-xl bg-white text-xs text-gray-800 shadow-sm hover:shadow transition"
+          >
+            Refresh
+          </button>
 
           <SyncInventoryButton />
 
@@ -752,7 +686,6 @@ useEffect(() => {
         </div>
       ) : null}
 
-      {/* Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
         <MetricCard
           title="Processing"
@@ -770,7 +703,6 @@ useEffect(() => {
         />
       </div>
 
-      {/* Controls */}
       <div className="flex flex-col gap-3 bg-white rounded-2xl shadow-sm ring-1 ring-black/5 p-3">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           {DATE_PRESETS.map((p) => (
@@ -822,21 +754,20 @@ useEffect(() => {
               />
             </div>
 
-          <button
-  onClick={() => {
-    // ✅ apply custom range and fetch with from/to
-    setUseCustomRange(true);
-    fetchProductionQueue({
-      fulfillmentStatus,
-      all: true,
-      from: rangeFrom || "",
-      to: rangeTo || "",
-    });
-  }}
-  className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 md:ml-auto"
->
-  Apply
-</button>
+            <button
+              onClick={() => {
+                setUseCustomRange(true);
+                fetchProductionQueue({
+                  fulfillmentStatus,
+                  all: true,
+                  from: rangeFrom || "",
+                  to: rangeTo || "",
+                });
+              }}
+              className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 md:ml-auto"
+            >
+              Apply
+            </button>
           </div>
         ) : null}
 
@@ -873,7 +804,6 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* ✅ Bulk selection / pack bar */}
         {fulfillmentStatus === "processing" ? (
           <div className="flex flex-col md:flex-row md:items-center gap-2 rounded-2xl bg-gray-50 ring-1 ring-black/5 p-3">
             <div className="flex items-center gap-2">
@@ -917,12 +847,13 @@ useEffect(() => {
         ) : null}
       </div>
 
-      {/* Orders */}
       <div className="space-y-2">
         {loadingQueue ? (
           <div className="p-6 text-center text-gray-500 text-sm">Loading orders...</div>
         ) : filteredQueue.length === 0 ? (
-          <div className="p-6 text-center text-gray-500 text-sm">No orders found in selected filter.</div>
+          <div className="p-6 text-center text-gray-500 text-sm">
+            No orders found in selected filter.
+          </div>
         ) : (
           filteredQueue.map((order, idx) => {
             const id = String(order?._id);
@@ -939,7 +870,6 @@ useEffect(() => {
                 onOpen={() => onOpenOrder(order._id)}
                 onMarkPacked={() => onMarkPacked(order._id)}
                 canMarkPacked={order.fulfillmentStatus === "processing"}
-                // ✅ selection props
                 showSelect={fulfillmentStatus === "processing"}
                 isPackable={pack.fullyReserved}
                 packDisabledReason={pack.reason}
@@ -953,7 +883,7 @@ useEffect(() => {
       </div>
 
       <div className="text-[11px] text-gray-500">
-        ✅ Packed orders are removed instantly (no full refresh). Images via Backend Proxy + Excel export embeds images.
+        ✅ Packed orders are removed instantly. Inventory consume happens from backend on packed.
       </div>
     </div>
   );
@@ -972,7 +902,9 @@ function MetricCard({ title, value, loading, onClick, active }) {
       }`}
     >
       <div className="text-[11px] text-gray-500">{title}</div>
-      <div className="text-lg font-semibold mt-1 text-gray-900">{loading ? "—" : Number(value || 0)}</div>
+      <div className="text-lg font-semibold mt-1 text-gray-900">
+        {loading ? "—" : Number(value || 0)}
+      </div>
     </button>
   );
 }
@@ -984,8 +916,6 @@ function OrderCard({
   canMarkPacked,
   productMap,
   reservationList = [],
-
-  // ✅ selection props
   showSelect = false,
   isPackable = false,
   packDisabledReason = "",
@@ -994,12 +924,8 @@ function OrderCard({
   packing = false,
 }) {
   const items = order?.items || [];
-
   const itemsCount = items.reduce((sum, it) => sum + Number(it?.quantity || 0), 0);
-
-  // still keep per-card tooltip reason consistent with live reservations
   const packCheck = useMemo(() => getOrderPackability(order, reservationList), [order, reservationList]);
-
   const disablePackBtn = !packCheck.fullyReserved || packing;
 
   return (
@@ -1034,6 +960,7 @@ function OrderCard({
               <h3 className="font-semibold text-gray-900 text-sm truncate">{order.orderNumber}</h3>
               <StatusPill status={order.fulfillmentStatus} />
               <span className="text-[11px] text-gray-500">• {itemsCount} pcs</span>
+
               {showSelect ? (
                 isPackable ? (
                   <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-green-100 text-green-800">
@@ -1051,7 +978,8 @@ function OrderCard({
             </div>
 
             <div className="text-[11px] text-gray-500 truncate mt-0.5">
-              {order?.shippingAddressSnapshot?.fullName || "—"} • {order?.shippingAddressSnapshot?.phone || "—"} •{" "}
+              {order?.shippingAddressSnapshot?.fullName || "—"} •{" "}
+              {order?.shippingAddressSnapshot?.phone || "—"} •{" "}
               {new Date(order.createdAt || order.orderDate || Date.now()).toLocaleString()}
             </div>
           </div>
@@ -1064,7 +992,9 @@ function OrderCard({
           }}
         >
           <div className="text-right">
-            <div className="text-sm font-semibold text-gray-900">₹{Number(order.finalPayable || 0).toFixed(0)}</div>
+            <div className="text-sm font-semibold text-gray-900">
+              ₹{Number(order.finalPayable || 0).toFixed(0)}
+            </div>
             <div className="text-[11px] text-gray-500">
               {String(order.paymentMethod || "").toUpperCase()} • {order.paymentStatus || "pending"}
             </div>
@@ -1095,7 +1025,9 @@ function OrderCard({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {items.map((it, idx) => (
             <ItemRow
-              key={String(it?._id || `${safeId(it?.productId)}-${getVariantIdFromItem(it) || "simple"}-${idx}`)}
+              key={String(
+                it?._id || `${safeId(it?.productId)}-${getVariantIdFromItem(it) || "simple"}-${idx}`
+              )}
               item={it}
               productMap={productMap}
               orderId={order?._id}
@@ -1114,7 +1046,9 @@ function ReservationPill({ requiredQty, reservedQty }) {
 
   if (!req) {
     return (
-      <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">Reserved: —</span>
+      <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">
+        Reserved: —
+      </span>
     );
   }
 
@@ -1123,7 +1057,12 @@ function ReservationPill({ requiredQty, reservedQty }) {
   const label =
     pct >= 1 ? "Reserved ✅" : pct > 0 ? `Partial Reserved (${resv}/${req})` : "Not Reserved";
 
-  const cls = pct >= 1 ? "bg-green-100 text-green-800" : pct > 0 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800";
+  const cls =
+    pct >= 1
+      ? "bg-green-100 text-green-800"
+      : pct > 0
+      ? "bg-yellow-100 text-yellow-800"
+      : "bg-red-100 text-red-800";
 
   return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>{label}</span>;
 }
@@ -1136,14 +1075,12 @@ function ItemRow({ item, productMap, orderId, reservationList }) {
   const size = item?.selectedSize || "";
   const color = item?.selectedColor || "";
   const sku = item?.variant?.sku || item?.productSnapshot?.sku || "";
-
   const reservedQty = getReservedQtyForItem(orderId, item, reservationList);
 
   return (
     <div className="flex gap-2 p-2 rounded-xl bg-gray-50">
       <div className="w-12 h-12 rounded-xl bg-white overflow-hidden ring-1 ring-black/5 flex items-center justify-center shrink-0">
         {img ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={img} alt={title} className="w-full h-full object-cover" />
         ) : (
           <div className="text-[10px] text-gray-400">No Image</div>
@@ -1169,7 +1106,9 @@ function ItemRow({ item, productMap, orderId, reservationList }) {
 
 function Tag({ label }) {
   return (
-    <span className="px-2 py-1 rounded-full bg-white ring-1 ring-black/5 text-[11px] text-gray-700">{label}</span>
+    <span className="px-2 py-1 rounded-full bg-white ring-1 ring-black/5 text-[11px] text-gray-700">
+      {label}
+    </span>
   );
 }
 
@@ -1187,5 +1126,9 @@ function StatusPill({ status }) {
 
   const cls = map[s] || "bg-gray-100 text-gray-800";
 
-  return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>{s.replaceAll("_", " ")}</span>;
+  return (
+    <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>
+      {s.replaceAll("_", " ")}
+    </span>
+  );
 }
