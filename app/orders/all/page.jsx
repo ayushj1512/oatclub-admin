@@ -86,10 +86,10 @@ const getOrderRevenue = (order) => {
   // Keep this aligned with whatever "Amount" column actually shows in OrderRow
   return toNumber(
     order?.finalPayable ??
-      order?.totalAmount ??
-      order?.grandTotal ??
-      order?.amount ??
-      0
+    order?.totalAmount ??
+    order?.grandTotal ??
+    order?.amount ??
+    0
   );
 };
 
@@ -148,7 +148,7 @@ function PaginationBar({
   loading,
   onRefresh,
   onPageChange,
-    totalRevenue,
+  totalRevenue,
 }) {
   const canGoPrev = currentPage > 1;
   const canGoNext = currentPage < totalPages;
@@ -157,29 +157,28 @@ function PaginationBar({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-      <div className="text-sm text-gray-600">
-  Page <span className="font-semibold">{currentPage}</span> of{" "}
-  <span className="font-semibold">{totalPages}</span>
-  {totalCount > 0 ? (
-    <>
-      {" "}
-      • Total <span className="font-semibold">{totalCount}</span> orders
-    </>
-  ) : null}
-  {" • "}
-  Revenue <span className="font-semibold">{formatINR(totalRevenue)}</span>
-  <span className="text-gray-400"> • {pageSize} per page</span>
-</div>
+        <div className="text-sm text-gray-600">
+          Page <span className="font-semibold">{currentPage}</span> of{" "}
+          <span className="font-semibold">{totalPages}</span>
+          {totalCount > 0 ? (
+            <>
+              {" "}
+              • Total <span className="font-semibold">{totalCount}</span> orders
+            </>
+          ) : null}
+          {" • "}
+          Revenue <span className="font-semibold">{formatINR(totalRevenue)}</span>
+          <span className="text-gray-400"> • {pageSize} per page</span>
+        </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={onRefresh}
             disabled={loading}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
-              loading
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${loading
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
-            }`}
+              }`}
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
@@ -194,11 +193,10 @@ function PaginationBar({
           <button
             disabled={!canGoPrev || loading}
             onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
-              !canGoPrev || loading
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoPrev || loading
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
-            }`}
+              }`}
           >
             <ChevronLeft size={16} />
             Prev
@@ -207,11 +205,10 @@ function PaginationBar({
           <button
             disabled={!canGoNext || loading}
             onClick={() => onPageChange(Math.min(currentPage + 1, totalPages))}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
-              !canGoNext || loading
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoNext || loading
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
-            }`}
+              }`}
           >
             Next
             <ChevronRight size={16} />
@@ -233,13 +230,12 @@ function PaginationBar({
               key={item}
               onClick={() => onPageChange(item)}
               disabled={loading}
-              className={`min-w-[42px] px-3 py-2 rounded-xl text-sm font-semibold transition ${
-                currentPage === item
+              className={`min-w-[42px] px-3 py-2 rounded-xl text-sm font-semibold transition ${currentPage === item
                   ? "bg-black text-white shadow-sm"
                   : loading
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
-                  : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-              }`}
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                    : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                }`}
             >
               {item}
             </button>
@@ -305,7 +301,7 @@ export default function OrdersListPage() {
 
   const fetchAllOrders = useOrderStore((s) => s.fetchAllOrders);
   const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
-const [exportLoading, setExportLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   // Search
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -350,25 +346,25 @@ const [exportLoading, setExportLoading] = useState(false);
   }, []);
 
   useEffect(() => {
-  if (quickDate === "today") {
-    const t = todayYMD_IST();
-    setStartDate(t);
-    setEndDate(t);
-    return;
-  }
+    if (quickDate === "today") {
+      const t = todayYMD_IST();
+      setStartDate(t);
+      setEndDate(t);
+      return;
+    }
 
-  if (quickDate === "yesterday") {
-    const y = yesterdayYMD_IST();
-    setStartDate(y);
-    setEndDate(y);
-    return;
-  }
+    if (quickDate === "yesterday") {
+      const y = yesterdayYMD_IST();
+      setStartDate(y);
+      setEndDate(y);
+      return;
+    }
 
-  if (quickDate === "") {
-    setStartDate("");
-    setEndDate("");
-  }
-}, [quickDate]);
+    if (quickDate === "") {
+      setStartDate("");
+      setEndDate("");
+    }
+  }, [quickDate]);
 
   const backendFilters = useMemo(() => {
     const f = {};
@@ -425,15 +421,15 @@ const [exportLoading, setExportLoading] = useState(false);
   }, [loadOrders]);
 
   const filteredOrders = useMemo(() => {
-  return applyClientFiltersToOrders({
-    orders,
-    confirmFilter,
-    priority,
-    search,
-  });
-}, [orders, confirmFilter, priority, search]);
+    return applyClientFiltersToOrders({
+      orders,
+      confirmFilter,
+      priority,
+      search,
+    });
+  }, [orders, confirmFilter, priority, search]);
 
-    const totalRevenue = useMemo(() => {
+  const totalRevenue = useMemo(() => {
     return filteredOrders.reduce((sum, order) => {
       return sum + getOrderRevenue(order);
     }, 0);
@@ -543,164 +539,164 @@ const [exportLoading, setExportLoading] = useState(false);
   };
 
   const exportToCSV = useCallback(async () => {
-  if (exportLoading || loading) return;
+    if (exportLoading || loading) return;
 
-  let originalFilters = null;
-  setExportLoading(true);
+    let originalFilters = null;
+    setExportLoading(true);
 
-  try {
-    originalFilters = { ...backendFilters };
-    const exportLimit = 500;
+    try {
+      originalFilters = { ...backendFilters };
+      const exportLimit = 500;
 
-    const baseFilters = { ...backendFilters };
-    delete baseFilters.page;
-    delete baseFilters.limit;
+      const baseFilters = { ...backendFilters };
+      delete baseFilters.page;
+      delete baseFilters.limit;
 
-    let page = 1;
-    let totalPagesToFetch = 1;
-    let allOrders = [];
+      let page = 1;
+      let totalPagesToFetch = 1;
+      let allOrders = [];
 
-    do {
-      await fetchAllOrders({
-        ...baseFilters,
-        page,
-        limit: exportLimit,
+      do {
+        await fetchAllOrders({
+          ...baseFilters,
+          page,
+          limit: exportLimit,
+        });
+
+        const state = useOrderStore.getState();
+        const pageOrders = Array.isArray(state.orders) ? state.orders : [];
+        const meta = state.ordersMeta || {};
+
+        allOrders.push(...pageOrders);
+
+        const totalCountFromMeta = toNumber(meta?.totalCount);
+        const totalPagesFromMeta =
+          toNumber(meta?.totalPages) ||
+          Math.max(1, Math.ceil(totalCountFromMeta / exportLimit));
+
+        totalPagesToFetch = totalPagesFromMeta;
+        page += 1;
+      } while (page <= totalPagesToFetch);
+
+      const uniqueOrdersMap = new Map();
+
+      for (const order of allOrders) {
+        const key = order?._id || order?.id || order?.orderNumber;
+        if (key && !uniqueOrdersMap.has(key)) {
+          uniqueOrdersMap.set(key, order);
+        }
+      }
+
+      const uniqueOrders = Array.from(uniqueOrdersMap.values());
+
+      const exportOrders = applyClientFiltersToOrders({
+        orders: uniqueOrders,
+        confirmFilter,
+        priority,
+        search,
       });
 
-      const state = useOrderStore.getState();
-      const pageOrders = Array.isArray(state.orders) ? state.orders : [];
-      const meta = state.ordersMeta || {};
-
-      allOrders.push(...pageOrders);
-
-      const totalCountFromMeta = toNumber(meta?.totalCount);
-      const totalPagesFromMeta =
-        toNumber(meta?.totalPages) ||
-        Math.max(1, Math.ceil(totalCountFromMeta / exportLimit));
-
-      totalPagesToFetch = totalPagesFromMeta;
-      page += 1;
-    } while (page <= totalPagesToFetch);
-
-    const uniqueOrdersMap = new Map();
-
-    for (const order of allOrders) {
-      const key = order?._id || order?.id || order?.orderNumber;
-      if (key && !uniqueOrdersMap.has(key)) {
-        uniqueOrdersMap.set(key, order);
+      if (!exportOrders.length) {
+        alert("No orders found to export for the applied filters.");
+        return;
       }
-    }
 
-    const uniqueOrders = Array.from(uniqueOrdersMap.values());
+      const rows = buildCsvRows(exportOrders);
 
-    const exportOrders = applyClientFiltersToOrders({
-      orders: uniqueOrders,
-      confirmFilter,
-      priority,
-      search,
-    });
+      const headers = [
+        "Order DB Id",
+        "Order #",
+        "Order Date (ISO)",
+        "Customer Name",
+        "Customer Email",
+        "Customer Phone",
+        "Is Confirmed",
+        "Fulfillment Status",
+        "Subtotal",
+        "Discount",
+        "Shipping Fee",
+        "Tax",
+        "Total Amount",
+        "Final Payable",
+        "Item #",
+        "Item Title",
+        "Product Code",
+        "Item SKU",
+        "Item Size",
+        "Item Quantity",
+        "Item Price",
+      ];
 
-    if (!exportOrders.length) {
-      alert("No orders found to export for the applied filters.");
-      return;
-    }
+      const csvLines = [
+        headers.map(escapeCSV).join(","),
+        ...rows.map((r) =>
+          [
+            r.orderId,
+            r.orderNumber,
+            r.orderDate,
+            r.customerName,
+            r.customerEmail,
+            r.customerPhone,
+            r.isConfirmed,
+            r.fulfillmentStatus,
+            r.subtotal,
+            r.discount,
+            r.shippingFee,
+            r.tax,
+            r.totalAmount,
+            r.finalPayable,
+            r.itemIndex,
+            r.itemTitle,
+            r.itemProductCode,
+            r.itemSku,
+            r.itemSize,
+            r.itemQuantity,
+            r.itemPrice,
+          ]
+            .map(escapeCSV)
+            .join(",")
+        ),
+      ];
 
-    const rows = buildCsvRows(exportOrders);
+      const blob = new Blob([csvLines.join("\r\n")], {
+        type: "text/csv;charset=utf-8;",
+      });
 
-    const headers = [
-      "Order DB Id",
-      "Order #",
-      "Order Date (ISO)",
-      "Customer Name",
-      "Customer Email",
-      "Customer Phone",
-      "Is Confirmed",
-      "Fulfillment Status",
-      "Subtotal",
-      "Discount",
-      "Shipping Fee",
-      "Tax",
-      "Total Amount",
-      "Final Payable",
-      "Item #",
-      "Item Title",
-      "Product Code",
-      "Item SKU",
-      "Item Size",
-      "Item Quantity",
-      "Item Price",
-    ];
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 
-    const csvLines = [
-      headers.map(escapeCSV).join(","),
-      ...rows.map((r) =>
-        [
-          r.orderId,
-          r.orderNumber,
-          r.orderDate,
-          r.customerName,
-          r.customerEmail,
-          r.customerPhone,
-          r.isConfirmed,
-          r.fulfillmentStatus,
-          r.subtotal,
-          r.discount,
-          r.shippingFee,
-          r.tax,
-          r.totalAmount,
-          r.finalPayable,
-          r.itemIndex,
-          r.itemTitle,
-          r.itemProductCode,
-          r.itemSku,
-          r.itemSize,
-          r.itemQuantity,
-          r.itemPrice,
-        ]
-          .map(escapeCSV)
-          .join(",")
-      ),
-    ];
-
-    const blob = new Blob([csvLines.join("\r\n")], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-
-    link.href = url;
-    link.setAttribute("download", `orders-all-pages-${ts}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error("CSV export failed:", error);
-    alert("Failed to export all orders.");
-  } finally {
-    if (originalFilters) {
-      try {
-        await fetchAllOrders(originalFilters);
-      } catch (restoreError) {
-        console.error(
-          "Failed to restore current page after export:",
-          restoreError
-        );
+      link.href = url;
+      link.setAttribute("download", `orders-all-pages-${ts}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("CSV export failed:", error);
+      alert("Failed to export all orders.");
+    } finally {
+      if (originalFilters) {
+        try {
+          await fetchAllOrders(originalFilters);
+        } catch (restoreError) {
+          console.error(
+            "Failed to restore current page after export:",
+            restoreError
+          );
+        }
       }
+      setExportLoading(false);
     }
-    setExportLoading(false);
-  }
-}, [
-  exportLoading,
-  loading,
-  backendFilters,
-  fetchAllOrders,
-  confirmFilter,
-  priority,
-  search,
-]);
+  }, [
+    exportLoading,
+    loading,
+    backendFilters,
+    fetchAllOrders,
+    confirmFilter,
+    priority,
+    search,
+  ]);
 
   const totalCount = toNumber(ordersMeta?.totalCount);
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -743,19 +739,19 @@ const [exportLoading, setExportLoading] = useState(false);
               View, filter and manage all customer orders.
             </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
-  <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-    {totalCount || filteredOrders.length} Orders
-  </span>
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
+                {totalCount || filteredOrders.length} Orders
+              </span>
 
-  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
-    Revenue: {formatINR(totalRevenue)}
-  </span>
+              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
+                Revenue: {formatINR(totalRevenue)}
+              </span>
 
-  <span className="px-3 py-1 rounded-full bg-violet-50 text-violet-700 font-semibold">
-    Page {currentMetaPage} of {totalPages}
-  </span>
-</div>
+              <span className="px-3 py-1 rounded-full bg-violet-50 text-violet-700 font-semibold">
+                Page {currentMetaPage} of {totalPages}
+              </span>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -785,26 +781,25 @@ const [exportLoading, setExportLoading] = useState(false);
               Clear
             </button>
 
-          <button
-  onClick={exportToCSV}
-  disabled={exportLoading || loading}
-  className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold shadow-sm active:scale-[0.98] transition ${
-    exportLoading || loading
-      ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-      : "bg-black text-white hover:opacity-90"
-  }`}
->
-  {exportLoading ? (
-    <>
-      <Loader2 size={18} className="animate-spin" />
-      Exporting All...
-    </>
-  ) : (
-    <>
-      <Download size={18} /> Export CSV
-    </>
-  )}
-</button>
+            <button
+              onClick={exportToCSV}
+              disabled={exportLoading || loading}
+              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold shadow-sm active:scale-[0.98] transition ${exportLoading || loading
+                  ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                  : "bg-black text-white hover:opacity-90"
+                }`}
+            >
+              {exportLoading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Exporting All...
+                </>
+              ) : (
+                <>
+                  <Download size={18} /> Export CSV
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -974,15 +969,15 @@ const [exportLoading, setExportLoading] = useState(false);
                 s.type === "status"
                   ? status === s.key
                   : s.type === "confirm"
-                  ? confirmFilter === s.key
-                  : s.type === "priority"
-                  ? priority === s.key
-                  : s.type === "quickDate"
-                  ? quickDate === s.key
-                  : status === "" &&
-                    confirmFilter === "" &&
-                    priority === "" &&
-                    quickDate === "";
+                    ? confirmFilter === s.key
+                    : s.type === "priority"
+                      ? priority === s.key
+                      : s.type === "quickDate"
+                        ? quickDate === s.key
+                        : status === "" &&
+                        confirmFilter === "" &&
+                        priority === "" &&
+                        quickDate === "";
 
               const onClick = () => {
                 setCurrentPage(1);
@@ -1016,11 +1011,10 @@ const [exportLoading, setExportLoading] = useState(false);
                 <button
                   key={`${s.type}-${s.key || "all"}`}
                   onClick={onClick}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${
-                    isActive
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${isActive
                       ? "bg-black text-white shadow-sm"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                    }`}
                 >
                   {s.label}
                 </button>
@@ -1030,16 +1024,16 @@ const [exportLoading, setExportLoading] = useState(false);
 
           {/* Top Pagination */}
           <div className="mt-6">
-           <PaginationBar
-  currentPage={currentMetaPage}
-  totalPages={totalPages}
-  totalCount={totalCount}
-  pageSize={pageSize}
-  loading={loading}
-  onRefresh={loadOrders}
-  onPageChange={setCurrentPage}
-  totalRevenue={totalRevenue}
-/>
+            <PaginationBar
+              currentPage={currentMetaPage}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              pageSize={pageSize}
+              loading={loading}
+              onRefresh={loadOrders}
+              onPageChange={setCurrentPage}
+              totalRevenue={totalRevenue}
+            />
           </div>
         </Card>
 
@@ -1122,16 +1116,16 @@ const [exportLoading, setExportLoading] = useState(false);
 
         {/* Bottom Pagination */}
         <Card>
-         <PaginationBar
-  currentPage={currentMetaPage}
-  totalPages={totalPages}
-  totalCount={totalCount}
-  pageSize={pageSize}
-  loading={loading}
-  onRefresh={loadOrders}
-  onPageChange={setCurrentPage}
-  totalRevenue={totalRevenue}
-/>
+          <PaginationBar
+            currentPage={currentMetaPage}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            pageSize={pageSize}
+            loading={loading}
+            onRefresh={loadOrders}
+            onPageChange={setCurrentPage}
+            totalRevenue={totalRevenue}
+          />
         </Card>
       </div>
     </section>

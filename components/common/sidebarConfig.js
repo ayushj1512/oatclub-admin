@@ -50,10 +50,11 @@ export const sidebarMenus = {
     { label: "Add Review", href: "/reviews/add" },
   ],
 
-  accounts: [
-    { label: "Accounts Dashboard", href: "/accounts" },
-    { label: "Sales", href: "/accounts/sales" },
-  ],
+accounts: [
+  { label: "Accounts Dashboard", href: "/accounts" },
+  { label: "Sales", href: "/accounts/sales" },
+  { label: "Revenue", href: "/accounts/revenue" },
+],
 
   inventory: [
     { label: "Inventory Dashboard", href: "/inventory" },

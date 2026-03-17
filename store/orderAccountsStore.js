@@ -15,125 +15,88 @@ const buildUrl = (path) => {
 
 const qs = (params = {}) => {
   const sp = new URLSearchParams();
-
   Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null) return;
-    if (String(value).trim?.() === "") return;
+    if (value === undefined || value === null || String(value).trim() === "") return;
     sp.set(key, String(value));
   });
-
   const s = sp.toString();
   return s ? `?${s}` : "";
+};
+
+const toNum = (v, d = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
 };
 
 const initialFilters = () => ({
   month: "",
   search: "",
+  startDate: "",
+  endDate: "",
   page: 1,
-  limit: 100,
+  limit: 50,
 });
 
-const emptyTotals = () => ({
-  rows: 0,
-  orders: 0,
-  disc: 0,
-  net: 0,
-  taxable: 0,
-  tax: 0,
-  sumOrderTotal: 0,
-  sumOrderDiscount: 0,
+const emptySummary = () => ({
+  totalOrders: 0,
+  grossRevenue: 0,
+  netRevenue: 0,
+  totalDiscount: 0,
+  codRevenue: 0,
+  prepaidRevenue: 0,
+  highestRevenueDay: null,
+  lowestRevenueDay: null,
 });
 
 const emptyMeta = () => ({
   page: 1,
-  limit: 100,
+  limit: 50,
   totalOrders: 0,
   totalPages: 1,
   hasNextPage: false,
   hasPrevPage: false,
   month: "",
   search: "",
-  analytics: {
-    rows: 0,
-    orders: 0,
-    disc: 0,
-    net: 0,
-    taxable: 0,
-    tax: 0,
-    sumOrderTotal: 0,
-    sumOrderDiscount: 0,
-  },
+  startDate: "",
+  endDate: "",
 });
 
-const toNumber = (v, d = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : d;
-};
-
-const normalizeTotals = (src = {}) => ({
-  rows: toNumber(src.rows, 0),
-  orders: toNumber(src.orders, 0),
-  disc: toNumber(src.disc, 0),
-  net: toNumber(src.net, 0),
-  taxable: toNumber(src.taxable, 0),
-  tax: toNumber(src.tax, 0),
-  sumOrderTotal: toNumber(src.sumOrderTotal, 0),
-  sumOrderDiscount: toNumber(src.sumOrderDiscount, 0),
+const normalizeSummary = (src = {}) => ({
+  totalOrders: toNum(src.totalOrders),
+  grossRevenue: toNum(src.grossRevenue),
+  netRevenue: toNum(src.netRevenue),
+  totalDiscount: toNum(src.totalDiscount),
+  codRevenue: toNum(src.codRevenue),
+  prepaidRevenue: toNum(src.prepaidRevenue),
+  highestRevenueDay: src.highestRevenueDay || null,
+  lowestRevenueDay: src.lowestRevenueDay || null,
 });
+
+const csvHeaders = [
+  "Order Number",
+  "Date",
+  "Payment Method",
+  "Status",
+  "Revenue",
+  "Discount",
+];
 
 const escapeCsv = (value) => {
   const s = String(value ?? "");
   return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-const csvHeaders = [
-  "OrderId",
-  "Delivered month",
-  "Customer name",
-  "Customer state",
-  "Payment mode",
-  "Payment method",
-  "Courier name",
-  "Product type",
-  "HSN code",
-  "Product size",
-  "Qty",
-  "Selling price (unit, incl tax)",
-  "Allocated discount",
-  "Net line (incl tax) (after discount)",
-  "Taxable value (excl tax)",
-  "Tax amount (5%)",
-  "Tax rate",
-  "Order total amount (final payable)",
-  "Order discount",
-  "Coupon code",
-];
-
-const rowsToCsv = (rows = []) =>
+const ordersToCsv = (orders = []) =>
   [
     csvHeaders.join(","),
-    ...rows.map((r) =>
+    ...orders.map((o) =>
       [
-        r.orderId,
-        r.deliveredMonth,
-        r.customerName,
-        r.customerState,
-        r.paymentMode,
-        r.paymentMethod,
-        r.courierName,
-        r.productType,
-        r.hsnCode,
-        r.productSize,
-        r.qty,
-        r.sellingPrice,
-        r.allocatedDiscount,
-        r.netLine,
-        r.taxableValue,
-        r.taxAmount,
-        r.taxRate,
-        r.orderTotalAmount,
-        r.orderDiscount,
-        r.couponCode,
+        o.orderNumber,
+        o.deliveredAt,
+        o.paymentMethod,
+        o.fulfillmentStatus,
+        o.revenue,
+        o.discount,
       ]
         .map(escapeCsv)
         .join(",")
@@ -151,211 +114,235 @@ const downloadBlob = (content, filename, type = "text/csv;charset=utf-8;") => {
   URL.revokeObjectURL(link.href);
 };
 
+const REPORT_ENDPOINTS = {
+  sales: "/api/orders/accounts/sales-report",
+  revenue: "/api/orders/accounts/revenue-report",
+};
+
+const buildFetchUrl = (endpoint, filters) =>
+  buildUrl(
+    `${endpoint}${qs({
+      month: filters.month,
+      search: filters.search,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      page: filters.page,
+      limit: filters.limit,
+    })}`
+  );
+
+const fetchJson = async (url, label = "report") => {
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.message || `Failed to fetch ${label}`);
+  }
+
+  return data;
+};
+
 export const useOrderAccountsStore = create((set, get) => ({
-  rows: [],
-  totals: emptyTotals(),
+  reportType: "revenue",
+
+  orders: [], // current page
+  allOrders: [], // all pages
+  summary: emptySummary(),
   meta: emptyMeta(),
   filters: initialFilters(),
 
   loading: false,
   downloading: false,
+  hydratingAll: false,
   error: "",
+
+  setReportType: (reportType = "revenue") =>
+    set({
+      reportType: reportType === "sales" ? "sales" : "revenue",
+      orders: [],
+      allOrders: [],
+      summary: emptySummary(),
+      meta: emptyMeta(),
+      error: "",
+    }),
 
   setFilters: (patch = {}) =>
     set((state) => ({
-      filters: {
-        ...state.filters,
-        ...patch,
-      },
+      filters: { ...state.filters, ...patch },
     })),
 
   setMonth: (month = "") =>
     set((state) => ({
-      filters: {
-        ...state.filters,
-        month,
-        page: 1,
-      },
+      filters: { ...state.filters, month, page: 1 },
     })),
 
   setSearch: (search = "") =>
     set((state) => ({
-      filters: {
-        ...state.filters,
-        search,
-        page: 1,
-      },
+      filters: { ...state.filters, search, page: 1 },
+    })),
+
+  setStartDate: (startDate = "") =>
+    set((state) => ({
+      filters: { ...state.filters, startDate, page: 1 },
+    })),
+
+  setEndDate: (endDate = "") =>
+    set((state) => ({
+      filters: { ...state.filters, endDate, page: 1 },
     })),
 
   setPage: (page = 1) =>
     set((state) => ({
-      filters: {
-        ...state.filters,
-        page: Math.max(1, Number(page) || 1),
-      },
+      filters: { ...state.filters, page: Math.max(1, Number(page) || 1) },
     })),
 
-  setLimit: (limit = 100) =>
+  setLimit: (limit = 50) =>
     set((state) => ({
-      filters: {
-        ...state.filters,
-        limit: Math.max(1, Number(limit) || 100),
-        page: 1,
-      },
+      filters: { ...state.filters, limit: Math.max(1, Number(limit) || 50), page: 1 },
     })),
 
   resetFilters: () =>
     set({
       filters: initialFilters(),
+      orders: [],
+      allOrders: [],
+      summary: emptySummary(),
+      meta: emptyMeta(),
+      error: "",
     }),
 
-  fetchSalesReport: async (override = {}) => {
-    const state = get();
-    const filters = {
-      ...state.filters,
-      ...override,
+  fetchAllPages: async ({ type, filters }) => {
+    const reportType = type || get().reportType || "revenue";
+    const endpoint = REPORT_ENDPOINTS[reportType] || REPORT_ENDPOINTS.revenue;
+
+    const firstData = await fetchJson(
+      buildFetchUrl(endpoint, { ...filters, page: 1, limit: 250 }),
+      `${reportType} report`
+    );
+
+    const totalPages = Math.max(1, toNum(firstData?.meta?.totalPages, 1));
+    let allOrders = Array.isArray(firstData?.orders) ? [...firstData.orders] : [];
+
+    if (totalPages > 1) {
+      const requests = [];
+      for (let page = 2; page <= totalPages; page++) {
+        requests.push(
+          fetchJson(
+            buildFetchUrl(endpoint, { ...filters, page, limit: 250 }),
+            `${reportType} report page ${page}`
+          ).then((data) => (Array.isArray(data?.orders) ? data.orders : []))
+        );
+      }
+
+      const pages = await Promise.all(requests);
+      pages.forEach((pageOrders) => allOrders.push(...pageOrders));
+    }
+
+    return {
+      allOrders,
+      meta: firstData?.meta || {},
+      summary: firstData?.summary || {},
     };
+  },
+
+  fetchReport: async ({ type, override = {}, fetchOverall = true } = {}) => {
+    const state = get();
+    const reportType = type || state.reportType || "revenue";
+    const endpoint = REPORT_ENDPOINTS[reportType] || REPORT_ENDPOINTS.revenue;
+    const filters = { ...state.filters, ...override };
 
     set({ loading: true, error: "" });
 
     try {
-      const url = buildUrl(
-        `/api/orders/accounts/sales-report${qs({
-          month: filters.month,
-          search: filters.search,
-          page: filters.page,
-          limit: filters.limit,
-        })}`
+      const data = await fetchJson(
+        buildFetchUrl(endpoint, filters),
+        `${reportType} report`
       );
 
-      const res = await fetch(url, {
-        method: "GET",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.message || "Failed to fetch sales report");
-      }
-
       set({
-        rows: Array.isArray(data?.rows) ? data.rows : [],
-        totals: normalizeTotals(data?.totals),
+        reportType,
+        orders: Array.isArray(data?.orders) ? data.orders : [],
+        summary: normalizeSummary(data?.summary),
         meta: {
-          page: toNumber(data?.meta?.page, filters.page || 1),
-          limit: toNumber(data?.meta?.limit, filters.limit || 100),
-          totalOrders: toNumber(data?.meta?.totalOrders, 0),
-          totalPages: Math.max(1, toNumber(data?.meta?.totalPages, 1)),
+          page: toNum(data?.meta?.page, filters.page),
+          limit: toNum(data?.meta?.limit, filters.limit),
+          totalOrders: toNum(data?.meta?.totalOrders, 0),
+          totalPages: Math.max(1, toNum(data?.meta?.totalPages, 1)),
           hasNextPage: Boolean(data?.meta?.hasNextPage),
           hasPrevPage: Boolean(data?.meta?.hasPrevPage),
           month: String(data?.meta?.month || filters.month || ""),
           search: String(data?.meta?.search || filters.search || ""),
-          analytics: normalizeTotals(
-            data?.meta?.analytics ||
-              data?.meta?.overallTotals ||
-              data?.meta?.summary ||
-              {}
-          ),
+          startDate: String(data?.meta?.startDate || filters.startDate || ""),
+          endDate: String(data?.meta?.endDate || filters.endDate || ""),
         },
         filters: {
           month: String(data?.meta?.month || filters.month || ""),
           search: String(data?.meta?.search || filters.search || ""),
-          page: toNumber(data?.meta?.page, filters.page || 1),
-          limit: toNumber(data?.meta?.limit, filters.limit || 100),
+          startDate: String(data?.meta?.startDate || filters.startDate || ""),
+          endDate: String(data?.meta?.endDate || filters.endDate || ""),
+          page: toNum(data?.meta?.page, filters.page),
+          limit: toNum(data?.meta?.limit, filters.limit),
         },
         loading: false,
         error: "",
       });
 
+      if (fetchOverall) {
+        set({ hydratingAll: true });
+        try {
+          const overall = await get().fetchAllPages({ type: reportType, filters });
+          set({
+            allOrders: overall.allOrders,
+            hydratingAll: false,
+          });
+        } catch (e) {
+          set({ hydratingAll: false });
+        }
+      }
+
       return data;
     } catch (error) {
       set({
         loading: false,
+        hydratingAll: false,
         error: error?.message || "Something went wrong",
       });
       throw error;
     }
   },
 
-  /* -------------------------------------------------
-     CSV should contain ALL rows for selected month/search
-     not just current page
-  -------------------------------------------------- */
-  downloadSalesReportCsv: async (override = {}) => {
+  fetchSalesReport: (override = {}, fetchOverall = true) =>
+    get().fetchReport({ type: "sales", override, fetchOverall }),
+
+  fetchRevenueReport: (override = {}, fetchOverall = true) =>
+    get().fetchReport({ type: "revenue", override, fetchOverall }),
+
+  downloadReportCsv: async ({ type, override = {} } = {}) => {
     const state = get();
-    const filters = {
-      ...state.filters,
-      ...override,
-    };
+    const reportType = type || state.reportType || "revenue";
+    const filters = { ...state.filters, ...override };
 
     set({ downloading: true, error: "" });
 
     try {
-      const firstUrl = buildUrl(
-        `/api/orders/accounts/sales-report${qs({
-          month: filters.month,
-          search: filters.search,
-          page: 1,
-          limit: 500,
-        })}`
+      let allOrders = state.allOrders;
+
+      if (!Array.isArray(allOrders) || !allOrders.length) {
+        const overall = await get().fetchAllPages({ type: reportType, filters });
+        allOrders = overall.allOrders;
+        set({ allOrders });
+      }
+
+      downloadBlob(
+        ordersToCsv(allOrders),
+        `${reportType}-report-${filters.month || "all"}.csv`
       );
-
-      const firstRes = await fetch(firstUrl, {
-        method: "GET",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-      });
-
-      const firstData = await firstRes.json().catch(() => ({}));
-
-      if (!firstRes.ok || !firstData?.success) {
-        throw new Error(firstData?.message || "Failed to fetch report for CSV");
-      }
-
-      const totalPages = Math.max(1, toNumber(firstData?.meta?.totalPages, 1));
-      let allRows = Array.isArray(firstData?.rows) ? [...firstData.rows] : [];
-
-      if (totalPages > 1) {
-        const requests = [];
-
-        for (let page = 2; page <= totalPages; page++) {
-          const url = buildUrl(
-            `/api/orders/accounts/sales-report${qs({
-              month: filters.month,
-              search: filters.search,
-              page,
-              limit: 500,
-            })}`
-          );
-
-          requests.push(
-            fetch(url, {
-              method: "GET",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              cache: "no-store",
-            }).then(async (res) => {
-              const data = await res.json().catch(() => ({}));
-              if (!res.ok || !data?.success) {
-                throw new Error(data?.message || `Failed to fetch page ${page} for CSV`);
-              }
-              return Array.isArray(data?.rows) ? data.rows : [];
-            })
-          );
-        }
-
-        const pages = await Promise.all(requests);
-        for (const pageRows of pages) allRows.push(...pageRows);
-      }
-
-      const csv = rowsToCsv(allRows);
-      const fileName = `sales-report-${filters.month || "all"}-full.csv`;
-
-      downloadBlob(csv, fileName);
 
       set({ downloading: false });
       return true;
@@ -368,10 +355,17 @@ export const useOrderAccountsStore = create((set, get) => ({
     }
   },
 
-  clearSalesReport: () =>
+  downloadSalesReportCsv: (override = {}) =>
+    get().downloadReportCsv({ type: "sales", override }),
+
+  downloadRevenueReportCsv: (override = {}) =>
+    get().downloadReportCsv({ type: "revenue", override }),
+
+  clearReport: () =>
     set({
-      rows: [],
-      totals: emptyTotals(),
+      orders: [],
+      allOrders: [],
+      summary: emptySummary(),
       meta: emptyMeta(),
       error: "",
     }),
