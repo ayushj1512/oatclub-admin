@@ -231,12 +231,17 @@ bluedart: [
 ],
 
   reports: [
-    { label: "Reports Home", href: "/reports" },
-    { label: "ROAS", href: "/reports/ROAS" },
-    { label: "Orders", href: "/reports/Orders" },
-    { label: "RTO", href: "/reports/RTO" },
-    { label: "Cancellation", href: "/reports/Cancellation" },
-  ],
+  { label: "Reports Home", href: "/reports" },
+
+  // Sales & Performance
+  { label: "Product Sales", href: "/reports/ProductSoldReport" },
+  { label: "Orders Report", href: "/reports/Orders" },
+  { label: "ROAS", href: "/reports/ROAS" },
+
+  // Operations
+  { label: "RTO Report", href: "/reports/RTO" },
+  { label: "Cancellation Report", href: "/reports/Cancellation" },
+],
 
   account_user: [
     { label: "Profile", href: "/account/profile" },
