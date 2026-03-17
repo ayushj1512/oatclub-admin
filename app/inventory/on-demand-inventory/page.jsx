@@ -115,13 +115,23 @@ export default function OnDemandInventoryPage() {
   const productImages = useMemo(() => getProductImages(product), [product]);
   const productImage = productImages[0] || "";
 
-  const getVariantDraft = (size, fallback) => {
-    const key = normalizeSize(size);
-    const v = draft[key];
-    return v != null ? v : fallback;
+  // add-on draft for simple product
+  const getSimpleAddOn = () => {
+    return draft.simpleAddOn != null ? draft.simpleAddOn : 0;
   };
 
-  const setVariantDraft = (size, val) => {
+  const setSimpleAddOn = (val) => {
+    setDraft((prev) => ({ ...prev, simpleAddOn: val }));
+  };
+
+  // add-on draft for variants
+  const getVariantAddOn = (size) => {
+    const key = normalizeSize(size);
+    const v = draft[key];
+    return v != null ? v : 0;
+  };
+
+  const setVariantAddOn = (size, val) => {
     const key = normalizeSize(size);
     setDraft((prev) => ({ ...prev, [key]: val }));
   };
@@ -133,15 +143,19 @@ export default function OnDemandInventoryPage() {
     return variants.reduce((sum, v) => sum + Number(v?.stock ?? 0), 0);
   }, [product, variants]);
 
-  const totalDraftInventory = useMemo(() => {
+  const totalAddOnInventory = useMemo(() => {
     if (!product) return 0;
-    if (!variants.length) return toInt(draft.simple ?? product?.stock);
+    if (!variants.length) return toInt(getSimpleAddOn());
 
     return variants.reduce((sum, v) => {
       const size = normalizeSize(getVariantSize(v));
-      return sum + toInt(getVariantDraft(size, v?.stock));
+      return sum + toInt(getVariantAddOn(size));
     }, 0);
   }, [product, variants, draft]);
+
+  const totalFinalInventory = useMemo(() => {
+    return totalCurrentInventory + totalAddOnInventory;
+  }, [totalCurrentInventory, totalAddOnInventory]);
 
   const runSearch = async () => {
     const q = t(search);
@@ -183,12 +197,15 @@ export default function OnDemandInventoryPage() {
         return;
       }
 
-      const stock = toInt(draft.simple ?? product?.stock);
+      const currentStock = Number(product?.stock ?? 0);
+      const addOn = toInt(getSimpleAddOn());
+      const finalStock = currentStock + addOn;
 
-      await updateProductStock(product._id, stock);
+      await updateProductStock(product._id, finalStock);
       await triggerReconcile({ productId: product._id });
 
-      toast.success("Stock updated");
+      toast.success(`Stock updated: ${currentStock} + ${addOn} = ${finalStock}`);
+      setDraft({});
       await runSearch();
     } catch (e) {
       toast.error(e?.message || "Failed to update stock");
@@ -208,15 +225,18 @@ export default function OnDemandInventoryPage() {
         return;
       }
 
-      const stock = toInt(getVariantDraft(size, v?.stock));
+      const currentStock = Number(v?.stock ?? 0);
+      const addOn = toInt(getVariantAddOn(size));
+      const finalStock = currentStock + addOn;
 
-      await updateVariantStock(product._id, size, stock);
+      await updateVariantStock(product._id, size, finalStock);
       await triggerReconcile({
         productId: product._id,
         variantId: v?._id,
       });
 
-      toast.success(`Stock updated for ${size}`);
+      toast.success(`Stock updated for ${size}: ${currentStock} + ${addOn} = ${finalStock}`);
+      setDraft((prev) => ({ ...prev, [size]: 0 }));
       await runSearch();
     } catch (e) {
       toast.error(e?.message || "Failed to update variant stock");
@@ -233,9 +253,11 @@ export default function OnDemandInventoryPage() {
         const size = normalizeSize(getVariantSize(v));
         if (!size) continue;
 
-        const stock = toInt(getVariantDraft(size, v?.stock));
+        const currentStock = Number(v?.stock ?? 0);
+        const addOn = toInt(getVariantAddOn(size));
+        const finalStock = currentStock + addOn;
 
-        await updateVariantStock(product._id, size, stock);
+        await updateVariantStock(product._id, size, finalStock);
         await triggerReconcile({
           productId: product._id,
           variantId: v?._id,
@@ -243,6 +265,7 @@ export default function OnDemandInventoryPage() {
       }
 
       toast.success("All variant stocks updated");
+      setDraft({});
       await runSearch();
     } catch (e) {
       toast.error(e?.message || "Failed to update all variant stock");
@@ -259,8 +282,8 @@ export default function OnDemandInventoryPage() {
             On Demand Inventory Update
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Search product on demand, view image and inventory, update stock, and
-            reconcile reservations.
+            Search product on demand, view image and inventory, add stock on top
+            of current stock, and reconcile reservations.
           </p>
         </div>
 
@@ -347,10 +370,19 @@ export default function OnDemandInventoryPage() {
 
                   <div className="rounded-2xl bg-[#fafafa] px-4 py-3 ring-1 ring-black/5">
                     <div className="text-[11px] uppercase tracking-wide text-gray-500">
-                      New Inventory
+                      Add On Inventory
                     </div>
                     <div className="mt-1 text-lg font-semibold">
-                      {totalDraftInventory}
+                      {totalAddOnInventory}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-[#fafafa] px-4 py-3 ring-1 ring-black/5">
+                    <div className="text-[11px] uppercase tracking-wide text-gray-500">
+                      Final Inventory
+                    </div>
+                    <div className="mt-1 text-lg font-semibold">
+                      {totalFinalInventory}
                     </div>
                   </div>
                 </div>
@@ -360,17 +392,16 @@ export default function OnDemandInventoryPage() {
             {!variants.length ? (
               <div className="mt-6 max-w-sm">
                 <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Stock
+                  Add Stock
                 </div>
 
                 <div className="flex gap-2">
                   <input
                     className="h-11 w-full rounded-2xl bg-[#f7f7f7] px-4 text-sm outline-none ring-1 ring-black/5 transition focus:bg-white focus:ring-black/10"
-                    value={draft.simple ?? product?.stock ?? 0}
-                    onChange={(e) =>
-                      setDraft((prev) => ({ ...prev, simple: e.target.value }))
-                    }
+                    value={getSimpleAddOn()}
+                    onChange={(e) => setSimpleAddOn(e.target.value)}
                     inputMode="numeric"
+                    placeholder="Enter stock to add"
                   />
 
                   <button
@@ -380,6 +411,11 @@ export default function OnDemandInventoryPage() {
                   >
                     {saving ? "Saving..." : "Save"}
                   </button>
+                </div>
+
+                <div className="mt-2 text-xs text-gray-500">
+                  Final stock will be: {Number(product?.stock ?? 0)} + {toInt(getSimpleAddOn())} ={" "}
+                  {Number(product?.stock ?? 0) + toInt(getSimpleAddOn())}
                 </div>
               </div>
             ) : (
@@ -395,14 +431,15 @@ export default function OnDemandInventoryPage() {
                 </div>
 
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[860px] text-sm">
+                  <table className="w-full min-w-[980px] text-sm">
                     <thead>
                       <tr className="text-left text-gray-500">
                         <th className="px-3 py-3 font-medium">SKU</th>
                         <th className="px-3 py-3 font-medium">Barcode</th>
                         <th className="px-3 py-3 font-medium">Size</th>
                         <th className="px-3 py-3 font-medium">Current</th>
-                        <th className="px-3 py-3 font-medium">New Stock</th>
+                        <th className="px-3 py-3 font-medium">Add On</th>
+                        <th className="px-3 py-3 font-medium">Final</th>
                         <th className="px-3 py-3 font-medium">Action</th>
                       </tr>
                     </thead>
@@ -411,6 +448,8 @@ export default function OnDemandInventoryPage() {
                       {variants.map((v) => {
                         const size = normalizeSize(getVariantSize(v));
                         const current = Number(v?.stock ?? 0);
+                        const addOn = toInt(getVariantAddOn(size));
+                        const final = current + addOn;
 
                         return (
                           <tr key={v?._id} className="border-t border-black/5">
@@ -433,11 +472,16 @@ export default function OnDemandInventoryPage() {
                             <td className="px-3 py-3">
                               <input
                                 className="h-10 w-28 rounded-2xl bg-[#f7f7f7] px-3 text-sm outline-none ring-1 ring-black/5 transition focus:bg-white focus:ring-black/10"
-                                value={getVariantDraft(size, current)}
-                                onChange={(e) => setVariantDraft(size, e.target.value)}
+                                value={getVariantAddOn(size)}
+                                onChange={(e) => setVariantAddOn(size, e.target.value)}
                                 inputMode="numeric"
                                 disabled={!size}
+                                placeholder="0"
                               />
+                            </td>
+
+                            <td className="px-3 py-3 text-gray-900 font-medium">
+                              {final}
                             </td>
 
                             <td className="px-3 py-3">
@@ -454,6 +498,10 @@ export default function OnDemandInventoryPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="mt-3 text-xs text-gray-500">
+                  Add-on mode enabled: current stock ke upar jitna input doge, utna add hoga.
                 </div>
               </>
             )}
