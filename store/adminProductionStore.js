@@ -19,6 +19,11 @@ const toBool = (v) => {
   return s === "1" || s === "true" || s === "yes" || s === "y";
 };
 
+const toNum = (v, d = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
+
 const buildQueryString = (params = {}) => {
   const qs = new URLSearchParams();
 
@@ -45,6 +50,12 @@ const buildQueryString = (params = {}) => {
   const sort = safeStr(params.sort);
   if (sort) qs.set("sort", sort);
 
+  const page = toNum(params.page, 0);
+  const limit = toNum(params.limit, 0);
+
+  if (page > 0) qs.set("page", String(page));
+  if (limit > 0 || String(params.limit) === "0") qs.set("limit", String(params.limit));
+
   return qs.toString();
 };
 
@@ -54,6 +65,34 @@ const parseJson = async (res) => {
   return data;
 };
 
+const downloadBlobFile = (blob, fileName = "download.xlsx") => {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+const getFileNameFromResponse = (res, fallback = "download.xlsx") => {
+  const contentDisposition = res.headers.get("content-disposition") || "";
+  const match =
+    contentDisposition.match(/filename\*=UTF-8''([^;]+)/i) ||
+    contentDisposition.match(/filename="([^"]+)"/i) ||
+    contentDisposition.match(/filename=([^;]+)/i);
+
+  if (!match?.[1]) return fallback;
+
+  try {
+    return decodeURIComponent(String(match[1]).replace(/["']/g, "").trim());
+  } catch {
+    return String(match[1]).replace(/["']/g, "").trim() || fallback;
+  }
+};
+
+/* ---------------- defaults ---------------- */
 const DEFAULT_FILTERS = {
   fulfillmentStatus: "processing",
   priority: "",
@@ -64,6 +103,31 @@ const DEFAULT_FILTERS = {
   to: "",
   sort: "createdAt:desc",
   all: true,
+};
+
+const DEFAULT_JOB_FILTERS = {
+  q: "",
+  from: "",
+  to: "",
+  sort: "qty_desc",
+  page: 1,
+  limit: 50,
+  all: false,
+};
+
+const DEFAULT_JOB_SUMMARY = {
+  totalSkus: 0,
+  totalQtyToProduce: 0,
+  totalOrdersCovered: 0,
+  totalReservations: 0,
+};
+
+const DEFAULT_JOB_PAGINATION = {
+  total: 0,
+  page: 1,
+  limit: 50,
+  pages: 1,
+  hasMore: false,
 };
 
 export const useAdminProductionStore = create((set, get) => ({
@@ -88,12 +152,21 @@ export const useAdminProductionStore = create((set, get) => ({
     exchanged: 0,
   },
 
+  productionJobs: [],
+  productionJobSummary: { ...DEFAULT_JOB_SUMMARY },
+  productionJobPagination: { ...DEFAULT_JOB_PAGINATION },
+
   fulfillmentStatus: "processing",
   filters: { ...DEFAULT_FILTERS },
+  productionJobFilters: { ...DEFAULT_JOB_FILTERS },
 
   total: 0,
   loadingQueue: false,
   loadingSummary: false,
+
+  loadingProductionJobs: false,
+  exportingProductionJobs: false,
+
   updatingPacked: false,
   updatingShipped: false,
   updatingBulkShipped: false,
@@ -132,6 +205,46 @@ export const useAdminProductionStore = create((set, get) => ({
     set({
       fulfillmentStatus: "processing",
       filters: { ...DEFAULT_FILTERS },
+    }),
+
+  setProductionJobFilters: (partial = {}) =>
+    set((state) => {
+      const next = { ...state.productionJobFilters, ...partial };
+
+      const changedKeys = Object.keys(partial || {});
+      const shouldResetPage = changedKeys.some((key) => key !== "page");
+
+      if (shouldResetPage && !("page" in partial)) {
+        next.page = 1;
+      }
+
+      return {
+        productionJobFilters: next,
+      };
+    }),
+
+  setProductionJobSearch: (q = "") =>
+    set((state) => ({
+      productionJobFilters: {
+        ...state.productionJobFilters,
+        q: safeStr(q),
+        page: 1,
+      },
+    })),
+
+  setProductionJobDateRange: ({ from = "", to = "" } = {}) =>
+    set((state) => ({
+      productionJobFilters: {
+        ...state.productionJobFilters,
+        from: safeStr(from),
+        to: safeStr(to),
+        page: 1,
+      },
+    })),
+
+  resetProductionJobFilters: () =>
+    set({
+      productionJobFilters: { ...DEFAULT_JOB_FILTERS },
     }),
 
   /* ============================================================
@@ -202,6 +315,137 @@ export const useAdminProductionStore = create((set, get) => ({
   },
 
   /* ============================================================
+    FETCH PRODUCTION JOBS
+    logic:
+    - reservation.status = pending
+    - reservation.refType = order
+    - joined order.isConfirmed = true
+  ============================================================ */
+  fetchProductionJobs: async (params = {}) => {
+    try {
+      set({ loadingProductionJobs: true, error: null });
+
+      const state = get();
+      const merged = { ...state.productionJobFilters, ...params };
+
+      if (merged.page == null || toNum(merged.page, 0) <= 0) merged.page = 1;
+      if (merged.limit == null || toNum(merged.limit, 0) <= 0) merged.limit = 50;
+
+      const query = buildQueryString({
+        q: merged.q,
+        from: merged.from,
+        to: merged.to,
+        sort: merged.sort,
+        page: merged.page,
+        limit: merged.limit,
+        all: merged.all,
+      });
+
+      const res = await fetch(`${API}/production/jobs?${query}`, {
+        credentials: "include",
+      });
+
+      const data = await parseJson(res);
+
+      set({
+        productionJobs: Array.isArray(data.rows) ? data.rows : [],
+        productionJobSummary: {
+          totalSkus: toNum(data?.summary?.totalSkus),
+          totalQtyToProduce: toNum(data?.summary?.totalQtyToProduce),
+          totalOrdersCovered: toNum(data?.summary?.totalOrdersCovered),
+          totalReservations: toNum(data?.summary?.totalReservations),
+        },
+        productionJobPagination: {
+          total: toNum(data?.pagination?.total),
+          page: toNum(data?.pagination?.page, 1),
+          limit: toNum(data?.pagination?.limit, 50),
+          pages: toNum(data?.pagination?.pages, 1),
+          hasMore: Boolean(data?.pagination?.hasMore),
+        },
+        productionJobFilters: {
+          ...state.productionJobFilters,
+          ...merged,
+          q: safeStr(merged.q),
+          from: safeStr(merged.from),
+          to: safeStr(merged.to),
+          sort: safeStr(merged.sort) || "qty_desc",
+          page: toNum(data?.pagination?.page, toNum(merged.page, 1)),
+          limit: toNum(data?.pagination?.limit, toNum(merged.limit, 50)),
+          all: Boolean(merged.all),
+        },
+      });
+
+      return data.rows || [];
+    } catch (e) {
+      console.error("❌ fetchProductionJobs error:", e);
+      set({
+        error: e.message,
+        productionJobs: [],
+        productionJobSummary: { ...DEFAULT_JOB_SUMMARY },
+        productionJobPagination: { ...DEFAULT_JOB_PAGINATION },
+      });
+      toast.error(e.message);
+      return [];
+    } finally {
+      set({ loadingProductionJobs: false });
+    }
+  },
+
+  /* ============================================================
+    EXPORT PRODUCTION JOBS EXCEL
+  ============================================================ */
+  downloadProductionJobsExcel: async (params = {}) => {
+    try {
+      set({ exportingProductionJobs: true, error: null });
+
+      const state = get();
+      const merged = { ...state.productionJobFilters, ...params };
+
+      const query = buildQueryString({
+        q: merged.q,
+        from: merged.from,
+        to: merged.to,
+        sort: merged.sort,
+      });
+
+      const res = await fetch(
+        `${API}/production/jobs/export${query ? `?${query}` : ""}`,
+        {
+          method: "GET",
+          credentials: "include",
+        }
+      );
+
+      if (!res.ok) {
+        let msg = "Failed to export production jobs excel";
+        try {
+          const data = await res.json();
+          msg = data?.message || msg;
+        } catch (_) {}
+        throw new Error(msg);
+      }
+
+      const blob = await res.blob();
+      const fileName = getFileNameFromResponse(
+        res,
+        `production-job-list-${new Date().toISOString().slice(0, 10)}.xlsx`
+      );
+
+      downloadBlobFile(blob, fileName);
+      toast.success("Production jobs excel downloaded ✅");
+
+      return true;
+    } catch (e) {
+      console.error("❌ downloadProductionJobsExcel error:", e);
+      set({ error: e.message });
+      toast.error(e.message);
+      return false;
+    } finally {
+      set({ exportingProductionJobs: false });
+    }
+  },
+
+  /* ============================================================
     MARK ORDER PACKED
     backend handles reservation consume on packed
   ============================================================ */
@@ -232,6 +476,7 @@ export const useAdminProductionStore = create((set, get) => ({
       await Promise.allSettled([
         get().fetchProductionSummary(),
         get().fetchProductionQueue(get().filters),
+        get().fetchProductionJobs(get().productionJobFilters),
       ]);
 
       return updated;
@@ -274,6 +519,7 @@ export const useAdminProductionStore = create((set, get) => ({
       await Promise.allSettled([
         get().fetchProductionSummary(),
         get().fetchProductionQueue(get().filters),
+        get().fetchProductionJobs(get().productionJobFilters),
       ]);
 
       return updated;
@@ -352,6 +598,7 @@ export const useAdminProductionStore = create((set, get) => ({
           ...get().filters,
           fulfillmentStatus: get().fulfillmentStatus || "processing",
         }),
+        get().fetchProductionJobs(get().productionJobFilters),
       ]);
 
       return data;
@@ -366,6 +613,13 @@ export const useAdminProductionStore = create((set, get) => ({
   },
 
   /* ============================================================
+    REFRESH HELPERS
+  ============================================================ */
+  refreshProductionJobs: async () => {
+    return get().fetchProductionJobs(get().productionJobFilters);
+  },
+
+  /* ============================================================
     REFRESH ALL
   ============================================================ */
   refreshAll: async () => {
@@ -373,6 +627,7 @@ export const useAdminProductionStore = create((set, get) => ({
     await Promise.allSettled([
       state.fetchProductionSummary(),
       state.fetchProductionQueue(state.filters),
+      state.fetchProductionJobs(state.productionJobFilters),
     ]);
   },
 }));

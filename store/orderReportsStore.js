@@ -58,6 +58,12 @@ const initialSummary = () => ({
   totalOrders: 0,
 });
 
+const initialBusinessOverview = () => ({
+  totalOrdersReceived: 0,
+  totalRevenueGenerated: 0,
+  averageOrderValue: 0,
+});
+
 const initialPagination = () => ({
   page: 1,
   limit: 20,
@@ -70,12 +76,16 @@ const initialPagination = () => ({
 export const useOrderReportsStore = create((set, get) => ({
   rows: [],
   summary: initialSummary(),
+  businessOverview: initialBusinessOverview(),
   filters: initialFilters(),
   pagination: initialPagination(),
 
   loading: false,
+  overviewLoading: false,
   error: "",
+  overviewError: "",
   initialized: false,
+  overviewInitialized: false,
 
   setFilter: (key, value) => {
     set((state) => ({
@@ -219,8 +229,112 @@ export const useOrderReportsStore = create((set, get) => ({
     }
   },
 
+  fetchBusinessOverview: async (override = {}) => {
+    const state = get();
+    const filters = {
+      ...state.filters,
+      ...override,
+    };
+
+    set({ overviewLoading: true, overviewError: "" });
+
+    try {
+      const url = buildUrl(
+        `/api/orders/accounts/business-overview${qs({
+          month: filters.month,
+        })}`
+      );
+
+      const res = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      const data = await safeJson(res);
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message || "Failed to fetch order business overview"
+        );
+      }
+
+      set((state) => ({
+        businessOverview: {
+          totalOrdersReceived: toNum(
+            data?.summary?.totalOrdersReceived,
+            0
+          ),
+          totalRevenueGenerated: toNum(
+            data?.summary?.totalRevenueGenerated,
+            0
+          ),
+          averageOrderValue: toNum(data?.summary?.averageOrderValue, 0),
+        },
+        filters: {
+          ...state.filters,
+          month: data?.filters?.month ?? filters.month ?? "",
+        },
+        overviewLoading: false,
+        overviewError: "",
+        overviewInitialized: true,
+      }));
+
+      return {
+        success: true,
+        data,
+      };
+    } catch (error) {
+      set({
+        overviewLoading: false,
+        overviewError:
+          error?.message || "Failed to fetch order business overview",
+        businessOverview: initialBusinessOverview(),
+        overviewInitialized: true,
+      });
+
+      return {
+        success: false,
+        message:
+          error?.message || "Failed to fetch order business overview",
+      };
+    }
+  },
+
+  fetchOverviewAndProducts: async (override = {}) => {
+    const filters = {
+      ...get().filters,
+      ...override,
+    };
+
+    set({
+      filters: {
+        ...get().filters,
+        ...filters,
+      },
+    });
+
+    const [overviewRes, productRes] = await Promise.all([
+      get().fetchBusinessOverview(filters),
+      get().fetchProductSalesReport(filters),
+    ]);
+
+    return {
+      success: Boolean(overviewRes?.success && productRes?.success),
+      overviewRes,
+      productRes,
+    };
+  },
+
   refresh: async () => {
     return get().fetchProductSalesReport();
+  },
+
+  refreshAll: async () => {
+    return get().fetchOverviewAndProducts();
   },
 
   goToNextPage: async () => {
@@ -270,13 +384,27 @@ export const useOrderReportsStore = create((set, get) => ({
     return get().fetchProductSalesReport(next);
   },
 
+  hydrateAndFetchAll: async (patch = {}) => {
+    const current = get().filters;
+    const next = {
+      ...current,
+      ...patch,
+    };
+
+    set({ filters: next });
+    return get().fetchOverviewAndProducts(next);
+  },
+
   clearReport: () => {
     set({
       rows: [],
       summary: initialSummary(),
+      businessOverview: initialBusinessOverview(),
       pagination: initialPagination(),
       error: "",
+      overviewError: "",
       initialized: false,
+      overviewInitialized: false,
     });
   },
 }));

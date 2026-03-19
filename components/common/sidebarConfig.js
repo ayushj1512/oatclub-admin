@@ -33,16 +33,17 @@ export const sidebarMenus = {
   ],
 
   production: [
-    { label: "Production Dashboard", href: "/production" },
-    { label: "Packed Orders", href: "/production/packed" },
-    { label: "Sampling", href: "/production/sampling" },
-    { label: "Stock Update", href: "/production/stock-update" },
-    { label: "Pattern Number", href: "/production/pattern-number" },
-    { label: "Fabric", href: "/production/fabric" },
-    { label: "Product Detail", href: "/production/product-detail" },
-    { label: "Missing Patterns", href: "/production/missing-patterns" },
-    { label: "Barcode Generator", href: "/production/barcode" },
-  ],
+  { label: "Production Dashboard", href: "/production" },
+  { label: "Production Jobs", href: "/production/production-job" },
+  { label: "Packed Orders", href: "/production/packed" },
+  { label: "Sampling", href: "/production/sampling" },
+  { label: "Stock Update", href: "/production/stock-update" },
+  { label: "Pattern Number", href: "/production/pattern-number" },
+  { label: "Fabric", href: "/production/fabric" },
+  { label: "Product Detail", href: "/production/product-detail" },
+  { label: "Missing Patterns", href: "/production/missing-patterns" },
+  { label: "Barcode Generator", href: "/production/barcode" },
+],
 
   reviews: [
     { label: "Reviews Dashboard", href: "/reviews" },
@@ -232,6 +233,12 @@ bluedart: [
 
   reports: [
   { label: "Reports Home", href: "/reports" },
+
+  // Business Overview
+  {
+    label: "Order & Business Overview",
+    href: "/reports/Order-Business-Overview",
+  },
 
   // Sales & Performance
   { label: "Product Sales", href: "/reports/ProductSoldReport" },
