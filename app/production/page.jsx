@@ -662,7 +662,7 @@ export default function ProductionDashboardPage() {
             Refresh
           </button>
 
-          <SyncInventoryButton />
+          {/* <SyncInventoryButton /> */}
 
           <button
             onClick={onExportExcel}
