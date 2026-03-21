@@ -22,6 +22,7 @@ import {
   Headset,
   Clapperboard,
   Sparkles,
+  ArrowUpDown,
   RefreshCw,
   Quote,
   Globe,
@@ -81,18 +82,9 @@ const DOMAIN_LIST = [
   { id: "collaboration", name: "Influencer Collaborations", icon: Handshake, route: "/collaboration" },
 ];
 
-const getSubtitle = (id) => {
-  if (id === "rma") return "Return / Exchange";
-  if (id === "collaboration") return "Influencer tracking";
-  if (id === "footwear") return "Catalog & variants";
-  if (id === "shiprocket") return "Labels & tracking";
-  if (id === "bluedart") return "Shipments & labels";
-  if (id === "reviews") return "Ratings moderation";
-  return "";
-};
-
 export default function HomeDashboard() {
   const router = useRouter();
+
   const admin = useLoginStore((s) => s.admin);
   const role = admin?.role || "viewer";
   const permissions =
@@ -116,92 +108,161 @@ export default function HomeDashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const domains = useMemo(() => {
-    return DOMAIN_LIST
-      .filter((d) => hasPermission(permissions, DOMAIN_PERMISSIONS[d.id]))
-      .sort((a, b) => a.name.localeCompare(b.name));
+  const allowedDomains = useMemo(() => {
+    return DOMAIN_LIST.filter((d) =>
+      hasPermission(permissions, DOMAIN_PERMISSIONS[d.id])
+    );
   }, [permissions]);
 
-  return (
-    <div className="min-h-screen bg-gray-50 px-3 py-4">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-4 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-3 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-white shadow-sm">
-              <Sparkles size={16} className="text-blue-700" />
-            </div>
+  const [sortBy, setSortBy] = useState("name_asc");
 
-            <div className="min-w-0 flex-1">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-900">Daily Focus</span>
-                <span className="inline-flex items-center rounded-full border border-blue-100 bg-white px-2 py-0.5 text-[10px] text-blue-700">
-                  <Quote size={10} className="mr-1" />
-                  {quote.tag}
+  const sortedDomains = useMemo(() => {
+    const arr = [...allowedDomains];
+    if (sortBy === "default" || sortBy === "name_asc") {
+      return arr.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    if (sortBy === "name_desc") {
+      return arr.sort((a, b) => b.name.localeCompare(a.name));
+    }
+    return arr;
+  }, [allowedDomains, sortBy]);
+
+  return (
+    <div className="min-h-screen bg-gray-50 px-3 py-6 sm:px-6 sm:py-10 md:px-8">
+      <div className="mx-auto">
+        <div className="mb-6">
+          <div className="w-full rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-4 py-4 shadow-sm sm:px-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
+                  <Sparkles size={18} className="text-blue-700" />
                 </span>
+
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-semibold text-gray-900">Daily Focus</div>
+                    <span className="hidden items-center gap-1 rounded-full bg-blue-600 px-2 py-1 text-[11px] text-white sm:inline-flex">
+                      <Quote size={12} /> Quote
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-blue-100 bg-white px-2 py-1 text-[11px] text-blue-700">
+                      {quote.tag}
+                    </span>
+                  </div>
+
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={quote.text}
+                      initial={{ opacity: 0, y: 10, filter: "blur(2px)" }}
+                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, y: -10, filter: "blur(2px)" }}
+                      transition={{ duration: 0.28 }}
+                      className="mt-1 break-words text-sm leading-snug text-gray-700 sm:text-[15px]"
+                    >
+                      <span className="font-semibold text-blue-700">“</span>
+                      {quote.text}
+                      <span className="font-semibold text-blue-700">”</span>
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
               </div>
 
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.p
-                  key={quote.text}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.25 }}
-                  className="text-xs leading-5 text-gray-700"
+              <div className="flex w-full items-center gap-2 md:w-auto">
+                <button
+                  type="button"
+                  onClick={pickQuote}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm hover:bg-gray-50"
                 >
-                  “{quote.text}”
-                </motion.p>
-              </AnimatePresence>
-            </div>
+                  <RefreshCw size={16} />
+                </button>
 
-            <button
-              type="button"
-              onClick={pickQuote}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white shadow-sm active:scale-95"
-            >
-              <RefreshCw size={15} />
-            </button>
+                <div className="flex w-full items-center gap-2 md:w-auto">
+                  <div className="hidden items-center gap-2 text-xs text-gray-500 md:flex">
+                    <ArrowUpDown size={14} /> Sort
+                  </div>
+
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none shadow-sm hover:bg-gray-50 md:w-auto"
+                  >
+                    <option value="default">Default (A → Z)</option>
+                    <option value="name_asc">Name (A → Z)</option>
+                    <option value="name_desc">Name (Z → A)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {domains.length === 0 ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 text-center text-sm text-gray-600">
+        {sortedDomains.length === 0 ? (
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-600">
             You don’t have access to any modules yet.
           </div>
         ) : (
-          <motion.div layout className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <motion.div
+            layout
+            className="grid grid-cols-2 gap-3 sm:gap-6 sm:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
+          >
             <AnimatePresence initial={false}>
-              {domains.map(({ id, name, icon: Icon, route }) => {
-                const subtitle = getSubtitle(id);
+              {sortedDomains.map(({ id, name, icon: Icon, route }) => (
+                <motion.button
+                  layout
+                  key={id}
+                  type="button"
+                  onClick={() => router.push(route)}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                  className="group flex min-h-[150px] flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white px-3 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md sm:min-h-[170px] sm:px-4 sm:py-6"
+                >
+                  <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 p-3 text-white shadow-md transition-transform group-hover:scale-110 sm:p-4">
+                    <Icon size={24} className="sm:hidden" />
+                    <Icon size={30} className="hidden sm:block" />
+                  </div>
 
-                return (
-                  <motion.button
-                    key={id}
-                    layout
-                    type="button"
-                    onClick={() => router.push(route)}
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    transition={{ type: "spring", stiffness: 450, damping: 32 }}
-                    className="group flex min-h-[148px] flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white px-3 py-4 text-center shadow-sm transition active:scale-[0.98]"
-                  >
-                    <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 p-3 text-white shadow-md">
-                      <Icon size={22} />
-                    </div>
+                  <h2 className="mt-3 text-center text-sm font-semibold text-gray-900 group-hover:text-blue-700 sm:mt-4 sm:text-lg">
+                    {name}
+                  </h2>
 
-                    <h2 className="mt-3 text-sm font-semibold leading-5 text-gray-900">
-                      {name}
-                    </h2>
+                  {id === "rma" && (
+                    <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
+                      View Return / Exchange requests
+                    </p>
+                  )}
 
-                    {subtitle ? (
-                      <p className="mt-1 text-[11px] leading-4 text-gray-500">
-                        {subtitle}
-                      </p>
-                    ) : null}
-                  </motion.button>
-                );
-              })}
+                  {id === "collaboration" && (
+                    <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
+                      Track ongoing influencer collaborations
+                    </p>
+                  )}
+
+                  {id === "footwear" && (
+                    <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
+                      Manage footwear catalog & variants
+                    </p>
+                  )}
+
+                  {id === "shiprocket" && (
+                    <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
+                      Manage Shiprocket sync, labels & tracking
+                    </p>
+                  )}
+
+                  {id === "bluedart" && (
+                    <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
+                      Manage Blue Dart shipments, labels & tracking
+                    </p>
+                  )}
+
+                  {id === "reviews" && (
+                    <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
+                      Moderate product reviews & ratings
+                    </p>
+                  )}
+                </motion.button>
+              ))}
             </AnimatePresence>
           </motion.div>
         )}
