@@ -1,156 +1,153 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useReactToPrint } from "react-to-print";
+import { FileText, Loader2, RefreshCcw, Search } from "lucide-react";
 
-/* -------------------------------
-   Mock JSON Data (Safe Testing)
---------------------------------*/
-const mockReservations = [
-  {
-    _id: "r1",
-    orderNumber: "MIRAY-000010",
-    createdAt: "2026-02-26T01:00:00.000Z",
-    orderDoc: { priority: "normal" },
-  },
-  {
-    _id: "r2",
-    orderNumber: "MIRAY-000002",
-    createdAt: "2026-02-26T02:00:00.000Z",
-    orderDoc: { priority: "normal" },
-  },
-  {
-    _id: "r3",
-    orderNumber: "MIRAY-000007",
-    createdAt: "2026-02-26T03:00:00.000Z",
-    orderDoc: { priority: "high" },
-  },
-  {
-    _id: "r4",
-    orderNumber: "MIRAY-000001",
-    createdAt: "2026-02-26T04:00:00.000Z",
-    orderDoc: { priority: "high" },
-  },
-  {
-    _id: "r5",
-    orderNumber: "MIRAY-000003",
-    createdAt: "2026-02-26T05:00:00.000Z",
-    orderDoc: { priority: "medium" },
-  },
-  {
-    _id: "r6",
-    orderNumber: "",
-    createdAt: "2026-02-26T06:00:00.000Z",
-    orderDoc: null,
-  },
-];
+import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
+import { useOrderInvoiceStore } from "@/store/orderInvoiceStore";
 
-/* -------------------------------
-   Sorting Helpers
---------------------------------*/
-const priorityRank = (p) => {
-  const x = String(p || "").toLowerCase();
-  if (x === "high") return 0;
-  if (x === "medium") return 1;
-  if (x === "normal") return 2;
-  return 3;
+const PREFIX = "MIRAY-";
+const DIGITS = 6;
+
+const normalizeOrderNumber = (value = "") => {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (!raw) return "";
+
+  if (/^MIRAY-\d{6}$/.test(raw)) return raw;
+
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+
+  return `${PREFIX}${digits.slice(-DIGITS).padStart(DIGITS, "0")}`;
 };
 
-const cmpOrderNumber = (a, b) =>
-  String(a || "").localeCompare(String(b || ""), undefined, {
-    numeric: true,
-    sensitivity: "base",
+const parseOrderNumbers = (input = "") =>
+  [...new Set(input.split(/[\n,\s]+/).map(normalizeOrderNumber).filter(Boolean))];
+
+export default function OrdersInvoicePage() {
+  const printRef = useRef(null);
+  const [input, setInput] = useState("");
+  const [pageError, setPageError] = useState("");
+
+  const {
+    invoices,
+    loading,
+    fetchInvoiceByOrderNumber,
+    fetchInvoicesByOrderNumbers,
+    clearInvoices,
+  } = useOrderInvoiceStore();
+
+  const orderNumbers = useMemo(() => parseOrderNumbers(input), [input]);
+
+  const printInvoices = useReactToPrint({
+    contentRef: printRef,
   });
 
-function sortReservations(rows) {
-  return [...rows].sort((a, b) => {
-    const pa = priorityRank(a?.orderDoc?.priority);
-    const pb = priorityRank(b?.orderDoc?.priority);
-    if (pa !== pb) return pa - pb;
+  const handleFetch = async () => {
+    setPageError("");
 
-    const on = cmpOrderNumber(a?.orderNumber, b?.orderNumber);
-    if (on !== 0) return on;
-
-    const ca = new Date(a?.createdAt).getTime();
-    const cb = new Date(b?.createdAt).getTime();
-    return ca - cb;
-  });
-}
-
-function isSorted(rows) {
-  for (let i = 1; i < rows.length; i++) {
-    const a = rows[i - 1];
-    const b = rows[i];
-
-    const pa = priorityRank(a?.orderDoc?.priority);
-    const pb = priorityRank(b?.orderDoc?.priority);
-    if (pa > pb) return false;
-
-    if (pa === pb) {
-      const on = cmpOrderNumber(a?.orderNumber, b?.orderNumber);
-      if (on > 0) return false;
-
-      if (on === 0) {
-        const ca = new Date(a?.createdAt).getTime();
-        const cb = new Date(b?.createdAt).getTime();
-        if (ca > cb) return false;
-      }
+    if (!orderNumbers.length) {
+      setPageError("Enter at least one order number");
+      return;
     }
-  }
-  return true;
-}
 
-/* -------------------------------
-   Page Component
---------------------------------*/
-export default function ReservationSortTest() {
-  const sorted = useMemo(() => sortReservations(mockReservations), []);
+    try {
+      clearInvoices();
 
-  const ok = useMemo(() => isSorted(sorted), [sorted]);
+      // 🔥 IMPORTANT LOGIC
+      if (orderNumbers.length === 1) {
+        const single = await fetchInvoiceByOrderNumber(orderNumbers[0]);
+        if (!single) {
+          setPageError("Invoice not found");
+        }
+      } else {
+        const many = await fetchInvoicesByOrderNumbers(orderNumbers);
+        if (!many?.length) {
+          setPageError("No invoices found");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setPageError(err?.message || "Failed to fetch invoice");
+    }
+  };
+
+  const handlePrint = async () => {
+    if (!invoices?.length) {
+      await handleFetch();
+    }
+
+    if (!invoices?.length) return;
+
+    setTimeout(() => {
+      printInvoices?.();
+    }, 80);
+  };
+
+  const handleReset = () => {
+    setInput("");
+    setPageError("");
+    clearInvoices();
+  };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="text-xl font-semibold">
-        🔬 Reservation Sorting Test (Mock JSON Only)
-      </div>
+    <div className="p-4 max-w-5xl mx-auto space-y-4">
+      <div className="bg-white p-4 rounded-xl border">
+        <h1 className="font-bold text-lg">Invoice Panel</h1>
 
-      <div className="text-sm text-gray-600">
-        Rule: priority (high → medium → normal) → orderNumber ASC → createdAt ASC
-      </div>
+        <textarea
+          className="w-full border p-3 rounded mt-3"
+          rows={4}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="1056 or MIRAY-001056"
+        />
 
-      <div className="text-lg">
-        Result:{" "}
-        {ok ? (
-          <span className="text-green-600 font-bold">✅ PASS</span>
-        ) : (
-          <span className="text-red-600 font-bold">❌ FAIL</span>
+        <div className="flex gap-2 mt-3">
+          <button onClick={handleFetch} className="btn">
+            {loading ? <Loader2 className="animate-spin" /> : <Search />}
+            Fetch
+          </button>
+
+          <button onClick={handlePrint} className="btn-dark">
+            <FileText /> Print
+          </button>
+
+          <button onClick={handleReset} className="btn-outline">
+            <RefreshCcw /> Reset
+          </button>
+        </div>
+
+        {pageError && (
+          <div className="text-red-500 mt-2 text-sm">{pageError}</div>
         )}
       </div>
 
-      <div className="border rounded overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="p-2 text-left">#</th>
-              <th className="p-2 text-left">Priority</th>
-              <th className="p-2 text-left">Order Number</th>
-              <th className="p-2 text-left">Created At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((r, i) => (
-              <tr key={r._id} className="border-b">
-                <td className="p-2">{i + 1}</td>
-                <td className="p-2">{r?.orderDoc?.priority || "none"}</td>
-                <td className="p-2">{r.orderNumber || "—"}</td>
-                <td className="p-2">{r.createdAt}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Preview */}
+      <div>
+        {!invoices?.length ? (
+          <div className="text-center text-gray-500 py-10">
+            No invoices loaded
+          </div>
+        ) : (
+          invoices.map((inv, i) => (
+            <div key={i} className="border rounded mb-4 p-2">
+              <InvoiceTemplate data={inv} />
+            </div>
+          ))
+        )}
       </div>
 
-      <div className="text-xs text-gray-500">
-        This page uses static JSON data. No API calls. No database impact.
+      {/* Print hidden */}
+      <div style={{ position: "absolute", left: "-99999px" }}>
+        <div ref={printRef}>
+          {invoices?.map((inv, i) => (
+            <div key={i}>
+              <InvoiceTemplate data={inv} />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
