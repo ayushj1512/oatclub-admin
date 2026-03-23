@@ -15,8 +15,12 @@ import {
   ArrowUpRight,
   ShoppingBag,
   Sparkles,
+  Download,
 } from "lucide-react";
 import { useOrderReportsStore } from "@/store/orderReportsStore";
+
+const API = (process.env.NEXT_PUBLIC_API_URL || "").trim();
+const REPORT_ENDPOINT = `${API}/api/orders/accounts/sales-report/products`;
 
 const fmtNum = (value) =>
   new Intl.NumberFormat("en-IN", {
@@ -72,7 +76,9 @@ function StatCard({ title, value, subtitle, icon: Icon, accent = "zinc" }) {
         </div>
 
         <div
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${accentMap[accent] || accentMap.zinc}`}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${
+            accentMap[accent] || accentMap.zinc
+          }`}
         >
           <Icon className="h-5 w-5" />
         </div>
@@ -80,6 +86,98 @@ function StatCard({ title, value, subtitle, icon: Icon, accent = "zinc" }) {
     </div>
   );
 }
+
+const safeText = (value) => String(value ?? "").trim();
+
+const escapeCsvCell = (value) => {
+  const text = String(value ?? "");
+  if (text.includes('"') || text.includes(",") || text.includes("\n")) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+};
+
+const buildQueryString = ({
+  month = "",
+  search = "",
+  sort = "qty_desc",
+  page = 1,
+  limit = 20,
+}) => {
+  const params = new URLSearchParams();
+
+  if (month) params.set("month", month);
+  if (search) params.set("search", search);
+  if (sort) params.set("sort", sort);
+  params.set("page", String(page));
+  params.set("limit", String(limit));
+
+  return params.toString();
+};
+
+const normalizePayload = (data) => {
+  const rows = Array.isArray(data?.rows)
+    ? data.rows
+    : Array.isArray(data?.data?.rows)
+    ? data.data.rows
+    : Array.isArray(data?.products)
+    ? data.products
+    : Array.isArray(data?.data?.products)
+    ? data.data.products
+    : [];
+
+  const pagination =
+    data?.pagination ||
+    data?.data?.pagination || {
+      page: 1,
+      limit: rows.length || 0,
+      total: rows.length || 0,
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false,
+    };
+
+  return { rows, pagination };
+};
+
+const buildCsvContent = (items = []) => {
+  const headers = [
+    "Product Code",
+    "Product Name",
+    "Product Image",
+    "Selling Price",
+    "Qty Sold",
+  ];
+
+  const body = items.map((row) =>
+    [
+      safeText(row.productCode || "-"),
+      safeText(row.productName || "-"),
+      safeText(row.productImage || ""),
+      Number(row.avgSellingPrice || row.sellingPrice || 0).toFixed(2),
+      Number(row.totalQtySold || 0),
+    ]
+      .map(escapeCsvCell)
+      .join(",")
+  );
+
+  return [headers.join(","), ...body].join("\n");
+};
+
+const downloadCsvFile = (content, filename) => {
+  const blob = new Blob([content], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
 
 export default function ProductSoldReportPage() {
   const {
@@ -98,6 +196,8 @@ export default function ProductSoldReportPage() {
 
   const [searchInput, setSearchInput] = useState(filters.search || "");
   const [scope, setScope] = useState(filters.month ? "monthly" : "overall");
+  const [csvLoading, setCsvLoading] = useState(false);
+  const [csvError, setCsvError] = useState("");
 
   useEffect(() => {
     fetchProductSalesReport();
@@ -133,7 +233,6 @@ export default function ProductSoldReportPage() {
     return count;
   }, [filters]);
 
-  // ✅ backend se agar order count aaye to use karo, warna safe fallback 0
   const totalOrdersConsidered = Number(summary?.totalOrders || 0);
 
   const onSubmitSearch = async (e) => {
@@ -220,6 +319,7 @@ export default function ProductSoldReportPage() {
   const handleReset = async () => {
     setSearchInput("");
     setScope("overall");
+    setCsvError("");
     resetFilters();
 
     fetchProductSalesReport({
@@ -241,6 +341,62 @@ export default function ProductSoldReportPage() {
       ...filters,
       page,
     });
+  };
+
+  const handleDownloadOverallCsv = async () => {
+    try {
+      setCsvLoading(true);
+      setCsvError("");
+
+      if (!API) {
+        throw new Error("NEXT_PUBLIC_API_URL is missing.");
+      }
+
+      const exportLimit = 500;
+      let currentPage = 1;
+      let totalPages = 1;
+      let allRows = [];
+
+      do {
+        const qs = buildQueryString({
+          month: filters.month || "",
+          search: filters.search || "",
+          sort: filters.sort || "qty_desc",
+          page: currentPage,
+          limit: exportLimit,
+        });
+
+        const res = await fetch(`${REPORT_ENDPOINT}?${qs}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch report data for CSV.");
+        }
+
+        const data = await res.json();
+        const normalized = normalizePayload(data);
+
+        allRows = [...allRows, ...(normalized.rows || [])];
+        totalPages = Number(normalized.pagination?.totalPages || 1);
+        currentPage += 1;
+      } while (currentPage <= totalPages);
+
+      if (!allRows.length) {
+        throw new Error("No data found to download.");
+      }
+
+      const csv = buildCsvContent(allRows);
+      const scopeLabel = filters.month ? filters.month : "overall";
+      const filename = `product-sold-report-${scopeLabel}.csv`;
+
+      downloadCsvFile(csv, filename);
+    } catch (err) {
+      setCsvError(err?.message || "CSV download failed.");
+    } finally {
+      setCsvLoading(false);
+    }
   };
 
   return (
@@ -292,7 +448,6 @@ export default function ProductSoldReportPage() {
           </div>
         </div>
 
-        {/* ✅ revenue cards remove kar diye */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           <StatCard
             title="Total Products"
@@ -304,7 +459,7 @@ export default function ProductSoldReportPage() {
 
           <StatCard
             title="Total Qty Sold"
-            value={fmtNum(summary?.totalQty)}
+            value={fmtNum(summary?.totalQtySold)}
             subtitle="Units sold in selected scope"
             icon={Boxes}
             accent="emerald"
@@ -336,6 +491,16 @@ export default function ProductSoldReportPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadOverallCsv}
+                    disabled={csvLoading}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Download className="h-4 w-4" />
+                    {csvLoading ? "Downloading..." : "Download CSV"}
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => onChangeScope("overall")}
@@ -502,6 +667,12 @@ export default function ProductSoldReportPage() {
                   {error}
                 </div>
               ) : null}
+
+              {csvError ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {csvError}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -553,7 +724,7 @@ export default function ProductSoldReportPage() {
                     <tr
                       key={
                         row.key ||
-                        `${row.productCode}-${row.productId}-${index}`
+                        `${row.productCode}-${row.productId || "product"}-${index}`
                       }
                       className="border-b border-zinc-100 transition hover:bg-zinc-50"
                     >
@@ -591,12 +762,12 @@ export default function ProductSoldReportPage() {
                       </td>
 
                       <td className="px-5 py-4 text-right align-middle text-sm font-medium text-zinc-700">
-                        {fmtCurrency(row.sellingPrice)}
+                        {fmtCurrency(row.avgSellingPrice || row.sellingPrice || 0)}
                       </td>
 
                       <td className="px-5 py-4 text-right align-middle">
                         <span className="inline-flex min-w-[64px] items-center justify-center rounded-xl bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700">
-                          {fmtNum(row.qty)}
+                          {fmtNum(row.totalQtySold || 0)}
                         </span>
                       </td>
                     </tr>
@@ -635,7 +806,7 @@ export default function ProductSoldReportPage() {
                   : ""}
               </span>
 
-              <span className="rounded-xl bg-white px-3 py-1.5 text-zinc-700 border border-zinc-200">
+              <span className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-zinc-700">
                 Orders considered: {fmtNum(totalOrdersConsidered)}
               </span>
             </div>

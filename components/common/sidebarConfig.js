@@ -53,18 +53,26 @@ export const sidebarMenus = {
 
 accounts: [
   { label: "Accounts Dashboard", href: "/accounts" },
+
+  // Core
   { label: "Sales", href: "/accounts/sales" },
   { label: "Revenue", href: "/accounts/revenue" },
+
+  // Payments & Remittance
+  { label: "Razorpay Remittance", href: "/accounts/razorpay-remittance" },
 ],
 
   inventory: [
-    { label: "Inventory Dashboard", href: "/inventory" },
-    { label: "Stock Update", href: "/inventory/stock-update" },
-    { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
-    { label: "Reserved Inventory", href: "/inventory/reserved-inventory" },
-    { label: "On Demand Inventory", href: "/inventory/on-demand-inventory" },
-    { label: "Zero Inventory", href: "/inventory/zero-inventory" },
-  ],
+  { label: "Inventory Dashboard", href: "/inventory" },
+  // Core Actions
+  { label: "Modify Inventory", href: "/inventory/modify-inventory" },
+  { label: "Stock Update", href: "/inventory/stock-update" },
+  // Inventory Views
+  { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
+  { label: "Reserved Inventory", href: "/inventory/reserved-inventory" },
+  { label: "On Demand Inventory", href: "/inventory/on-demand-inventory" },
+  { label: "Zero Inventory", href: "/inventory/zero-inventory" },
+],
 
   media: [
     { label: "Media Library", href: "/media" },
@@ -242,6 +250,7 @@ bluedart: [
 
   // Sales & Performance
   { label: "Product Sales", href: "/reports/ProductSoldReport" },
+  { label: "Product UnSold", href: "/reports/ProductUnSoldReport" },
   { label: "Orders Report", href: "/reports/Orders" },
   { label: "ROAS", href: "/reports/ROAS" },
 

@@ -23,8 +23,8 @@ const qs = (params = {}) => {
     sp.set(key, String(value));
   });
 
-  const s = sp.toString();
-  return s ? `?${s}` : "";
+  const str = sp.toString();
+  return str ? `?${str}` : "";
 };
 
 const toNum = (v, d = 0) => {
@@ -56,8 +56,13 @@ const initialFilters = () => ({
 
 const initialSummary = () => ({
   totalProducts: 0,
-  totalQty: 0,
+  totalQtySold: 0,
+  totalRevenue: 0,
   totalOrders: 0,
+});
+
+const initialUnsoldSummary = () => ({
+  totalUnsoldProducts: 0,
 });
 
 const initialBusinessOverview = () => ({
@@ -97,7 +102,10 @@ const initialOperationsSummary = () => ({
 
 export const useOrderReportsStore = create((set, get) => ({
   rows: [],
+  unsoldRows: [],
+
   summary: initialSummary(),
+  unsoldSummary: initialUnsoldSummary(),
   businessOverview: initialBusinessOverview(),
   roasSummary: initialRoasSummary(),
   operationsSummary: initialOperationsSummary(),
@@ -108,18 +116,22 @@ export const useOrderReportsStore = create((set, get) => ({
 
   filters: initialFilters(),
   pagination: initialPagination(),
+  unsoldPagination: initialPagination(),
 
   loading: false,
+  unsoldLoading: false,
   overviewLoading: false,
   roasLoading: false,
   operationsLoading: false,
 
   error: "",
+  unsoldError: "",
   overviewError: "",
   roasError: "",
   operationsError: "",
 
   initialized: false,
+  unsoldInitialized: false,
   overviewInitialized: false,
   roasInitialized: false,
   operationsInitialized: false,
@@ -139,7 +151,9 @@ export const useOrderReportsStore = create((set, get) => ({
       filters: {
         ...state.filters,
         ...patch,
-        ...(Object.prototype.hasOwnProperty.call(patch, "page") ? {} : { page: 1 }),
+        ...(Object.prototype.hasOwnProperty.call(patch, "page")
+          ? {}
+          : { page: 1 }),
       },
     }));
   },
@@ -189,13 +203,16 @@ export const useOrderReportsStore = create((set, get) => ({
       );
 
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(data?.message || "Failed to fetch product sales report");
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to fetch product sales report");
+      }
 
-      set({
+      set((state) => ({
         rows: safeArr(data?.rows),
         summary: {
           totalProducts: toNum(data?.summary?.totalProducts),
-          totalQty: toNum(data?.summary?.totalQty),
+          totalQtySold: toNum(data?.summary?.totalQtySold ?? data?.summary?.totalQty),
+          totalRevenue: toNum(data?.summary?.totalRevenue),
           totalOrders: toNum(data?.summary?.totalOrders),
         },
         pagination: {
@@ -207,7 +224,7 @@ export const useOrderReportsStore = create((set, get) => ({
           hasPrev: Boolean(data?.pagination?.hasPrev),
         },
         filters: {
-          ...get().filters,
+          ...state.filters,
           month: data?.filters?.month ?? filters.month ?? "",
           search: data?.filters?.search ?? filters.search ?? "",
           sort: data?.filters?.sort ?? filters.sort ?? "qty_desc",
@@ -217,7 +234,7 @@ export const useOrderReportsStore = create((set, get) => ({
         loading: false,
         error: "",
         initialized: true,
-      });
+      }));
 
       return { success: true, data };
     } catch (error) {
@@ -237,7 +254,85 @@ export const useOrderReportsStore = create((set, get) => ({
         initialized: true,
       });
 
-      return { success: false, message: error?.message || "Failed to fetch product sales report" };
+      return {
+        success: false,
+        message: error?.message || "Failed to fetch product sales report",
+      };
+    }
+  },
+
+  fetchUnsoldProductsReport: async (override = {}) => {
+    const filters = { ...get().filters, ...override };
+    set({ unsoldLoading: true, unsoldError: "" });
+
+    try {
+      const res = await fetch(
+        buildUrl(
+          `/api/orders/accounts/sales-report/products/unsold${qs({
+            search: filters.search,
+            page: filters.page,
+            limit: filters.limit,
+          })}`
+        ),
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }
+      );
+
+      const data = await safeJson(res);
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to fetch unsold products report");
+      }
+
+      set((state) => ({
+        unsoldRows: safeArr(data?.rows),
+        unsoldSummary: {
+          totalUnsoldProducts: toNum(data?.summary?.totalUnsoldProducts),
+        },
+        unsoldPagination: {
+          page: toNum(data?.pagination?.page, filters.page),
+          limit: toNum(data?.pagination?.limit, filters.limit),
+          total: toNum(data?.pagination?.total),
+          totalPages: toNum(data?.pagination?.totalPages),
+          hasNext: Boolean(data?.pagination?.hasNext),
+          hasPrev: Boolean(data?.pagination?.hasPrev),
+        },
+        filters: {
+          ...state.filters,
+          search: data?.filters?.search ?? filters.search ?? "",
+          page: toNum(data?.filters?.page, filters.page),
+          limit: toNum(data?.filters?.limit, filters.limit),
+        },
+        unsoldLoading: false,
+        unsoldError: "",
+        unsoldInitialized: true,
+      }));
+
+      return { success: true, data };
+    } catch (error) {
+      set({
+        unsoldRows: [],
+        unsoldSummary: initialUnsoldSummary(),
+        unsoldPagination: {
+          page: toNum(filters.page, 1),
+          limit: toNum(filters.limit, 20),
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+        unsoldLoading: false,
+        unsoldError: error?.message || "Failed to fetch unsold products report",
+        unsoldInitialized: true,
+      });
+
+      return {
+        success: false,
+        message: error?.message || "Failed to fetch unsold products report",
+      };
     }
   },
 
@@ -257,7 +352,9 @@ export const useOrderReportsStore = create((set, get) => ({
       );
 
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(data?.message || "Failed to fetch order business overview");
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to fetch order business overview");
+      }
 
       set((state) => ({
         businessOverview: {
@@ -283,7 +380,10 @@ export const useOrderReportsStore = create((set, get) => ({
         overviewInitialized: true,
       });
 
-      return { success: false, message: error?.message || "Failed to fetch order business overview" };
+      return {
+        success: false,
+        message: error?.message || "Failed to fetch order business overview",
+      };
     }
   },
 
@@ -373,7 +473,9 @@ export const useOrderReportsStore = create((set, get) => ({
       );
 
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(data?.message || "Failed to fetch operations status report");
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to fetch operations status report");
+      }
 
       set((state) => ({
         operationsSummary: {
@@ -405,7 +507,10 @@ export const useOrderReportsStore = create((set, get) => ({
         operationsInitialized: true,
       });
 
-      return { success: false, message: error?.message || "Failed to fetch operations status report" };
+      return {
+        success: false,
+        message: error?.message || "Failed to fetch operations status report",
+      };
     }
   },
 
@@ -426,6 +531,7 @@ export const useOrderReportsStore = create((set, get) => ({
   },
 
   refresh: async () => get().fetchProductSalesReport(),
+  refreshUnsold: async () => get().fetchUnsoldProductsReport(),
   refreshAll: async () => get().fetchOverviewAndProducts(),
   refreshROAS: async () => get().fetchROASReport(),
   refreshOperations: async () => get().fetchOperationsStatusReport(),
@@ -436,7 +542,6 @@ export const useOrderReportsStore = create((set, get) => ({
 
     const page = toNum(filters.page, 1) + 1;
     set({ filters: { ...filters, page } });
-
     return get().fetchProductSalesReport({ ...filters, page });
   },
 
@@ -448,10 +553,33 @@ export const useOrderReportsStore = create((set, get) => ({
     return get().fetchProductSalesReport({ ...filters, page });
   },
 
+  goToNextUnsoldPage: async () => {
+    const { unsoldPagination, filters } = get();
+    if (!unsoldPagination.hasNext) return;
+
+    const page = toNum(filters.page, 1) + 1;
+    set({ filters: { ...filters, page } });
+    return get().fetchUnsoldProductsReport({ ...filters, page });
+  },
+
+  goToPrevUnsoldPage: async () => {
+    const { filters } = get();
+    const page = Math.max(1, toNum(filters.page, 1) - 1);
+
+    set({ filters: { ...filters, page } });
+    return get().fetchUnsoldProductsReport({ ...filters, page });
+  },
+
   hydrateAndFetch: async (patch = {}) => {
     const next = { ...get().filters, ...patch };
     set({ filters: next });
     return get().fetchProductSalesReport(next);
+  },
+
+  hydrateAndFetchUnsold: async (patch = {}) => {
+    const next = { ...get().filters, ...patch };
+    set({ filters: next });
+    return get().fetchUnsoldProductsReport(next);
   },
 
   hydrateAndFetchAll: async (patch = {}) => {
@@ -475,7 +603,9 @@ export const useOrderReportsStore = create((set, get) => ({
   clearReport: () => {
     set({
       rows: [],
+      unsoldRows: [],
       summary: initialSummary(),
+      unsoldSummary: initialUnsoldSummary(),
       businessOverview: initialBusinessOverview(),
       roasSummary: initialRoasSummary(),
       operationsSummary: initialOperationsSummary(),
@@ -483,11 +613,14 @@ export const useOrderReportsStore = create((set, get) => ({
       spendRows: [],
       sources: [],
       pagination: initialPagination(),
+      unsoldPagination: initialPagination(),
       error: "",
+      unsoldError: "",
       overviewError: "",
       roasError: "",
       operationsError: "",
       initialized: false,
+      unsoldInitialized: false,
       overviewInitialized: false,
       roasInitialized: false,
       operationsInitialized: false,
