@@ -1,14 +1,12 @@
-// store/orderReportsStore.js
 "use client";
 
 import { create } from "zustand";
 
-const API =
-  (
-    process.env.NEXT_PUBLIC_API_URL ||
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    ""
-  ).replace(/\/+$/, "");
+const API = (
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  ""
+).replace(/\/+$/, "");
 
 const buildUrl = (path) => {
   if (!API) return path;
@@ -21,7 +19,7 @@ const qs = (params = {}) => {
 
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null) return;
-    if (typeof value === "string" && value.trim() === "") return;
+    if (typeof value === "string" && !value.trim()) return;
     sp.set(key, String(value));
   });
 
@@ -50,6 +48,9 @@ const initialFilters = () => ({
   sort: "qty_desc",
   page: 1,
   limit: 20,
+  from: "",
+  to: "",
+  source: "",
 });
 
 const initialSummary = () => ({
@@ -73,19 +74,38 @@ const initialPagination = () => ({
   hasPrev: false,
 });
 
+const initialRoasSummary = () => ({
+  spendTotal: 0,
+  revenueAll: 0,
+  revenueValid: 0,
+  ordersAll: 0,
+  ordersValid: 0,
+  roasAll: 0,
+  roasValid: 0,
+});
+
 export const useOrderReportsStore = create((set, get) => ({
   rows: [],
   summary: initialSummary(),
   businessOverview: initialBusinessOverview(),
+  roasSummary: initialRoasSummary(),
+  roasRows: [],
+  spendRows: [],
+  sources: [],
   filters: initialFilters(),
   pagination: initialPagination(),
 
   loading: false,
   overviewLoading: false,
+  roasLoading: false,
+
   error: "",
   overviewError: "",
+  roasError: "",
+
   initialized: false,
   overviewInitialized: false,
+  roasInitialized: false,
 
   setFilter: (key, value) => {
     set((state) => ({
@@ -98,18 +118,13 @@ export const useOrderReportsStore = create((set, get) => ({
   },
 
   setFilters: (patch = {}) => {
-    set((state) => {
-      const next = {
+    set((state) => ({
+      filters: {
         ...state.filters,
         ...patch,
-      };
-
-      if (!Object.prototype.hasOwnProperty.call(patch, "page")) {
-        next.page = 1;
-      }
-
-      return { filters: next };
-    });
+        ...(Object.prototype.hasOwnProperty.call(patch, "page") ? {} : { page: 1 }),
+      },
+    }));
   },
 
   setPage: (page) => {
@@ -132,83 +147,67 @@ export const useOrderReportsStore = create((set, get) => ({
   },
 
   resetFilters: () => {
-    set({
-      filters: initialFilters(),
-    });
+    set({ filters: initialFilters() });
   },
 
   fetchProductSalesReport: async (override = {}) => {
-    const state = get();
-    const filters = {
-      ...state.filters,
-      ...override,
-    };
+    const filters = { ...get().filters, ...override };
 
     set({ loading: true, error: "" });
 
     try {
-      const url = buildUrl(
-        `/api/orders/accounts/sales-report/products${qs({
-          month: filters.month,
-          search: filters.search,
-          sort: filters.sort,
-          page: filters.page,
-          limit: filters.limit,
-        })}`
+      const res = await fetch(
+        buildUrl(
+          `/api/orders/accounts/sales-report/products${qs({
+            month: filters.month,
+            search: filters.search,
+            sort: filters.sort,
+            page: filters.page,
+            limit: filters.limit,
+          })}`
+        ),
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }
       );
 
-      const res = await fetch(url, {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-      });
-
       const data = await safeJson(res);
-
-      if (!res.ok) {
-        throw new Error(
-          data?.message || "Failed to fetch product sales report"
-        );
-      }
+      if (!res.ok) throw new Error(data?.message || "Failed to fetch product sales report");
 
       set({
         rows: safeArr(data?.rows),
         summary: {
-          totalProducts: toNum(data?.summary?.totalProducts, 0),
-          totalQty: toNum(data?.summary?.totalQty, 0),
-          totalOrders: toNum(data?.summary?.totalOrders, 0),
+          totalProducts: toNum(data?.summary?.totalProducts),
+          totalQty: toNum(data?.summary?.totalQty),
+          totalOrders: toNum(data?.summary?.totalOrders),
         },
         pagination: {
-          page: toNum(data?.pagination?.page, filters.page || 1),
-          limit: toNum(data?.pagination?.limit, filters.limit || 20),
-          total: toNum(data?.pagination?.total, 0),
-          totalPages: toNum(data?.pagination?.totalPages, 0),
+          page: toNum(data?.pagination?.page, filters.page),
+          limit: toNum(data?.pagination?.limit, filters.limit),
+          total: toNum(data?.pagination?.total),
+          totalPages: toNum(data?.pagination?.totalPages),
           hasNext: Boolean(data?.pagination?.hasNext),
           hasPrev: Boolean(data?.pagination?.hasPrev),
         },
         filters: {
+          ...get().filters,
           month: data?.filters?.month ?? filters.month ?? "",
           search: data?.filters?.search ?? filters.search ?? "",
           sort: data?.filters?.sort ?? filters.sort ?? "qty_desc",
-          page: toNum(data?.filters?.page, filters.page || 1),
-          limit: toNum(data?.filters?.limit, filters.limit || 20),
+          page: toNum(data?.filters?.page, filters.page),
+          limit: toNum(data?.filters?.limit, filters.limit),
         },
         loading: false,
         error: "",
         initialized: true,
       });
 
-      return {
-        success: true,
-        data,
-      };
+      return { success: true, data };
     } catch (error) {
       set({
-        loading: false,
-        error: error?.message || "Failed to fetch product sales report",
         rows: [],
         summary: initialSummary(),
         pagination: {
@@ -219,60 +218,43 @@ export const useOrderReportsStore = create((set, get) => ({
           hasNext: false,
           hasPrev: false,
         },
+        loading: false,
+        error: error?.message || "Failed to fetch product sales report",
         initialized: true,
       });
 
-      return {
-        success: false,
-        message: error?.message || "Failed to fetch product sales report",
-      };
+      return { success: false, message: error?.message || "Failed to fetch product sales report" };
     }
   },
 
   fetchBusinessOverview: async (override = {}) => {
-    const state = get();
-    const filters = {
-      ...state.filters,
-      ...override,
-    };
+    const filters = { ...get().filters, ...override };
 
     set({ overviewLoading: true, overviewError: "" });
 
     try {
-      const url = buildUrl(
-        `/api/orders/accounts/business-overview${qs({
-          month: filters.month,
-        })}`
+      const res = await fetch(
+        buildUrl(
+          `/api/orders/accounts/business-overview${qs({
+            month: filters.month,
+          })}`
+        ),
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }
       );
 
-      const res = await fetch(url, {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-      });
-
       const data = await safeJson(res);
-
-      if (!res.ok) {
-        throw new Error(
-          data?.message || "Failed to fetch order business overview"
-        );
-      }
+      if (!res.ok) throw new Error(data?.message || "Failed to fetch order business overview");
 
       set((state) => ({
         businessOverview: {
-          totalOrdersReceived: toNum(
-            data?.summary?.totalOrdersReceived,
-            0
-          ),
-          totalRevenueGenerated: toNum(
-            data?.summary?.totalRevenueGenerated,
-            0
-          ),
-          averageOrderValue: toNum(data?.summary?.averageOrderValue, 0),
+          totalOrdersReceived: toNum(data?.summary?.totalOrdersReceived),
+          totalRevenueGenerated: toNum(data?.summary?.totalRevenueGenerated),
+          averageOrderValue: toNum(data?.summary?.averageOrderValue),
         },
         filters: {
           ...state.filters,
@@ -283,39 +265,87 @@ export const useOrderReportsStore = create((set, get) => ({
         overviewInitialized: true,
       }));
 
-      return {
-        success: true,
-        data,
-      };
+      return { success: true, data };
     } catch (error) {
       set({
-        overviewLoading: false,
-        overviewError:
-          error?.message || "Failed to fetch order business overview",
         businessOverview: initialBusinessOverview(),
+        overviewLoading: false,
+        overviewError: error?.message || "Failed to fetch order business overview",
         overviewInitialized: true,
       });
 
-      return {
-        success: false,
-        message:
-          error?.message || "Failed to fetch order business overview",
-      };
+      return { success: false, message: error?.message || "Failed to fetch order business overview" };
+    }
+  },
+
+  fetchROASReport: async (override = {}) => {
+    const filters = { ...get().filters, ...override };
+
+    set({ roasLoading: true, roasError: "" });
+
+    try {
+      const res = await fetch(
+        buildUrl(
+          `/api/orders/reports/roas${qs({
+            from: filters.from,
+            to: filters.to,
+            source: filters.source,
+          })}`
+        ),
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }
+      );
+
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data?.message || "Failed to fetch ROAS report");
+
+      set((state) => ({
+        roasSummary: {
+          spendTotal: toNum(data?.summary?.spendTotal),
+          revenueAll: toNum(data?.summary?.revenueAll),
+          revenueValid: toNum(data?.summary?.revenueValid),
+          ordersAll: toNum(data?.summary?.ordersAll),
+          ordersValid: toNum(data?.summary?.ordersValid),
+          roasAll: toNum(data?.summary?.roasAll),
+          roasValid: toNum(data?.summary?.roasValid),
+        },
+        roasRows: safeArr(data?.dayWise),
+        spendRows: safeArr(data?.spendDayWise),
+        sources: safeArr(data?.sources),
+        filters: {
+          ...state.filters,
+          from: data?.filters?.from ?? filters.from ?? "",
+          to: data?.filters?.to ?? filters.to ?? "",
+          source: data?.filters?.source ?? filters.source ?? "",
+        },
+        roasLoading: false,
+        roasError: "",
+        roasInitialized: true,
+      }));
+
+      return { success: true, data };
+    } catch (error) {
+      set({
+        roasSummary: initialRoasSummary(),
+        roasRows: [],
+        spendRows: [],
+        sources: [],
+        roasLoading: false,
+        roasError: error?.message || "Failed to fetch ROAS report",
+        roasInitialized: true,
+      });
+
+      return { success: false, message: error?.message || "Failed to fetch ROAS report" };
     }
   },
 
   fetchOverviewAndProducts: async (override = {}) => {
-    const filters = {
-      ...get().filters,
-      ...override,
-    };
-
-    set({
-      filters: {
-        ...get().filters,
-        ...filters,
-      },
-    });
+    const filters = { ...get().filters, ...override };
+    set({ filters: { ...get().filters, ...filters } });
 
     const [overviewRes, productRes] = await Promise.all([
       get().fetchBusinessOverview(filters),
@@ -329,70 +359,45 @@ export const useOrderReportsStore = create((set, get) => ({
     };
   },
 
-  refresh: async () => {
-    return get().fetchProductSalesReport();
-  },
-
-  refreshAll: async () => {
-    return get().fetchOverviewAndProducts();
-  },
+  refresh: async () => get().fetchProductSalesReport(),
+  refreshAll: async () => get().fetchOverviewAndProducts(),
+  refreshROAS: async () => get().fetchROASReport(),
 
   goToNextPage: async () => {
     const { pagination, filters } = get();
     if (!pagination.hasNext) return;
 
-    const nextPage = toNum(filters.page, 1) + 1;
+    const page = toNum(filters.page, 1) + 1;
+    set({ filters: { ...filters, page } });
 
-    set({
-      filters: {
-        ...filters,
-        page: nextPage,
-      },
-    });
-
-    return get().fetchProductSalesReport({
-      ...filters,
-      page: nextPage,
-    });
+    return get().fetchProductSalesReport({ ...filters, page });
   },
 
   goToPrevPage: async () => {
     const { filters } = get();
-    const prevPage = Math.max(1, toNum(filters.page, 1) - 1);
+    const page = Math.max(1, toNum(filters.page, 1) - 1);
 
-    set({
-      filters: {
-        ...filters,
-        page: prevPage,
-      },
-    });
+    set({ filters: { ...filters, page } });
 
-    return get().fetchProductSalesReport({
-      ...filters,
-      page: prevPage,
-    });
+    return get().fetchProductSalesReport({ ...filters, page });
   },
 
   hydrateAndFetch: async (patch = {}) => {
-    const current = get().filters;
-    const next = {
-      ...current,
-      ...patch,
-    };
-
+    const next = { ...get().filters, ...patch };
     set({ filters: next });
     return get().fetchProductSalesReport(next);
   },
 
   hydrateAndFetchAll: async (patch = {}) => {
-    const current = get().filters;
-    const next = {
-      ...current,
-      ...patch,
-    };
-
+    const next = { ...get().filters, ...patch };
     set({ filters: next });
     return get().fetchOverviewAndProducts(next);
+  },
+
+  hydrateAndFetchROAS: async (patch = {}) => {
+    const next = { ...get().filters, ...patch };
+    set({ filters: next });
+    return get().fetchROASReport(next);
   },
 
   clearReport: () => {
@@ -400,11 +405,17 @@ export const useOrderReportsStore = create((set, get) => ({
       rows: [],
       summary: initialSummary(),
       businessOverview: initialBusinessOverview(),
+      roasSummary: initialRoasSummary(),
+      roasRows: [],
+      spendRows: [],
+      sources: [],
       pagination: initialPagination(),
       error: "",
       overviewError: "",
+      roasError: "",
       initialized: false,
       overviewInitialized: false,
+      roasInitialized: false,
     });
   },
 }));
