@@ -246,6 +246,10 @@ bluedart: [
   { label: "ROAS", href: "/reports/ROAS" },
 
   // Operations
+  {
+    label: "Operations Status",
+    href: "/reports/Operations-Order-Status",
+  },
   { label: "RTO Report", href: "/reports/RTO" },
   { label: "Cancellation Report", href: "/reports/Cancellation" },
 ],

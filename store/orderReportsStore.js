@@ -51,6 +51,7 @@ const initialFilters = () => ({
   from: "",
   to: "",
   source: "",
+  range: "",
 });
 
 const initialSummary = () => ({
@@ -84,28 +85,44 @@ const initialRoasSummary = () => ({
   roasValid: 0,
 });
 
+const initialOperationsSummary = () => ({
+  totalOrders: 0,
+  pendingProcessing: 0,
+  dispatched: 0,
+  delivered: 0,
+  cancelled: 0,
+  returnedRto: 0,
+  refundsProcessed: 0,
+});
+
 export const useOrderReportsStore = create((set, get) => ({
   rows: [],
   summary: initialSummary(),
   businessOverview: initialBusinessOverview(),
   roasSummary: initialRoasSummary(),
+  operationsSummary: initialOperationsSummary(),
+
   roasRows: [],
   spendRows: [],
   sources: [],
+
   filters: initialFilters(),
   pagination: initialPagination(),
 
   loading: false,
   overviewLoading: false,
   roasLoading: false,
+  operationsLoading: false,
 
   error: "",
   overviewError: "",
   roasError: "",
+  operationsError: "",
 
   initialized: false,
   overviewInitialized: false,
   roasInitialized: false,
+  operationsInitialized: false,
 
   setFilter: (key, value) => {
     set((state) => ({
@@ -146,13 +163,10 @@ export const useOrderReportsStore = create((set, get) => ({
     }));
   },
 
-  resetFilters: () => {
-    set({ filters: initialFilters() });
-  },
+  resetFilters: () => set({ filters: initialFilters() }),
 
   fetchProductSalesReport: async (override = {}) => {
     const filters = { ...get().filters, ...override };
-
     set({ loading: true, error: "" });
 
     try {
@@ -229,16 +243,11 @@ export const useOrderReportsStore = create((set, get) => ({
 
   fetchBusinessOverview: async (override = {}) => {
     const filters = { ...get().filters, ...override };
-
     set({ overviewLoading: true, overviewError: "" });
 
     try {
       const res = await fetch(
-        buildUrl(
-          `/api/orders/accounts/business-overview${qs({
-            month: filters.month,
-          })}`
-        ),
+        buildUrl(`/api/orders/accounts/business-overview${qs({ month: filters.month })}`),
         {
           method: "GET",
           credentials: "include",
@@ -280,7 +289,6 @@ export const useOrderReportsStore = create((set, get) => ({
 
   fetchROASReport: async (override = {}) => {
     const filters = { ...get().filters, ...override };
-
     set({ roasLoading: true, roasError: "" });
 
     try {
@@ -343,6 +351,64 @@ export const useOrderReportsStore = create((set, get) => ({
     }
   },
 
+  fetchOperationsStatusReport: async (override = {}) => {
+    const filters = { ...get().filters, ...override };
+    set({ operationsLoading: true, operationsError: "" });
+
+    try {
+      const res = await fetch(
+        buildUrl(
+          `/api/orders/reports/operations-status${qs({
+            range: filters.range,
+            from: filters.from,
+            to: filters.to,
+          })}`
+        ),
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }
+      );
+
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data?.message || "Failed to fetch operations status report");
+
+      set((state) => ({
+        operationsSummary: {
+          totalOrders: toNum(data?.summary?.totalOrders),
+          pendingProcessing: toNum(data?.summary?.pendingProcessing),
+          dispatched: toNum(data?.summary?.dispatched),
+          delivered: toNum(data?.summary?.delivered),
+          cancelled: toNum(data?.summary?.cancelled),
+          returnedRto: toNum(data?.summary?.returnedRto),
+          refundsProcessed: toNum(data?.summary?.refundsProcessed),
+        },
+        filters: {
+          ...state.filters,
+          range: data?.filters?.range ?? filters.range ?? "",
+          from: data?.filters?.from ?? filters.from ?? "",
+          to: data?.filters?.to ?? filters.to ?? "",
+        },
+        operationsLoading: false,
+        operationsError: "",
+        operationsInitialized: true,
+      }));
+
+      return { success: true, data };
+    } catch (error) {
+      set({
+        operationsSummary: initialOperationsSummary(),
+        operationsLoading: false,
+        operationsError: error?.message || "Failed to fetch operations status report",
+        operationsInitialized: true,
+      });
+
+      return { success: false, message: error?.message || "Failed to fetch operations status report" };
+    }
+  },
+
   fetchOverviewAndProducts: async (override = {}) => {
     const filters = { ...get().filters, ...override };
     set({ filters: { ...get().filters, ...filters } });
@@ -362,6 +428,7 @@ export const useOrderReportsStore = create((set, get) => ({
   refresh: async () => get().fetchProductSalesReport(),
   refreshAll: async () => get().fetchOverviewAndProducts(),
   refreshROAS: async () => get().fetchROASReport(),
+  refreshOperations: async () => get().fetchOperationsStatusReport(),
 
   goToNextPage: async () => {
     const { pagination, filters } = get();
@@ -378,7 +445,6 @@ export const useOrderReportsStore = create((set, get) => ({
     const page = Math.max(1, toNum(filters.page, 1) - 1);
 
     set({ filters: { ...filters, page } });
-
     return get().fetchProductSalesReport({ ...filters, page });
   },
 
@@ -400,12 +466,19 @@ export const useOrderReportsStore = create((set, get) => ({
     return get().fetchROASReport(next);
   },
 
+  hydrateAndFetchOperations: async (patch = {}) => {
+    const next = { ...get().filters, ...patch };
+    set({ filters: next });
+    return get().fetchOperationsStatusReport(next);
+  },
+
   clearReport: () => {
     set({
       rows: [],
       summary: initialSummary(),
       businessOverview: initialBusinessOverview(),
       roasSummary: initialRoasSummary(),
+      operationsSummary: initialOperationsSummary(),
       roasRows: [],
       spendRows: [],
       sources: [],
@@ -413,9 +486,11 @@ export const useOrderReportsStore = create((set, get) => ({
       error: "",
       overviewError: "",
       roasError: "",
+      operationsError: "",
       initialized: false,
       overviewInitialized: false,
       roasInitialized: false,
+      operationsInitialized: false,
     });
   },
 }));
