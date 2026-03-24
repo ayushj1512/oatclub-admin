@@ -10,6 +10,163 @@ import PackedTrackingSyncPanel from "@/components/production/PackedTrackingSyncP
 import PackedBulkInvoicePrint from "@/components/production/PackedBulkInvoicePrint";
 
 const safe = (v) => String(v ?? "").trim();
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+function csvCell(value) {
+  const text = safe(value).replace(/"/g, '""');
+  return `"${text}"`;
+}
+
+function downloadCSV(filename, rows = []) {
+  if (!rows.length) {
+    alert("No orders found to download.");
+    return;
+  }
+
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  URL.revokeObjectURL(url);
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return safe(value);
+
+  return d.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getItemsSummary(order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  return items
+    .map((item) => {
+      const title =
+        safe(item?.productSnapshot?.title) ||
+        safe(item?.title) ||
+        safe(item?.name) ||
+        safe(item?.productName);
+
+      const code =
+        safe(item?.productSnapshot?.productCode) ||
+        safe(item?.productCode) ||
+        safe(item?.sku);
+
+      const size =
+        safe(item?.selectedSize) ||
+        safe(item?.variantSnapshot?.attributes?.size) ||
+        safe(item?.size);
+
+      const color =
+        safe(item?.selectedColor) ||
+        safe(item?.variantSnapshot?.attributes?.color) ||
+        safe(item?.color);
+
+      const qty = num(item?.qty || item?.quantity || 1);
+
+      return [title, code, size, color, `x${qty}`].filter(Boolean).join(" | ");
+    })
+    .join(" || ");
+}
+
+function buildOrdersCsvRows(list = []) {
+  const header = [
+    "Order Number",
+    "Order ID",
+    "Created At",
+    "Confirmed",
+    "Order Type",
+    "Fulfillment Status",
+    "Payment Method",
+    "Payment Status",
+    "Total Items",
+    "Final Payable",
+    "Customer Name",
+    "Phone",
+    "Email",
+    "City",
+    "State",
+    "Pincode",
+    "Address",
+    "Courier Provider",
+    "Courier Name",
+    "AWB / Tracking ID",
+    "Items Summary",
+  ];
+
+  const body = list.map((order) => {
+    const shipping = order?.shippingAddressSnapshot || {};
+    const trackingId =
+      safe(order?.trackingDetails?.trackingId) ||
+      safe(order?.shipment?.shiprocket?.awb) ||
+      safe(order?.shipment?.awb);
+
+    const courierName =
+      safe(order?.trackingDetails?.courierName) ||
+      safe(order?.shipment?.shiprocket?.courierName) ||
+      safe(order?.shipment?.courierName);
+
+    const address = [
+      safe(shipping?.addressLine1),
+      safe(shipping?.addressLine2),
+      safe(shipping?.landmark),
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    const totalItems = Array.isArray(order?.items)
+      ? order.items.reduce((sum, item) => sum + num(item?.qty || item?.quantity || 1), 0)
+      : num(order?.analytics?.totalItems);
+
+    const finalPayable =
+      order?.pricing?.finalPayable ??
+      order?.finalPayable ??
+      order?.coupon?.finalTotal ??
+      order?.totalAmount ??
+      "";
+
+    return [
+      safe(order?.orderNumber),
+      safe(order?._id),
+      formatDateTime(order?.createdAt),
+      order?.isConfirmed ? "Yes" : "No",
+      safe(order?.orderType),
+      safe(order?.fulfillmentStatus),
+      safe(order?.paymentMethod),
+      safe(order?.paymentStatus),
+      totalItems,
+      finalPayable,
+      safe(shipping?.fullName),
+      safe(shipping?.phone),
+      safe(order?.userSnapshot?.email || shipping?.email || order?.customerEmail),
+      safe(shipping?.city),
+      safe(shipping?.state),
+      safe(shipping?.pincode),
+      address,
+      safe(order?.shipment?.provider),
+      courierName,
+      trackingId,
+      getItemsSummary(order),
+    ];
+  });
+
+  return [header, ...body];
+}
 
 function Chip({ children, tone = "neutral" }) {
   const base =
@@ -75,8 +232,7 @@ function Td({ children, colSpan, className = "", ...rest }) {
 }
 
 export default function PackedOrdersPage() {
-  const { orders, loading, error, fetchAllOrders, updateOrderStatus } =
-    useOrderStore();
+  const { orders, loading, error, fetchAllOrders, updateOrderStatus } = useOrderStore();
 
   const [q, setQ] = useState("");
   const [onlyConfirmed, setOnlyConfirmed] = useState(true);
@@ -87,6 +243,7 @@ export default function PackedOrdersPage() {
   const [printOpen, setPrintOpen] = useState({});
   const [selectedIds, setSelectedIds] = useState({});
   const [bulkShipping, setBulkShipping] = useState(false);
+  const [downloadingCsv, setDownloadingCsv] = useState(false);
 
   useEffect(() => {
     const run = async () => {
@@ -312,9 +469,7 @@ export default function PackedOrdersPage() {
     setBulkShipping(true);
     try {
       const results = await Promise.allSettled(
-        filtered.map((o) =>
-          updateOrderStatus(o?._id, { fulfillmentStatus: "shipped" })
-        )
+        filtered.map((o) => updateOrderStatus(o?._id, { fulfillmentStatus: "shipped" }))
       );
 
       const successCount = results.filter((r) => r.status === "fulfilled").length;
@@ -330,6 +485,24 @@ export default function PackedOrdersPage() {
       refresh();
     } finally {
       setBulkShipping(false);
+    }
+  };
+
+  const handleDownloadCsv = async () => {
+    try {
+      setDownloadingCsv(true);
+
+      const data = Array.isArray(filtered) ? filtered : [];
+      if (!data.length) {
+        alert("No orders found to download.");
+        return;
+      }
+
+      const rows = buildOrdersCsvRows(data);
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadCSV(`packed-orders-${stamp}.csv`, rows);
+    } finally {
+      setDownloadingCsv(false);
     }
   };
 
@@ -349,18 +522,28 @@ export default function PackedOrdersPage() {
           </p>
         </div>
 
-        <button
-          onClick={refresh}
-          disabled={loading || bulkShipping}
-          className={[
-            "rounded-xl border px-4 py-2 text-sm font-bold transition",
-            loading || bulkShipping
-              ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-500"
-              : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50",
-          ].join(" ")}
-        >
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <SmallBtn
+            onClick={handleDownloadCsv}
+            disabled={loading || bulkShipping || downloadingCsv || filtered.length === 0}
+            variant="primary"
+          >
+            {downloadingCsv ? "Downloading..." : `Download CSV (${filtered.length})`}
+          </SmallBtn>
+
+          <button
+            onClick={refresh}
+            disabled={loading || bulkShipping || downloadingCsv}
+            className={[
+              "rounded-xl border px-4 py-2 text-sm font-bold transition",
+              loading || bulkShipping || downloadingCsv
+                ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-500"
+                : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50",
+            ].join(" ")}
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
       <div className="mb-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
@@ -404,7 +587,7 @@ export default function PackedOrdersPage() {
               </div>
             ) : (
               <div className="text-[11px] text-zinc-500">
-                Tip: click <b>Order #</b> / <b>AWB</b> to copy
+                Tip: CSV downloads all currently loaded filtered orders
               </div>
             )}
           </div>
@@ -430,7 +613,7 @@ export default function PackedOrdersPage() {
             disabled={loading || bulkShipping || selectedCount === 0}
             variant="success"
           >
-            {bulkShipping ? "Updating…" : `Mark Selected as Shipped (${selectedCount})`}
+            {bulkShipping ? "Updating..." : `Mark Selected as Shipped (${selectedCount})`}
           </SmallBtn>
 
           <SmallBtn
@@ -438,7 +621,7 @@ export default function PackedOrdersPage() {
             disabled={loading || bulkShipping || filtered.length === 0}
             variant="danger"
           >
-            {bulkShipping ? "Updating…" : `Mark All Filtered as Shipped (${filtered.length})`}
+            {bulkShipping ? "Updating..." : `Mark All Filtered as Shipped (${filtered.length})`}
           </SmallBtn>
         </div>
       </div>
@@ -465,7 +648,7 @@ export default function PackedOrdersPage() {
       <div className="grid grid-cols-1 gap-3 lg:hidden">
         {loading && filtered.length === 0 && (
           <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-500">
-            Loading…
+            Loading...
           </div>
         )}
 
@@ -571,7 +754,7 @@ export default function PackedOrdersPage() {
               {loading && filtered.length === 0 && (
                 <tr>
                   <Td colSpan={7}>
-                    <div className="p-5 text-sm text-zinc-500">Loading…</div>
+                    <div className="p-5 text-sm text-zinc-500">Loading...</div>
                   </Td>
                 </tr>
               )}
