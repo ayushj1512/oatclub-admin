@@ -60,6 +60,7 @@ accounts: [
   { label: "Revenue", href: "/accounts/revenue" },
 
   // Payments & Remittance
+  { label: "Razorpay transaction", href: "/accounts/razorpay-transaction" },
   { label: "Razorpay Remittance", href: "/accounts/razorpay-remittance" },
 ],
 

@@ -1,787 +1,507 @@
+// app/accounts/razorpay-remittance/page.jsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  CreditCard,
-  Download,
-  IndianRupee,
-  Loader2,
-  RefreshCcw,
-  Search,
-  Wallet,
-  X,
-  XCircle,
-} from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRazorpayReportsStore } from "@/store/razorpayReportsStore";
 
-const CSV_STATUS_OPTIONS = [
-  "captured",
-  "paid",
-  "created",
-  "authorized",
-  "failed",
-  "refunded",
-  "pending",
-];
-
-const money = (v) => {
-  const n = Number(v || 0);
-  return new Intl.NumberFormat("en-IN", {
+const money = (n) =>
+  new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-};
+  }).format(Number(n || 0));
 
-const dt = (v) => {
-  if (!v) return "—";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-IN", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+const MONTHS = [
+  { value: 1, label: "Jan" },
+  { value: 2, label: "Feb" },
+  { value: 3, label: "Mar" },
+  { value: 4, label: "Apr" },
+  { value: 5, label: "May" },
+  { value: 6, label: "Jun" },
+  { value: 7, label: "Jul" },
+  { value: 8, label: "Aug" },
+  { value: 9, label: "Sep" },
+  { value: 10, label: "Oct" },
+  { value: 11, label: "Nov" },
+  { value: 12, label: "Dec" },
+];
 
-const csvDt = (v) => {
-  if (!v) return "";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString();
-};
-
-const normalizeStatus = (value) => String(value || "").trim().toLowerCase();
-
-const statusTone = (status = "") => {
-  const s = normalizeStatus(status);
-  if (["captured", "paid"].includes(s)) return "bg-emerald-50 text-emerald-700";
-  if (["failed"].includes(s)) return "bg-rose-50 text-rose-700";
-  return "bg-amber-50 text-amber-700";
-};
-
-const csvEscape = (value) => {
-  const str = String(value ?? "");
-  if (str.includes('"') || str.includes(",") || str.includes("\n")) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-};
-
-const buildCsvRows = (rows = []) => {
-  const headers = [
-    "Receipt",
-    "Payment ID",
-    "Razorpay Order ID",
-    "Amount",
-    "Currency",
-    "Method",
-    "Status",
-    "Email",
-    "Contact",
-    "Fee",
-    "Tax",
-    "Created At",
-  ];
-
-  return [
-    headers.join(","),
-    ...rows.map((row) =>
-      [
-        row?.receipt || "",
-        row?.paymentId || "",
-        row?.orderId || "",
-        Number(row?.amount || 0),
-        row?.currency || "INR",
-        row?.method || "",
-        row?.status || "",
-        row?.email || "",
-        row?.contact || "",
-        Number(row?.fee || 0),
-        Number(row?.tax || 0),
-        csvDt(row?.createdAt),
-      ]
-        .map(csvEscape)
-        .join(",")
-    ),
-  ].join("\n");
-};
-
-const downloadCsv = (rows = [], statuses = []) => {
-  const selected = Array.isArray(statuses) ? statuses : [];
-  const statusSet = new Set(selected.map(normalizeStatus));
-  const shouldDownloadAll =
-    !selected.length || statusSet.has("all") || selected.length === CSV_STATUS_OPTIONS.length;
-
-  const filteredRows = shouldDownloadAll
-    ? rows
-    : rows.filter((row) => statusSet.has(normalizeStatus(row?.status)));
-
-  const blob = new Blob([buildCsvRows(filteredRows)], {
-    type: "text/csv;charset=utf-8;",
-  });
-
-  const stamp = new Date().toISOString().slice(0, 10);
-  const suffix = shouldDownloadAll ? "all" : selected.map(normalizeStatus).join("-");
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-
-  a.href = url;
-  a.download = `razorpay-transactions-${suffix || "filtered"}-${stamp}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-};
-
-const StatCard = ({ title, value, sub, icon: Icon }) => (
-  <div className="rounded-2xl bg-white p-4 shadow-sm">
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-          {title}
-        </p>
-        <h3 className="mt-2 text-2xl font-bold text-gray-900">{value}</h3>
-        {sub ? <p className="mt-1 text-xs text-gray-500">{sub}</p> : null}
-      </div>
-      <div className="rounded-xl bg-gray-100 p-2 text-gray-700">
-        <Icon className="h-5 w-5" />
-      </div>
-    </div>
-  </div>
-);
-
-function CsvDownloadModal({
-  open,
-  loading,
-  rowsCount,
-  selectedStatuses,
-  setSelectedStatuses,
-  onClose,
-  onDownload,
-}) {
-  if (!open) return null;
-
-  const allChecked =
-    selectedStatuses.length === CSV_STATUS_OPTIONS.length ||
-    selectedStatuses.includes("all");
-
-  const toggleAll = () => {
-    setSelectedStatuses(allChecked ? [] : [...CSV_STATUS_OPTIONS]);
+const getDefaults = () => {
+  const d = new Date();
+  return {
+    year: d.getFullYear(),
+    month: d.getMonth() + 1,
+    receipt: "",
+    settlementId: "",
+    method: "",
+    type: "",
   };
+};
 
-  const toggleStatus = (status) => {
-    const exists = selectedStatuses.includes(status);
-    const next = exists
-      ? selectedStatuses.filter((s) => s !== status)
-      : [...selectedStatuses, status];
+const normalizeFilters = (filters = {}) => {
+  const d = getDefaults();
+  return {
+    year: Number(filters?.year || d.year),
+    month: Number(filters?.month || d.month),
+    receipt: String(filters?.receipt || ""),
+    settlementId: String(filters?.settlementId || ""),
+    method: String(filters?.method || ""),
+    type: String(filters?.type || ""),
+  };
+};
 
-    setSelectedStatuses(next);
+const sameFilters = (a, b) =>
+  String(a?.year ?? "") === String(b?.year ?? "") &&
+  String(a?.month ?? "") === String(b?.month ?? "") &&
+  String(a?.receipt ?? "") === String(b?.receipt ?? "") &&
+  String(a?.settlementId ?? "") === String(b?.settlementId ?? "") &&
+  String(a?.method ?? "") === String(b?.method ?? "") &&
+  String(a?.type ?? "") === String(b?.type ?? "");
+
+function Card({ title, value, tone = "blue" }) {
+  const tones = {
+    blue: "border-blue-200 bg-blue-50/70 text-blue-950",
+    emerald: "border-emerald-200 bg-emerald-50/70 text-emerald-950",
+    amber: "border-amber-200 bg-amber-50/70 text-amber-950",
+    violet: "border-violet-200 bg-violet-50/70 text-violet-950",
+    rose: "border-rose-200 bg-rose-50/70 text-rose-950",
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Download CSV</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Status select karke CSV download karo.
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="rounded-xl bg-gray-100 p-2 text-gray-600 transition hover:bg-gray-200"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="mt-4 rounded-2xl bg-gray-50 p-4">
-          <label className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-white">
-            <input
-              type="checkbox"
-              checked={allChecked}
-              onChange={toggleAll}
-              className="h-4 w-4 rounded border-gray-300"
-            />
-            <span className="text-sm font-semibold text-gray-900">All</span>
-          </label>
-
-          <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
-            {CSV_STATUS_OPTIONS.map((status) => (
-              <label
-                key={status}
-                className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-white"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedStatuses.includes(status)}
-                  onChange={() => toggleStatus(status)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                <span className="text-sm capitalize text-gray-800">{status}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <p className="text-xs text-gray-500">
-            Rows available: <span className="font-semibold text-gray-900">{rowsCount}</span>
-          </p>
-
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onDownload}
-              disabled={!rowsCount || loading}
-              className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Download className="h-4 w-4" />
-              Download
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className={`rounded-2xl border p-4 shadow-sm ${tones[tone]}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">
+        {title}
+      </p>
+      <h3 className="mt-2 text-2xl font-semibold">{value}</h3>
     </div>
+  );
+}
+
+function Input({ label, ...props }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium text-zinc-600">
+        {label}
+      </span>
+      <input
+        {...props}
+        className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+      />
+    </label>
+  );
+}
+
+function Select({ label, children, ...props }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium text-zinc-600">
+        {label}
+      </span>
+      <select
+        {...props}
+        className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function Chip({ active, children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+        active
+          ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+          : "border-zinc-200 bg-white text-zinc-700 hover:border-blue-200 hover:bg-blue-50",
+      ].join(" ")}
+    >
+      {children}
+    </button>
   );
 }
 
 export default function RazorpayRemittancePage() {
   const {
-    transactions,
-    summary,
-    receiptDetail,
-    filters,
-    pagination,
-    loading,
-    summaryLoading,
-    receiptLoading,
+    remittance,
+    remittanceSummary,
+    remittanceFilters,
+    remittanceLoading,
     error,
-    setFilters,
-    fetchTransactions,
-    fetchSummary,
-    fetchByReceipt,
-    clearReceiptDetail,
-    applyFiltersAndFetch,
-    goToPage,
-    refreshAll,
+    setRemittanceFilters,
+    fetchRemittanceReport,
+    clearError,
   } = useRazorpayReportsStore();
 
-  const [receiptInput, setReceiptInput] = useState("");
-  const [showCsvModal, setShowCsvModal] = useState(false);
-  const [selectedCsvStatuses, setSelectedCsvStatuses] = useState(["captured"]);
-
-  useEffect(() => {
-    fetchSummary();
-    fetchTransactions();
-  }, [fetchSummary, fetchTransactions]);
-
-  const rows = useMemo(
-    () => (Array.isArray(transactions) ? transactions : []),
-    [transactions]
+  const storeFilters = useMemo(
+    () => normalizeFilters(remittanceFilters),
+    [
+      remittanceFilters?.year,
+      remittanceFilters?.month,
+      remittanceFilters?.receipt,
+      remittanceFilters?.settlementId,
+      remittanceFilters?.method,
+      remittanceFilters?.type,
+    ]
   );
 
-  const page = Number(pagination?.page || filters?.page || 1);
-  const limit = Number(pagination?.limit || filters?.limit || 20);
-  const hasPrev = page > 1;
-  const hasNext = rows.length >= limit;
+  const [localFilters, setLocalFilters] = useState(storeFilters);
 
-  const onFilterChange = (key, value) => setFilters({ [key]: value });
+  useEffect(() => {
+    const defaults = normalizeFilters(remittanceFilters);
+    fetchRemittanceReport(defaults);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const onApply = () => {
-    applyFiltersAndFetch({
-      from: filters?.from || "",
-      to: filters?.to || "",
-      status: filters?.status || "",
-      limit: Number(filters?.limit || 20),
+  useEffect(() => {
+    setLocalFilters((prev) => (sameFilters(prev, storeFilters) ? prev : storeFilters));
+  }, [storeFilters]);
+
+  const rows = useMemo(() => (Array.isArray(remittance) ? remittance : []), [remittance]);
+
+  const onChange = (key, value) => {
+    setLocalFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const buildPayload = (yearValue, monthValue, extra = {}) => ({
+    year: Number(yearValue || getDefaults().year),
+    month: Number(monthValue || getDefaults().month),
+    receipt: String(extra.receipt ?? localFilters.receipt ?? "").trim(),
+    settlementId: String(extra.settlementId ?? localFilters.settlementId ?? "").trim(),
+    method: String(extra.method ?? localFilters.method ?? "").trim(),
+    type: String(extra.type ?? localFilters.type ?? "").trim(),
+  });
+
+  const applyFilters = async () => {
+    clearError();
+    const next = buildPayload(localFilters.year, localFilters.month);
+    setRemittanceFilters(next);
+    setLocalFilters(next);
+    await fetchRemittanceReport(next);
+  };
+
+  const applyQuickMonth = async (monthValue) => {
+    clearError();
+    const next = buildPayload(localFilters.year, monthValue);
+    setRemittanceFilters(next);
+    setLocalFilters(next);
+    await fetchRemittanceReport(next);
+  };
+
+  const resetFilters = async () => {
+    clearError();
+    const d = getDefaults();
+    const next = {
+      year: d.year,
+      month: d.month,
+      receipt: "",
+      settlementId: "",
+      method: "",
+      type: "",
+    };
+    setRemittanceFilters(next);
+    setLocalFilters(next);
+    await fetchRemittanceReport(next);
+  };
+
+  const downloadCSV = () => {
+    const headers = [
+      "Sr No",
+      "Settlement ID",
+      "Order Receipt",
+      "Order ID",
+      "Payment ID",
+      "Refund ID",
+      "Method",
+      "Type",
+      "Description",
+      "Amount",
+      "Fee",
+      "Tax",
+      "Net",
+      "Debit",
+      "Credit",
+      "Settled At",
+    ];
+
+    const escapeCSV = (value) => {
+      const v = String(value ?? "");
+      return `"${v.replace(/"/g, '""')}"`;
+    };
+
+    const csvRows = [
+      headers.join(","),
+      ...rows.map((r) =>
+        [
+          r.srNo,
+          r.settlementId,
+          r.orderReceipt,
+          r.orderId,
+          r.paymentId,
+          r.refundId,
+          r.method,
+          r.type,
+          r.description,
+          r.amount,
+          r.fee,
+          r.tax,
+          r.net,
+          r.debit,
+          r.credit,
+          r.settledAtLabel,
+        ]
+          .map(escapeCSV)
+          .join(",")
+      ),
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], {
+      type: "text/csv;charset=utf-8;",
     });
-  };
 
-  const onReset = () => {
-    setReceiptInput("");
-    clearReceiptDetail();
-    applyFiltersAndFetch({
-      from: "",
-      to: "",
-      status: "",
-      page: 1,
-      limit: 20,
-    });
-  };
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
 
-  const onSearchReceipt = async (e) => {
-    e.preventDefault();
-    await fetchByReceipt(receiptInput);
-  };
+    a.href = url;
+    a.download = `razorpay-remittance-${localFilters.year}-${String(
+      localFilters.month
+    ).padStart(2, "0")}.csv`;
 
-  const openCsvModal = () => setShowCsvModal(true);
-
-  const handleCsvDownload = () => {
-    downloadCsv(rows, selectedCsvStatuses);
-    setShowCsvModal(false);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <CsvDownloadModal
-        open={showCsvModal}
-        loading={loading}
-        rowsCount={rows.length}
-        selectedStatuses={selectedCsvStatuses}
-        setSelectedStatuses={setSelectedCsvStatuses}
-        onClose={() => setShowCsvModal(false)}
-        onDownload={handleCsvDownload}
-      />
+    <div className="min-h-screen bg-zinc-50 px-4 py-4 md:px-6">
+      <div className="mb-5">
+        <h1 className="text-2xl font-semibold text-zinc-900">
+          Razorpay Remittance
+        </h1>
+        <p className="mt-1 text-sm text-zinc-500">
+          Settlement recon report mapped with receipt / order number.
+        </p>
+      </div>
 
-      <div className="space-y-4 p-4 md:p-6">
-        <div className="rounded-3xl bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-                Razorpay Remittance
-              </h1>
-              <p className="mt-1 text-sm text-gray-500">
-                Receipt is your order number, so transaction lookup stays clean and easy.
-              </p>
-            </div>
+      <div className="mb-5 rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex flex-wrap gap-2">
+          {MONTHS.map((m) => (
+            <Chip
+              key={m.value}
+              active={Number(localFilters.month) === Number(m.value)}
+              onClick={() => applyQuickMonth(m.value)}
+            >
+              {m.label}
+            </Chip>
+          ))}
+        </div>
 
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={openCsvModal}
-                disabled={!rows.length || loading}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Download className="h-4 w-4" />
-                CSV
-              </button>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <Input
+            label="Year"
+            type="number"
+            min="2020"
+            value={localFilters.year}
+            onChange={(e) => onChange("year", e.target.value)}
+          />
 
-              <button
-                onClick={() => refreshAll()}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-black"
-              >
-                {loading || summaryLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCcw className="h-4 w-4" />
-                )}
-                Refresh
-              </button>
-            </div>
-          </div>
+          <Select
+            label="Month"
+            value={localFilters.month}
+            onChange={(e) => onChange("month", e.target.value)}
+          >
+            {MONTHS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+
+          <Input
+            label="Receipt / Order No."
+            placeholder="MIRAY-000123"
+            value={localFilters.receipt}
+            onChange={(e) => onChange("receipt", e.target.value)}
+          />
+
+          <Input
+            label="Settlement ID"
+            placeholder="setl_xxx"
+            value={localFilters.settlementId}
+            onChange={(e) => onChange("settlementId", e.target.value)}
+          />
+
+          <Select
+            label="Method"
+            value={localFilters.method}
+            onChange={(e) => onChange("method", e.target.value)}
+          >
+            <option value="">All</option>
+            <option value="card">Card</option>
+            <option value="upi">UPI</option>
+            <option value="netbanking">Netbanking</option>
+            <option value="wallet">Wallet</option>
+            <option value="emi">EMI</option>
+            <option value="paylater">Pay Later</option>
+          </Select>
+
+          <Select
+            label="Type"
+            value={localFilters.type}
+            onChange={(e) => onChange("type", e.target.value)}
+          >
+            <option value="">All</option>
+            <option value="payment">Payment</option>
+            <option value="refund">Refund</option>
+            <option value="transfer">Transfer</option>
+            <option value="adjustment">Adjustment</option>
+          </Select>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            onClick={applyFilters}
+            disabled={remittanceLoading}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {remittanceLoading ? "Loading..." : "Apply Filters"}
+          </button>
+
+          <button
+            onClick={resetFilters}
+            disabled={remittanceLoading}
+            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Reset
+          </button>
+
+          <button
+            onClick={downloadCSV}
+            disabled={!rows.length}
+            className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Download CSV
+          </button>
         </div>
 
         {error ? (
-          <div className="flex items-start gap-3 rounded-2xl bg-rose-50 px-4 py-3 text-rose-700 shadow-sm">
-            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-            <p className="text-sm font-medium">{error}</p>
+          <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {error}
           </div>
         ) : null}
+      </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            title="Captured"
-            value={summaryLoading ? "..." : Number(summary?.success || 0)}
-            sub="Successful payments"
-            icon={CheckCircle2}
-          />
-          <StatCard
-            title="Failed"
-            value={summaryLoading ? "..." : Number(summary?.failed || 0)}
-            sub="Failed attempts"
-            icon={XCircle}
-          />
-          <StatCard
-            title="Pending"
-            value={summaryLoading ? "..." : Number(summary?.pending || 0)}
-            sub="Needs follow-up"
-            icon={Wallet}
-          />
-          <StatCard
-            title="Captured Amount"
-            value={summaryLoading ? "..." : money(summary?.totalAmount || 0)}
-            sub="From current summary"
-            icon={IndianRupee}
-          />
+      <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <Card title="Rows" value={remittanceSummary.totalRows || 0} tone="blue" />
+        <Card
+          title="Total Amount"
+          value={money(remittanceSummary.totalAmount)}
+          tone="violet"
+        />
+        <Card
+          title="Total Fee"
+          value={money(remittanceSummary.totalFee)}
+          tone="amber"
+        />
+        <Card
+          title="Total Tax"
+          value={money(remittanceSummary.totalTax)}
+          tone="rose"
+        />
+        <Card
+          title="Net Received"
+          value={money(remittanceSummary.totalNet)}
+          tone="emerald"
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
+        <div className="border-b border-zinc-100 bg-gradient-to-r from-blue-50 via-white to-emerald-50 px-4 py-3">
+          <p className="text-sm font-semibold text-zinc-900">Remittance Rows</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Showing{" "}
+            {MONTHS.find((m) => m.value === Number(localFilters.month))?.label || ""}{" "}
+            {localFilters.year}
+          </p>
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-3xl bg-white p-4 shadow-sm md:p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-gray-700" />
-              <h2 className="text-lg font-semibold text-gray-900">
-                Filters & Receipt Search
-              </h2>
-            </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[1450px] w-full text-sm">
+            <thead className="bg-zinc-100/80 text-zinc-700">
+              <tr>
+                <th className="px-3 py-3 text-left font-semibold">#</th>
+                <th className="px-3 py-3 text-left font-semibold">Settlement ID</th>
+                <th className="px-3 py-3 text-left font-semibold">Order Receipt</th>
+                <th className="px-3 py-3 text-left font-semibold">Order ID</th>
+                <th className="px-3 py-3 text-left font-semibold">Payment ID</th>
+                <th className="px-3 py-3 text-left font-semibold">Refund ID</th>
+                <th className="px-3 py-3 text-left font-semibold">Method</th>
+                <th className="px-3 py-3 text-left font-semibold">Type</th>
+                <th className="px-3 py-3 text-left font-semibold">Description</th>
+                <th className="px-3 py-3 text-right font-semibold">Amount</th>
+                <th className="px-3 py-3 text-right font-semibold">Fee</th>
+                <th className="px-3 py-3 text-right font-semibold">Tax</th>
+                <th className="px-3 py-3 text-right font-semibold">Net</th>
+                <th className="px-3 py-3 text-right font-semibold">Debit</th>
+                <th className="px-3 py-3 text-right font-semibold">Credit</th>
+                <th className="px-3 py-3 text-left font-semibold">Settled At</th>
+              </tr>
+            </thead>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-              <input
-                type="date"
-                value={filters?.from || ""}
-                onChange={(e) => onFilterChange("from", e.target.value)}
-                className="h-11 rounded-xl bg-gray-50 px-3 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-gray-200"
-              />
-
-              <input
-                type="date"
-                value={filters?.to || ""}
-                onChange={(e) => onFilterChange("to", e.target.value)}
-                className="h-11 rounded-xl bg-gray-50 px-3 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-gray-200"
-              />
-
-              <select
-                value={filters?.status || ""}
-                onChange={(e) => onFilterChange("status", e.target.value)}
-                className="h-11 rounded-xl bg-gray-50 px-3 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-gray-200"
-              >
-                <option value="">Overall Status</option>
-                <option value="captured">Captured</option>
-                <option value="paid">Paid</option>
-                <option value="created">Created</option>
-                <option value="authorized">Authorized</option>
-                <option value="failed">Failed</option>
-                <option value="refunded">Refunded</option>
-                <option value="pending">Pending</option>
-              </select>
-
-              <select
-                value={filters?.limit || 20}
-                onChange={(e) => onFilterChange("limit", Number(e.target.value))}
-                className="h-11 rounded-xl bg-gray-50 px-3 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-gray-200"
-              >
-                <option value={10}>10 rows</option>
-                <option value={20}>20 rows</option>
-                <option value={50}>50 rows</option>
-                <option value={100}>100 rows</option>
-              </select>
-
-              <form onSubmit={onSearchReceipt} className="md:col-span-2 xl:col-span-2">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      value={receiptInput}
-                      onChange={(e) => setReceiptInput(e.target.value)}
-                      placeholder="Search receipt / order number"
-                      className="h-11 w-full rounded-xl bg-gray-50 pl-10 pr-3 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-gray-200"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-black"
+            <tbody>
+              {remittanceLoading ? (
+                <tr>
+                  <td colSpan={16} className="px-3 py-12 text-center text-sm text-zinc-500">
+                    Loading remittance report...
+                  </td>
+                </tr>
+              ) : rows.length ? (
+                rows.map((row) => (
+                  <tr
+                    key={`${row.settlementId}-${row.paymentId}-${row.srNo}`}
+                    className="border-t border-zinc-100 hover:bg-blue-50/30"
                   >
-                    {receiptLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Search className="h-4 w-4" />
-                    )}
-                    Search
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                onClick={onApply}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-black"
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4" />
-                )}
-                Apply Filters
-              </button>
-
-              <button
-                onClick={onReset}
-                className="inline-flex h-10 items-center justify-center rounded-xl bg-gray-100 px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-
-          {receiptDetail?.ok ? (
-            <div className="rounded-3xl bg-white p-4 shadow-sm md:p-5">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Receipt Details</h2>
-                  <p className="text-sm text-gray-500">
-                    Complete Razorpay trail for this order number.
-                  </p>
-                </div>
-
-                <button
-                  onClick={clearReceiptDetail}
-                  className="rounded-xl bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="rounded-2xl bg-gray-50 p-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                      Receipt
-                    </p>
-                    <p className="mt-1 font-semibold text-gray-900">
-                      {receiptDetail?.order?.receipt || "—"}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                      Razorpay Order ID
-                    </p>
-                    <p className="mt-1 break-all font-mono text-xs text-gray-800">
-                      {receiptDetail?.order?.id || "—"}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                      Amount
-                    </p>
-                    <p className="mt-1 font-semibold text-gray-900">
-                      {money((receiptDetail?.order?.amount || 0) / 100)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                      Status
-                    </p>
-                    <p className="mt-1 capitalize text-gray-900">
-                      {receiptDetail?.order?.status || "—"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                <h3 className="text-sm font-semibold text-gray-900">
-                  Linked Payments ({Number(receiptDetail?.count || 0)})
-                </h3>
-
-                {Array.isArray(receiptDetail?.payments) && receiptDetail.payments.length ? (
-                  receiptDetail.payments.map((item, idx) => (
-                    <div
-                      key={item?.paymentId || idx}
-                      className="rounded-2xl bg-gray-50 p-4"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="break-all font-semibold text-gray-900">
-                            {item?.paymentId || "—"}
-                          </p>
-                          <p className="mt-1 text-xs text-gray-500">{dt(item?.createdAt)}</p>
-                        </div>
-
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusTone(
-                            item?.status
-                          )}`}
-                        >
-                          {item?.status || "unknown"}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                            Amount
-                          </p>
-                          <p className="mt-1 font-semibold text-gray-900">
-                            {money(item?.amount || 0)}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                            Method
-                          </p>
-                          <p className="mt-1 uppercase text-gray-900">
-                            {item?.method || "—"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                            Email
-                          </p>
-                          <p className="mt-1 break-all text-gray-900">{item?.email || "—"}</p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                            Contact
-                          </p>
-                          <p className="mt-1 text-gray-900">{item?.contact || "—"}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-2xl bg-gray-50 p-6 text-center text-sm text-gray-500">
-                    No linked payments found.
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="rounded-3xl bg-white p-4 shadow-sm md:p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Transactions</h2>
-                <p className="text-sm text-gray-500">
-                  Clean transaction view for Razorpay payments.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="text-sm text-gray-500">
-                  Page <span className="font-semibold text-gray-900">{page}</span>
-                </div>
-
-                <button
-                  onClick={openCsvModal}
-                  disabled={!rows.length || loading}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-gray-100 px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4" />
-                  CSV
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl bg-gray-50">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="text-gray-500">
-                    <tr className="border-b border-gray-100">
-                      <th className="px-4 py-3 font-semibold">Receipt</th>
-                      <th className="px-4 py-3 font-semibold">Payment</th>
-                      <th className="px-4 py-3 font-semibold">Amount</th>
-                      <th className="px-4 py-3 font-semibold">Method</th>
-                      <th className="px-4 py-3 font-semibold">Status</th>
-                      <th className="px-4 py-3 font-semibold">Customer</th>
-                      <th className="px-4 py-3 font-semibold">Created</th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="bg-white">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
-                          <div className="inline-flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Loading transactions...
-                          </div>
-                        </td>
-                      </tr>
-                    ) : rows.length ? (
-                      rows.map((row, idx) => (
-                        <tr
-                          key={row?.paymentId || `${row?.orderId}-${idx}`}
-                          className="border-b border-gray-50 last:border-b-0"
-                        >
-                          <td className="px-4 py-3 font-semibold text-gray-900">
-                            {row?.receipt || "—"}
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <div className="max-w-[220px]">
-                              <p className="truncate font-mono text-xs text-gray-800">
-                                {row?.paymentId || "—"}
-                              </p>
-                              <p className="truncate text-xs text-gray-400">
-                                {row?.orderId || "—"}
-                              </p>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3 font-semibold text-gray-900">
-                            {money(row?.amount || 0)}
-                          </td>
-
-                          <td className="px-4 py-3 uppercase text-gray-700">
-                            {row?.method || "—"}
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusTone(
-                                row?.status
-                              )}`}
-                            >
-                              {row?.status || "unknown"}
-                            </span>
-                          </td>
-
-                          <td className="px-4 py-3 text-gray-700">
-                            <div className="max-w-[220px]">
-                              <p className="truncate font-medium">{row?.email || "—"}</p>
-                              <p className="truncate text-xs text-gray-400">
-                                {row?.contact || "—"}
-                              </p>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3 text-gray-700">{dt(row?.createdAt)}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
-                          No transactions found.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <p className="text-sm text-gray-500">
-                Showing <span className="font-semibold text-gray-900">{rows.length}</span> rows
-              </p>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => goToPage(page - 1)}
-                  disabled={!hasPrev || loading}
-                  className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => goToPage(page + 1)}
-                  disabled={!hasNext || loading}
-                  className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
+                    <td className="px-3 py-3 text-zinc-600">{row.srNo}</td>
+                    <td className="px-3 py-3 font-medium text-zinc-900">
+                      {row.settlementId || "—"}
+                    </td>
+                    <td className="px-3 py-3 font-medium text-blue-700">
+                      {row.orderReceipt || "—"}
+                    </td>
+                    <td className="px-3 py-3 text-zinc-600">{row.orderId || "—"}</td>
+                    <td className="px-3 py-3 text-zinc-600">{row.paymentId || "—"}</td>
+                    <td className="px-3 py-3 text-zinc-600">{row.refundId || "—"}</td>
+                    <td className="px-3 py-3 capitalize text-zinc-700">{row.method || "—"}</td>
+                    <td className="px-3 py-3 capitalize text-zinc-700">{row.type || "—"}</td>
+                    <td className="max-w-[260px] px-3 py-3 text-zinc-600">
+                      <div className="line-clamp-2">{row.description || "—"}</div>
+                    </td>
+                    <td className="px-3 py-3 text-right font-medium text-zinc-900">
+                      {money(row.amount)}
+                    </td>
+                    <td className="px-3 py-3 text-right text-amber-700">{money(row.fee)}</td>
+                    <td className="px-3 py-3 text-right text-rose-700">{money(row.tax)}</td>
+                    <td className="px-3 py-3 text-right font-semibold text-emerald-700">
+                      {money(row.net)}
+                    </td>
+                    <td className="px-3 py-3 text-right text-zinc-700">{money(row.debit)}</td>
+                    <td className="px-3 py-3 text-right text-zinc-700">{money(row.credit)}</td>
+                    <td className="px-3 py-3 text-zinc-600">{row.settledAtLabel || "—"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={16} className="px-3 py-12 text-center text-sm text-zinc-500">
+                    No remittance data found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
