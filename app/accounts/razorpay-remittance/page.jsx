@@ -11,9 +11,20 @@ import {
   RefreshCcw,
   Search,
   Wallet,
+  X,
   XCircle,
 } from "lucide-react";
 import { useRazorpayReportsStore } from "@/store/razorpayReportsStore";
+
+const CSV_STATUS_OPTIONS = [
+  "captured",
+  "paid",
+  "created",
+  "authorized",
+  "failed",
+  "refunded",
+  "pending",
+];
 
 const money = (v) => {
   const n = Number(v || 0);
@@ -44,15 +55,12 @@ const csvDt = (v) => {
   return d.toISOString();
 };
 
-const statusTone = (status = "") => {
-  const s = String(status).toLowerCase();
+const normalizeStatus = (value) => String(value || "").trim().toLowerCase();
 
-  if (["captured", "paid"].includes(s)) {
-    return "bg-emerald-50 text-emerald-700";
-  }
-  if (["failed"].includes(s)) {
-    return "bg-rose-50 text-rose-700";
-  }
+const statusTone = (status = "") => {
+  const s = normalizeStatus(status);
+  if (["captured", "paid"].includes(s)) return "bg-emerald-50 text-emerald-700";
+  if (["failed"].includes(s)) return "bg-rose-50 text-rose-700";
   return "bg-amber-50 text-amber-700";
 };
 
@@ -64,9 +72,7 @@ const csvEscape = (value) => {
   return str;
 };
 
-const downloadCsv = (rows = []) => {
-  const data = Array.isArray(rows) ? rows : [];
-
+const buildCsvRows = (rows = []) => {
   const headers = [
     "Receipt",
     "Payment ID",
@@ -82,9 +88,9 @@ const downloadCsv = (rows = []) => {
     "Created At",
   ];
 
-  const lines = [
+  return [
     headers.join(","),
-    ...data.map((row) =>
+    ...rows.map((row) =>
       [
         row?.receipt || "",
         row?.paymentId || "",
@@ -102,18 +108,30 @@ const downloadCsv = (rows = []) => {
         .map(csvEscape)
         .join(",")
     ),
-  ];
+  ].join("\n");
+};
 
-  const blob = new Blob([lines.join("\n")], {
+const downloadCsv = (rows = [], statuses = []) => {
+  const selected = Array.isArray(statuses) ? statuses : [];
+  const statusSet = new Set(selected.map(normalizeStatus));
+  const shouldDownloadAll =
+    !selected.length || statusSet.has("all") || selected.length === CSV_STATUS_OPTIONS.length;
+
+  const filteredRows = shouldDownloadAll
+    ? rows
+    : rows.filter((row) => statusSet.has(normalizeStatus(row?.status)));
+
+  const blob = new Blob([buildCsvRows(filteredRows)], {
     type: "text/csv;charset=utf-8;",
   });
 
+  const stamp = new Date().toISOString().slice(0, 10);
+  const suffix = shouldDownloadAll ? "all" : selected.map(normalizeStatus).join("-");
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const stamp = new Date().toISOString().slice(0, 10);
 
   a.href = url;
-  a.download = `razorpay-transactions-${stamp}.csv`;
+  a.download = `razorpay-transactions-${suffix || "filtered"}-${stamp}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -137,6 +155,109 @@ const StatCard = ({ title, value, sub, icon: Icon }) => (
   </div>
 );
 
+function CsvDownloadModal({
+  open,
+  loading,
+  rowsCount,
+  selectedStatuses,
+  setSelectedStatuses,
+  onClose,
+  onDownload,
+}) {
+  if (!open) return null;
+
+  const allChecked =
+    selectedStatuses.length === CSV_STATUS_OPTIONS.length ||
+    selectedStatuses.includes("all");
+
+  const toggleAll = () => {
+    setSelectedStatuses(allChecked ? [] : [...CSV_STATUS_OPTIONS]);
+  };
+
+  const toggleStatus = (status) => {
+    const exists = selectedStatuses.includes(status);
+    const next = exists
+      ? selectedStatuses.filter((s) => s !== status)
+      : [...selectedStatuses, status];
+
+    setSelectedStatuses(next);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Download CSV</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Status select karke CSV download karo.
+            </p>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="rounded-xl bg-gray-100 p-2 text-gray-600 transition hover:bg-gray-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-2xl bg-gray-50 p-4">
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-white">
+            <input
+              type="checkbox"
+              checked={allChecked}
+              onChange={toggleAll}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            <span className="text-sm font-semibold text-gray-900">All</span>
+          </label>
+
+          <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {CSV_STATUS_OPTIONS.map((status) => (
+              <label
+                key={status}
+                className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-white"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedStatuses.includes(status)}
+                  onChange={() => toggleStatus(status)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <span className="text-sm capitalize text-gray-800">{status}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-500">
+            Rows available: <span className="font-semibold text-gray-900">{rowsCount}</span>
+          </p>
+
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onDownload}
+              disabled={!rowsCount || loading}
+              className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              Download
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RazorpayRemittancePage() {
   const {
     transactions,
@@ -159,6 +280,8 @@ export default function RazorpayRemittancePage() {
   } = useRazorpayReportsStore();
 
   const [receiptInput, setReceiptInput] = useState("");
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [selectedCsvStatuses, setSelectedCsvStatuses] = useState(["captured"]);
 
   useEffect(() => {
     fetchSummary();
@@ -175,9 +298,7 @@ export default function RazorpayRemittancePage() {
   const hasPrev = page > 1;
   const hasNext = rows.length >= limit;
 
-  const onFilterChange = (key, value) => {
-    setFilters({ [key]: value });
-  };
+  const onFilterChange = (key, value) => setFilters({ [key]: value });
 
   const onApply = () => {
     applyFiltersAndFetch({
@@ -205,8 +326,25 @@ export default function RazorpayRemittancePage() {
     await fetchByReceipt(receiptInput);
   };
 
+  const openCsvModal = () => setShowCsvModal(true);
+
+  const handleCsvDownload = () => {
+    downloadCsv(rows, selectedCsvStatuses);
+    setShowCsvModal(false);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
+      <CsvDownloadModal
+        open={showCsvModal}
+        loading={loading}
+        rowsCount={rows.length}
+        selectedStatuses={selectedCsvStatuses}
+        setSelectedStatuses={setSelectedCsvStatuses}
+        onClose={() => setShowCsvModal(false)}
+        onDownload={handleCsvDownload}
+      />
+
       <div className="space-y-4 p-4 md:p-6">
         <div className="rounded-3xl bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -215,14 +353,13 @@ export default function RazorpayRemittancePage() {
                 Razorpay Remittance
               </h1>
               <p className="mt-1 text-sm text-gray-500">
-                Receipt is your order number, so transaction lookup stays clean
-                and easy.
+                Receipt is your order number, so transaction lookup stays clean and easy.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => downloadCsv(rows)}
+                onClick={openCsvModal}
                 disabled={!rows.length || loading}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -310,10 +447,12 @@ export default function RazorpayRemittancePage() {
               >
                 <option value="">Overall Status</option>
                 <option value="captured">Captured</option>
+                <option value="paid">Paid</option>
                 <option value="created">Created</option>
                 <option value="authorized">Authorized</option>
                 <option value="failed">Failed</option>
                 <option value="refunded">Refunded</option>
+                <option value="pending">Pending</option>
               </select>
 
               <select
@@ -381,9 +520,7 @@ export default function RazorpayRemittancePage() {
             <div className="rounded-3xl bg-white p-4 shadow-sm md:p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Receipt Details
-                  </h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Receipt Details</h2>
                   <p className="text-sm text-gray-500">
                     Complete Razorpay trail for this order number.
                   </p>
@@ -442,8 +579,7 @@ export default function RazorpayRemittancePage() {
                   Linked Payments ({Number(receiptDetail?.count || 0)})
                 </h3>
 
-                {Array.isArray(receiptDetail?.payments) &&
-                receiptDetail.payments.length ? (
+                {Array.isArray(receiptDetail?.payments) && receiptDetail.payments.length ? (
                   receiptDetail.payments.map((item, idx) => (
                     <div
                       key={item?.paymentId || idx}
@@ -454,9 +590,7 @@ export default function RazorpayRemittancePage() {
                           <p className="break-all font-semibold text-gray-900">
                             {item?.paymentId || "—"}
                           </p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            {dt(item?.createdAt)}
-                          </p>
+                          <p className="mt-1 text-xs text-gray-500">{dt(item?.createdAt)}</p>
                         </div>
 
                         <span
@@ -491,18 +625,14 @@ export default function RazorpayRemittancePage() {
                           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                             Email
                           </p>
-                          <p className="mt-1 break-all text-gray-900">
-                            {item?.email || "—"}
-                          </p>
+                          <p className="mt-1 break-all text-gray-900">{item?.email || "—"}</p>
                         </div>
 
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                             Contact
                           </p>
-                          <p className="mt-1 text-gray-900">
-                            {item?.contact || "—"}
-                          </p>
+                          <p className="mt-1 text-gray-900">{item?.contact || "—"}</p>
                         </div>
                       </div>
                     </div>
@@ -519,9 +649,7 @@ export default function RazorpayRemittancePage() {
           <div className="rounded-3xl bg-white p-4 shadow-sm md:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Transactions
-                </h2>
+                <h2 className="text-lg font-semibold text-gray-900">Transactions</h2>
                 <p className="text-sm text-gray-500">
                   Clean transaction view for Razorpay payments.
                 </p>
@@ -533,7 +661,7 @@ export default function RazorpayRemittancePage() {
                 </div>
 
                 <button
-                  onClick={() => downloadCsv(rows)}
+                  onClick={openCsvModal}
                   disabled={!rows.length || loading}
                   className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-gray-100 px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -561,10 +689,7 @@ export default function RazorpayRemittancePage() {
                   <tbody className="bg-white">
                     {loading ? (
                       <tr>
-                        <td
-                          colSpan={7}
-                          className="px-4 py-10 text-center text-gray-500"
-                        >
+                        <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
                           <div className="inline-flex items-center gap-2">
                             <Loader2 className="h-4 w-4 animate-spin" />
                             Loading transactions...
@@ -612,26 +737,19 @@ export default function RazorpayRemittancePage() {
 
                           <td className="px-4 py-3 text-gray-700">
                             <div className="max-w-[220px]">
-                              <p className="truncate font-medium">
-                                {row?.email || "—"}
-                              </p>
+                              <p className="truncate font-medium">{row?.email || "—"}</p>
                               <p className="truncate text-xs text-gray-400">
                                 {row?.contact || "—"}
                               </p>
                             </div>
                           </td>
 
-                          <td className="px-4 py-3 text-gray-700">
-                            {dt(row?.createdAt)}
-                          </td>
+                          <td className="px-4 py-3 text-gray-700">{dt(row?.createdAt)}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td
-                          colSpan={7}
-                          className="px-4 py-10 text-center text-gray-500"
-                        >
+                        <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
                           No transactions found.
                         </td>
                       </tr>
@@ -643,9 +761,7 @@ export default function RazorpayRemittancePage() {
 
             <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <p className="text-sm text-gray-500">
-                Showing{" "}
-                <span className="font-semibold text-gray-900">{rows.length}</span>{" "}
-                rows
+                Showing <span className="font-semibold text-gray-900">{rows.length}</span> rows
               </p>
 
               <div className="flex gap-2">

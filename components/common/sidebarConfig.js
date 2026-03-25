@@ -53,6 +53,7 @@ export const sidebarMenus = {
 
 accounts: [
   { label: "Accounts Dashboard", href: "/accounts" },
+  { label: "Remittance", href: "/accounts/remittance" },
 
   // Core
   { label: "Sales", href: "/accounts/sales" },
@@ -185,6 +186,7 @@ accounts: [
   customers: [
     { label: "Customer Dashboard", href: "/customers/dashboard" },
     { label: "Customer List", href: "/customers" },
+      { label: "Customer Search", href: "/customers/search" },
     { label: "Banking / Refund Details", href: "/customers/bankingDetails" },
     { label: "Customer / Address", href: "/customers/address" },
     { label: "Cart Adds", href: "/customers/cart-adds" },
