@@ -2,21 +2,36 @@
 
 import { create } from "zustand";
 
-// ✅ base URL from .env
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const API_BASE = `${BASE_URL}/api/homepage-settings`;
 
-// ✅ helper: normalize + order + continuous sortOrder
-const normalizeCategoryRow = (row = []) => {
-  return [...row]
+/* ---------------------------
+   Normalize Category Row
+---------------------------- */
+const normalizeCategoryRow = (row = []) =>
+  [...row]
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-    .map((item, index) => ({
-      ...item,
-      sortOrder: index + 1,
-    }));
-};
+    .map((item, index) => {
+      const navigationType = item?.navigationType || "category";
 
-export const useHomepageSettingsStore = create((set, get) => ({
+      return {
+        ...item,
+        navigationType,
+
+        // ✅ clean fields based on type
+        slug:
+          navigationType === "category" || navigationType === "collection"
+            ? item?.slug || ""
+            : "",
+
+        customRoute:
+          navigationType === "custom" ? item?.customRoute || "" : "",
+
+        sortOrder: index + 1,
+      };
+    });
+
+export const useHomepageSettingsStore = create((set) => ({
   settings: null,
 
   heroBanners: [],
@@ -28,7 +43,7 @@ export const useHomepageSettingsStore = create((set, get) => ({
   success: null,
 
   /* ---------------------------
-     Fetch Homepage Settings
+     Fetch
   ---------------------------- */
   fetchHomepageSettings: async () => {
     try {
@@ -42,7 +57,7 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err?.message || "Failed to fetch homepage settings");
+        throw new Error(err?.message || "Failed to fetch");
       }
 
       const data = await res.json();
@@ -50,25 +65,24 @@ export const useHomepageSettingsStore = create((set, get) => ({
       set({
         settings: data,
         heroBanners: data.heroBanners || [],
-        categoryRow: normalizeCategoryRow(data.categoryRow || []), // ✅ normalize
+        categoryRow: normalizeCategoryRow(data.categoryRow || []),
         loading: false,
       });
 
       return data;
     } catch (err) {
-      set({ loading: false, error: err.message || "Something went wrong" });
+      set({ loading: false, error: err.message });
       return null;
     }
   },
 
   /* ---------------------------
-     Update Entire Settings
+     Update All
   ---------------------------- */
   updateHomepageSettings: async (payload) => {
     try {
       set({ saving: true, error: null, success: null });
 
-      // ✅ if payload has categoryRow, normalize it
       const finalPayload = {
         ...payload,
         categoryRow: payload.categoryRow
@@ -84,7 +98,7 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err?.message || "Failed to update homepage settings");
+        throw new Error(err?.message || "Failed to update");
       }
 
       const updated = await res.json();
@@ -92,20 +106,20 @@ export const useHomepageSettingsStore = create((set, get) => ({
       set({
         settings: updated,
         heroBanners: updated.heroBanners || [],
-        categoryRow: normalizeCategoryRow(updated.categoryRow || []), // ✅ normalize
+        categoryRow: normalizeCategoryRow(updated.categoryRow || []),
         saving: false,
-        success: "Homepage settings updated ✅",
+        success: "Updated ✅",
       });
 
       return updated;
     } catch (err) {
-      set({ saving: false, error: err.message || "Something went wrong" });
+      set({ saving: false, error: err.message });
       return null;
     }
   },
 
   /* ---------------------------
-     Update Only Hero Banners
+     Hero Only
   ---------------------------- */
   updateHeroBanners: async (heroBanners) => {
     try {
@@ -117,10 +131,7 @@ export const useHomepageSettingsStore = create((set, get) => ({
         body: JSON.stringify({ heroBanners }),
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.message || "Failed to update hero banners");
-      }
+      if (!res.ok) throw new Error("Failed to update hero banners");
 
       const updated = await res.json();
 
@@ -128,24 +139,23 @@ export const useHomepageSettingsStore = create((set, get) => ({
         settings: updated,
         heroBanners: updated.heroBanners || heroBanners,
         saving: false,
-        success: "Hero banners updated ✅",
+        success: "Hero updated ✅",
       });
 
       return updated;
     } catch (err) {
-      set({ saving: false, error: err.message || "Something went wrong" });
+      set({ saving: false, error: err.message });
       return null;
     }
   },
 
   /* ---------------------------
-     Update Only Category Row
+     Category Only
   ---------------------------- */
   updateCategoryRow: async (categoryRow) => {
     try {
       set({ saving: true, error: null, success: null });
 
-      // ✅ normalize before sending
       const normalized = normalizeCategoryRow(categoryRow);
 
       const res = await fetch(`${API_BASE}/category-row`, {
@@ -154,38 +164,31 @@ export const useHomepageSettingsStore = create((set, get) => ({
         body: JSON.stringify({ categoryRow: normalized }),
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.message || "Failed to update category row");
-      }
+      if (!res.ok) throw new Error("Failed to update category row");
 
       const updated = await res.json();
 
       set({
         settings: updated,
-        categoryRow: normalizeCategoryRow(updated.categoryRow || normalized), // ✅ normalize
+        categoryRow: normalizeCategoryRow(updated.categoryRow || normalized),
         saving: false,
-        success: "Category row updated ✅",
+        success: "Category updated ✅",
       });
 
       return updated;
     } catch (err) {
-      set({ saving: false, error: err.message || "Something went wrong" });
+      set({ saving: false, error: err.message });
       return null;
     }
   },
 
   /* ---------------------------
-     Local-only setters (UI)
+     Local
   ---------------------------- */
   setHeroBannersLocal: (heroBanners) => set({ heroBanners }),
 
-  // ✅ normalize even locally (rearrangement always clean)
   setCategoryRowLocal: (categoryRow) =>
     set({ categoryRow: normalizeCategoryRow(categoryRow) }),
 
-  /* ---------------------------
-     Clear success/error
-  ---------------------------- */
   clearMessages: () => set({ error: null, success: null }),
 }));
