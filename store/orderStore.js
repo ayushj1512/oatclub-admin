@@ -86,7 +86,7 @@ export const useOrderStore = create((set, get) => ({
   order: null,
   loading: false,
   error: null,
-
+productOrderCount: null,
   // ✅ pagination meta for orders list
   ordersMeta: null, // { page, limit, totalCount, totalSum, hasMore }
 
@@ -524,11 +524,32 @@ export const useOrderStore = create((set, get) => ({
     return orders;
   },
 
+  fetchProductOrderCount: async (q) => {
+  const search = String(q ?? "").trim();
+
+  if (!search) {
+    set({ productOrderCount: null });
+    return null;
+  }
+
+  const data = await get()._get(
+    `/api/orders/product-order-count?q=${encodeURIComponent(search)}`
+  );
+
+  const result = {
+    query: data?.query || search,
+    totalOrders: Number(data?.totalOrders || 0),
+  };
+
+  set({ productOrderCount: result });
+  return result;
+},
+
   /* =========================
      RESET
   ========================= */
   clearOrder: () => set({ order: null }),
-
+clearProductOrderCount: () => set({ productOrderCount: null }),
   clearOrders: () =>
     set({
       orders: [],

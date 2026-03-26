@@ -126,28 +126,39 @@ accounts: [
   ],
 
  orders: [
+  // 🧠 Overview
   { label: "Orders Dashboard", href: "/orders" },
   { label: "All Orders", href: "/orders/all" },
+
+  // 🔍 Search
   { label: "Order Search", href: "/orders/search" },
+  { label: "Product → Order Search", href: "/orders/search-order-by-name-or-code" }, // ✅ NEW
+
+  // 📊 Analytics
   { label: "Order Analytics", href: "/orders/report" },
 
+  // 🚚 Forward Flow
   { label: "Processing", href: "/orders/processing" },
   { label: "Packed", href: "/orders/packed" },
   { label: "Shipped", href: "/orders/shipped" },
   { label: "Delivered", href: "/orders/delivered" },
+
+  // ❌ Failures / Exceptions
   { label: "Failed", href: "/orders/failed" },
   { label: "Cancelled", href: "/orders/cancelled" },
   { label: "Refunded", href: "/orders/refunded" },
 
-  { label: "Returns", href: "/orders/returns" },
-  { label: "Returned", href: "/orders/returned" },
+  // 🔁 Reverse Flow (RMA)
   { label: "Return Requested", href: "/orders/return_requested" },
-  { label: "Exchanged", href: "/orders/exchanged" },
+  { label: "Returned", href: "/orders/returned" },
   { label: "Exchange Requested", href: "/orders/exchange_requested" },
+  { label: "Exchanged", href: "/orders/exchanged" },
 
+  // 📦 Logistics
   { label: "Pickup Initiated", href: "/orders/pickup_initiated" },
   { label: "RTO / NDR", href: "/orders/rto" },
 
+  // 🧾 Others
   { label: "Order Remark", href: "/orders/remark" },
   { label: "Invoice", href: "/orders/invoices" },
   { label: "RMA Requests", href: "/orders/rma" },
