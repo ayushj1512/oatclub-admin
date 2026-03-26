@@ -262,9 +262,15 @@ bluedart: [
     href: "/reports/Order-Business-Overview",
   },
 
+  // Revenue / Finance
+  {
+    label: "Revenue by Status",
+    href: "/reports/revenue-by-status",
+  },
+
   // Sales & Performance
   { label: "Product Sales", href: "/reports/ProductSoldReport" },
-  { label: "Product UnSold", href: "/reports/ProductUnSoldReport" },
+  { label: "Product Unsold", href: "/reports/ProductUnSoldReport" },
   { label: "Orders Report", href: "/reports/Orders" },
   { label: "ROAS", href: "/reports/ROAS" },
 
