@@ -85,14 +85,35 @@ const getPresetDates = (preset) => {
   return { from: "", to: "" };
 };
 
+const getStatusTone = (status = "") => {
+  const value = String(status).toLowerCase();
+
+  const map = {
+    processing: "border-amber-200 bg-amber-50 text-amber-700",
+    packed: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    picked: "border-sky-200 bg-sky-50 text-sky-700",
+    shipped: "border-blue-200 bg-blue-50 text-blue-700",
+    out_for_delivery: "border-cyan-200 bg-cyan-50 text-cyan-700",
+    delivered: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    cancelled: "border-rose-200 bg-rose-50 text-rose-700",
+    failed: "border-red-200 bg-red-50 text-red-700",
+    returned: "border-orange-200 bg-orange-50 text-orange-700",
+    refunded: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700",
+    rto: "border-red-200 bg-red-50 text-red-700",
+    exchange_requested: "border-violet-200 bg-violet-50 text-violet-700",
+    exchanged: "border-purple-200 bg-purple-50 text-purple-700",
+    return_requested: "border-yellow-200 bg-yellow-50 text-yellow-700",
+    pickup_initiated: "border-teal-200 bg-teal-50 text-teal-700",
+  };
+
+  return map[value] || "border-zinc-200 bg-zinc-50 text-zinc-700";
+};
+
 const downloadCsv = (rows, fileName = "revenue-by-status.csv") => {
   const csv = rows
     .map((row) =>
       row
-        .map((cell) => {
-          const value = String(cell ?? "");
-          return `"${value.replace(/"/g, '""')}"`;
-        })
+        .map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`)
         .join(",")
     )
     .join("\n");
@@ -402,14 +423,16 @@ export default function RevenueByStatusPage() {
             <div className="flex flex-wrap gap-2">
               {STATUS_OPTIONS.map((status) => {
                 const active = statuses.includes(status);
+                const tone = getStatusTone(status);
+
                 return (
                   <button
                     key={status}
                     onClick={() => toggleStatus(status)}
                     className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       active
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-zinc-200 bg-white text-zinc-700 hover:border-blue-200 hover:bg-blue-50"
+                        ? tone
+                        : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50"
                     }`}
                   >
                     {formatStatus(status)}
@@ -513,29 +536,35 @@ export default function RevenueByStatusPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.breakdown.map((item, index) => (
-                    <tr
-                      key={item.fulfillmentStatus}
-                      className={`border-t border-zinc-100 ${
-                        index % 2 === 0 ? "bg-white" : "bg-zinc-50/40"
-                      } hover:bg-blue-50/40`}
-                    >
-                      <td className="px-4 py-3">
-                        <span className="inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                          {formatStatus(item.fulfillmentStatus)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-zinc-700">
-                        {formatNumber(item.totalOrders)}
-                      </td>
-                      <td className="px-4 py-3 font-semibold text-zinc-900">
-                        {formatCurrency(item.totalFinalPayable)}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-zinc-700">
-                        {formatCurrency(item.avgFinalPayable)}
-                      </td>
-                    </tr>
-                  ))}
+                  {data.breakdown.map((item, index) => {
+                    const tone = getStatusTone(item.fulfillmentStatus);
+
+                    return (
+                      <tr
+                        key={item.fulfillmentStatus}
+                        className={`border-t border-zinc-100 ${
+                          index % 2 === 0 ? "bg-white" : "bg-zinc-50/40"
+                        } hover:bg-blue-50/40`}
+                      >
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${tone}`}
+                          >
+                            {formatStatus(item.fulfillmentStatus)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-zinc-700">
+                          {formatNumber(item.totalOrders)}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-zinc-900">
+                          {formatCurrency(item.totalFinalPayable)}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-zinc-700">
+                          {formatCurrency(item.avgFinalPayable)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
