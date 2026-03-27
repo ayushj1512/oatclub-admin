@@ -51,7 +51,7 @@ const getSearchTokens = (value) => {
   if (normalizedOrderNo) {
     set.add(lower(normalizedOrderNo));
     set.add(lower(normalizedOrderNo.replace("-", "")));
-    set.add(lower(normalizedOrderNo.replace("miray-", "")));
+    set.add(lower(normalizedOrderNo.replace("MIRAY-", "")));
   }
 
   return [...set].filter(Boolean);
@@ -63,13 +63,13 @@ const matchesSearch = (order, query) => {
 
   const shipping = order?.shippingAddressSnapshot || {};
   const orderNumber = safe(order?.orderNumber);
-  const normalizedOrderNumber = normalizeOrderNumber(orderNumber);
+  const normalized = normalizeOrderNumber(orderNumber);
 
   const haystack = [
     lower(orderNumber),
-    lower(normalizedOrderNumber),
+    lower(normalized),
     lower(orderNumber.replace("-", "")),
-    lower(normalizedOrderNumber.replace("-", "")),
+    lower(normalized.replace("-", "")),
     lower(shipping?.fullName),
     lower(shipping?.phone),
     lower(shipping?.email),
@@ -80,9 +80,7 @@ const matchesSearch = (order, query) => {
     lower(order?.fulfillmentStatus),
   ];
 
-  return tokens.some((token) =>
-    haystack.some((value) => value.includes(token))
-  );
+  return tokens.some((token) => haystack.some((value) => value.includes(token)));
 };
 
 const getShipmentPriorityScore = (shipment = {}) => {
@@ -90,7 +88,6 @@ const getShipmentPriorityScore = (shipment = {}) => {
   const hasAwb = Boolean(safe(shipment?.awbNumber).trim());
 
   let score = 0;
-
   if (hasAwb) score += 100;
   if (BOOKED_STATUSES.has(status)) score += 50;
   if (status === "order_pushed") score += 25;
@@ -130,6 +127,7 @@ export default function BlueDartPage() {
   const [search, setSearch] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [bookingFilter, setBookingFilter] = useState("all");
+  const [fulfillmentFilter, setFulfillmentFilter] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -140,7 +138,7 @@ export default function BlueDartPage() {
       await Promise.all([
         fetchAllOrdersAllPages({
           confirmFilter: "confirmed",
-          fulfillmentStatus: "processing",
+          fulfillmentStatus: ["processing", "packed"],
           limit: 200,
         }),
         fetchShipments({
@@ -165,7 +163,6 @@ export default function BlueDartPage() {
       if (!orderNumber) continue;
 
       const existing = map.get(orderNumber);
-
       if (
         !existing ||
         getShipmentPriorityScore(shipment) >= getShipmentPriorityScore(existing)
@@ -195,6 +192,12 @@ export default function BlueDartPage() {
       );
     }
 
+    if (fulfillmentFilter !== "all") {
+      rows = rows.filter(
+        (order) => lower(order?.fulfillmentStatus) === lower(fulfillmentFilter)
+      );
+    }
+
     if (bookingFilter !== "all") {
       rows = rows.filter((order) => {
         const shipment = shipmentMap.get(normalizeOrderNumber(order?.orderNumber));
@@ -203,7 +206,14 @@ export default function BlueDartPage() {
     }
 
     return rows;
-  }, [allEligibleOrders, search, paymentFilter, bookingFilter, shipmentMap]);
+  }, [
+    allEligibleOrders,
+    search,
+    paymentFilter,
+    fulfillmentFilter,
+    bookingFilter,
+    shipmentMap,
+  ]);
 
   const totalPages = Math.max(
     1,
@@ -212,7 +222,7 @@ export default function BlueDartPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, paymentFilter, bookingFilter]);
+  }, [search, paymentFilter, fulfillmentFilter, bookingFilter]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -261,9 +271,11 @@ export default function BlueDartPage() {
                 BlueDart Booking
               </h1>
               <p className="mt-1 text-sm text-neutral-500">
-                Sirf confirmed aur fulfillment status{" "}
-                <span className="font-semibold text-black">processing</span> wale
-                orders dikh rahe hain.
+                Sirf confirmed orders dikh rahe hain. Fulfillment filter se{" "}
+                <span className="font-semibold text-black">
+                  all / processing / packed
+                </span>{" "}
+                select kar sakte ho.
               </p>
             </div>
           </div>
@@ -326,16 +338,68 @@ export default function BlueDartPage() {
         </div>
       </section>
 
-      <BlueDartBookingFilters
-        search={search}
-        onSearchChange={setSearch}
-        paymentFilter={paymentFilter}
-        onPaymentFilterChange={setPaymentFilter}
-        bookingFilter={bookingFilter}
-        onBookingFilterChange={setBookingFilter}
-        page={page}
-        totalPages={totalPages}
-      />
+      <section className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-neutral-700">
+              Search
+            </label>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Order no, name, phone..."
+              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-black"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-neutral-700">
+              Payment
+            </label>
+            <select
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value)}
+              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-black"
+            >
+              <option value="all">All</option>
+              <option value="cod">COD</option>
+              <option value="razorpay">Razorpay</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-neutral-700">
+              Fulfillment Status
+            </label>
+            <select
+              value={fulfillmentFilter}
+              onChange={(e) => setFulfillmentFilter(e.target.value)}
+              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-black"
+            >
+              <option value="all">All</option>
+              <option value="processing">Processing</option>
+              <option value="packed">Packed</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-neutral-700">
+              Booking Status
+            </label>
+            <select
+              value={bookingFilter}
+              onChange={(e) => setBookingFilter(e.target.value)}
+              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-black"
+            >
+              <option value="all">All</option>
+              <option value="booked">Booked</option>
+              <option value="order_pushed">Pushed</option>
+              <option value="not_booked">Not Booked</option>
+            </select>
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-3xl border border-neutral-200 bg-white p-2 shadow-sm">
         <BlueDartBookingTable
