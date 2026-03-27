@@ -31,6 +31,60 @@ const BOOKED_STATUSES = new Set([
 
 const LOCAL_PAGE_SIZE = 50;
 
+const normalizeOrderNumber = (value) => {
+  const raw = safe(value).toUpperCase().trim();
+  if (!raw) return "";
+
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return raw;
+
+  return `MIRAY-${digits.slice(-6).padStart(6, "0")}`;
+};
+
+const getSearchTokens = (value) => {
+  const raw = safe(value).trim();
+  if (!raw) return [];
+
+  const set = new Set([lower(raw)]);
+  const normalizedOrderNo = normalizeOrderNumber(raw);
+
+  if (normalizedOrderNo) {
+    set.add(lower(normalizedOrderNo));
+    set.add(lower(normalizedOrderNo.replace("-", "")));
+    set.add(lower(normalizedOrderNo.replace("miray-", "")));
+  }
+
+  return [...set].filter(Boolean);
+};
+
+const matchesSearch = (order, query) => {
+  const tokens = getSearchTokens(query);
+  if (!tokens.length) return true;
+
+  const shipping = order?.shippingAddressSnapshot || {};
+  const orderNumber = safe(order?.orderNumber);
+  const normalizedOrderNumber = normalizeOrderNumber(orderNumber);
+
+  const haystack = [
+    lower(orderNumber),
+    lower(normalizedOrderNumber),
+    lower(orderNumber.replace("-", "")),
+    lower(normalizedOrderNumber.replace("-", "")),
+    lower(shipping?.fullName),
+    lower(shipping?.phone),
+    lower(shipping?.email),
+    lower(shipping?.city),
+    lower(shipping?.state),
+    lower(shipping?.pincode),
+    lower(order?.paymentMethod),
+    lower(order?.fulfillmentStatus),
+  ];
+
+  return tokens.some((token) =>
+    haystack.some((value) => value.includes(token))
+  );
+};
+
 const getShipmentPriorityScore = (shipment = {}) => {
   const status = lower(shipment?.status);
   const hasAwb = Boolean(safe(shipment?.awbNumber).trim());
@@ -45,10 +99,7 @@ const getShipmentPriorityScore = (shipment = {}) => {
   const updatedAt = new Date(shipment?.updatedAt || 0).getTime() || 0;
   const createdAt = new Date(shipment?.createdAt || 0).getTime() || 0;
 
-  score += updatedAt / 1e13;
-  score += createdAt / 1e13;
-
-  return score;
+  return score + updatedAt / 1e13 + createdAt / 1e13;
 };
 
 const getOrderBookingState = (shipment) => {
@@ -67,7 +118,7 @@ export default function BlueDartPage() {
   const {
     orders,
     loading: ordersLoading,
-    fetchAllOrders,
+    fetchAllOrdersAllPages,
   } = useOrderStore();
 
   const {
@@ -87,11 +138,10 @@ export default function BlueDartPage() {
       setRefreshing(true);
 
       await Promise.all([
-        fetchAllOrders({
-          page: 1,
-          limit: 2000,
+        fetchAllOrdersAllPages({
           confirmFilter: "confirmed",
           fulfillmentStatus: "processing",
+          limit: 200,
         }),
         fetchShipments({
           page: 1,
@@ -101,7 +151,7 @@ export default function BlueDartPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [fetchAllOrders, fetchShipments]);
+  }, [fetchAllOrdersAllPages, fetchShipments]);
 
   useEffect(() => {
     loadData();
@@ -111,19 +161,14 @@ export default function BlueDartPage() {
     const map = new Map();
 
     for (const shipment of shipments || []) {
-      const orderNumber = shipment?.orderNumber;
+      const orderNumber = normalizeOrderNumber(shipment?.orderNumber);
       if (!orderNumber) continue;
 
       const existing = map.get(orderNumber);
 
-      if (!existing) {
-        map.set(orderNumber, shipment);
-        continue;
-      }
-
       if (
-        getShipmentPriorityScore(shipment) >=
-        getShipmentPriorityScore(existing)
+        !existing ||
+        getShipmentPriorityScore(shipment) >= getShipmentPriorityScore(existing)
       ) {
         map.set(orderNumber, shipment);
       }
@@ -132,30 +177,16 @@ export default function BlueDartPage() {
     return map;
   }, [shipments]);
 
-  const allEligibleOrders = useMemo(() => {
-    return Array.isArray(orders) ? orders : [];
-  }, [orders]);
+  const allEligibleOrders = useMemo(
+    () => (Array.isArray(orders) ? orders : []),
+    [orders]
+  );
 
   const filteredOrders = useMemo(() => {
     let rows = [...allEligibleOrders];
-    const q = lower(search);
 
-    if (q) {
-      rows = rows.filter((order) => {
-        const shipping = order?.shippingAddressSnapshot || {};
-
-        return (
-          lower(order?.orderNumber).includes(q) ||
-          lower(shipping?.fullName).includes(q) ||
-          lower(shipping?.phone).includes(q) ||
-          lower(shipping?.email).includes(q) ||
-          lower(shipping?.city).includes(q) ||
-          lower(shipping?.state).includes(q) ||
-          lower(shipping?.pincode).includes(q) ||
-          lower(order?.paymentMethod).includes(q) ||
-          lower(order?.fulfillmentStatus).includes(q)
-        );
-      });
+    if (search.trim()) {
+      rows = rows.filter((order) => matchesSearch(order, search));
     }
 
     if (paymentFilter !== "all") {
@@ -166,7 +197,7 @@ export default function BlueDartPage() {
 
     if (bookingFilter !== "all") {
       rows = rows.filter((order) => {
-        const shipment = shipmentMap.get(order?.orderNumber);
+        const shipment = shipmentMap.get(normalizeOrderNumber(order?.orderNumber));
         return getOrderBookingState(shipment) === bookingFilter;
       });
     }
@@ -184,15 +215,12 @@ export default function BlueDartPage() {
   }, [search, paymentFilter, bookingFilter]);
 
   useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
+    if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
   const paginatedOrders = useMemo(() => {
     const start = (page - 1) * LOCAL_PAGE_SIZE;
-    const end = start + LOCAL_PAGE_SIZE;
-    return filteredOrders.slice(start, end);
+    return filteredOrders.slice(start, start + LOCAL_PAGE_SIZE);
   }, [filteredOrders, page]);
 
   const stats = useMemo(() => {
@@ -201,7 +229,7 @@ export default function BlueDartPage() {
     let notBooked = 0;
 
     for (const order of filteredOrders) {
-      const shipment = shipmentMap.get(order?.orderNumber);
+      const shipment = shipmentMap.get(normalizeOrderNumber(order?.orderNumber));
       const state = getOrderBookingState(shipment);
 
       if (state === "booked") booked += 1;
