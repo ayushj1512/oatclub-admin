@@ -151,12 +151,6 @@ export default function ProcessingOrdersPage() {
       const y = yesterdayYMD_IST();
       setStartDate(y);
       setEndDate(y);
-      return;
-    }
-
-    if (!quickDate) {
-      setStartDate("");
-      setEndDate("");
     }
   }, [quickDate]);
 
@@ -552,12 +546,23 @@ export default function ProcessingOrdersPage() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             {quickDateChips.map((chip) => {
-              const active = quickDate === chip.key;
+              const active =
+                chip.key === ""
+                  ? !quickDate && !startDate && !endDate
+                  : quickDate === chip.key;
 
               return (
                 <button
                   key={chip.key || "all-dates"}
-                  onClick={() => setQuickDate(chip.key)}
+                  onClick={() => {
+                    if (!chip.key) {
+                      setQuickDate("");
+                      setStartDate("");
+                      setEndDate("");
+                      return;
+                    }
+                    setQuickDate(chip.key);
+                  }}
                   className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
                     active
                       ? "bg-black text-white shadow-sm"
