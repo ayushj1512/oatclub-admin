@@ -1,35 +1,72 @@
-// app/orders/delivered/page.jsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Download, Loader2, Search } from "lucide-react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Download,
+  IndianRupee,
+  Loader2,
+  Search,
+  Truck,
+} from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 import { useOrderStore } from "@/store/orderStore";
 
-/* ---------------------------------------------
-   ✅ Small UI helpers
---------------------------------------------- */
+const IST_TZ = "Asia/Kolkata";
+const IST_OFFSET = "+05:30";
+
 const Card = ({ children, className = "" }) => (
   <div
-    className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-6 ${className}`}
+    className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-5 ${className}`}
   >
     {children}
   </div>
 );
 
-/* ---------------------------------------------
-   ✅ CSV helpers
---------------------------------------------- */
-const escapeCSV = (value) => {
-  if (value === null || value === undefined) return "";
-  const s = String(value);
-  return `"${s.replace(/"/g, '""')}"`;
+const ymdInTZ = (date = new Date(), timeZone = IST_TZ) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const y = parts.find((p) => p.type === "year")?.value || "1970";
+  const m = parts.find((p) => p.type === "month")?.value || "01";
+  const d = parts.find((p) => p.type === "day")?.value || "01";
+  return `${y}-${m}-${d}`;
 };
 
-const formatDateISO = (d) => {
-  if (!d) return "";
-  const dt = new Date(d);
-  return Number.isNaN(dt.getTime()) ? "" : dt.toISOString();
+const todayYMD_IST = () => ymdInTZ(new Date(), IST_TZ);
+
+const yesterdayYMD_IST = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return ymdInTZ(d, IST_TZ);
+};
+
+const monthStartYMD_IST = () => {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: IST_TZ,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(now);
+
+  const y = parts.find((p) => p.type === "year")?.value || "1970";
+  const m = parts.find((p) => p.type === "month")?.value || "01";
+  return `${y}-${m}-01`;
+};
+
+const istStartISO = (ymd) => (ymd ? `${ymd}T00:00:00.000${IST_OFFSET}` : "");
+const istEndISO = (ymd) => (ymd ? `${ymd}T23:59:59.999${IST_OFFSET}` : "");
+
+const safe = (v) => (v === null || v === undefined ? "" : v);
+
+const toNumber = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 };
 
 const money = (n) => {
@@ -37,7 +74,11 @@ const money = (n) => {
   return Number.isFinite(x) ? x : "";
 };
 
-const safe = (v) => (v === null || v === undefined ? "" : v);
+const formatDateISO = (d) => {
+  if (!d) return "";
+  const dt = new Date(d);
+  return Number.isNaN(dt.getTime()) ? "" : dt.toISOString();
+};
 
 const formatDateLabel = (value) => {
   if (!value) return "";
@@ -52,6 +93,54 @@ const formatDateLabel = (value) => {
   });
 };
 
+const formatINR = (value) => {
+  const n = toNumber(value);
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(n);
+};
+
+const escapeCSV = (value) => {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  return `"${s.replace(/"/g, '""')}"`;
+};
+
+const normalizeOrderNumber = (value = "") => {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return "";
+
+  const digits = raw.replace(/\D/g, "");
+  if (digits) return `MIRAY-${digits.padStart(6, "0")}`;
+
+  return raw.replace(/\s+/g, "");
+};
+
+const normalizeSearchTerm = (value = "") => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const upper = raw.toUpperCase();
+  const digits = raw.replace(/\D/g, "");
+
+  if (upper.startsWith("MIRAY") || /^\d+$/.test(raw) || digits.length) {
+    return normalizeOrderNumber(raw);
+  }
+
+  return raw;
+};
+
+const getOrderRevenue = (order) =>
+  toNumber(
+    order?.finalPayable ??
+      order?.totalAmount ??
+      order?.grandTotal ??
+      order?.amount ??
+      0
+  );
+
 const getOrderDate = (order) => {
   const raw =
     order?.deliveredAt ||
@@ -63,16 +152,6 @@ const getOrderDate = (order) => {
 
   const dt = new Date(raw);
   return Number.isNaN(dt.getTime()) ? null : dt;
-};
-
-const getMonthRange = (monthValue) => {
-  if (!monthValue) return { start: null, end: null };
-  const [y, m] = String(monthValue).split("-").map(Number);
-  if (!y || !m) return { start: null, end: null };
-
-  const start = new Date(y, m - 1, 1, 0, 0, 0, 0);
-  const end = new Date(y, m, 0, 23, 59, 59, 999);
-  return { start, end };
 };
 
 const normalizeDateStart = (dateStr) => {
@@ -87,12 +166,6 @@ const normalizeDateEnd = (dateStr) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-/* ---------------------------------------------
-   Page: Delivered Orders
-   - ✅ Search
-   - ✅ Month filter
-   - ✅ From / To date filter
---------------------------------------------- */
 export default function DeliveredOrdersPage() {
   const orders = useOrderStore((s) => s.orders);
   const loading = useOrderStore((s) => s.loading);
@@ -102,11 +175,9 @@ export default function DeliveredOrdersPage() {
   const fetchNextOrdersPage = useOrderStore((s) => s.fetchNextOrdersPage);
   const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
 
-  // Search
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
-  // Date / Month filters
   const [monthInput, setMonthInput] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
 
@@ -115,12 +186,13 @@ export default function DeliveredOrdersPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  // pagination
+  const [quickDate, setQuickDate] = useState("");
+
   const [pageSize] = useState(500);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const applyFilters = useCallback(() => {
-    setSearch(searchInput.trim());
+    setSearch(normalizeSearchTerm(searchInput));
     setSelectedMonth(monthInput);
     setFromDate(fromDateInput);
     setToDate(toDateInput);
@@ -135,14 +207,47 @@ export default function DeliveredOrdersPage() {
     setToDateInput("");
     setFromDate("");
     setToDate("");
+    setQuickDate("");
   }, []);
 
-  /* ---------------------------------------------
-     ✅ Backend filters
-     Keep delivered filter on backend
-     Search on backend
-     Month/date filters on client-side for safety
-  --------------------------------------------- */
+  useEffect(() => {
+    if (quickDate === "today") {
+      const t = todayYMD_IST();
+      setMonthInput("");
+      setSelectedMonth("");
+      setFromDateInput(t);
+      setToDateInput(t);
+      setFromDate(t);
+      setToDate(t);
+      return;
+    }
+
+    if (quickDate === "yesterday") {
+      const y = yesterdayYMD_IST();
+      setMonthInput("");
+      setSelectedMonth("");
+      setFromDateInput(y);
+      setToDateInput(y);
+      setFromDate(y);
+      setToDate(y);
+      return;
+    }
+
+    if (quickDate === "this_month") {
+      const start = monthStartYMD_IST();
+      const end = todayYMD_IST();
+      setMonthInput("");
+      setSelectedMonth("");
+      setFromDateInput(start);
+      setToDateInput(end);
+      setFromDate(start);
+      setToDate(end);
+      return;
+    }
+
+    if (!quickDate) return;
+  }, [quickDate]);
+
   const backendFilters = useMemo(() => {
     const f = {
       fulfillmentStatus: "delivered",
@@ -152,8 +257,20 @@ export default function DeliveredOrdersPage() {
 
     if (search) f.customerName = search;
 
+    if (fromDate) {
+      f.startDate = fromDate;
+      f.startAt = istStartISO(fromDate);
+      f.tz = IST_TZ;
+    }
+
+    if (toDate) {
+      f.endDate = toDate;
+      f.endAt = istEndISO(toDate);
+      f.tz = IST_TZ;
+    }
+
     return f;
-  }, [search, pageSize]);
+  }, [search, fromDate, toDate, pageSize]);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -167,34 +284,36 @@ export default function DeliveredOrdersPage() {
     loadOrders();
   }, [loadOrders]);
 
-  /* ---------------------------------------------
-     ✅ Client-side filtering
-  --------------------------------------------- */
   const filteredOrders = useMemo(() => {
     let data = Array.isArray(orders) ? [...orders] : [];
 
-    // Safety: keep only delivered
     data = data.filter(
       (o) => String(o?.fulfillmentStatus || "").toLowerCase() === "delivered"
     );
 
-    // Search
-    const q = search.trim().toLowerCase();
+    const q = String(search || "").trim().toLowerCase();
     if (q) {
       data = data.filter((o) => {
         const orderNumber = String(o?.orderNumber || "").toLowerCase();
+        const normalizedOrderNumber = normalizeOrderNumber(
+          o?.orderNumber || ""
+        ).toLowerCase();
+
         const name = String(
           o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
         ).toLowerCase();
+
         const email = String(
           o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
         ).toLowerCase();
+
         const phone = String(
           o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
         ).toLowerCase();
 
         return (
           orderNumber.includes(q) ||
+          normalizedOrderNumber.includes(q) ||
           name.includes(q) ||
           email.includes(q) ||
           phone.includes(q)
@@ -202,19 +321,16 @@ export default function DeliveredOrdersPage() {
       });
     }
 
-    // Month filter
     if (selectedMonth) {
-      const { start, end } = getMonthRange(selectedMonth);
-      if (start && end) {
-        data = data.filter((o) => {
-          const dt = getOrderDate(o);
-          if (!dt) return false;
-          return dt >= start && dt <= end;
-        });
-      }
+      data = data.filter((o) => {
+        const dt = getOrderDate(o);
+        if (!dt) return false;
+        const year = dt.getFullYear();
+        const month = String(dt.getMonth() + 1).padStart(2, "0");
+        return `${year}-${month}` === selectedMonth;
+      });
     }
 
-    // From / To date filters
     const from = normalizeDateStart(fromDate);
     const to = normalizeDateEnd(toDate);
 
@@ -222,10 +338,8 @@ export default function DeliveredOrdersPage() {
       data = data.filter((o) => {
         const dt = getOrderDate(o);
         if (!dt) return false;
-
         if (from && dt < from) return false;
         if (to && dt > to) return false;
-
         return true;
       });
     }
@@ -250,9 +364,20 @@ export default function DeliveredOrdersPage() {
     });
   }, [filteredOrders]);
 
-  /* ---------------------------------------------
-     ✅ CSV export
-  --------------------------------------------- */
+  const totalRevenue = useMemo(() => {
+    return sortedOrders.reduce((sum, order) => sum + getOrderRevenue(order), 0);
+  }, [sortedOrders]);
+
+  const confirmedCount = useMemo(() => {
+    return sortedOrders.filter((o) => o?.isConfirmed === true).length;
+  }, [sortedOrders]);
+
+  const prepaidCount = useMemo(() => {
+    return sortedOrders.filter(
+      (o) => String(o?.paymentMethod || "").toLowerCase() === "razorpay"
+    ).length;
+  }, [sortedOrders]);
+
   const buildCsvRows = (ordersArr) => {
     const rows = [];
 
@@ -369,7 +494,7 @@ export default function DeliveredOrdersPage() {
   };
 
   const exportToCSV = () => {
-    if (!sortedOrders?.length) {
+    if (!sortedOrders.length) {
       alert("No delivered orders to export.");
       return;
     }
@@ -451,16 +576,6 @@ export default function DeliveredOrdersPage() {
     URL.revokeObjectURL(url);
   };
 
-  const totals = useMemo(() => {
-    return {
-      count: sortedOrders.length,
-      sum: sortedOrders.reduce(
-        (acc, o) => acc + (Number(o?.finalPayable) || 0),
-        0
-      ),
-    };
-  }, [sortedOrders]);
-
   const hasMore = !!ordersMeta?.hasMore;
 
   const loadMore = async () => {
@@ -474,116 +589,179 @@ export default function DeliveredOrdersPage() {
     }
   };
 
+  const quickDateChips = [
+    { key: "", label: "Custom" },
+    { key: "today", label: "Today" },
+    { key: "yesterday", label: "Yesterday" },
+    { key: "this_month", label: "This Month" },
+  ];
+
   return (
-    <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
-      <div className="mx-auto space-y-8">
-        {/* Header */}
-        <div className="flex flex-col xl:flex-row justify-between xl:items-start gap-6">
+    <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-8">
+      <div className="mx-auto space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">
               Delivered Orders
             </h1>
-            <p className="text-gray-500 mt-1">
-              Search and manage only <b>delivered</b> orders with month and date
-              filters.
+            <p className="text-sm text-gray-500 mt-1">
+              Search and manage only <b>delivered</b> orders.
             </p>
-
-            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
-              <span className="px-3 py-1 rounded-full bg-green-50 text-green-700 font-semibold">
-                {totals.count} Orders
-              </span>
-              <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
-                Total ₹{Number(totals.sum || 0).toLocaleString("en-IN")}
-              </span>
-              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 font-semibold">
-                Status: delivered
-              </span>
-              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-                Loaded: {orders.length}
-              </span>
-            </div>
           </div>
 
-          <div className="w-full xl:max-w-[980px]">
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
-              {/* Search */}
-              <div className="xl:col-span-2 flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
-                <Search size={18} className="text-gray-400 shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Search order # / name / email / phone..."
-                  className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && applyFilters()}
-                />
-              </div>
-
-              {/* Month */}
-              <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
-                <CalendarDays size={18} className="text-gray-400 shrink-0" />
-                <input
-                  type="month"
-                  className="outline-none w-full bg-transparent text-sm text-gray-700"
-                  value={monthInput}
-                  onChange={(e) => setMonthInput(e.target.value)}
-                />
-              </div>
-
-              {/* From Date */}
-              <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
-                <span className="text-xs font-semibold text-gray-500 shrink-0">
-                  From
-                </span>
-                <input
-                  type="date"
-                  className="outline-none w-full bg-transparent text-sm text-gray-700"
-                  value={fromDateInput}
-                  onChange={(e) => setFromDateInput(e.target.value)}
-                />
-              </div>
-
-              {/* To Date */}
-              <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
-                <span className="text-xs font-semibold text-gray-500 shrink-0">
-                  To
-                </span>
-                <input
-                  type="date"
-                  className="outline-none w-full bg-transparent text-sm text-gray-700"
-                  value={toDateInput}
-                  onChange={(e) => setToDateInput(e.target.value)}
-                />
-              </div>
-
-              {/* Apply */}
-              <button
-                onClick={applyFilters}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-gray-200 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition"
-              >
-                <Search size={18} /> Apply
-              </button>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-3">
-              <button
-                onClick={clearFilters}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-200 active:scale-[0.98] transition"
-              >
-                Clear Filters
-              </button>
-
-              <button
-                onClick={exportToCSV}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
-              >
-                <Download size={18} /> Export CSV
-              </button>
-            </div>
-          </div>
+          <button
+            onClick={exportToCSV}
+            className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
+          >
+            <Download size={18} />
+            Export CSV
+          </button>
         </div>
 
-        {/* Active filter summary */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <CheckCircle2 size={20} />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Delivered Orders</p>
+                <p className="text-xl font-bold text-gray-900">{sortedOrders.length}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <IndianRupee size={20} />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Delivered Revenue</p>
+                <p className="text-xl font-bold text-gray-900">{formatINR(totalRevenue)}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <Truck size={20} />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Confirmed Delivered</p>
+                <p className="text-xl font-bold text-gray-900">{confirmedCount}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center">
+                <Search size={20} />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Prepaid Delivered</p>
+                <p className="text-xl font-bold text-gray-900">{prepaidCount}</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <Card>
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div className="md:col-span-2 flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-gray-100">
+              <Search size={18} className="text-gray-400 shrink-0" />
+              <input
+                type="text"
+                placeholder="Search MIRAY-000123 / name / email / phone..."
+                className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && applyFilters()}
+              />
+            </div>
+
+            <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-gray-100">
+              <CalendarDays size={18} className="text-gray-400 shrink-0" />
+              <input
+                type="month"
+                className="outline-none w-full bg-transparent text-sm text-gray-700"
+                value={monthInput}
+                onChange={(e) => {
+                  setQuickDate("");
+                  setMonthInput(e.target.value);
+                }}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 border border-gray-100">
+              <span className="text-xs font-semibold text-gray-500 shrink-0">From</span>
+              <input
+                type="date"
+                className="outline-none w-full bg-transparent text-sm text-gray-700"
+                value={fromDateInput}
+                onChange={(e) => {
+                  setQuickDate("");
+                  setMonthInput("");
+                  setFromDateInput(e.target.value);
+                }}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 border border-gray-100">
+              <span className="text-xs font-semibold text-gray-500 shrink-0">To</span>
+              <input
+                type="date"
+                className="outline-none w-full bg-transparent text-sm text-gray-700"
+                value={toDateInput}
+                onChange={(e) => {
+                  setQuickDate("");
+                  setMonthInput("");
+                  setToDateInput(e.target.value);
+                }}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={applyFilters}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-gray-800 text-sm font-semibold hover:bg-gray-50 active:scale-[0.98] transition"
+              >
+                <Search size={18} />
+                Apply
+              </button>
+
+              <button
+                onClick={clearFilters}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200 active:scale-[0.98] transition"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {quickDateChips.map((chip) => {
+              const active = quickDate === chip.key;
+
+              return (
+                <button
+                  key={chip.key || "custom"}
+                  onClick={() => setQuickDate(chip.key)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+                    active
+                      ? "bg-black text-white shadow-sm"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+
         {(search || selectedMonth || fromDate || toDate) && (
           <Card>
             <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -616,16 +794,15 @@ export default function DeliveredOrdersPage() {
           </Card>
         )}
 
-        {/* Load More / Refresh */}
-        <Card>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
             <div className="text-xs text-gray-500">
               {ordersMeta?.page
-                ? `Page ${ordersMeta.page} • Loaded ${orders.length} orders • Visible ${sortedOrders.length} orders`
-                : `Loaded ${orders.length} orders • Visible ${sortedOrders.length} orders`}
+                ? `Page ${ordersMeta.page} • Loaded ${orders.length} orders • Visible ${sortedOrders.length} rows`
+                : `Loaded ${orders.length} orders • Visible ${sortedOrders.length} rows`}
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button
                 onClick={loadOrders}
                 className="px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98] transition"
@@ -634,19 +811,20 @@ export default function DeliveredOrdersPage() {
               </button>
 
               <button
-                disabled={!hasMore || loadingMore}
+                disabled={!ordersMeta?.hasMore || loadingMore}
                 onClick={loadMore}
                 className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  !hasMore || loadingMore
+                  !ordersMeta?.hasMore || loadingMore
                     ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                     : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
                 }`}
               >
                 {loadingMore ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin" /> Loading...
+                    <Loader2 size={16} className="animate-spin" />
+                    Loading...
                   </span>
-                ) : hasMore ? (
+                ) : ordersMeta?.hasMore ? (
                   "Load More"
                 ) : (
                   "No More"
@@ -656,16 +834,15 @@ export default function DeliveredOrdersPage() {
           </div>
         </Card>
 
-        {/* Table */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
                 <tr>
-                  <th className="py-4 px-5 text-left font-semibold">Order #</th>
+                  <th className="py-4 px-5 text-left font-semibold">Order</th>
                   <th className="py-4 px-5 text-left font-semibold">Customer</th>
                   <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
+                  <th className="py-4 px-5 text-left font-semibold">Status</th>
                   <th className="py-4 px-5 text-left font-semibold">Amount</th>
                   <th className="py-4 px-5 text-left font-semibold">Date</th>
                   <th className="py-4 px-5 text-left font-semibold">Action</th>
@@ -691,7 +868,7 @@ export default function DeliveredOrdersPage() {
                 ) : (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-gray-500">
-                      No delivered orders found.
+                      {loading ? "Loading delivered orders..." : "No delivered orders found."}
                     </td>
                   </tr>
                 )}
@@ -700,10 +877,9 @@ export default function DeliveredOrdersPage() {
           </div>
         </div>
 
-        {/* Small filter result note */}
         {sortedOrders.length > 0 && (
           <div className="text-xs text-gray-500 px-1">
-            Showing filtered delivered orders. Latest visible order date:{" "}
+            Latest visible delivered date:{" "}
             <span className="font-medium text-gray-700">
               {formatDateLabel(getOrderDate(sortedOrders[0])) || "-"}
             </span>
@@ -711,7 +887,6 @@ export default function DeliveredOrdersPage() {
         )}
       </div>
 
-      {/* Global loading overlay */}
       {loading ? (
         <div className="fixed inset-0 bg-black/10 backdrop-blur-[1px] flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 px-5 py-4 flex items-center gap-3">

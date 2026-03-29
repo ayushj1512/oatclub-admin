@@ -349,7 +349,7 @@ export default function OrdersListPage() {
     if (quickDate === "today") {
       const t = todayYMD_IST();
       setStartDate(t);
-      setEndDate(t);
+    setEndDate(t);
       return;
     }
 

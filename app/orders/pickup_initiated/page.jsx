@@ -1,29 +1,72 @@
-// app/orders/pickup_initiated/page.jsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Search } from "lucide-react";
+import {
+  CalendarDays,
+  Download,
+  Loader2,
+  RefreshCcw,
+  Search,
+} from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 import { useOrderStore } from "@/store/orderStore";
 
-/* ---------------------------------------------
-   ✅ Small UI helpers
---------------------------------------------- */
+const IST_TZ = "Asia/Kolkata";
+const IST_OFFSET = "+05:30";
+
 const Card = ({ children, className = "" }) => (
   <div
-    className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-6 ${className}`}
+    className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-5 ${className}`}
   >
     {children}
   </div>
 );
 
-/* ---------------------------------------------
-   ✅ CSV helpers
---------------------------------------------- */
-const escapeCSV = (value) => {
-  if (value === null || value === undefined) return "";
-  const s = String(value);
-  return `"${s.replace(/"/g, '""')}"`;
+const ymdInTZ = (date = new Date(), timeZone = IST_TZ) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const y = parts.find((p) => p.type === "year")?.value || "1970";
+  const m = parts.find((p) => p.type === "month")?.value || "01";
+  const d = parts.find((p) => p.type === "day")?.value || "01";
+
+  return `${y}-${m}-${d}`;
+};
+
+const todayYMD_IST = () => ymdInTZ(new Date(), IST_TZ);
+
+const yesterdayYMD_IST = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return ymdInTZ(d, IST_TZ);
+};
+
+const monthStartYMD_IST = () => {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: IST_TZ,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(now);
+
+  const y = parts.find((p) => p.type === "year")?.value || "1970";
+  const m = parts.find((p) => p.type === "month")?.value || "01";
+
+  return `${y}-${m}-01`;
+};
+
+const istStartISO = (ymd) => (ymd ? `${ymd}T00:00:00.000${IST_OFFSET}` : "");
+const istEndISO = (ymd) => (ymd ? `${ymd}T23:59:59.999${IST_OFFSET}` : "");
+
+const safe = (v) => (v === null || v === undefined ? "" : v);
+
+const money = (n) => {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : "";
 };
 
 const formatDateISO = (d) => {
@@ -32,18 +75,70 @@ const formatDateISO = (d) => {
   return Number.isNaN(dt.getTime()) ? "" : dt.toISOString();
 };
 
-const money = (n) => {
-  const x = Number(n);
-  return Number.isFinite(x) ? x : "";
+const formatINR = (value) => {
+  const n = Number(value);
+  const safeNum = Number.isFinite(n) ? n : 0;
+
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(safeNum);
 };
 
-const safe = (v) => (v === null || v === undefined ? "" : v);
+const escapeCSV = (value) => {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  return `"${s.replace(/"/g, '""')}"`;
+};
 
-/* ---------------------------------------------
-   Page: Pickup Initiated
-   - ✅ Only Searchbar (no filters)
-   - ✅ Backend: fulfillmentStatus=pickup_initiated + customerName=search
---------------------------------------------- */
+const normalizeOrderNumber = (value = "") => {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return "";
+
+  const digits = raw.replace(/\D/g, "");
+  if (digits) return `MIRAY-${digits.padStart(6, "0")}`;
+
+  return raw.replace(/\s+/g, "");
+};
+
+const normalizeSearchTerm = (value = "") => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const upper = raw.toUpperCase();
+  const digits = raw.replace(/\D/g, "");
+
+  if (upper.startsWith("MIRAY") || /^\d+$/.test(raw) || digits.length) {
+    return normalizeOrderNumber(raw);
+  }
+
+  return raw;
+};
+
+const getOrderDate = (order) => {
+  const raw =
+    order?.updatedAt ||
+    order?.createdAt ||
+    order?.orderDate ||
+    order?.rmas?.[order?.rmas?.length - 1]?.reverseShipment?.pickupScheduledAt;
+
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
+const normalizeDateStart = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(`${dateStr}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const normalizeDateEnd = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(`${dateStr}T23:59:59.999`);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
 export default function PickupInitiatedOrdersPage() {
   const orders = useOrderStore((s) => s.orders);
   const loading = useOrderStore((s) => s.loading);
@@ -53,35 +148,78 @@ export default function PickupInitiatedOrdersPage() {
   const fetchNextOrdersPage = useOrderStore((s) => s.fetchNextOrdersPage);
   const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
 
-  // Search (button based)
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
-  // pagination
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [quickDate, setQuickDate] = useState("");
+
   const [pageSize] = useState(500);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const applySearch = useCallback(() => {
-    setSearch(searchInput.trim());
+    setSearch(normalizeSearchTerm(searchInput));
   }, [searchInput]);
 
   const clearSearch = useCallback(() => {
     setSearchInput("");
     setSearch("");
+    setStartDate("");
+    setEndDate("");
+    setQuickDate("");
   }, []);
 
-  /* ---------------------------------------------
-     ✅ Backend filters
-  --------------------------------------------- */
+  useEffect(() => {
+    if (quickDate === "today") {
+      const t = todayYMD_IST();
+      setStartDate(t);
+      setEndDate(t);
+      return;
+    }
+
+    if (quickDate === "yesterday") {
+      const y = yesterdayYMD_IST();
+      setStartDate(y);
+      setEndDate(y);
+      return;
+    }
+
+    if (quickDate === "this_month") {
+      setStartDate(monthStartYMD_IST());
+      setEndDate(todayYMD_IST());
+      return;
+    }
+
+    if (!quickDate) {
+      setStartDate("");
+      setEndDate("");
+    }
+  }, [quickDate]);
+
   const backendFilters = useMemo(() => {
     const f = {
       fulfillmentStatus: "pickup_initiated",
       page: 1,
       limit: pageSize,
     };
+
     if (search) f.customerName = search;
+
+    if (startDate) {
+      f.startDate = startDate;
+      f.startAt = istStartISO(startDate);
+      f.tz = IST_TZ;
+    }
+
+    if (endDate) {
+      f.endDate = endDate;
+      f.endAt = istEndISO(endDate);
+      f.tz = IST_TZ;
+    }
+
     return f;
-  }, [search, pageSize]);
+  }, [search, startDate, endDate, pageSize]);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -95,47 +233,126 @@ export default function PickupInitiatedOrdersPage() {
     loadOrders();
   }, [loadOrders]);
 
-  /* ---------------------------------------------
-     ✅ Client-side search fallback
-  --------------------------------------------- */
   const filteredOrders = useMemo(() => {
     let data = Array.isArray(orders) ? [...orders] : [];
 
-    // Safety: keep only pickup_initiated
     data = data.filter(
       (o) =>
         String(o?.fulfillmentStatus || "").toLowerCase() === "pickup_initiated"
     );
 
-    const q = search.trim().toLowerCase();
-    if (!q) return data;
+    const q = String(search || "").trim().toLowerCase();
 
-    return data.filter((o) => {
-      const orderNumber = String(o?.orderNumber || "").toLowerCase();
-      const name = String(
-        o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
-      ).toLowerCase();
-      const email = String(
-        o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
-      ).toLowerCase();
-      const phone = String(
-        o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
-      ).toLowerCase();
-      return (
-        orderNumber.includes(q) ||
-        name.includes(q) ||
-        email.includes(q) ||
-        phone.includes(q)
-      );
+    if (q) {
+      data = data.filter((o) => {
+        const orderNumber = String(o?.orderNumber || "").toLowerCase();
+        const normalizedOrderNumber = normalizeOrderNumber(
+          o?.orderNumber || ""
+        ).toLowerCase();
+
+        const name = String(
+          o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
+        ).toLowerCase();
+
+        const email = String(
+          o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
+        ).toLowerCase();
+
+        const phone = String(
+          o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
+        ).toLowerCase();
+
+        const adminRemarks = String(o?.adminRemarks || "").toLowerCase();
+        const customerSupportRemark = String(
+          o?.customerSupportRemark || ""
+        ).toLowerCase();
+        const customerMessage = String(o?.customerMessage || "").toLowerCase();
+
+        const paymentMethod = String(o?.paymentMethod || "").toLowerCase();
+        const paymentStatus = String(o?.paymentStatus || "").toLowerCase();
+
+        const latestRma = Array.isArray(o?.rmas) && o.rmas.length
+          ? o.rmas[o.rmas.length - 1]
+          : null;
+
+        const rmaNumber = String(latestRma?.rmaNumber || "").toLowerCase();
+        const reverseAwb = String(
+          latestRma?.reverseShipment?.awb || ""
+        ).toLowerCase();
+        const reverseCourier = String(
+          latestRma?.reverseShipment?.courierName || ""
+        ).toLowerCase();
+
+        return (
+          orderNumber.includes(q) ||
+          normalizedOrderNumber.includes(q) ||
+          name.includes(q) ||
+          email.includes(q) ||
+          phone.includes(q) ||
+          adminRemarks.includes(q) ||
+          customerSupportRemark.includes(q) ||
+          customerMessage.includes(q) ||
+          paymentMethod.includes(q) ||
+          paymentStatus.includes(q) ||
+          rmaNumber.includes(q) ||
+          reverseAwb.includes(q) ||
+          reverseCourier.includes(q)
+        );
+      });
+    }
+
+    const from = normalizeDateStart(startDate);
+    const to = normalizeDateEnd(endDate);
+
+    if (from || to) {
+      data = data.filter((o) => {
+        const dt = getOrderDate(o);
+        if (!dt) return false;
+        if (from && dt < from) return false;
+        if (to && dt > to) return false;
+        return true;
+      });
+    }
+
+    return data;
+  }, [orders, search, startDate, endDate]);
+
+  const sortedOrders = useMemo(() => {
+    return [...filteredOrders].sort((a, b) => {
+      const getNum = (o) => {
+        const m = String(o?.orderNumber || "").match(/(\d+)$/);
+        return m ? Number(m[1]) : 0;
+      };
+
+      const an = getNum(a);
+      const bn = getNum(b);
+      if (bn !== an) return bn - an;
+
+      const ad = getOrderDate(a)?.getTime() || 0;
+      const bd = getOrderDate(b)?.getTime() || 0;
+      return bd - ad;
     });
-  }, [orders, search]);
+  }, [filteredOrders]);
 
-  /* ---------------------------------------------
-     ✅ CSV export
-     - focuses on reverse pickup details from latest RMA
-  --------------------------------------------- */
+  const totalRevenue = useMemo(() => {
+    return sortedOrders.reduce(
+      (acc, o) => acc + (Number(o?.finalPayable) || 0),
+      0
+    );
+  }, [sortedOrders]);
+
+  const confirmedCount = useMemo(() => {
+    return sortedOrders.filter((o) => o?.isConfirmed === true).length;
+  }, [sortedOrders]);
+
+  const withRmaCount = useMemo(() => {
+    return sortedOrders.filter((o) => Array.isArray(o?.rmas) && o.rmas.length)
+      .length;
+  }, [sortedOrders]);
+
   const buildCsvRows = (ordersArr) => {
     const rows = [];
+
     for (const order of ordersArr || []) {
       const orderId = safe(order?._id || order?.id);
       const orderNumber = safe(order?.orderNumber);
@@ -164,7 +381,6 @@ export default function PickupInitiatedOrdersPage() {
       const totalAmount = money(order?.totalAmount);
       const finalPayable = money(order?.finalPayable);
 
-      // Latest RMA reverse pickup details
       const rmas = Array.isArray(order?.rmas) ? order.rmas : [];
       const latestRma = rmas.length ? rmas[rmas.length - 1] : null;
 
@@ -174,10 +390,16 @@ export default function PickupInitiatedOrdersPage() {
       const rmaReason = safe(latestRma?.reason || "");
 
       const reverseOrderId = safe(latestRma?.reverseShipment?.orderId || "");
-      const reverseShipmentId = safe(latestRma?.reverseShipment?.shipmentId || "");
+      const reverseShipmentId = safe(
+        latestRma?.reverseShipment?.shipmentId || ""
+      );
       const reverseAwb = safe(latestRma?.reverseShipment?.awb || "");
-      const reverseCourier = safe(latestRma?.reverseShipment?.courierName || "");
-      const reverseTrackingUrl = safe(latestRma?.reverseShipment?.trackingUrl || "");
+      const reverseCourier = safe(
+        latestRma?.reverseShipment?.courierName || ""
+      );
+      const reverseTrackingUrl = safe(
+        latestRma?.reverseShipment?.trackingUrl || ""
+      );
 
       const pickupScheduledAt = formatDateISO(
         latestRma?.reverseShipment?.pickupScheduledAt || ""
@@ -232,10 +454,14 @@ export default function PickupInitiatedOrdersPage() {
         const attrs = Array.isArray(item?.variant?.attributes)
           ? item.variant.attributes
           : [];
+
         const attrSize =
-          attrs.find((a) => String(a?.key || "").toLowerCase() === "size")?.value ||
-          attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")?.value ||
+          attrs.find((a) => String(a?.key || "").toLowerCase() === "size")
+            ?.value ||
+          attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")
+            ?.value ||
           "";
+
         const itemSku = safe(item?.variant?.sku || snap?.sku || "");
         const itemSize = safe(item?.selectedSize || attrSize || "");
 
@@ -277,14 +503,17 @@ export default function PickupInitiatedOrdersPage() {
         });
       });
     }
+
     return rows;
   };
 
   const exportToCSV = () => {
-    if (!filteredOrders?.length)
-      return alert("No pickup initiated orders to export.");
+    if (!sortedOrders.length) {
+      alert("No pickup initiated orders to export.");
+      return;
+    }
 
-    const rows = buildCsvRows(filteredOrders);
+    const rows = buildCsvRows(sortedOrders);
 
     const headers = [
       "Order DB Id",
@@ -370,10 +599,11 @@ export default function PickupInitiatedOrdersPage() {
     const blob = new Blob([csvLines.join("\r\n")], {
       type: "text/csv;charset=utf-8;",
     });
-    const url = URL.createObjectURL(blob);
 
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+
     link.href = url;
     link.setAttribute("download", `pickup-initiated-orders-${ts}.csv`);
     document.body.appendChild(link);
@@ -382,20 +612,22 @@ export default function PickupInitiatedOrdersPage() {
     URL.revokeObjectURL(url);
   };
 
+  const quickDateChips = [
+    { key: "", label: "All Dates" },
+    { key: "today", label: "Today" },
+    { key: "yesterday", label: "Yesterday" },
+    { key: "this_month", label: "This Month" },
+  ];
+
   const totals = useMemo(() => {
     const metaCount = Number(ordersMeta?.totalCount);
-    const metaSum = Number(ordersMeta?.totalSum);
-
     const count =
-      Number.isFinite(metaCount) && metaCount >= 0 ? metaCount : filteredOrders.length;
+      Number.isFinite(metaCount) && metaCount >= 0
+        ? metaCount
+        : sortedOrders.length;
 
-    const sum =
-      Number.isFinite(metaSum) && metaSum >= 0
-        ? metaSum
-        : filteredOrders.reduce((acc, o) => acc + (Number(o?.finalPayable) || 0), 0);
-
-    return { count, sum };
-  }, [ordersMeta, filteredOrders]);
+    return { count };
+  }, [ordersMeta, sortedOrders]);
 
   const hasMore = !!ordersMeta?.hasMore;
 
@@ -411,36 +643,64 @@ export default function PickupInitiatedOrdersPage() {
   };
 
   return (
-    <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
-      <div className="mx-auto space-y-8">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
+    <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-8">
+      <div className="mx-auto space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">
               Pickup Initiated
             </h1>
-            <p className="text-gray-500 mt-1">
-              Search and manage <b>pickup initiated</b> (reverse) orders.
+            <p className="text-sm text-gray-500 mt-1">
+              Search and manage <b>pickup initiated</b> orders.
             </p>
-            <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
-              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-                {totals.count} Orders
-              </span>
-              <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
-                Total ₹{totals.sum}
-              </span>
-              <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-800 font-semibold">
-                Status: pickup_initiated
-              </span>
-            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 w-full md:w-80">
+          <button
+            onClick={exportToCSV}
+            className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
+          >
+            <Download size={18} />
+            Export CSV
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <Card className="p-4">
+            <p className="text-xs text-gray-500">Pickup Initiated Orders</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {totals.count}
+            </p>
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-xs text-gray-500">Final Payable Total</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {formatINR(totalRevenue)}
+            </p>
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-xs text-gray-500">Confirmed Orders</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {confirmedCount}
+            </p>
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-xs text-gray-500">With RMA</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {withRmaCount}
+            </p>
+          </Card>
+        </div>
+
+        <Card>
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+            <div className="xl:col-span-5 flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100">
               <Search size={18} className="text-gray-400" />
               <input
                 type="text"
-                placeholder="Search order # / name / email / phone..."
+                placeholder="Search MIRAY/order/name/email/phone/AWB/RMA..."
                 className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -448,136 +708,113 @@ export default function PickupInitiatedOrdersPage() {
               />
             </div>
 
+            <div className="xl:col-span-2 flex items-center gap-2 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100">
+              <CalendarDays size={18} className="text-gray-400" />
+              <input
+                type="date"
+                className="outline-none w-full bg-transparent text-sm"
+                value={startDate}
+                onChange={(e) => {
+                  setQuickDate("");
+                  setStartDate(e.target.value);
+                }}
+              />
+            </div>
+
+            <div className="xl:col-span-2 flex items-center gap-2 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100">
+              <CalendarDays size={18} className="text-gray-400" />
+              <input
+                type="date"
+                className="outline-none w-full bg-transparent text-sm"
+                value={endDate}
+                onChange={(e) => {
+                  setQuickDate("");
+                  setEndDate(e.target.value);
+                }}
+              />
+            </div>
+
             <button
               onClick={applySearch}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-gray-200 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition"
+              className="xl:col-span-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 transition"
             >
-              <Search size={18} /> Search
+              <Search size={18} />
+              Search
             </button>
 
             <button
               onClick={clearSearch}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-200 active:scale-[0.98] transition"
+              className="xl:col-span-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm font-semibold shadow-sm hover:bg-gray-50 transition"
             >
+              <RefreshCcw size={18} />
               Clear
             </button>
 
-            <button
-              onClick={exportToCSV}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
-            >
-              <Download size={18} /> Export CSV
-            </button>
-          </div>
-        </div>
-
-        {/* Load More / Refresh */}
-        <Card>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="text-xs text-gray-500">
-              {ordersMeta?.page
-                ? `Page ${ordersMeta.page} • Showing ${orders.length} orders`
-                : `Showing ${orders.length} orders`}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={loadOrders}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98] transition"
-              >
-                Refresh
-              </button>
-
-              <button
-                disabled={!hasMore || loadingMore}
-                onClick={loadMore}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  !hasMore || loadingMore
-                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                    : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
-                }`}
-              >
-                {loadingMore ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin" /> Loading...
-                  </span>
-                ) : hasMore ? (
-                  "Load More"
-                ) : (
-                  "No More"
-                )}
-              </button>
+            <div className="xl:col-span-12 flex flex-wrap gap-2">
+              {quickDateChips.map((chip) => {
+                const active = quickDate === chip.key;
+                return (
+                  <button
+                    key={chip.key}
+                    onClick={() => setQuickDate(chip.key)}
+                    className={`px-3 py-2 rounded-full text-xs font-semibold transition ${
+                      active
+                        ? "bg-black text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </Card>
 
-        {/* Table */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
-                <tr>
-                  <th className="py-4 px-5 text-left font-semibold">Order #</th>
-                  <th className="py-4 px-5 text-left font-semibold">Customer</th>
-                  <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Amount</th>
-                  <th className="py-4 px-5 text-left font-semibold">Date</th>
-                  <th className="py-4 px-5 text-left font-semibold">Action</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-gray-100">
-                {filteredOrders.length ? (
-                  [...filteredOrders]
-                    .sort((a, b) => {
-                      const getNum = (o) => {
-                        const m = String(o?.orderNumber || "").match(/(\d+)$/);
-                        return m ? Number(m[1]) : 0;
-                      };
-                      const an = getNum(a);
-                      const bn = getNum(b);
-                      if (bn !== an) return bn - an;
-                      const ad = new Date(a?.createdAt || a?.orderDate || 0).getTime();
-                      const bd = new Date(b?.createdAt || b?.orderDate || 0).getTime();
-                      return bd - ad;
-                    })
-                    .map((order, idx) => {
-                      const rowKey =
-                        order?._id || order?.id || order?.orderNumber || `order-${idx}`;
-
-                      return (
-                        <OrderRow
-                          key={String(rowKey)}
-                          order={order}
-                          onUpdated={(updatedOrder) => {
-                            if (updatedOrder?._id) syncOrderInList(updatedOrder);
-                          }}
-                        />
-                      );
-                    })
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">
-                      No pickup initiated orders found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div className="space-y-4">
+          {loading ? (
+            <Card>
+              <div className="flex items-center justify-center gap-2 py-10 text-gray-500">
+                <Loader2 className="animate-spin" size={18} />
+                Loading pickup initiated orders...
+              </div>
+            </Card>
+          ) : sortedOrders.length ? (
+            sortedOrders.map((order) => (
+              <OrderRow
+                key={order._id || order.id}
+                order={order}
+                onUpdate={(updated) => syncOrderInList?.(updated)}
+              />
+            ))
+          ) : (
+            <Card>
+              <div className="py-10 text-center text-gray-500">
+                No pickup initiated orders found.
+              </div>
+            </Card>
+          )}
         </div>
+
+        {!loading && hasMore && (
+          <div className="flex justify-center">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-gray-200 text-sm font-semibold shadow-sm hover:bg-gray-50 disabled:opacity-60"
+            >
+              {loadingMore ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                "Load More"
+              )}
+            </button>
+          </div>
+        )}
       </div>
-
-      {/* Global loading overlay */}
-      {loading ? (
-        <div className="fixed inset-0 bg-black/10 backdrop-blur-[1px] flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 px-5 py-4 flex items-center gap-3">
-            <Loader2 size={18} className="animate-spin text-gray-700" />
-            <span className="text-sm font-semibold text-gray-800">Loading...</span>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }

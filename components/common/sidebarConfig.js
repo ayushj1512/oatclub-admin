@@ -76,7 +76,7 @@ export const sidebarMenus = {
   { label: "Fabric Dashboard", href: "/fabrics" },
   { label: "Add Fabric", href: "/fabrics/add-fabric" },
   { label: "Fabric Inventory", href: "/fabrics/fabric-inventory" },
-  { label: "Add Inventory", href: "/fabrics/fabric-inventory/add" },
+  // { label: "Add Inventory", href: "/fabrics/fabric-inventory/add" },
   { label: "Fabric Actions", href: "/fabrics/actions" },
   { label: "Fabric Logs", href: "/fabrics/logs" },
 ],
