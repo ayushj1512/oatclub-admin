@@ -253,27 +253,28 @@ export const sidebarMenus = {
     { label: "Analytics", href: "/bluedart/analytics" },
   ],
 
-  reports: [
-    { label: "Reports Home", href: "/reports" },
-    {
-      label: "Order & Business Overview",
-      href: "/reports/Order-Business-Overview",
-    },
-    {
-      label: "Revenue by Status",
-      href: "/reports/revenue-by-status",
-    },
-    { label: "Product Sales", href: "/reports/ProductSoldReport" },
-    { label: "Product Unsold", href: "/reports/ProductUnSoldReport" },
-    { label: "Orders Report", href: "/reports/Orders" },
-    { label: "ROAS", href: "/reports/ROAS" },
-    {
-      label: "Operations Status",
-      href: "/reports/Operations-Order-Status",
-    },
-    { label: "RTO Report", href: "/reports/RTO" },
-    { label: "Cancellation Report", href: "/reports/Cancellation" },
-  ],
+ reports: [
+  { label: "Reports Home", href: "/reports" },
+  {
+    label: "Order & Business Overview",
+    href: "/reports/Order-Business-Overview",
+  },
+  {
+    label: "Revenue by Status",
+    href: "/reports/revenue-by-status",
+  },
+  { label: "Product Sales", href: "/reports/ProductSoldReport" },
+  { label: "Low Product Sale", href: "/reports/low-product-sale" },
+  { label: "Product Unsold", href: "/reports/ProductUnSoldReport" },
+  { label: "Orders Report", href: "/reports/Orders" },
+  { label: "ROAS", href: "/reports/ROAS" },
+  {
+    label: "Operations Status",
+    href: "/reports/Operations-Order-Status",
+  },
+  { label: "RTO Report", href: "/reports/RTO" },
+  { label: "Cancellation Report", href: "/reports/Cancellation" },
+],
 
   account_user: [
     { label: "Profile", href: "/account/profile" },

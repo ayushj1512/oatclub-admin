@@ -65,6 +65,10 @@ const initialUnsoldSummary = () => ({
   totalUnsoldProducts: 0,
 });
 
+const initialLowSellingSummary = () => ({
+  totalLowSellingProducts: 0,
+});
+
 const initialBusinessOverview = () => ({
   totalOrdersReceived: 0,
   totalRevenueGenerated: 0,
@@ -103,9 +107,11 @@ const initialOperationsSummary = () => ({
 export const useOrderReportsStore = create((set, get) => ({
   rows: [],
   unsoldRows: [],
+  lowSellingRows: [],
 
   summary: initialSummary(),
   unsoldSummary: initialUnsoldSummary(),
+  lowSellingSummary: initialLowSellingSummary(),
   businessOverview: initialBusinessOverview(),
   roasSummary: initialRoasSummary(),
   operationsSummary: initialOperationsSummary(),
@@ -117,21 +123,25 @@ export const useOrderReportsStore = create((set, get) => ({
   filters: initialFilters(),
   pagination: initialPagination(),
   unsoldPagination: initialPagination(),
+  lowSellingPagination: initialPagination(),
 
   loading: false,
   unsoldLoading: false,
+  lowSellingLoading: false,
   overviewLoading: false,
   roasLoading: false,
   operationsLoading: false,
 
   error: "",
   unsoldError: "",
+  lowSellingError: "",
   overviewError: "",
   roasError: "",
   operationsError: "",
 
   initialized: false,
   unsoldInitialized: false,
+  lowSellingInitialized: false,
   overviewInitialized: false,
   roasInitialized: false,
   operationsInitialized: false,
@@ -211,7 +221,9 @@ export const useOrderReportsStore = create((set, get) => ({
         rows: safeArr(data?.rows),
         summary: {
           totalProducts: toNum(data?.summary?.totalProducts),
-          totalQtySold: toNum(data?.summary?.totalQtySold ?? data?.summary?.totalQty),
+          totalQtySold: toNum(
+            data?.summary?.totalQtySold ?? data?.summary?.totalQty
+          ),
           totalRevenue: toNum(data?.summary?.totalRevenue),
           totalOrders: toNum(data?.summary?.totalOrders),
         },
@@ -336,13 +348,98 @@ export const useOrderReportsStore = create((set, get) => ({
     }
   },
 
+  fetchLowSellingProductsReport: async (override = {}) => {
+    const filters = { ...get().filters, ...override };
+    set({ lowSellingLoading: true, lowSellingError: "" });
+
+    try {
+      const res = await fetch(
+        buildUrl(
+          `/api/orders/accounts/sales-report/products/low-selling${qs({
+            search: filters.search,
+            page: filters.page,
+            limit: filters.limit,
+          })}`
+        ),
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }
+      );
+
+      const data = await safeJson(res);
+      if (!res.ok) {
+        throw new Error(
+          data?.message || "Failed to fetch low selling products report"
+        );
+      }
+
+      set((state) => ({
+        lowSellingRows: safeArr(data?.rows),
+        lowSellingSummary: {
+          totalLowSellingProducts: toNum(
+            data?.summary?.totalLowSellingProducts ?? data?.pagination?.total
+          ),
+        },
+        lowSellingPagination: {
+          page: toNum(data?.pagination?.page, filters.page),
+          limit: toNum(data?.pagination?.limit, filters.limit),
+          total: toNum(data?.pagination?.total),
+          totalPages: toNum(data?.pagination?.totalPages),
+          hasNext: Boolean(data?.pagination?.hasNext),
+          hasPrev: Boolean(data?.pagination?.hasPrev),
+        },
+        filters: {
+          ...state.filters,
+          search: data?.filters?.search ?? filters.search ?? "",
+          page: toNum(data?.filters?.page ?? data?.pagination?.page, filters.page),
+          limit: toNum(
+            data?.filters?.limit ?? data?.pagination?.limit,
+            filters.limit
+          ),
+        },
+        lowSellingLoading: false,
+        lowSellingError: "",
+        lowSellingInitialized: true,
+      }));
+
+      return { success: true, data };
+    } catch (error) {
+      set({
+        lowSellingRows: [],
+        lowSellingSummary: initialLowSellingSummary(),
+        lowSellingPagination: {
+          page: toNum(filters.page, 1),
+          limit: toNum(filters.limit, 20),
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+        lowSellingLoading: false,
+        lowSellingError:
+          error?.message || "Failed to fetch low selling products report",
+        lowSellingInitialized: true,
+      });
+
+      return {
+        success: false,
+        message: error?.message || "Failed to fetch low selling products report",
+      };
+    }
+  },
+
   fetchBusinessOverview: async (override = {}) => {
     const filters = { ...get().filters, ...override };
     set({ overviewLoading: true, overviewError: "" });
 
     try {
       const res = await fetch(
-        buildUrl(`/api/orders/accounts/business-overview${qs({ month: filters.month })}`),
+        buildUrl(
+          `/api/orders/accounts/business-overview${qs({ month: filters.month })}`
+        ),
         {
           method: "GET",
           credentials: "include",
@@ -447,7 +544,10 @@ export const useOrderReportsStore = create((set, get) => ({
         roasInitialized: true,
       });
 
-      return { success: false, message: error?.message || "Failed to fetch ROAS report" };
+      return {
+        success: false,
+        message: error?.message || "Failed to fetch ROAS report",
+      };
     }
   },
 
@@ -532,6 +632,7 @@ export const useOrderReportsStore = create((set, get) => ({
 
   refresh: async () => get().fetchProductSalesReport(),
   refreshUnsold: async () => get().fetchUnsoldProductsReport(),
+  refreshLowSelling: async () => get().fetchLowSellingProductsReport(),
   refreshAll: async () => get().fetchOverviewAndProducts(),
   refreshROAS: async () => get().fetchROASReport(),
   refreshOperations: async () => get().fetchOperationsStatusReport(),
@@ -570,6 +671,23 @@ export const useOrderReportsStore = create((set, get) => ({
     return get().fetchUnsoldProductsReport({ ...filters, page });
   },
 
+  goToNextLowSellingPage: async () => {
+    const { lowSellingPagination, filters } = get();
+    if (!lowSellingPagination.hasNext) return;
+
+    const page = toNum(filters.page, 1) + 1;
+    set({ filters: { ...filters, page } });
+    return get().fetchLowSellingProductsReport({ ...filters, page });
+  },
+
+  goToPrevLowSellingPage: async () => {
+    const { filters } = get();
+    const page = Math.max(1, toNum(filters.page, 1) - 1);
+
+    set({ filters: { ...filters, page } });
+    return get().fetchLowSellingProductsReport({ ...filters, page });
+  },
+
   hydrateAndFetch: async (patch = {}) => {
     const next = { ...get().filters, ...patch };
     set({ filters: next });
@@ -580,6 +698,12 @@ export const useOrderReportsStore = create((set, get) => ({
     const next = { ...get().filters, ...patch };
     set({ filters: next });
     return get().fetchUnsoldProductsReport(next);
+  },
+
+  hydrateAndFetchLowSelling: async (patch = {}) => {
+    const next = { ...get().filters, ...patch };
+    set({ filters: next });
+    return get().fetchLowSellingProductsReport(next);
   },
 
   hydrateAndFetchAll: async (patch = {}) => {
@@ -604,8 +728,10 @@ export const useOrderReportsStore = create((set, get) => ({
     set({
       rows: [],
       unsoldRows: [],
+      lowSellingRows: [],
       summary: initialSummary(),
       unsoldSummary: initialUnsoldSummary(),
+      lowSellingSummary: initialLowSellingSummary(),
       businessOverview: initialBusinessOverview(),
       roasSummary: initialRoasSummary(),
       operationsSummary: initialOperationsSummary(),
@@ -614,13 +740,16 @@ export const useOrderReportsStore = create((set, get) => ({
       sources: [],
       pagination: initialPagination(),
       unsoldPagination: initialPagination(),
+      lowSellingPagination: initialPagination(),
       error: "",
       unsoldError: "",
+      lowSellingError: "",
       overviewError: "",
       roasError: "",
       operationsError: "",
       initialized: false,
       unsoldInitialized: false,
+      lowSellingInitialized: false,
       overviewInitialized: false,
       roasInitialized: false,
       operationsInitialized: false,
