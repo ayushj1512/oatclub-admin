@@ -61,6 +61,9 @@ const normalizeProductPayload = (payload) => {
     const hsn = toStr(out.hsnCode);
     out.hsnCode = hsn === "" ? "" : hsn.replace(/[^\d]/g, "");
   }
+  if (out.isPrimaryProduct !== undefined) {
+  out.isPrimaryProduct = toBool(out.isPrimaryProduct);
+}
 
   // allow JSON strings
   const tryJson = (v) => {
@@ -1534,5 +1537,78 @@ export const useAdminProductStore = create((set, get) => ({
       set({ saving: false });
     }
   },
+
+
+  updatePrimaryProductStatus: async (payload, isPrimaryProduct) => {
+  try {
+    set({ saving: true, error: null });
+
+    const toBool = (v) =>
+      typeof v === "boolean"
+        ? v
+        : ["true", "1", "yes"].includes(String(v).trim().toLowerCase());
+
+    const nextValue = toBool(isPrimaryProduct);
+
+    const body =
+      typeof payload === "string"
+        ? { productCode: payload, isPrimaryProduct: nextValue }
+        : Array.isArray(payload)
+        ? { productCodes: payload, isPrimaryProduct: nextValue }
+        : {
+            ...(payload || {}),
+            isPrimaryProduct: nextValue,
+          };
+
+    const res = await fetch(`${API}/primary-status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Primary status update failed");
+
+    const updatedProducts = Array.isArray(data.products)
+      ? data.products
+      : data.product
+      ? [data.product]
+      : [];
+
+    const updatedMap = new Map(
+      updatedProducts.map((p) => [String(p._id), p])
+    );
+
+    const currentProductId = String(get().product?._id || "");
+    if (currentProductId && updatedMap.has(currentProductId)) {
+      set({ product: updatedMap.get(currentProductId) });
+    }
+
+    set((state) => ({
+      products: (state.products || []).map((p) =>
+        updatedMap.has(String(p._id))
+          ? { ...p, ...updatedMap.get(String(p._id)) }
+          : p
+      ),
+    }));
+
+    toast.success(
+      nextValue
+        ? "Marked as primary product ✅"
+        : "Marked as secondary product ✅"
+    );
+
+    return updatedProducts;
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
+
+
 
 }));

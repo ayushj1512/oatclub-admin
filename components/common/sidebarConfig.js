@@ -113,6 +113,7 @@ export const sidebarMenus = {
     { label: "Bestsellers", href: "/products/bestseller" },
     { label: "Coming Soon", href: "/products/comingsoon" },
     { label: "Size Charts", href: "/products/size-charts" },
+    { label: "Secondary Products", href: "/products/secondary-products" },
     { label: "Attributes", href: "/products/attributes" },
     { label: "Variants", href: "/products/variants" },
     { label: "Collections", href: "/products/collections" },
