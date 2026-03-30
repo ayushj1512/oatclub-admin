@@ -193,6 +193,7 @@ export const sidebarMenus = {
     { label: "Email Marketing", href: "/marketing/email" },
     { label: "Marketing Spend", href: "/marketing/marketingSpend" },
     { label: "ROAS Report", href: "/marketing/ROAS" },
+    { label: "Commerce Manager", href: "/marketing/commerceManager" },
   ],
 
   customers: [
