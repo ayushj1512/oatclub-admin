@@ -31,58 +31,77 @@ export default function SecondaryProductsPage() {
   const products = useAdminProductStore((s) => s.products || []);
   const loading = useAdminProductStore((s) => s.loading);
   const saving = useAdminProductStore((s) => s.saving);
-  const fetchAllProducts = useAdminProductStore((s) => s.fetchAllProducts);
   const fetchProducts = useAdminProductStore((s) => s.fetchProducts);
   const updatePrimaryProductStatus = useAdminProductStore(
     (s) => s.updatePrimaryProductStatus
   );
 
   const [query, setQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all"); // all | primary | secondary
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  // debounce search
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQuery(searchInput);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const loadProducts = useCallback(async () => {
-    if (typeof fetchAllProducts === "function") {
-      await fetchAllProducts();
-      return;
+    if (typeof fetchProducts !== "function") return;
+
+    const params = {
+      page: 1,
+      limit: 100,
+    };
+
+    if (String(query || "").trim()) {
+      params.search = String(query).trim();
     }
 
-    if (typeof fetchProducts === "function") {
-      await fetchProducts({ page: 1, limit: 5000 });
+    if (categoryFilter !== "all") {
+      params.category = categoryFilter;
     }
-  }, [fetchAllProducts, fetchProducts]);
+
+    if (statusFilter === "primary") {
+      params.isPrimaryProduct = "true";
+    } else if (statusFilter === "secondary") {
+      params.isPrimaryProduct = "false";
+    }
+
+    await fetchProducts(params);
+  }, [fetchProducts, query, categoryFilter, statusFilter]);
 
   useEffect(() => {
     loadProducts();
+    setSelectedIds([]);
   }, [loadProducts]);
 
-  const filteredProducts = useMemo(() => {
-    const q = lower(query);
+  const categoryOptions = useMemo(() => {
+    const set = new Set();
 
-    return (products || []).filter((p) => {
-      const title = lower(p?.title);
-      const code = lower(p?.productCode);
-      const cats = Array.isArray(p?.categories)
-        ? p.categories.map(lower).join(" ")
-        : "";
-
-      const matchesQuery =
-        !q || title.includes(q) || code.includes(q) || cats.includes(q);
-
-      const matchesStatus =
-        statusFilter === "all"
-          ? true
-          : statusFilter === "primary"
-          ? isPrimary(p)
-          : !isPrimary(p);
-
-      return matchesQuery && matchesStatus;
+    (products || []).forEach((p) => {
+      if (Array.isArray(p?.categories)) {
+        p.categories.forEach((cat) => {
+          const value = String(cat || "").trim();
+          if (value) set.add(value);
+        });
+      }
     });
-  }, [products, query, statusFilter]);
+
+    return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [products]);
+
+  const visibleProducts = useMemo(() => {
+    return products || [];
+  }, [products]);
 
   const allVisibleSelected =
-    filteredProducts.length > 0 &&
-    filteredProducts.every((p) => selectedIds.includes(String(p._id)));
+    visibleProducts.length > 0 &&
+    visibleProducts.every((p) => selectedIds.includes(String(p._id)));
 
   const toggleSelect = (id) => {
     const key = String(id);
@@ -93,7 +112,7 @@ export default function SecondaryProductsPage() {
 
   const toggleSelectAllVisible = () => {
     if (allVisibleSelected) {
-      const visibleIds = new Set(filteredProducts.map((p) => String(p._id)));
+      const visibleIds = new Set(visibleProducts.map((p) => String(p._id)));
       setSelectedIds((prev) =>
         prev.filter((id) => !visibleIds.has(String(id)))
       );
@@ -102,7 +121,7 @@ export default function SecondaryProductsPage() {
 
     const merged = new Set([
       ...selectedIds.map(String),
-      ...filteredProducts.map((p) => String(p._id)),
+      ...visibleProducts.map((p) => String(p._id)),
     ]);
     setSelectedIds(Array.from(merged));
   };
@@ -117,18 +136,19 @@ export default function SecondaryProductsPage() {
 
     await updatePrimaryProductStatus({ ids: [id] }, nextValue);
     setSelectedIds((prev) => prev.filter((x) => x !== id));
+    await loadProducts();
   };
 
   const handleBulkUpdate = async (nextValue) => {
     if (!selectedIds.length) return;
     await updatePrimaryProductStatus({ ids: selectedIds }, nextValue);
     setSelectedIds([]);
+    await loadProducts();
   };
 
   return (
     <div className="min-h-screen bg-[#f7f7f7] text-black">
       <div className="px-4 py-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="mb-4 rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
@@ -171,20 +191,31 @@ export default function SecondaryProductsPage() {
           </div>
         </div>
 
-        {/* Filters */}
         <div className="mb-4 rounded-3xl border border-black/10 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center">
-              <div className="relative w-full xl:max-w-xl">
+            <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1fr)_220px_auto]">
+              <div className="relative w-full">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
                 <input
                   type="text"
-                  placeholder="Search by name, code, category..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by product name, code, category..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className="h-11 w-full rounded-2xl border border-black/10 bg-[#fafafa] pl-10 pr-4 text-sm outline-none transition focus:border-black/30 focus:bg-white"
                 />
               </div>
+
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="h-11 w-full rounded-2xl border border-black/10 bg-[#fafafa] px-4 text-sm outline-none transition focus:border-black/30 focus:bg-white"
+              >
+                {categoryOptions.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat === "all" ? "All Categories" : cat}
+                  </option>
+                ))}
+              </select>
 
               <div className="flex flex-wrap items-center gap-2">
                 <FilterButton
@@ -218,7 +249,7 @@ export default function SecondaryProductsPage() {
               </button>
 
               <span className="rounded-2xl bg-[#f0f0f0] px-3 py-2">
-                {filteredProducts.length} products
+                {visibleProducts.length} products
               </span>
               <span className="rounded-2xl bg-[#f0f0f0] px-3 py-2">
                 {selectedIds.length} selected
@@ -227,7 +258,6 @@ export default function SecondaryProductsPage() {
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -260,17 +290,17 @@ export default function SecondaryProductsPage() {
                       </td>
                     </tr>
                   ))
-                ) : filteredProducts.length === 0 ? (
+                ) : visibleProducts.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-14 text-center">
                       <p className="text-base font-semibold">No products found</p>
                       <p className="mt-1 text-sm text-black/55">
-                        Try changing the search or filter.
+                        Try changing the search, category, or status filter.
                       </p>
                     </td>
                   </tr>
                 ) : (
-                  filteredProducts.map((product) => {
+                  visibleProducts.map((product) => {
                     const id = String(product?._id || "");
                     const checked = selectedIds.includes(id);
                     const primary = isPrimary(product);
@@ -320,7 +350,7 @@ export default function SecondaryProductsPage() {
                         </td>
 
                         <td className="px-4 py-4 align-middle">
-                          <div className="max-w-[240px] text-black/70">
+                          <div className="max-w-[260px] text-black/70">
                             {categories || "-"}
                           </div>
                         </td>

@@ -1610,5 +1610,59 @@ export const useAdminProductStore = create((set, get) => ({
 },
 
 
+fetchProductTypeList: async ({
+  page = 1,
+  limit = 100,
+  search = "",
+  category = "all",
+  status = "all",
+} = {}) => {
+  try {
+    set({ loading: true, error: null });
+
+    const params = {
+      page: String(page),
+      limit: String(limit),
+    };
+
+    if (String(search || "").trim()) {
+      params.search = String(search).trim();
+    }
+
+    if (String(category || "").trim() && category !== "all") {
+      params.category = String(category).trim();
+    }
+
+    if (status === "primary") {
+      params.isPrimaryProduct = "true";
+    } else if (status === "secondary") {
+      params.isPrimaryProduct = "false";
+    }
+
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API}?${query}`, { credentials: "include" });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to fetch products");
+
+    set({
+      products: data.products || [],
+      page: data.page || 1,
+      pages: data.pages || 1,
+      total: data.total || 0,
+    });
+
+    return data.products || [];
+  } catch (e) {
+    console.error(e);
+    set({ error: e.message });
+    toast.error(e.message);
+    return [];
+  } finally {
+    set({ loading: false });
+  }
+},
+
+
 
 }));
