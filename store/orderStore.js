@@ -558,6 +558,75 @@ export const useOrderStore = create((set, get) => ({
     return result;
   },
 
+
+  // ✅ NEW FUNCTION ONLY
+searchOrdersByLocation: async (params = {}) => {
+  get()._start();
+
+  try {
+    const query = new URLSearchParams();
+
+    if (params.state) query.set("state", String(params.state).trim());
+    if (params.pincode) query.set("pincode", String(params.pincode).trim());
+    if (params.page != null) query.set("page", String(params.page));
+    if (params.limit != null) query.set("limit", String(params.limit));
+
+    if (params.fulfillmentStatus) {
+      query.set("fulfillmentStatus", String(params.fulfillmentStatus).trim());
+    }
+
+    if (params.paymentMethod) {
+      query.set("paymentMethod", String(params.paymentMethod).trim());
+    }
+
+    if (
+      params.isConfirmed !== undefined &&
+      params.isConfirmed !== null &&
+      params.isConfirmed !== ""
+    ) {
+      query.set("isConfirmed", String(params.isConfirmed));
+    }
+
+    if (params.search) {
+      query.set("search", String(params.search).trim());
+    }
+
+    const data = await get()._get(
+      `/api/orders/location/search?${query.toString()}`,
+      { silent: true }
+    );
+
+    set({
+      orders: Array.isArray(data?.orders) ? data.orders : [],
+      ordersMeta: data?.pagination
+        ? {
+            page: Number(data.pagination.page || 1),
+            limit: Number(data.pagination.limit || 100),
+            totalCount: Number(data.pagination.total || 0),
+            totalPages: Number(data.pagination.totalPages || 1),
+            hasMore: Boolean(data.pagination.hasNextPage),
+            hasPrevPage: Boolean(data.pagination.hasPrevPage),
+          }
+        : {
+            page: 1,
+            limit: Number(params.limit || 100),
+            totalCount: 0,
+            totalPages: 1,
+            hasMore: false,
+            hasPrevPage: false,
+          },
+      loading: false,
+      error: null,
+    });
+
+    return data;
+  } catch (error) {
+    console.error("searchOrdersByLocation error:", error);
+    get()._fail(error);
+    throw error;
+  }
+},
+
   clearOrder: () => set({ order: null }),
   clearProductOrderCount: () => set({ productOrderCount: null }),
 

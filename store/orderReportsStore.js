@@ -61,6 +61,17 @@ const initialSummary = () => ({
   totalOrders: 0,
 });
 
+const initialSalesLedgerSummary = () => ({
+  rows: 0,
+  orders: 0,
+  totalDiscount: 0,
+  netInclusive: 0,
+  taxable: 0,
+  shippingCharges: 0,
+  taxAmount: 0,
+});
+
+
 const initialUnsoldSummary = () => ({
   totalUnsoldProducts: 0,
 });
@@ -108,6 +119,7 @@ export const useOrderReportsStore = create((set, get) => ({
   rows: [],
   unsoldRows: [],
   lowSellingRows: [],
+  
 
   summary: initialSummary(),
   unsoldSummary: initialUnsoldSummary(),

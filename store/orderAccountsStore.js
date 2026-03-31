@@ -2,10 +2,15 @@
 
 import { create } from "zustand";
 
+/* ---------------------------------------
+   API helpers
+---------------------------------------- */
 const API =
-  (process.env.NEXT_PUBLIC_API_URL ||
+  (
+    process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
-    "").replace(/\/+$/, "");
+    ""
+  ).replace(/\/+$/, "");
 
 const buildUrl = (path) => {
   if (!API) return path;
@@ -15,19 +20,26 @@ const buildUrl = (path) => {
 
 const qs = (params = {}) => {
   const sp = new URLSearchParams();
+
   Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || String(value).trim() === "") return;
+    if (value === undefined || value === null || String(value).trim() === "") {
+      return;
+    }
     sp.set(key, String(value));
   });
-  const s = sp.toString();
-  return s ? `?${s}` : "";
+
+  const str = sp.toString();
+  return str ? `?${str}` : "";
 };
 
-const toNum = (v, d = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : d;
+const toNum = (value, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 };
 
+/* ---------------------------------------
+   Initial filters
+---------------------------------------- */
 const initialFilters = () => ({
   month: "",
   search: "",
@@ -37,6 +49,9 @@ const initialFilters = () => ({
   limit: 50,
 });
 
+/* ---------------------------------------
+   Empty states
+---------------------------------------- */
 const emptySummary = () => ({
   totalOrders: 0,
   grossRevenue: 0,
@@ -51,10 +66,19 @@ const emptySummary = () => ({
 const emptyTotals = () => ({
   rows: 0,
   orders: 0,
-  disc: 0,
-  net: 0,
+  totalDiscount: 0,
+  netInclusive: 0,
   taxable: 0,
-  tax: 0,
+  shippingCharges: 0,
+  taxAmount: 0,
+});
+
+const emptyGSTSummary = () => ({
+  taxableValue: 0,
+  taxAmount: 0,
+  taxRate: "5%",
+  totalOrders: 0,
+  totalStates: 0,
 });
 
 const emptyMeta = () => ({
@@ -71,6 +95,9 @@ const emptyMeta = () => ({
   endDate: "",
 });
 
+/* ---------------------------------------
+   Normalizers
+---------------------------------------- */
 const normalizeSummary = (src = {}) => ({
   totalOrders: toNum(src.totalOrders),
   grossRevenue: toNum(src.grossRevenue),
@@ -85,10 +112,19 @@ const normalizeSummary = (src = {}) => ({
 const normalizeTotals = (src = {}) => ({
   rows: toNum(src.rows),
   orders: toNum(src.orders),
-  disc: toNum(src.disc),
-  net: toNum(src.net),
+  totalDiscount: toNum(src.totalDiscount ?? src.disc),
+  netInclusive: toNum(src.netInclusive ?? src.net),
   taxable: toNum(src.taxable),
-  tax: toNum(src.tax),
+  shippingCharges: toNum(src.shippingCharges),
+  taxAmount: toNum(src.taxAmount ?? src.tax),
+});
+
+const normalizeGSTSummary = (src = {}) => ({
+  taxableValue: toNum(src.taxableValue),
+  taxAmount: toNum(src.taxAmount),
+  taxRate: String(src.taxRate || "5%"),
+  totalOrders: toNum(src.totalOrders),
+  totalStates: toNum(src.totalStates),
 });
 
 const normalizeMeta = (src = {}, fallback = {}) => ({
@@ -105,6 +141,9 @@ const normalizeMeta = (src = {}, fallback = {}) => ({
   endDate: String(src.endDate || fallback.endDate || ""),
 });
 
+/* ---------------------------------------
+   CSV helpers
+---------------------------------------- */
 const revenueCsvHeaders = [
   "Order Number",
   "Date",
@@ -116,43 +155,50 @@ const revenueCsvHeaders = [
 
 const salesCsvHeaders = [
   "Order ID",
-  "Month",
-  "Customer",
+  "Order Date",
+  "Delivered Date",
+  "Customer Name",
   "State",
-  "Pay",
-  "Payment Method",
+  "Payment Type",
   "Courier",
   "Product Type",
-  "HSN",
+  "HSN Code",
   "Size",
   "Qty",
-  "Unit (incl)",
-  "Disc",
-  "Net (incl)",
+  "Unit (Inclusive Tax)",
+  "T. Discount",
+  "Net (Inclusive)",
   "Taxable",
-  "Tax",
-  "Rate",
-  "Order Total",
-  "Order Disc",
-  "Coupon",
+  "Shipping Charges",
+  "Tax Amount",
+  "Tax Rate",
+];
+
+const gstCsvHeaders = [
+  "State Name",
+  "State Code",
+  "Taxable Value",
+  "Tax Amount",
+  "Tax Rate",
+  "Total Orders",
 ];
 
 const escapeCsv = (value) => {
-  const s = String(value ?? "");
-  return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const str = String(value ?? "");
+  return /[,"\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 };
 
 const revenueOrdersToCsv = (orders = []) =>
   [
     revenueCsvHeaders.join(","),
-    ...orders.map((o) =>
+    ...orders.map((order) =>
       [
-        o.orderNumber,
-        o.deliveredAt,
-        o.paymentMethod,
-        o.fulfillmentStatus,
-        o.revenue,
-        o.discount,
+        order.orderNumber,
+        order.deliveredAt,
+        order.paymentMethod,
+        order.fulfillmentStatus,
+        order.revenue,
+        order.discount,
       ]
         .map(escapeCsv)
         .join(",")
@@ -165,25 +211,40 @@ const salesRowsToCsv = (rows = []) =>
     ...rows.map((row) =>
       [
         row.orderId,
-        row.deliveredMonth,
+        row.orderDate,
+        row.deliveredDate,
         row.customerName,
-        row.customerState,
-        row.paymentMode,
-        row.paymentMethod,
-        row.courierName,
+        row.state,
+        row.paymentType,
+        row.courier,
         row.productType,
         row.hsnCode,
-        row.productSize,
+        row.size,
         row.qty,
-        row.sellingPrice,
-        row.allocatedDiscount,
-        row.netLine,
+        row.unitInclusiveTax,
+        row.totalDiscount,
+        row.netInclusive,
+        row.taxable,
+        row.shippingCharges,
+        row.taxAmount,
+        row.taxRate,
+      ]
+        .map(escapeCsv)
+        .join(",")
+    ),
+  ].join("\n");
+
+const gstRowsToCsv = (rows = []) =>
+  [
+    gstCsvHeaders.join(","),
+    ...rows.map((row) =>
+      [
+        row.stateName,
+        row.stateCode,
         row.taxableValue,
         row.taxAmount,
         row.taxRate,
-        row.orderTotalAmount,
-        row.orderDiscount,
-        row.couponCode,
+        row.totalOrders,
       ]
         .map(escapeCsv)
         .join(",")
@@ -193,18 +254,30 @@ const salesRowsToCsv = (rows = []) =>
 const downloadBlob = (content, filename, type = "text/csv;charset=utf-8;") => {
   const blob = new Blob([content], { type });
   const link = document.createElement("a");
+
   link.href = URL.createObjectURL(blob);
   link.download = filename;
+
   document.body.appendChild(link);
   link.click();
   link.remove();
+
   URL.revokeObjectURL(link.href);
 };
 
+/* ---------------------------------------
+   Endpoints
+---------------------------------------- */
 const REPORT_ENDPOINTS = {
-  sales: "/api/orders/accounts/sales-report",
+  sales: "/api/orders/accounts/sales-ledger",
   revenue: "/api/orders/accounts/revenue-report",
+  gst: "/api/orders/accounts/gst-report",
 };
+
+const VALID_REPORT_TYPES = ["revenue", "sales", "gst"];
+
+const getSafeReportType = (type = "revenue") =>
+  VALID_REPORT_TYPES.includes(type) ? type : "revenue";
 
 const buildFetchUrl = (endpoint, filters) =>
   buildUrl(
@@ -235,18 +308,24 @@ const fetchJson = async (url, label = "report") => {
   return data;
 };
 
+/* ---------------------------------------
+   Store
+---------------------------------------- */
 export const useOrderAccountsStore = create((set, get) => ({
   reportType: "revenue",
 
-  // revenue
+  // revenue report
   orders: [],
   allOrders: [],
   summary: emptySummary(),
 
-  // sales
+  // sales ledger / gst rows
   rows: [],
   allRows: [],
   totals: emptyTotals(),
+
+  // gst summary
+  gstSummary: emptyGSTSummary(),
 
   // shared
   meta: emptyMeta(),
@@ -257,15 +336,19 @@ export const useOrderAccountsStore = create((set, get) => ({
   hydratingAll: false,
   error: "",
 
+  /* -----------------------------------
+     Filters
+  ------------------------------------ */
   setReportType: (reportType = "revenue") =>
     set({
-      reportType: reportType === "sales" ? "sales" : "revenue",
+      reportType: getSafeReportType(reportType),
       orders: [],
       allOrders: [],
       rows: [],
       allRows: [],
       summary: emptySummary(),
       totals: emptyTotals(),
+      gstSummary: emptyGSTSummary(),
       meta: emptyMeta(),
       error: "",
     }),
@@ -297,7 +380,10 @@ export const useOrderAccountsStore = create((set, get) => ({
 
   setPage: (page = 1) =>
     set((state) => ({
-      filters: { ...state.filters, page: Math.max(1, Number(page) || 1) },
+      filters: {
+        ...state.filters,
+        page: Math.max(1, Number(page) || 1),
+      },
     })),
 
   setLimit: (limit = 50) =>
@@ -318,12 +404,16 @@ export const useOrderAccountsStore = create((set, get) => ({
       allRows: [],
       summary: emptySummary(),
       totals: emptyTotals(),
+      gstSummary: emptyGSTSummary(),
       meta: emptyMeta(),
       error: "",
     }),
 
+  /* -----------------------------------
+     Fetch all pages for full CSV
+  ------------------------------------ */
   fetchAllPages: async ({ type, filters }) => {
-    const reportType = type || get().reportType || "revenue";
+    const reportType = getSafeReportType(type || get().reportType);
     const endpoint = REPORT_ENDPOINTS[reportType] || REPORT_ENDPOINTS.revenue;
 
     const baseFilters = {
@@ -340,12 +430,14 @@ export const useOrderAccountsStore = create((set, get) => ({
 
     const totalPages = Math.max(1, toNum(firstData?.meta?.totalPages, 1));
 
-    if (reportType === "sales") {
+    // sales + gst both use rows
+    if (reportType === "sales" || reportType === "gst") {
       let allRows = Array.isArray(firstData?.rows) ? [...firstData.rows] : [];
 
       if (totalPages > 1) {
         const requests = [];
-        for (let page = 2; page <= totalPages; page++) {
+
+        for (let page = 2; page <= totalPages; page += 1) {
           requests.push(
             fetchJson(
               buildFetchUrl(endpoint, { ...baseFilters, page, limit: 250 }),
@@ -355,15 +447,20 @@ export const useOrderAccountsStore = create((set, get) => ({
         }
 
         const pages = await Promise.all(requests);
-        pages.forEach((pageRows) => {
-          allRows.push(...pageRows);
-        });
+        pages.forEach((pageRows) => allRows.push(...pageRows));
       }
 
       return {
         allRows,
         meta: normalizeMeta(firstData?.meta, baseFilters),
-        totals: normalizeTotals(firstData?.totals),
+        totals:
+          reportType === "sales"
+            ? normalizeTotals(firstData?.totals)
+            : emptyTotals(),
+        gstSummary:
+          reportType === "gst"
+            ? normalizeGSTSummary(firstData?.summary)
+            : emptyGSTSummary(),
       };
     }
 
@@ -371,7 +468,8 @@ export const useOrderAccountsStore = create((set, get) => ({
 
     if (totalPages > 1) {
       const requests = [];
-      for (let page = 2; page <= totalPages; page++) {
+
+      for (let page = 2; page <= totalPages; page += 1) {
         requests.push(
           fetchJson(
             buildFetchUrl(endpoint, { ...baseFilters, page, limit: 250 }),
@@ -381,9 +479,7 @@ export const useOrderAccountsStore = create((set, get) => ({
       }
 
       const pages = await Promise.all(requests);
-      pages.forEach((pageOrders) => {
-        allOrders.push(...pageOrders);
-      });
+      pages.forEach((pageOrders) => allOrders.push(...pageOrders));
     }
 
     return {
@@ -393,28 +489,36 @@ export const useOrderAccountsStore = create((set, get) => ({
     };
   },
 
+  /* -----------------------------------
+     Main fetch
+  ------------------------------------ */
   fetchReport: async ({ type, override = {}, fetchOverall = true } = {}) => {
     const state = get();
-    const reportType = type || state.reportType || "revenue";
+    const reportType = getSafeReportType(type || state.reportType);
     const endpoint = REPORT_ENDPOINTS[reportType] || REPORT_ENDPOINTS.revenue;
     const filters = { ...state.filters, ...override };
 
     set({ loading: true, error: "" });
 
     try {
-      const data = await fetchJson(buildFetchUrl(endpoint, filters), `${reportType} report`);
+      const data = await fetchJson(
+        buildFetchUrl(endpoint, filters),
+        `${reportType} report`
+      );
 
       const normalizedMeta = normalizeMeta(data?.meta, filters);
 
-      if (reportType === "sales") {
+      // GST
+      if (reportType === "gst") {
         set({
           reportType,
           rows: Array.isArray(data?.rows) ? data.rows : [],
           allRows: fetchOverall ? get().allRows : [],
-          totals: normalizeTotals(data?.totals),
+          gstSummary: normalizeGSTSummary(data?.summary),
           orders: [],
           allOrders: [],
           summary: emptySummary(),
+          totals: emptyTotals(),
           meta: normalizedMeta,
           filters: {
             month: normalizedMeta.month,
@@ -430,8 +534,13 @@ export const useOrderAccountsStore = create((set, get) => ({
 
         if (fetchOverall) {
           set({ hydratingAll: true });
+
           try {
-            const overall = await get().fetchAllPages({ type: reportType, filters });
+            const overall = await get().fetchAllPages({
+              type: reportType,
+              filters,
+            });
+
             set({
               allRows: Array.isArray(overall?.allRows) ? overall.allRows : [],
               hydratingAll: false,
@@ -444,6 +553,52 @@ export const useOrderAccountsStore = create((set, get) => ({
         return data;
       }
 
+      // Sales
+      if (reportType === "sales") {
+        set({
+          reportType,
+          rows: Array.isArray(data?.rows) ? data.rows : [],
+          allRows: fetchOverall ? get().allRows : [],
+          totals: normalizeTotals(data?.totals),
+          orders: [],
+          allOrders: [],
+          summary: emptySummary(),
+          gstSummary: emptyGSTSummary(),
+          meta: normalizedMeta,
+          filters: {
+            month: normalizedMeta.month,
+            search: normalizedMeta.search,
+            startDate: normalizedMeta.startDate,
+            endDate: normalizedMeta.endDate,
+            page: normalizedMeta.page,
+            limit: normalizedMeta.limit,
+          },
+          loading: false,
+          error: "",
+        });
+
+        if (fetchOverall) {
+          set({ hydratingAll: true });
+
+          try {
+            const overall = await get().fetchAllPages({
+              type: reportType,
+              filters,
+            });
+
+            set({
+              allRows: Array.isArray(overall?.allRows) ? overall.allRows : [],
+              hydratingAll: false,
+            });
+          } catch {
+            set({ hydratingAll: false });
+          }
+        }
+
+        return data;
+      }
+
+      // Revenue
       set({
         reportType,
         orders: Array.isArray(data?.orders) ? data.orders : [],
@@ -452,6 +607,7 @@ export const useOrderAccountsStore = create((set, get) => ({
         rows: [],
         allRows: [],
         totals: emptyTotals(),
+        gstSummary: emptyGSTSummary(),
         meta: normalizedMeta,
         filters: {
           month: normalizedMeta.month,
@@ -467,8 +623,13 @@ export const useOrderAccountsStore = create((set, get) => ({
 
       if (fetchOverall) {
         set({ hydratingAll: true });
+
         try {
-          const overall = await get().fetchAllPages({ type: reportType, filters });
+          const overall = await get().fetchAllPages({
+            type: reportType,
+            filters,
+          });
+
           set({
             allOrders: Array.isArray(overall?.allOrders) ? overall.allOrders : [],
             hydratingAll: false,
@@ -489,15 +650,24 @@ export const useOrderAccountsStore = create((set, get) => ({
     }
   },
 
+  /* -----------------------------------
+     Wrappers
+  ------------------------------------ */
   fetchSalesReport: (override = {}, fetchOverall = true) =>
     get().fetchReport({ type: "sales", override, fetchOverall }),
 
   fetchRevenueReport: (override = {}, fetchOverall = true) =>
     get().fetchReport({ type: "revenue", override, fetchOverall }),
 
+  fetchGSTReport: (override = {}, fetchOverall = true) =>
+    get().fetchReport({ type: "gst", override, fetchOverall }),
+
+  /* -----------------------------------
+     Downloads
+  ------------------------------------ */
   downloadReportCsv: async ({ type, override = {} } = {}) => {
     const state = get();
-    const reportType = type || state.reportType || "revenue";
+    const reportType = getSafeReportType(type || state.reportType);
     const filters = { ...state.filters, ...override };
 
     set({ downloading: true, error: "" });
@@ -514,7 +684,25 @@ export const useOrderAccountsStore = create((set, get) => ({
 
         downloadBlob(
           salesRowsToCsv(allRows),
-          `sales-report-${filters.month || "all"}.csv`
+          `sales-ledger-${filters.month || "all"}.csv`
+        );
+
+        set({ downloading: false });
+        return true;
+      }
+
+      if (reportType === "gst") {
+        let allRows = state.allRows;
+
+        if (!Array.isArray(allRows) || !allRows.length) {
+          const overall = await get().fetchAllPages({ type: reportType, filters });
+          allRows = Array.isArray(overall?.allRows) ? overall.allRows : [];
+          set({ allRows });
+        }
+
+        downloadBlob(
+          gstRowsToCsv(allRows),
+          `gst-report-${filters.month || "all"}.csv`
         );
 
         set({ downloading: false });
@@ -551,6 +739,12 @@ export const useOrderAccountsStore = create((set, get) => ({
   downloadRevenueReportCsv: (override = {}) =>
     get().downloadReportCsv({ type: "revenue", override }),
 
+  downloadGSTReportCsv: (override = {}) =>
+    get().downloadReportCsv({ type: "gst", override }),
+
+  /* -----------------------------------
+     Clear
+  ------------------------------------ */
   clearReport: () =>
     set({
       orders: [],
@@ -559,7 +753,10 @@ export const useOrderAccountsStore = create((set, get) => ({
       allRows: [],
       summary: emptySummary(),
       totals: emptyTotals(),
+      gstSummary: emptyGSTSummary(),
       meta: emptyMeta(),
       error: "",
     }),
 }));
+
+export default useOrderAccountsStore;

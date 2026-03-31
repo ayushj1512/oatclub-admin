@@ -52,15 +52,16 @@ export const sidebarMenus = {
   ],
 
   accounts: [
-    { label: "Accounts Dashboard", href: "/accounts" },
-    { label: "Remittance", href: "/accounts/remittance" },
+  { label: "Accounts Dashboard", href: "/accounts" },
+  { label: "Remittance", href: "/accounts/remittance" },
 
-    { label: "Sales", href: "/accounts/sales" },
-    { label: "Revenue", href: "/accounts/revenue" },
+  { label: "Sales", href: "/accounts/sales" },
+  { label: "Revenue", href: "/accounts/revenue" },
+  { label: "GST State Wise Report", href: "/accounts/gst-state-wise-report" },
 
-    { label: "Razorpay transaction", href: "/accounts/razorpay-transaction" },
-    { label: "Razorpay Remittance", href: "/accounts/razorpay-remittance" },
-  ],
+  { label: "Razorpay transaction", href: "/accounts/razorpay-transaction" },
+  { label: "Razorpay Remittance", href: "/accounts/razorpay-remittance" },
+],
 
   inventory: [
     { label: "Inventory Dashboard", href: "/inventory" },
@@ -140,6 +141,7 @@ export const sidebarMenus = {
       label: "Product → Order Search",
       href: "/orders/search-order-by-name-or-code",
     },
+    { label: "Order Search by Location", href: "/orders/getOrderbyLocation" },
 
     { label: "Order Analytics", href: "/orders/report" },
 

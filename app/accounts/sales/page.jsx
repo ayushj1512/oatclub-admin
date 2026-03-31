@@ -21,9 +21,13 @@ const currentMonthKey = () => {
   return `${y}-${m}`;
 };
 
-/* -----------------------------
-   Small UI helpers
------------------------------- */
+const formatDate = (value) => {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-IN");
+};
+
 const StatCard = ({ label, value, hint = "" }) => (
   <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
     <div className="text-xs font-medium text-neutral-500">{label}</div>
@@ -74,22 +78,14 @@ export default function SalesReportPage() {
 
   const [searchInput, setSearchInput] = useState(search);
 
-  /* -----------------------------
-     Keep local search input synced
-  ------------------------------ */
   useEffect(() => {
     setSearchInput(search);
   }, [search]);
 
-  /* -----------------------------
-     Initial load
-  ------------------------------ */
   useEffect(() => {
     const resolvedMonth = month || currentMonthKey();
 
-    if (!month) {
-      setMonth(resolvedMonth);
-    }
+    if (!month) setMonth(resolvedMonth);
 
     fetchSalesReport({
       month: resolvedMonth,
@@ -99,17 +95,12 @@ export default function SalesReportPage() {
       startDate: startDate || "",
       endDate: endDate || "",
     }).catch(() => {});
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* -----------------------------
-     Debounced search
-  ------------------------------ */
   useEffect(() => {
     const timer = setTimeout(() => {
       const nextSearch = searchInput.trim();
-
       if (nextSearch === search) return;
 
       setSearch(nextSearch);
@@ -147,7 +138,14 @@ export default function SalesReportPage() {
     }
 
     return `Showing page ${currentPage} of ${totalPages} • ${safeRows.length} rows on this page • ${totalOrders} matched orders overall`;
-  }, [safeMeta.page, safeMeta.totalPages, safeMeta.totalOrders, safeMeta.totalRows, page, safeRows.length]);
+  }, [
+    safeMeta.page,
+    safeMeta.totalPages,
+    safeMeta.totalOrders,
+    safeMeta.totalRows,
+    page,
+    safeRows.length,
+  ]);
 
   const handleMonthChange = async (e) => {
     const value = e.target.value;
@@ -220,10 +218,9 @@ export default function SalesReportPage() {
       <div className="px-4 py-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Sales Report</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Sales Ledger</h1>
             <p className="mt-1 text-sm text-neutral-600">
-              Delivered orders only • Month level reporting • Paginated table • Full month CSV
-              download
+              Delivered orders only • Clean line-item report • Paginated table • Full CSV download
             </p>
           </div>
 
@@ -243,7 +240,7 @@ export default function SalesReportPage() {
               <input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search order, customer, state, coupon, HSN, size..."
+                placeholder="Search order, customer, state, courier, HSN, size..."
                 className="w-full rounded-xl border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-black"
               />
             </div>
@@ -276,23 +273,23 @@ export default function SalesReportPage() {
             <StatCard label="Rows" value={safeTotals.rows || 0} hint="Matched dataset" />
             <StatCard label="Orders" value={safeTotals.orders || 0} hint="Matched dataset" />
             <StatCard
-              label="Allocated Discount"
-              value={`₹ ${money(safeTotals.disc)}`}
+              label="T. Discount"
+              value={`₹ ${money(safeTotals.totalDiscount)}`}
               hint="Matched dataset"
             />
             <StatCard
               label="Net (incl)"
-              value={`₹ ${money(safeTotals.net)}`}
+              value={`₹ ${money(safeTotals.netInclusive)}`}
               hint="Matched dataset"
             />
             <StatCard
-              label="Taxable (excl)"
+              label="Taxable"
               value={`₹ ${money(safeTotals.taxable)}`}
               hint="Matched dataset"
             />
             <StatCard
-              label="Tax (5%)"
-              value={`₹ ${money(safeTotals.tax)}`}
+              label="Tax Amount"
+              value={`₹ ${money(safeTotals.taxAmount)}`}
               hint="Matched dataset"
             />
           </div>
@@ -300,44 +297,42 @@ export default function SalesReportPage() {
 
         <div className="mt-5 overflow-hidden rounded-2xl border border-neutral-200 bg-white">
           <div className="overflow-auto">
-            <table className="min-w-[2100px] w-full border-collapse">
+            <table className="min-w-[1900px] w-full border-collapse">
               <thead className="sticky top-0 z-10 bg-black text-white">
                 <tr>
                   <Th>Order ID</Th>
-                  <Th>Month</Th>
-                  <Th>Customer</Th>
+                  <Th>Order Date</Th>
+                  <Th>Delivered Date</Th>
+                  <Th>Customer Name</Th>
                   <Th>State</Th>
-                  <Th>Pay</Th>
-                  <Th>Payment Method</Th>
+                  <Th>Payment Type</Th>
                   <Th>Courier</Th>
                   <Th>Product Type</Th>
-                  <Th>HSN</Th>
+                  <Th>HSN Code</Th>
                   <Th>Size</Th>
                   <Th>Qty</Th>
-                  <Th>Unit (incl)</Th>
-                  <Th>Disc</Th>
-                  <Th>Net (incl)</Th>
+                  <Th>Unit (Inclusive Tax)</Th>
+                  <Th>T. Discount</Th>
+                  <Th>Net (Inclusive)</Th>
                   <Th>Taxable</Th>
-                  <Th>Tax</Th>
-                  <Th>Rate</Th>
-                  <Th>Order Total</Th>
-                  <Th>Order Disc</Th>
-                  <Th>Coupon</Th>
+                  <Th>Shipping Charges</Th>
+                  <Th>Tax Amount</Th>
+                  <Th>Tax Rate</Th>
                 </tr>
               </thead>
 
               <tbody className="text-sm">
                 {loading && (
                   <tr>
-                    <td colSpan={20} className="px-4 py-8 text-center text-neutral-500">
-                      Loading sales report...
+                    <td colSpan={18} className="px-4 py-8 text-center text-neutral-500">
+                      Loading sales ledger...
                     </td>
                   </tr>
                 )}
 
                 {!loading && error && (
                   <tr>
-                    <td colSpan={20} className="px-4 py-8 text-center text-red-600">
+                    <td colSpan={18} className="px-4 py-8 text-center text-red-600">
                       {String(error)}
                     </td>
                   </tr>
@@ -345,7 +340,7 @@ export default function SalesReportPage() {
 
                 {!loading && !error && safeRows.length === 0 && (
                   <tr>
-                    <td colSpan={20} className="px-4 py-8 text-center text-neutral-500">
+                    <td colSpan={18} className="px-4 py-8 text-center text-neutral-500">
                       No delivered orders found for the selected filters.
                     </td>
                   </tr>
@@ -363,29 +358,27 @@ export default function SalesReportPage() {
                           {row?.orderId || "-"}
                         </span>
                       </Td>
-                      <Td>{row?.deliveredMonth || "-"}</Td>
+                      <Td>{formatDate(row?.orderDate)}</Td>
+                      <Td>{formatDate(row?.deliveredDate)}</Td>
                       <Td>{row?.customerName || "-"}</Td>
-                      <Td>{row?.customerState || "-"}</Td>
-                      <Td>{row?.paymentMode || "-"}</Td>
-                      <Td>{row?.paymentMethod || "-"}</Td>
-                      <Td>{row?.courierName || "-"}</Td>
+                      <Td>{row?.state || "-"}</Td>
+                      <Td>{row?.paymentType || "-"}</Td>
+                      <Td>{row?.courier || "-"}</Td>
                       <Td>{row?.productType || "-"}</Td>
                       <Td>{row?.hsnCode || DEFAULT_HSN}</Td>
-                      <Td>{row?.productSize || "-"}</Td>
+                      <Td>{row?.size || "-"}</Td>
                       <Td>{row?.qty ?? 0}</Td>
-                      <Td>₹ {money(row?.sellingPrice)}</Td>
+                      <Td>₹ {money(row?.unitInclusiveTax)}</Td>
                       <Td>
                         <span className="inline-flex rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium">
-                          ₹ {money(row?.allocatedDiscount)}
+                          ₹ {money(row?.totalDiscount)}
                         </span>
                       </Td>
-                      <Td className="font-medium">₹ {money(row?.netLine)}</Td>
-                      <Td>₹ {money(row?.taxableValue)}</Td>
+                      <Td className="font-medium">₹ {money(row?.netInclusive)}</Td>
+                      <Td>₹ {money(row?.taxable)}</Td>
+                      <Td>₹ {money(row?.shippingCharges)}</Td>
                       <Td>₹ {money(row?.taxAmount)}</Td>
                       <Td>{row?.taxRate || "5%"}</Td>
-                      <Td>₹ {money(row?.orderTotalAmount)}</Td>
-                      <Td>₹ {money(row?.orderDiscount)}</Td>
-                      <Td>{row?.couponCode || "-"}</Td>
                     </tr>
                   ))}
               </tbody>
@@ -422,9 +415,8 @@ export default function SalesReportPage() {
         </div>
 
         <div className="mt-3 text-xs text-neutral-500">
-          Notes: table paginated hai, lekin <b>Download Full CSV</b> selected month/search ke
-          according <b>saara matched data</b> export karega, sirf current page nahi. Missing HSN
-          falls back to <b>{DEFAULT_HSN}</b>.
+          Missing HSN falls back to <b>{DEFAULT_HSN}</b>. CSV download exports full matched data,
+          not just current page.
         </div>
       </div>
     </div>
