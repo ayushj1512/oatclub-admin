@@ -81,54 +81,76 @@ const DOMAIN_LIST = [
   { id: "tickets", name: "Tickets / Issues", icon: Ticket, route: "/tickets" },
   { id: "coupons", name: "Coupons", icon: TicketPercent, route: "/coupons" },
   { id: "wordpress", name: "WordPress Orders", icon: Globe, route: "/wordpress" },
-  { id: "collaboration", name: "Influencer Collaborations", icon: Handshake, route: "/collaboration" },
+  {
+    id: "collaboration",
+    name: "Influencer Collaborations",
+    icon: Handshake,
+    route: "/influencer-collaboration-program",
+  },
 ];
+
+const CARD_HINTS = {
+  rma: "View Return / Exchange requests",
+  collaboration: "Track ongoing influencer collaborations",
+  footwear: "Manage footwear catalog & variants",
+  shiprocket: "Manage Shiprocket sync, labels & tracking",
+  bluedart: "Manage Blue Dart shipments, labels & tracking",
+  reviews: "Moderate product reviews & ratings",
+  fabrics: "Manage fabric records & mappings",
+};
 
 export default function HomeDashboard() {
   const router = useRouter();
 
   const admin = useLoginStore((s) => s.admin);
   const role = admin?.role || "viewer";
-  const permissions =
-    (admin?.permissions?.length ? admin.permissions : ROLE_DEFAULT_PERMS[role]) || [];
+
+  const permissions = useMemo(() => {
+    if (admin?.permissions?.length) return admin.permissions;
+    return ROLE_DEFAULT_PERMS[role] || [];
+  }, [admin?.permissions, role]);
 
   const [quote, setQuote] = useState(QUOTES[0]);
   const [sortBy, setSortBy] = useState("name_asc");
-  const lastIdx = useRef(-1);
+  const lastQuoteIndex = useRef(-1);
 
   const pickQuote = () => {
-    const n = QUOTES.length;
-    if (!n) return;
-    let i = Math.floor(Math.random() * n);
-    if (i === lastIdx.current) i = (i + 1) % n;
-    lastIdx.current = i;
-    setQuote(QUOTES[i]);
+    if (!QUOTES.length) return;
+
+    let nextIndex = Math.floor(Math.random() * QUOTES.length);
+    if (nextIndex === lastQuoteIndex.current) {
+      nextIndex = (nextIndex + 1) % QUOTES.length;
+    }
+
+    lastQuoteIndex.current = nextIndex;
+    setQuote(QUOTES[nextIndex]);
   };
 
   useEffect(() => {
     pickQuote();
-    const t = setInterval(pickQuote, 9000);
-    return () => clearInterval(t);
+    const timer = setInterval(pickQuote, 9000);
+    return () => clearInterval(timer);
   }, []);
 
   const allowedDomains = useMemo(() => {
-    return DOMAIN_LIST.filter((d) =>
-      hasPermission(permissions, DOMAIN_PERMISSIONS[d.id])
+    return DOMAIN_LIST.filter((item) =>
+      hasPermission(permissions, DOMAIN_PERMISSIONS[item.id])
     );
   }, [permissions]);
 
   const sortedDomains = useMemo(() => {
-    const arr = [...allowedDomains];
-    if (sortBy === "name_desc") {
-      return arr.sort((a, b) => b.name.localeCompare(a.name));
-    }
-    return arr.sort((a, b) => a.name.localeCompare(b.name));
+    const items = [...allowedDomains];
+    return items.sort((a, b) =>
+      sortBy === "name_desc"
+        ? b.name.localeCompare(a.name)
+        : a.name.localeCompare(b.name)
+    );
   }, [allowedDomains, sortBy]);
 
   return (
     <div className="min-h-screen bg-gray-50 px-3 py-6 sm:px-6 sm:py-10 md:px-8">
       <div className="mb-6">
-        <div className="w-full rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-4 py-4 shadow-sm sm:px-5">
+        <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-4 py-4 shadow-sm sm:px-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
@@ -138,9 +160,11 @@ export default function HomeDashboard() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="font-semibold text-gray-900">Daily Focus</div>
+
                   <span className="hidden items-center gap-1 rounded-full bg-blue-600 px-2 py-1 text-[11px] text-white sm:inline-flex">
                     <Quote size={12} /> Quote
                   </span>
+
                   <span className="inline-flex items-center rounded-full border border-blue-100 bg-white px-2 py-1 text-[11px] text-blue-700">
                     {quote.tag}
                   </span>
@@ -167,7 +191,7 @@ export default function HomeDashboard() {
               <button
                 type="button"
                 onClick={pickQuote}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm hover:bg-gray-50"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:bg-gray-50"
               >
                 <RefreshCw size={16} />
               </button>
@@ -203,8 +227,8 @@ export default function HomeDashboard() {
           <AnimatePresence initial={false}>
             {sortedDomains.map(({ id, name, icon: Icon, route }) => (
               <motion.button
-                layout
                 key={id}
+                layout
                 type="button"
                 onClick={() => router.push(route)}
                 initial={{ opacity: 0, scale: 0.98 }}
@@ -222,45 +246,9 @@ export default function HomeDashboard() {
                   {name}
                 </h2>
 
-                {id === "rma" && (
+                {CARD_HINTS[id] && (
                   <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
-                    View Return / Exchange requests
-                  </p>
-                )}
-
-                {id === "collaboration" && (
-                  <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
-                    Track ongoing influencer collaborations
-                  </p>
-                )}
-
-                {id === "footwear" && (
-                  <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
-                    Manage footwear catalog & variants
-                  </p>
-                )}
-
-                {id === "shiprocket" && (
-                  <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
-                    Manage Shiprocket sync, labels & tracking
-                  </p>
-                )}
-
-                {id === "bluedart" && (
-                  <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
-                    Manage Blue Dart shipments, labels & tracking
-                  </p>
-                )}
-
-                {id === "reviews" && (
-                  <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
-                    Moderate product reviews & ratings
-                  </p>
-                )}
-
-                {id === "fabrics" && (
-                  <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
-                    Manage fabric records & mappings
+                    {CARD_HINTS[id]}
                   </p>
                 )}
               </motion.button>

@@ -79,6 +79,8 @@ export const useOrderStore = create((set, get) => ({
   productOrderCount: null,
   ordersMeta: null,
   customerSupportOrderDetails: {},
+  duplicateAlerts: [],
+duplicateLoading: false,
 
   _start: () => set({ loading: true, error: null }),
   _success: () => set({ loading: false }),
@@ -625,6 +627,21 @@ searchOrdersByLocation: async (params = {}) => {
     get()._fail(error);
     throw error;
   }
+},
+
+
+/* ---------------- DUPLICATE ORDER ALERTS ---------------- */
+
+// fetch only (no marking)
+fetchDuplicateOrderAlerts: async () => {
+  const data = await get()._get(`/api/orders/duplicate-alerts`);
+  return data;
+},
+
+// detect + mark in adminRemarks
+markDuplicateOrderAlerts: async () => {
+  const data = await get()._post(`/api/orders/duplicate-alerts/mark`, {});
+  return data;
 },
 
   clearOrder: () => set({ order: null }),

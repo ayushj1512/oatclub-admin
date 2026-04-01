@@ -1,7 +1,4 @@
 // components/common/sidebarConfig.js
-// ------------------------------
-// SIDEBAR MENUS
-// ------------------------------
 
 export const sidebarMenus = {
   dashboard: [
@@ -52,16 +49,14 @@ export const sidebarMenus = {
   ],
 
   accounts: [
-  { label: "Accounts Dashboard", href: "/accounts" },
-  { label: "Remittance", href: "/accounts/remittance" },
-
-  { label: "Sales", href: "/accounts/sales" },
-  { label: "Revenue", href: "/accounts/revenue" },
-  { label: "GST State Wise Report", href: "/accounts/gst-state-wise-report" },
-
-  { label: "Razorpay transaction", href: "/accounts/razorpay-transaction" },
-  { label: "Razorpay Remittance", href: "/accounts/razorpay-remittance" },
-],
+    { label: "Accounts Dashboard", href: "/accounts" },
+    { label: "Remittance", href: "/accounts/remittance" },
+    { label: "Sales", href: "/accounts/sales" },
+    { label: "Revenue", href: "/accounts/revenue" },
+    { label: "GST State Wise Report", href: "/accounts/gst-state-wise-report" },
+    { label: "Razorpay transaction", href: "/accounts/razorpay-transaction" },
+    { label: "Razorpay Remittance", href: "/accounts/razorpay-remittance" },
+  ],
 
   inventory: [
     { label: "Inventory Dashboard", href: "/inventory" },
@@ -74,13 +69,12 @@ export const sidebarMenus = {
   ],
 
   fabrics: [
-  { label: "Fabric Dashboard", href: "/fabrics" },
-  { label: "Add Fabric", href: "/fabrics/add-fabric" },
-  { label: "Fabric Inventory", href: "/fabrics/fabric-inventory" },
-  // { label: "Add Inventory", href: "/fabrics/fabric-inventory/add" },
-  { label: "Fabric Actions", href: "/fabrics/actions" },
-  { label: "Fabric Logs", href: "/fabrics/logs" },
-],
+    { label: "Fabric Dashboard", href: "/fabrics" },
+    { label: "Add Fabric", href: "/fabrics/add-fabric" },
+    { label: "Fabric Inventory", href: "/fabrics/fabric-inventory" },
+    { label: "Fabric Actions", href: "/fabrics/actions" },
+    { label: "Fabric Logs", href: "/fabrics/logs" },
+  ],
 
   media: [
     { label: "Media Library", href: "/media" },
@@ -135,33 +129,27 @@ export const sidebarMenus = {
   orders: [
     { label: "Orders Dashboard", href: "/orders" },
     { label: "All Orders", href: "/orders/all" },
-
     { label: "Order Search", href: "/orders/search" },
     {
       label: "Product → Order Search",
       href: "/orders/search-order-by-name-or-code",
     },
     { label: "Order Search by Location", href: "/orders/getOrderbyLocation" },
-
+    { label: "Duplicate Orders", href: "/orders/duplicate-orders" },
     { label: "Order Analytics", href: "/orders/report" },
-
     { label: "Processing", href: "/orders/processing" },
     { label: "Packed", href: "/orders/packed" },
     { label: "Shipped", href: "/orders/shipped" },
     { label: "Delivered", href: "/orders/delivered" },
-
     { label: "Failed", href: "/orders/failed" },
     { label: "Cancelled", href: "/orders/cancelled" },
     { label: "Refunded", href: "/orders/refunded" },
-
     { label: "Return Requested", href: "/orders/return_requested" },
     { label: "Returned", href: "/orders/returned" },
     { label: "Exchange Requested", href: "/orders/exchange_requested" },
     { label: "Exchanged", href: "/orders/exchanged" },
-
     { label: "Pickup Initiated", href: "/orders/pickup_initiated" },
     { label: "RTO / NDR", href: "/orders/rto" },
-
     { label: "Order Remark", href: "/orders/remark" },
     { label: "Invoice", href: "/orders/invoices" },
     { label: "RMA Requests", href: "/orders/rma" },
@@ -220,6 +208,7 @@ export const sidebarMenus = {
       label: "Customer Confirmation",
       href: "/customer-support/customer-confirmation",
     },
+    { label: "Duplicate Orders", href: "/customer-support/duplicate-orders" },
     { label: "Order Remark", href: "/customer-support/remark" },
     { label: "All Orders", href: "/customer-support/all-orders" },
     { label: "All Tickets", href: "/customer-support/all" },
@@ -255,28 +244,25 @@ export const sidebarMenus = {
     { label: "Analytics", href: "/bluedart/analytics" },
   ],
 
- reports: [
-  { label: "Reports Home", href: "/reports" },
-  {
-    label: "Order & Business Overview",
-    href: "/reports/Order-Business-Overview",
-  },
-  {
-    label: "Revenue by Status",
-    href: "/reports/revenue-by-status",
-  },
-  { label: "Product Sales", href: "/reports/ProductSoldReport" },
-  { label: "Low Product Sale", href: "/reports/low-product-sale" },
-  { label: "Product Unsold", href: "/reports/ProductUnSoldReport" },
-  { label: "Orders Report", href: "/reports/Orders" },
-  { label: "ROAS", href: "/reports/ROAS" },
-  {
-    label: "Operations Status",
-    href: "/reports/Operations-Order-Status",
-  },
-  { label: "RTO Report", href: "/reports/RTO" },
-  { label: "Cancellation Report", href: "/reports/Cancellation" },
-],
+  reports: [
+    { label: "Reports Home", href: "/reports" },
+    {
+      label: "Order & Business Overview",
+      href: "/reports/Order-Business-Overview",
+    },
+    { label: "Revenue by Status", href: "/reports/revenue-by-status" },
+    { label: "Product Sales", href: "/reports/ProductSoldReport" },
+    { label: "Low Product Sale", href: "/reports/low-product-sale" },
+    { label: "Product Unsold", href: "/reports/ProductUnSoldReport" },
+    { label: "Orders Report", href: "/reports/Orders" },
+    { label: "ROAS", href: "/reports/ROAS" },
+    {
+      label: "Operations Status",
+      href: "/reports/Operations-Order-Status",
+    },
+    { label: "RTO Report", href: "/reports/RTO" },
+    { label: "Cancellation Report", href: "/reports/Cancellation" },
+  ],
 
   account_user: [
     { label: "Profile", href: "/account/profile" },
@@ -293,32 +279,29 @@ export const sidebarMenus = {
   ],
 
   collaboration: [
-    { label: "Collaboration Dashboard", href: "/collaboration" },
-    { label: "Add Collaboration", href: "/collaboration/add" },
+    { label: "Influencer Program", href: "/influencer-collaboration-program" },
+    { label: "All Collaborations", href: "/influencer-collaboration-program/all" },
+    { label: "Add Collaboration", href: "/influencer-collaboration-program/add" },
+    { label: "Search", href: "/influencer-collaboration-program/search" },
+    { label: "Analytics", href: "/influencer-collaboration-program/analytics" },
   ],
 
   wordpress: [{ label: "WP Orders", href: "/wordpress/orders" }],
 };
 
-// ------------------------------
-// ROUTE → SIDEBAR CATEGORY MAP
-// ------------------------------
-
 export const routeSidebarMap = [
   { prefix: "/superadmin", key: "superadmin" },
   { prefix: "/customer-support", key: "customer_support" },
   { prefix: "/reports", key: "reports" },
-
   { prefix: "/fabrics", key: "fabrics" },
-
   { prefix: "/inventory", key: "inventory" },
   { prefix: "/analytics", key: "analytics" },
   { prefix: "/reels", key: "reels" },
   { prefix: "/marketing", key: "marketing" },
+  { prefix: "/influencer-collaboration-program", key: "collaboration" },
   { prefix: "/collaboration", key: "collaboration" },
   { prefix: "/shiprocket", key: "shiprocket" },
   { prefix: "/bluedart", key: "bluedart" },
-
   { prefix: "/dashboard", key: "dashboard" },
   { prefix: "/designing", key: "designing" },
   { prefix: "/production", key: "production" },

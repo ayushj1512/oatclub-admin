@@ -27,7 +27,10 @@ export const DOMAIN_PERMISSIONS = {
   tickets: "manageTickets",
   coupons: "manageCoupons",
   wordpress: "manageWordpressOrders",
-  collaboration: "manageCollaboration",
+
+  // ✅ UPDATED (for influencer-collaboration-program)
+  collaboration: "manageInfluencerProgram",
+
   warehouse: "manageProduction",
 };
 
@@ -51,7 +54,11 @@ export const ROLE_DEFAULT_PERMS = {
 
   viewer: ["viewReports", "viewAnalytics"],
 
-  influencer: ["manageMedia", "manageReels"],
+  influencer: [
+    "manageMedia",
+    "manageReels",
+    "manageInfluencerProgram", // ✅ added access
+  ],
 
   warehouse: ["manageProduction", "manageOrders"],
 };
