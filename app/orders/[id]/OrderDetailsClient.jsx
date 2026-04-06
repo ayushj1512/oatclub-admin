@@ -19,6 +19,7 @@ import OrderPrintPanel from "@/components/orders/OrderPrintPanel";
 import OrderRmaMention from "../../../components/orders/OrderRma";
 import OrderTrackingCard from "@/components/orders/OrderTrackingCard";
 import OrderCreateRmaPanel from "@/components/orders/OrderCreateRmaPanel";
+import OrderServiceabilityCard from "@/components/orders/OrderServiceabilityCard";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 const STORE_URL = "https://www.mirayfashions.com";
@@ -457,8 +458,10 @@ export default function OrderDetailsClient({ id }) {
             address={order.billingAddressSnapshot}
             onRefresh={() => fetchOrderById(order._id)}
           />
-        </div>
 
+        
+        </div>
+  <OrderServiceabilityCard order={order} />
         {/* STATUS UPDATE */}
         <Card>
           <h2 className="text-base font-semibold mb-4">Order Status</h2>
