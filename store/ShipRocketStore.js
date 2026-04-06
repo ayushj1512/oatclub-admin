@@ -41,15 +41,19 @@ const normalizeError = (res, data) => {
   return e;
 };
 
+const toBoolLike = (value) => {
+  if (typeof value === "boolean") return value;
+  const v = String(value || "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+};
+
 /**
  * ✅ Shiprocket Store (Admin)
+ * - Get token
+ * - Check serviceability
  * - Book shipment
  * - Reverse pickup
  * - Sync tracking
- *
- * ✅ Handles new backend behavior:
- * - backend tries shipmentId and may fallback to orders/show (orderId)
- * - may return 503 with code SHIPROCKET_UPSTREAM_DOWN (temporary)
  */
 export const useShiprocketStore = create((set, get) => ({
   /* ============================================================
@@ -63,13 +67,17 @@ export const useShiprocketStore = create((set, get) => ({
   token: null,
   tokenFetchedAt: null,
 
+  serviceabilityLoading: false,
+  serviceabilityError: null,
+  serviceabilityResult: null,
+
   result: null,
   bulkResult: null,
   reverseResult: null,
 
   syncLoading: false,
   syncError: null,
-  syncErrorCode: null, // ✅ NEW
+  syncErrorCode: null,
   syncResult: null,
 
   /* ============================================================
@@ -91,7 +99,24 @@ export const useShiprocketStore = create((set, get) => ({
       tokenError: err?.message || "Token fetch failed",
     }),
 
-  _startSync: () => set({ syncLoading: true, syncError: null, syncErrorCode: null }),
+  _startServiceability: () =>
+    set({
+      serviceabilityLoading: true,
+      serviceabilityError: null,
+    }),
+  _successServiceability: () => set({ serviceabilityLoading: false }),
+  _errorServiceability: (err) =>
+    set({
+      serviceabilityLoading: false,
+      serviceabilityError: err?.message || "Serviceability check failed",
+    }),
+
+  _startSync: () =>
+    set({
+      syncLoading: true,
+      syncError: null,
+      syncErrorCode: null,
+    }),
   _successSync: () => set({ syncLoading: false }),
   _errorSync: (err) =>
     set({
@@ -131,15 +156,56 @@ export const useShiprocketStore = create((set, get) => ({
   },
 
   /* ============================================================
+     CHECK SHIPROCKET SERVICEABILITY
+     GET /api/shiprocket/serviceability
+  ============================================================ */
+  checkServiceability: async ({
+    pickupPincode,
+    deliveryPincode,
+    weight = 0.5,
+    cod = false,
+  }) => {
+    if (!pickupPincode) throw new Error("pickupPincode is required");
+    if (!deliveryPincode) throw new Error("deliveryPincode is required");
+
+    get()._startServiceability();
+
+    try {
+      const params = {
+        pickupPincode: String(pickupPincode).trim(),
+        deliveryPincode: String(deliveryPincode).trim(),
+        weight: String(Number(weight || 0.5)),
+        cod: toBoolLike(cod) ? "1" : "0",
+      };
+
+      const res = await fetch(buildUrl("/api/shiprocket/serviceability", params), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "include",
+      });
+
+      const data = await safeJson(res);
+      if (!res.ok) throw normalizeError(res, data);
+
+      set({ serviceabilityResult: data });
+      get()._successServiceability();
+      return data;
+    } catch (e) {
+      get()._errorServiceability(e);
+      throw e;
+    }
+  },
+
+  /* ============================================================
      BOOK SHIPROCKET (ADMIN)
-     POST /api/orders/:id/shiprocket/book
+     POST /api/orders/:id/ship
   ============================================================ */
   bookShipment: async (orderId) => {
     if (!orderId) throw new Error("orderId is required");
 
     get()._start();
     try {
-      const res = await fetch(buildUrl(`/api/orders/${orderId}/shiprocket/book`), {
+      const res = await fetch(buildUrl(`/api/orders/${orderId}/ship`), {
         method: "POST",
         headers: { Accept: "application/json" },
         credentials: "include",
@@ -167,13 +233,16 @@ export const useShiprocketStore = create((set, get) => ({
     let orderId = "";
     let orderNumber = "";
 
-    if (typeof input === "string") orderId = String(input).trim();
-    else {
+    if (typeof input === "string") {
+      orderId = String(input).trim();
+    } else {
       orderId = String(input?.orderId || "").trim();
       orderNumber = String(input?.orderNumber || "").trim();
     }
 
-    if (!orderId && !orderNumber) throw new Error("orderId or orderNumber is required");
+    if (!orderId && !orderNumber) {
+      throw new Error("orderId or orderNumber is required");
+    }
 
     get()._startSync();
     try {
@@ -260,11 +329,13 @@ export const useShiprocketStore = create((set, get) => ({
   ============================================================ */
   clearError: () => set({ error: null }),
   clearTokenError: () => set({ tokenError: null }),
+  clearServiceabilityError: () => set({ serviceabilityError: null }),
   clearSyncError: () => set({ syncError: null, syncErrorCode: null }),
 
   clearResult: () => set({ result: null }),
   clearBulkResult: () => set({ bulkResult: null }),
   clearReverseResult: () => set({ reverseResult: null }),
+  clearServiceabilityResult: () => set({ serviceabilityResult: null }),
   clearSyncResult: () => set({ syncResult: null }),
 
   resetStore: () =>
@@ -276,6 +347,10 @@ export const useShiprocketStore = create((set, get) => ({
       tokenError: null,
       token: null,
       tokenFetchedAt: null,
+
+      serviceabilityLoading: false,
+      serviceabilityError: null,
+      serviceabilityResult: null,
 
       result: null,
       bulkResult: null,

@@ -31,7 +31,8 @@ export const sidebarMenus = {
 
   production: [
     { label: "Production Dashboard", href: "/production" },
-    { label: "Production Jobs", href: "/production/production-job" },
+    { label: "All Production Jobs", href: "/production/all-production-job" },
+    { label: "Confirmed Production Jobs", href: "/production/production-job" },
     { label: "Packed Orders", href: "/production/packed" },
     { label: "Sampling", href: "/production/sampling" },
     { label: "Stock Update", href: "/production/stock-update" },
@@ -231,6 +232,7 @@ export const sidebarMenus = {
 
   shiprocket: [
     { label: "Shiprocket Dashboard", href: "/shiprocket" },
+      { label: "Serviceability Check", href: "/shiprocket/serviceability-check" },
     { label: "Authentication API", href: "/shiprocket/authentication-api" },
     { label: "Not Deliverables", href: "/shiprocket/not-deliverables" },
   ],
@@ -280,8 +282,14 @@ export const sidebarMenus = {
 
   collaboration: [
     { label: "Influencer Program", href: "/influencer-collaboration-program" },
-    { label: "All Collaborations", href: "/influencer-collaboration-program/all" },
-    { label: "Add Collaboration", href: "/influencer-collaboration-program/add" },
+    {
+      label: "All Collaborations",
+      href: "/influencer-collaboration-program/all",
+    },
+    {
+      label: "Add Collaboration",
+      href: "/influencer-collaboration-program/add",
+    },
     { label: "Search", href: "/influencer-collaboration-program/search" },
     { label: "Analytics", href: "/influencer-collaboration-program/analytics" },
   ],
