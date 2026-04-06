@@ -5,7 +5,9 @@ const BASE_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || "").trim();
 const apiBase = BASE_URL ? BASE_URL.replace(/\/+$/, "") : "";
 const API = `${apiBase}/api/orders`;
 
-/* ---------------- helpers ---------------- */
+/* =========================================================
+   HELPERS
+========================================================= */
 const safeStr = (v) => String(v ?? "").trim();
 
 const toCSV = (v) => {
@@ -40,21 +42,24 @@ const buildQueryString = (params = {}) => {
   const q = safeStr(params.q);
   const from = safeStr(params.from);
   const to = safeStr(params.to);
+  const sort = safeStr(params.sort);
 
   if (q) qs.set("q", q);
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
-
-  if (params.all != null) qs.set("all", toBool(params.all) ? "true" : "false");
-
-  const sort = safeStr(params.sort);
   if (sort) qs.set("sort", sort);
+
+  if (params.all != null) {
+    qs.set("all", toBool(params.all) ? "true" : "false");
+  }
 
   const page = toNum(params.page, 0);
   const limit = toNum(params.limit, 0);
 
   if (page > 0) qs.set("page", String(page));
-  if (limit > 0 || String(params.limit) === "0") qs.set("limit", String(params.limit));
+  if (limit > 0 || String(params.limit) === "0") {
+    qs.set("limit", String(params.limit));
+  }
 
   return qs.toString();
 };
@@ -92,7 +97,9 @@ const getFileNameFromResponse = (res, fallback = "download.xlsx") => {
   }
 };
 
-/* ---------------- defaults ---------------- */
+/* =========================================================
+   DEFAULTS
+========================================================= */
 const DEFAULT_FILTERS = {
   fulfillmentStatus: "processing",
   priority: "",
@@ -120,6 +127,10 @@ const DEFAULT_JOB_SUMMARY = {
   totalQtyToProduce: 0,
   totalOrdersCovered: 0,
   totalReservations: 0,
+  totalOrderedQty: 0,
+  totalReservedQty: 0,
+  totalReservedGroups: 0,
+  totalUnreservedGroups: 0,
 };
 
 const DEFAULT_JOB_PAGINATION = {
@@ -131,11 +142,10 @@ const DEFAULT_JOB_PAGINATION = {
 };
 
 export const useAdminProductionStore = create((set, get) => ({
-  /* ============================================================
-    STATE
-  ============================================================ */
+  /* =========================================================
+     STATE
+  ========================================================= */
   queue: [],
-
   summary: {
     processing: 0,
     packed: 0,
@@ -161,20 +171,21 @@ export const useAdminProductionStore = create((set, get) => ({
   productionJobFilters: { ...DEFAULT_JOB_FILTERS },
 
   total: 0,
+
   loadingQueue: false,
   loadingSummary: false,
-
   loadingProductionJobs: false,
   exportingProductionJobs: false,
 
   updatingPacked: false,
   updatingShipped: false,
   updatingBulkShipped: false,
+
   error: null,
 
-  /* ============================================================
-    HELPERS
-  ============================================================ */
+  /* =========================================================
+     BASIC HELPERS
+  ========================================================= */
   clearError: () => set({ error: null }),
 
   setFulfillmentStatus: (status) =>
@@ -198,7 +209,11 @@ export const useAdminProductionStore = create((set, get) => ({
 
   setDateRange: ({ from = "", to = "" } = {}) =>
     set((state) => ({
-      filters: { ...state.filters, from: safeStr(from), to: safeStr(to) },
+      filters: {
+        ...state.filters,
+        from: safeStr(from),
+        to: safeStr(to),
+      },
     })),
 
   resetFilters: () =>
@@ -210,7 +225,6 @@ export const useAdminProductionStore = create((set, get) => ({
   setProductionJobFilters: (partial = {}) =>
     set((state) => {
       const next = { ...state.productionJobFilters, ...partial };
-
       const changedKeys = Object.keys(partial || {});
       const shouldResetPage = changedKeys.some((key) => key !== "page");
 
@@ -218,9 +232,7 @@ export const useAdminProductionStore = create((set, get) => ({
         next.page = 1;
       }
 
-      return {
-        productionJobFilters: next,
-      };
+      return { productionJobFilters: next };
     }),
 
   setProductionJobSearch: (q = "") =>
@@ -247,16 +259,17 @@ export const useAdminProductionStore = create((set, get) => ({
       productionJobFilters: { ...DEFAULT_JOB_FILTERS },
     }),
 
-  /* ============================================================
-    FETCH PRODUCTION QUEUE
-  ============================================================ */
+  /* =========================================================
+     FETCH PRODUCTION QUEUE
+  ========================================================= */
   fetchProductionQueue: async (params = {}) => {
     try {
       set({ loadingQueue: true, error: null });
 
       const state = get();
       const merged = { ...state.filters, ...params };
-      const status = merged.fulfillmentStatus || state.fulfillmentStatus || "processing";
+      const status =
+        merged.fulfillmentStatus || state.fulfillmentStatus || "processing";
 
       merged.fulfillmentStatus = status;
       if (merged.all == null) merged.all = true;
@@ -269,13 +282,13 @@ export const useAdminProductionStore = create((set, get) => ({
       const data = await parseJson(res);
 
       set((s) => ({
-        queue: data.orders || [],
+        queue: Array.isArray(data.orders) ? data.orders : [],
         total: Number(data.total || (data.orders || []).length || 0),
         fulfillmentStatus: status,
         filters: { ...s.filters, ...merged, fulfillmentStatus: status },
       }));
 
-      return data.orders || [];
+      return Array.isArray(data.orders) ? data.orders : [];
     } catch (e) {
       console.error("❌ fetchProductionQueue error:", e);
       set({ error: e.message, queue: [] });
@@ -286,9 +299,9 @@ export const useAdminProductionStore = create((set, get) => ({
     }
   },
 
-  /* ============================================================
-    FETCH PRODUCTION SUMMARY
-  ============================================================ */
+  /* =========================================================
+     FETCH PRODUCTION SUMMARY
+  ========================================================= */
   fetchProductionSummary: async () => {
     try {
       set({ loadingSummary: true, error: null });
@@ -314,13 +327,9 @@ export const useAdminProductionStore = create((set, get) => ({
     }
   },
 
-  /* ============================================================
-    FETCH PRODUCTION JOBS
-    logic:
-    - reservation.status = pending
-    - reservation.refType = order
-    - joined order.isConfirmed = true
-  ============================================================ */
+  /* =========================================================
+     FETCH PRODUCTION JOBS
+  ========================================================= */
   fetchProductionJobs: async (params = {}) => {
     try {
       set({ loadingProductionJobs: true, error: null });
@@ -328,8 +337,8 @@ export const useAdminProductionStore = create((set, get) => ({
       const state = get();
       const merged = { ...state.productionJobFilters, ...params };
 
-      if (merged.page == null || toNum(merged.page, 0) <= 0) merged.page = 1;
-      if (merged.limit == null || toNum(merged.limit, 0) <= 0) merged.limit = 50;
+      if (merged.page == null || toNum(merged.page) <= 0) merged.page = 1;
+      if (merged.limit == null || toNum(merged.limit) <= 0) merged.limit = 50;
 
       const query = buildQueryString({
         q: merged.q,
@@ -348,12 +357,16 @@ export const useAdminProductionStore = create((set, get) => ({
       const data = await parseJson(res);
 
       set({
-        productionJobs: Array.isArray(data.rows) ? data.rows : [],
+        productionJobs: Array.isArray(data?.rows) ? data.rows : [],
         productionJobSummary: {
           totalSkus: toNum(data?.summary?.totalSkus),
           totalQtyToProduce: toNum(data?.summary?.totalQtyToProduce),
           totalOrdersCovered: toNum(data?.summary?.totalOrdersCovered),
           totalReservations: toNum(data?.summary?.totalReservations),
+          totalOrderedQty: toNum(data?.summary?.totalOrderedQty),
+          totalReservedQty: toNum(data?.summary?.totalReservedQty),
+          totalReservedGroups: toNum(data?.summary?.totalReservedGroups),
+          totalUnreservedGroups: toNum(data?.summary?.totalUnreservedGroups),
         },
         productionJobPagination: {
           total: toNum(data?.pagination?.total),
@@ -375,7 +388,7 @@ export const useAdminProductionStore = create((set, get) => ({
         },
       });
 
-      return data.rows || [];
+      return data;
     } catch (e) {
       console.error("❌ fetchProductionJobs error:", e);
       set({
@@ -385,15 +398,19 @@ export const useAdminProductionStore = create((set, get) => ({
         productionJobPagination: { ...DEFAULT_JOB_PAGINATION },
       });
       toast.error(e.message);
-      return [];
+      return {
+        rows: [],
+        summary: { ...DEFAULT_JOB_SUMMARY },
+        pagination: { ...DEFAULT_JOB_PAGINATION },
+      };
     } finally {
       set({ loadingProductionJobs: false });
     }
   },
 
-  /* ============================================================
-    EXPORT PRODUCTION JOBS EXCEL
-  ============================================================ */
+  /* =========================================================
+     EXPORT PRODUCTION JOBS EXCEL
+  ========================================================= */
   downloadProductionJobsExcel: async (params = {}) => {
     try {
       set({ exportingProductionJobs: true, error: null });
@@ -421,7 +438,7 @@ export const useAdminProductionStore = create((set, get) => ({
         try {
           const data = await res.json();
           msg = data?.message || msg;
-        } catch (_) {}
+        } catch {}
         throw new Error(msg);
       }
 
@@ -433,7 +450,6 @@ export const useAdminProductionStore = create((set, get) => ({
 
       downloadBlobFile(blob, fileName);
       toast.success("Production jobs excel downloaded ✅");
-
       return true;
     } catch (e) {
       console.error("❌ downloadProductionJobsExcel error:", e);
@@ -445,10 +461,9 @@ export const useAdminProductionStore = create((set, get) => ({
     }
   },
 
-  /* ============================================================
-    MARK ORDER PACKED
-    backend handles reservation consume on packed
-  ============================================================ */
+  /* =========================================================
+     MARK ORDER PACKED
+  ========================================================= */
   markOrderPacked: async (orderId) => {
     try {
       if (!orderId) throw new Error("Order id missing");
@@ -490,10 +505,9 @@ export const useAdminProductionStore = create((set, get) => ({
     }
   },
 
-  /* ============================================================
-    MARK ORDER SHIPPED FROM PRODUCTION
-    backend only allows packed/picked -> shipped
-  ============================================================ */
+  /* =========================================================
+     MARK ORDER SHIPPED
+  ========================================================= */
   markOrderShipped: async (orderId) => {
     try {
       if (!orderId) throw new Error("Order id missing");
@@ -533,9 +547,9 @@ export const useAdminProductionStore = create((set, get) => ({
     }
   },
 
-  /* ============================================================
-    BULK MARK ALL PACKED AS SHIPPED
-  ============================================================ */
+  /* =========================================================
+     BULK MARK PACKED AS SHIPPED
+  ========================================================= */
   markAllPackedAsShipped: async (params = {}) => {
     try {
       set({ updatingBulkShipped: true, error: null });
@@ -612,16 +626,96 @@ export const useAdminProductionStore = create((set, get) => ({
     }
   },
 
-  /* ============================================================
-    REFRESH HELPERS
-  ============================================================ */
+  /* =========================================================
+     FETCH PROCESSING ORDER PRODUCTS
+     - processing orders
+     - grouped from order items
+  ========================================================= */
+  fetchProcessingOrderProducts: async (params = {}) => {
+    try {
+      set({ loadingProductionJobs: true, error: null });
+
+      const state = get();
+      const merged = { ...state.productionJobFilters, ...params };
+
+      if (merged.page == null || toNum(merged.page) <= 0) merged.page = 1;
+      if (merged.limit == null || toNum(merged.limit) <= 0) merged.limit = 50;
+
+      const query = buildQueryString({
+        q: merged.q,
+        from: merged.from,
+        to: merged.to,
+        sort: merged.sort,
+        page: merged.page,
+        limit: merged.limit,
+        all: merged.all,
+      });
+
+      const res = await fetch(`${API}/production/processing-products?${query}`, {
+        credentials: "include",
+      });
+
+      const data = await parseJson(res);
+
+      set({
+        productionJobs: Array.isArray(data?.rows) ? data.rows : [],
+        productionJobSummary: {
+          totalSkus: toNum(data?.summary?.totalSkus),
+          totalQtyToProduce: toNum(data?.summary?.totalQtyToProduce),
+          totalOrdersCovered: toNum(data?.summary?.totalOrdersCovered),
+          totalReservations: toNum(data?.summary?.totalReservations, 0),
+          totalOrderedQty: toNum(data?.summary?.totalOrderedQty),
+          totalReservedQty: toNum(data?.summary?.totalReservedQty),
+          totalReservedGroups: toNum(data?.summary?.totalReservedGroups),
+          totalUnreservedGroups: toNum(data?.summary?.totalUnreservedGroups),
+        },
+        productionJobPagination: {
+          total: toNum(data?.pagination?.total),
+          page: toNum(data?.pagination?.page, 1),
+          limit: toNum(data?.pagination?.limit, 50),
+          pages: toNum(data?.pagination?.pages, 1),
+          hasMore: Boolean(data?.pagination?.hasMore),
+        },
+        productionJobFilters: {
+          ...state.productionJobFilters,
+          ...merged,
+          q: safeStr(merged.q),
+          from: safeStr(merged.from),
+          to: safeStr(merged.to),
+          sort: safeStr(merged.sort) || "qty_desc",
+          page: toNum(data?.pagination?.page, toNum(merged.page, 1)),
+          limit: toNum(data?.pagination?.limit, toNum(merged.limit, 50)),
+          all: Boolean(merged.all),
+        },
+      });
+
+      return data;
+    } catch (e) {
+      console.error("❌ fetchProcessingOrderProducts error:", e);
+      set({
+        error: e.message,
+        productionJobs: [],
+        productionJobSummary: { ...DEFAULT_JOB_SUMMARY },
+        productionJobPagination: { ...DEFAULT_JOB_PAGINATION },
+      });
+      toast.error(e.message);
+      return {
+        rows: [],
+        summary: { ...DEFAULT_JOB_SUMMARY },
+        pagination: { ...DEFAULT_JOB_PAGINATION },
+      };
+    } finally {
+      set({ loadingProductionJobs: false });
+    }
+  },
+
+  /* =========================================================
+     REFRESH HELPERS
+  ========================================================= */
   refreshProductionJobs: async () => {
     return get().fetchProductionJobs(get().productionJobFilters);
   },
 
-  /* ============================================================
-    REFRESH ALL
-  ============================================================ */
   refreshAll: async () => {
     const state = get();
     await Promise.allSettled([
