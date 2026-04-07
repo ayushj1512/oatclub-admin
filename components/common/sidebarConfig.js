@@ -141,6 +141,7 @@ export const sidebarMenus = {
     { label: "Processing", href: "/orders/processing" },
     { label: "Packed", href: "/orders/packed" },
     { label: "Shipped", href: "/orders/shipped" },
+      { label: "Out for Delivery", href: "/orders/out-for-delivery" },
     { label: "Delivered", href: "/orders/delivered" },
     { label: "Failed", href: "/orders/failed" },
     { label: "Cancelled", href: "/orders/cancelled" },
