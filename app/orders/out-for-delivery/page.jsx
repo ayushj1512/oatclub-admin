@@ -515,12 +515,21 @@ export default function OutForDeliveryOrdersPage() {
     [sortedOrders]
   );
 
-  const totalCount =
-    Number(ordersMeta?.total || ordersMeta?.totalOrders || 0) ||
-    sortedOrders.length;
+ const totalCount =
+  Number(
+    ordersMeta?.totalCount ||
+    ordersMeta?.total ||
+    ordersMeta?.totalOrders ||
+    0
+  ) || sortedOrders.length;
 
-  const totalPages = Math.max(
-    Number(ordersMeta?.pages || ordersMeta?.totalPages || 1),
+const totalPages =
+  Math.max(
+    Number(
+      ordersMeta?.totalPages ||
+      ordersMeta?.pages ||
+      (totalCount ? Math.ceil(totalCount / pageSize) : 1)
+    ),
     1
   );
 

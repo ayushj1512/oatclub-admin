@@ -156,7 +156,7 @@ const revenueCsvHeaders = [
 const salesCsvHeaders = [
   "Order ID",
   "Order Date",
-  "Delivered Date",
+  "Status Date",
   "Customer Name",
   "State",
   "Payment Type",
