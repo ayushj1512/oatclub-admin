@@ -306,6 +306,8 @@ export default function OrdersListPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
   // Filters
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -324,6 +326,15 @@ export default function OrdersListPage() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 100;
+
+    // ✅ Update only changed order in list, avoid full page refresh feel
+  const handleOrderUpdated = useCallback(
+    (updatedOrder) => {
+      if (!updatedOrder?._id) return;
+      syncOrderInList(updatedOrder);
+    },
+    [syncOrderInList]
+  );
 
   const applySearch = useCallback(() => {
     setCurrentPage(1);
@@ -408,13 +419,15 @@ export default function OrdersListPage() {
     currentPage,
   ]);
 
-  const loadOrders = useCallback(async () => {
-    try {
-      await fetchAllOrders(backendFilters);
-    } catch (e) {
-      console.log("Orders Fetch Error:", e);
-    }
-  }, [fetchAllOrders, backendFilters]);
+ const loadOrders = useCallback(async () => {
+  try {
+    await fetchAllOrders(backendFilters);
+  } catch (e) {
+    console.log("Orders Fetch Error:", e);
+  } finally {
+    setHasLoadedOnce(true);
+  }
+}, [fetchAllOrders, backendFilters]);
 
   useEffect(() => {
     loadOrders();
@@ -433,6 +446,24 @@ export default function OrdersListPage() {
     return filteredOrders.reduce((sum, order) => {
       return sum + getOrderRevenue(order);
     }, 0);
+  }, [filteredOrders]);
+
+    // ✅ stable sorted list so table work stays neat
+  const sortedOrders = useMemo(() => {
+    const getNum = (o) => {
+      const m = String(o?.orderNumber || "").match(/(\d+)$/);
+      return m ? Number(m[1]) : 0;
+    };
+
+    return [...filteredOrders].sort((a, b) => {
+      const an = getNum(a);
+      const bn = getNum(b);
+      if (bn !== an) return bn - an;
+
+      const ad = new Date(a?.createdAt || a?.orderDate || 0).getTime();
+      const bd = new Date(b?.createdAt || b?.orderDate || 0).getTime();
+      return bd - ad;
+    });
   }, [filteredOrders]);
 
   const buildCsvRows = (ordersArr) => {
@@ -1038,81 +1069,58 @@ export default function OrdersListPage() {
         </Card>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
-                <tr>
-                  <th className="py-4 px-5 text-left font-semibold">Order #</th>
-                  <th className="py-4 px-5 text-left font-semibold">Customer</th>
-                  <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">
-                    Fulfillment
-                  </th>
-                  <th className="py-4 px-5 text-left font-semibold">Amount</th>
-                  <th className="py-4 px-5 text-left font-semibold">Date</th>
-                  <th className="py-4 px-5 text-left font-semibold">Action</th>
-                </tr>
-              </thead>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+  <div className="overflow-x-auto">
+    <table className="w-full text-sm">
+      <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
+        <tr>
+          <th className="py-4 px-5 text-left font-semibold">Order #</th>
+          <th className="py-4 px-5 text-left font-semibold">Customer</th>
+          <th className="py-4 px-5 text-left font-semibold">Payment</th>
+          <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
+          <th className="py-4 px-5 text-left font-semibold">Amount</th>
+          <th className="py-4 px-5 text-left font-semibold">Date</th>
+          <th className="py-4 px-5 text-left font-semibold">Action</th>
+        </tr>
+      </thead>
 
-              <tbody className="divide-y divide-gray-100">
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="py-14 text-center text-gray-500">
-                      <div className="inline-flex items-center gap-2">
-                        <Loader2 size={18} className="animate-spin" />
-                        Loading orders...
-                      </div>
-                    </td>
-                  </tr>
-                ) : filteredOrders.length ? (
-                  [...filteredOrders]
-                    .sort((a, b) => {
-                      const getNum = (o) => {
-                        const m = String(o?.orderNumber || "").match(/(\d+)$/);
-                        return m ? Number(m[1]) : 0;
-                      };
+      <tbody className="divide-y divide-gray-100">
+        {loading && !hasLoadedOnce ? (
+          <tr>
+            <td colSpan={7} className="py-14 text-center text-gray-500">
+              <div className="inline-flex items-center gap-2">
+                <Loader2 size={18} className="animate-spin" />
+                Loading orders...
+              </div>
+            </td>
+          </tr>
+        ) : sortedOrders.length ? (
+          sortedOrders.map((order, idx) => {
+            const rowKey =
+              order?._id ||
+              order?.id ||
+              order?.orderNumber ||
+              `order-${idx}`;
 
-                      const an = getNum(a);
-                      const bn = getNum(b);
-                      if (bn !== an) return bn - an;
-
-                      const ad = new Date(
-                        a?.createdAt || a?.orderDate || 0
-                      ).getTime();
-                      const bd = new Date(
-                        b?.createdAt || b?.orderDate || 0
-                      ).getTime();
-                      return bd - ad;
-                    })
-                    .map((order, idx) => {
-                      const rowKey =
-                        order?._id ||
-                        order?.id ||
-                        order?.orderNumber ||
-                        `order-${idx}`;
-
-                      return (
-                        <OrderRow
-                          key={String(rowKey)}
-                          order={order}
-                          onUpdated={(updatedOrder) => {
-                            if (updatedOrder?._id) syncOrderInList(updatedOrder);
-                          }}
-                        />
-                      );
-                    })
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">
-                      No orders found for applied filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+            return (
+              <OrderRow
+                key={String(rowKey)}
+                order={order}
+                onUpdated={handleOrderUpdated}
+              />
+            );
+          })
+        ) : (
+          <tr>
+            <td colSpan={7} className="py-12 text-center text-gray-500">
+              No orders found for applied filters.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
 
         {/* Bottom Pagination */}
         <Card>
