@@ -5,12 +5,11 @@ import { create } from "zustand";
 /* ---------------------------------------
    API helpers
 ---------------------------------------- */
-const API =
-  (
-    process.env.NEXT_PUBLIC_API_URL ||
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    ""
-  ).replace(/\/+$/, "");
+const API = (
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  ""
+).replace(/\/+$/, "");
 
 const buildUrl = (path) => {
   if (!API) return path;
@@ -22,9 +21,7 @@ const qs = (params = {}) => {
   const sp = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || String(value).trim() === "") {
-      return;
-    }
+    if (value === undefined || value === null || String(value).trim() === "") return;
     sp.set(key, String(value));
   });
 
@@ -35,6 +32,18 @@ const qs = (params = {}) => {
 const toNum = (value, fallback = 0) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+};
+
+const formatCsvDate = (value) => {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+
+  return `${day}-${month}-${year}`;
 };
 
 /* ---------------------------------------
@@ -194,7 +203,7 @@ const revenueOrdersToCsv = (orders = []) =>
     ...orders.map((order) =>
       [
         order.orderNumber,
-        order.deliveredAt,
+        formatCsvDate(order.deliveredAt),
         order.paymentMethod,
         order.fulfillmentStatus,
         order.revenue,
@@ -211,8 +220,8 @@ const salesRowsToCsv = (rows = []) =>
     ...rows.map((row) =>
       [
         row.orderId,
-        row.orderDate,
-        row.deliveredDate,
+        formatCsvDate(row.orderDate),
+        formatCsvDate(row.deliveredDate),
         row.customerName,
         row.state,
         row.paymentType,
@@ -314,20 +323,16 @@ const fetchJson = async (url, label = "report") => {
 export const useOrderAccountsStore = create((set, get) => ({
   reportType: "revenue",
 
-  // revenue report
   orders: [],
   allOrders: [],
   summary: emptySummary(),
 
-  // sales ledger / gst rows
   rows: [],
   allRows: [],
   totals: emptyTotals(),
 
-  // gst summary
   gstSummary: emptyGSTSummary(),
 
-  // shared
   meta: emptyMeta(),
   filters: initialFilters(),
 
@@ -430,7 +435,6 @@ export const useOrderAccountsStore = create((set, get) => ({
 
     const totalPages = Math.max(1, toNum(firstData?.meta?.totalPages, 1));
 
-    // sales + gst both use rows
     if (reportType === "sales" || reportType === "gst") {
       let allRows = Array.isArray(firstData?.rows) ? [...firstData.rows] : [];
 
@@ -453,10 +457,7 @@ export const useOrderAccountsStore = create((set, get) => ({
       return {
         allRows,
         meta: normalizeMeta(firstData?.meta, baseFilters),
-        totals:
-          reportType === "sales"
-            ? normalizeTotals(firstData?.totals)
-            : emptyTotals(),
+        totals: reportType === "sales" ? normalizeTotals(firstData?.totals) : emptyTotals(),
         gstSummary:
           reportType === "gst"
             ? normalizeGSTSummary(firstData?.summary)
@@ -501,14 +502,9 @@ export const useOrderAccountsStore = create((set, get) => ({
     set({ loading: true, error: "" });
 
     try {
-      const data = await fetchJson(
-        buildFetchUrl(endpoint, filters),
-        `${reportType} report`
-      );
-
+      const data = await fetchJson(buildFetchUrl(endpoint, filters), `${reportType} report`);
       const normalizedMeta = normalizeMeta(data?.meta, filters);
 
-      // GST
       if (reportType === "gst") {
         set({
           reportType,
@@ -536,11 +532,7 @@ export const useOrderAccountsStore = create((set, get) => ({
           set({ hydratingAll: true });
 
           try {
-            const overall = await get().fetchAllPages({
-              type: reportType,
-              filters,
-            });
-
+            const overall = await get().fetchAllPages({ type: reportType, filters });
             set({
               allRows: Array.isArray(overall?.allRows) ? overall.allRows : [],
               hydratingAll: false,
@@ -553,7 +545,6 @@ export const useOrderAccountsStore = create((set, get) => ({
         return data;
       }
 
-      // Sales
       if (reportType === "sales") {
         set({
           reportType,
@@ -581,11 +572,7 @@ export const useOrderAccountsStore = create((set, get) => ({
           set({ hydratingAll: true });
 
           try {
-            const overall = await get().fetchAllPages({
-              type: reportType,
-              filters,
-            });
-
+            const overall = await get().fetchAllPages({ type: reportType, filters });
             set({
               allRows: Array.isArray(overall?.allRows) ? overall.allRows : [],
               hydratingAll: false,
@@ -598,7 +585,6 @@ export const useOrderAccountsStore = create((set, get) => ({
         return data;
       }
 
-      // Revenue
       set({
         reportType,
         orders: Array.isArray(data?.orders) ? data.orders : [],
@@ -625,11 +611,7 @@ export const useOrderAccountsStore = create((set, get) => ({
         set({ hydratingAll: true });
 
         try {
-          const overall = await get().fetchAllPages({
-            type: reportType,
-            filters,
-          });
-
+          const overall = await get().fetchAllPages({ type: reportType, filters });
           set({
             allOrders: Array.isArray(overall?.allOrders) ? overall.allOrders : [],
             hydratingAll: false,
@@ -682,11 +664,7 @@ export const useOrderAccountsStore = create((set, get) => ({
           set({ allRows });
         }
 
-        downloadBlob(
-          salesRowsToCsv(allRows),
-          `sales-ledger-${filters.month || "all"}.csv`
-        );
-
+        downloadBlob(salesRowsToCsv(allRows), `sales-ledger-${filters.month || "all"}.csv`);
         set({ downloading: false });
         return true;
       }
@@ -700,11 +678,7 @@ export const useOrderAccountsStore = create((set, get) => ({
           set({ allRows });
         }
 
-        downloadBlob(
-          gstRowsToCsv(allRows),
-          `gst-report-${filters.month || "all"}.csv`
-        );
-
+        downloadBlob(gstRowsToCsv(allRows), `gst-report-${filters.month || "all"}.csv`);
         set({ downloading: false });
         return true;
       }
