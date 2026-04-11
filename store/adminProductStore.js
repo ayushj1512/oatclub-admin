@@ -4,6 +4,32 @@ import { toast } from "react-hot-toast";
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const API = `${BASE_URL}/api/products`;
 
+const buildProductQuery = (params = {}) => {
+  const query = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+
+    if (Array.isArray(value)) {
+      const arr = value.map((v) => String(v).trim()).filter(Boolean);
+      if (arr.length) query.set(key, arr.join(","));
+      return;
+    }
+
+    if (typeof value === "boolean") {
+      query.set(key, String(value));
+      return;
+    }
+
+    const str = String(value).trim();
+    if (!str) return;
+
+    query.set(key, str);
+  });
+
+  return query.toString();
+};
+
 /* ============================================================
   Helpers (admin-side payload hygiene)
   - remove variant.price fields (no longer in schema)
@@ -255,7 +281,7 @@ export const useAdminProductStore = create((set, get) => ({
   bulkSelectedIds: [],
   bulkPriceDraft: {}, // { [id]: { price?, compareAtPrice? } }
   page: 1,
-  limit: 20,
+  limit: 100,
   total: 0,
   pages: 0,
 
@@ -291,68 +317,221 @@ export const useAdminProductStore = create((set, get) => ({
     FETCH ALL PRODUCTS (ADMIN GRID)
   ============================================================ */
   fetchProducts: async (params = {}) => {
-    try {
-      set({ loading: true, error: null });
+  try {
+    const currentPage = Number(params.page ?? get().page ?? 1) || 1;
+    const currentLimit = Number(params.limit ?? get().limit ?? 100) || 100;
 
-      const query = new URLSearchParams(params).toString();
-      const res = await fetch(`${API}?${query}`, { credentials: "include" });
+    set({ loading: true, error: null });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to fetch products");
+    const query = buildProductQuery({
+      page: currentPage,
+      limit: currentLimit,
 
-      set({
-        products: data.products || [],
-        page: data.page || 1,
-        pages: data.pages || 1,
-        total: data.total || 0,
-      });
-    } catch (e) {
-      console.error(e);
-      set({ error: e.message });
-      toast.error(e.message);
-    } finally {
-      set({ loading: false });
-    }
-  },
+      // existing
+      category: params.category,
+      collection: params.collection,
+      tags: params.tags,
+      minPrice: params.minPrice,
+      maxPrice: params.maxPrice,
+      isActive: params.isActive,
+      isDraft: params.isDraft,
+      isBestSeller: params.isBestSeller,
+      isTrending: params.isTrending,
+      isPrimaryProduct: params.isPrimaryProduct,
+      search: params.search,
+      sort: params.sort,
+      sku: params.sku,
+      q: params.q,
+      title: params.title,
+      productCode: params.productCode,
+      code: params.code,
+
+      // new filters
+      isFeatured: params.isFeatured,
+      isPatternReady: params.isPatternReady,
+      isSamplingDone: params.isSamplingDone,
+      isInStock: params.isInStock,
+      productType: params.productType,
+      currency: params.currency,
+      taxClass: params.taxClass,
+      color: params.color,
+      colors: params.colors,
+      fabricName: params.fabricName,
+      fabricCode: params.fabricCode,
+      fabricColor: params.fabricColor,
+      role: params.role,
+      hsnCode: params.hsnCode,
+      slug: params.slug,
+      titleExact: params.titleExact,
+      externalURL: params.externalURL,
+      originalProductLink: params.originalProductLink,
+      wordpressId: params.wordpressId,
+
+      minRating: params.minRating,
+      maxRating: params.maxRating,
+      minViews: params.minViews,
+      maxViews: params.maxViews,
+      minPurchases: params.minPurchases,
+      maxPurchases: params.maxPurchases,
+      minCartAdds: params.minCartAdds,
+      maxCartAdds: params.maxCartAdds,
+      minWishlistCount: params.minWishlistCount,
+      maxWishlistCount: params.maxWishlistCount,
+      minSearchAppearances: params.minSearchAppearances,
+      maxSearchAppearances: params.maxSearchAppearances,
+
+      minStock: params.minStock,
+      maxStock: params.maxStock,
+      minReservedStock: params.minReservedStock,
+      maxReservedStock: params.maxReservedStock,
+
+      createdFrom: params.createdFrom,
+      createdTo: params.createdTo,
+      updatedFrom: params.updatedFrom,
+      updatedTo: params.updatedTo,
+      publishFrom: params.publishFrom,
+      publishTo: params.publishTo,
+
+      sortKey: params.sortKey,
+      sortDir: params.sortDir,
+    });
+
+    const res = await fetch(`${API}?${query}`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to fetch products");
+
+    set({
+      products: Array.isArray(data.products) ? data.products : [],
+      page: Number(data.page || currentPage || 1),
+      limit: currentLimit,
+      pages: Number(data.pages || 1),
+      total: Number(data.total || 0),
+    });
+
+    return data;
+  } catch (e) {
+    console.error(e);
+    set({ error: e.message });
+    toast.error(e.message);
+    return null;
+  } finally {
+    set({ loading: false });
+  }
+},
 
   /* ============================================================
     ✅ FETCH PRODUCTS BY CATEGORY (ADMIN)
   ============================================================ */
-  fetchProductsByCategory: async (categorySlugOrId, params = {}) => {
-    try {
-      set({ loading: true, error: null });
+  fetchProducts: async (params = {}) => {
+  try {
+    const currentPage = Number(params.page ?? get().page ?? 1) || 1;
+    const currentLimit = Number(params.limit ?? get().limit ?? 100) || 100;
 
-      const category = String(categorySlugOrId || "").trim();
-      if (!category) throw new Error("Category is required");
+    set({ loading: true, error: null });
 
-      const query = new URLSearchParams(params).toString();
-      const url = `${API}/by-category/${encodeURIComponent(category)}${
-        query ? `?${query}` : ""
-      }`;
+    const query = buildProductQuery({
+      page: currentPage,
+      limit: currentLimit,
 
-      const res = await fetch(url, { credentials: "include" });
+      // existing
+      category: params.category,
+      collection: params.collection,
+      tags: params.tags,
+      minPrice: params.minPrice,
+      maxPrice: params.maxPrice,
+      isActive: params.isActive,
+      isDraft: params.isDraft,
+      isBestSeller: params.isBestSeller,
+      isTrending: params.isTrending,
+      isPrimaryProduct: params.isPrimaryProduct,
+      search: params.search,
+      sort: params.sort,
+      sku: params.sku,
+      q: params.q,
+      title: params.title,
+      productCode: params.productCode,
+      code: params.code,
 
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.message || "Failed to fetch products by category");
+      // new filters
+      isFeatured: params.isFeatured,
+      isPatternReady: params.isPatternReady,
+      isSamplingDone: params.isSamplingDone,
+      isInStock: params.isInStock,
+      productType: params.productType,
+      currency: params.currency,
+      taxClass: params.taxClass,
+      color: params.color,
+      colors: params.colors,
+      fabricName: params.fabricName,
+      fabricCode: params.fabricCode,
+      fabricColor: params.fabricColor,
+      role: params.role,
+      hsnCode: params.hsnCode,
+      slug: params.slug,
+      titleExact: params.titleExact,
+      externalURL: params.externalURL,
+      originalProductLink: params.originalProductLink,
+      wordpressId: params.wordpressId,
 
-      set({
-        products: data.products || [],
-        page: data.page || 1,
-        pages: data.pages || 1,
-        total: data.total || 0,
-      });
+      minRating: params.minRating,
+      maxRating: params.maxRating,
+      minViews: params.minViews,
+      maxViews: params.maxViews,
+      minPurchases: params.minPurchases,
+      maxPurchases: params.maxPurchases,
+      minCartAdds: params.minCartAdds,
+      maxCartAdds: params.maxCartAdds,
+      minWishlistCount: params.minWishlistCount,
+      maxWishlistCount: params.maxWishlistCount,
+      minSearchAppearances: params.minSearchAppearances,
+      maxSearchAppearances: params.maxSearchAppearances,
 
-      return data.products || [];
-    } catch (e) {
-      console.error(e);
-      set({ error: e.message });
-      toast.error(e.message);
-      return [];
-    } finally {
-      set({ loading: false });
-    }
-  },
+      minStock: params.minStock,
+      maxStock: params.maxStock,
+      minReservedStock: params.minReservedStock,
+      maxReservedStock: params.maxReservedStock,
+
+      createdFrom: params.createdFrom,
+      createdTo: params.createdTo,
+      updatedFrom: params.updatedFrom,
+      updatedTo: params.updatedTo,
+      publishFrom: params.publishFrom,
+      publishTo: params.publishTo,
+
+      sortKey: params.sortKey,
+      sortDir: params.sortDir,
+    });
+
+    const res = await fetch(`${API}?${query}`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to fetch products");
+
+    set({
+      products: Array.isArray(data.products) ? data.products : [],
+      page: Number(data.page || currentPage || 1),
+      limit: currentLimit,
+      pages: Number(data.pages || 1),
+      total: Number(data.total || 0),
+    });
+
+    return data;
+  } catch (e) {
+    console.error(e);
+    set({ error: e.message });
+    toast.error(e.message);
+    return null;
+  } finally {
+    set({ loading: false });
+  }
+},
 
   /* ============================================================
     FETCH SINGLE PRODUCT (EDIT PAGE)
@@ -376,6 +555,7 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
+  
   /* ============================================================
     CREATE PRODUCT
     - strips variant price fields
@@ -1085,6 +1265,73 @@ export const useAdminProductStore = create((set, get) => ({
     } catch (e) {
       console.error("❌ fetchProductsByIds error:", e);
       toast.error(e.message);
+      return [];
+    }
+  },
+
+
+    fetchSelectedProductsByCodes: async (codes = [], opts = {}) => {
+    try {
+      const normalizeCode = (value) => {
+        const raw = String(value ?? "").trim().toUpperCase().replace(/\s+/g, "");
+        if (!raw) return "";
+        if (/^\d+$/.test(raw)) return raw.padStart(5, "0");
+        return raw;
+      };
+
+      const list = Array.isArray(codes)
+        ? codes
+        : typeof codes === "string"
+          ? codes.split(",").map((x) => x.trim())
+          : [];
+
+      const normalizedCodes = [
+        ...new Set(list.map(normalizeCode).filter(Boolean)),
+      ];
+
+      if (!normalizedCodes.length) return [];
+
+      const res = await fetch(`${API}/selected-codes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
+        body: JSON.stringify({
+          selectedProductCodes: normalizedCodes,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to fetch selected products");
+      }
+
+      const products = Array.isArray(data.products) ? data.products : [];
+
+      if (opts.mergeIntoProducts) {
+        set((state) => {
+          const map = new Map();
+
+          (Array.isArray(state.products) ? state.products : []).forEach((product) => {
+            const key = String(product?._id || "");
+            if (key) map.set(key, product);
+          });
+
+          products.forEach((product) => {
+            const key = String(product?._id || "");
+            if (key) map.set(key, product);
+          });
+
+          return {
+            products: Array.from(map.values()),
+          };
+        });
+      }
+
+      return products;
+    } catch (e) {
+      console.error("❌ fetchSelectedProductsByCodes error:", e);
+      toast.error(e.message || "Failed to fetch selected products");
       return [];
     }
   },

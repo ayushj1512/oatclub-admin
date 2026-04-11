@@ -19,6 +19,7 @@ import {
 import toast from "react-hot-toast";
 
 import ProductPicker from "@/components/common/ProductPicker";
+import SelectedProductCodesTable from "@/components/marketing/SelectedProductCodesTable";
 import { useAdminCommerceManagerStore } from "@/store/adminCommerceManagerStore";
 import { useAdminProductStore } from "@/store/adminProductStore";
 
@@ -27,7 +28,7 @@ const safeArray = (value) => (Array.isArray(value) ? value : []);
 const normalizeCode = (value) => {
   const raw = String(value ?? "").trim().toUpperCase().replace(/\s+/g, "");
   if (!raw) return "";
-  if (/^\d+$/.test(raw)) return raw.padStart(6, "0");
+  if (/^\d+$/.test(raw)) return raw.padStart(5, "0");
   return raw;
 };
 
@@ -36,12 +37,7 @@ const normalizeCodes = (codes = []) => [
 ];
 
 const parseCodesFromText = (text = "") =>
-  normalizeCodes(
-    String(text)
-      .split(/[\n,\s,;|]+/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  );
+  normalizeCodes(String(text).split(/[\n,\s;|]+/));
 
 const getProductImage = (product) => {
   if (!product) return "";
@@ -51,26 +47,20 @@ const getProductImage = (product) => {
   if (typeof product?.mainImage === "string") return product.mainImage;
   if (typeof product?.featuredImage === "string") return product.featuredImage;
 
-  if (Array.isArray(product?.images) && product.images.length > 0) {
-    const first = product.images[0];
-    if (typeof first === "string") return first;
-    if (typeof first?.url === "string") return first.url;
-    if (typeof first?.src === "string") return first.src;
-  }
+  const firstImage = Array.isArray(product?.images) ? product.images[0] : null;
+  if (typeof firstImage === "string") return firstImage;
+  if (typeof firstImage?.url === "string") return firstImage.url;
+  if (typeof firstImage?.src === "string") return firstImage.src;
 
-  if (Array.isArray(product?.variants) && product.variants.length > 0) {
-    const v = product.variants[0];
-    if (typeof v?.image === "string") return v.image;
-    if (typeof v?.image?.url === "string") return v.image.url;
-    if (typeof v?.image?.src === "string") return v.image.src;
-  }
+  const firstVariant = Array.isArray(product?.variants) ? product.variants[0] : null;
+  if (typeof firstVariant?.image === "string") return firstVariant.image;
+  if (typeof firstVariant?.image?.url === "string") return firstVariant.image.url;
+  if (typeof firstVariant?.image?.src === "string") return firstVariant.image.src;
 
   return "";
 };
 
 const getProductCode = (product) => {
-  if (!product) return "";
-
   const candidates = [
     product?.productCode,
     product?.sku,
@@ -81,8 +71,8 @@ const getProductCode = (product) => {
     product?.productDetails?.code,
   ];
 
-  for (const item of candidates) {
-    const code = normalizeCode(item);
+  for (const value of candidates) {
+    const code = normalizeCode(value);
     if (code) return code;
   }
 
@@ -91,8 +81,6 @@ const getProductCode = (product) => {
 
 const getTextFromCell = (value) => {
   if (value == null) return "";
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number") return String(value).trim();
   return String(value).trim();
 };
 
@@ -114,9 +102,7 @@ function StatCard({ icon: Icon, label, value, subValue }) {
             {label}
           </div>
           <div className="mt-2 text-2xl font-semibold text-black">{value}</div>
-          {subValue ? (
-            <div className="mt-1 text-xs text-zinc-500">{subValue}</div>
-          ) : null}
+          {subValue ? <div className="mt-1 text-xs text-zinc-500">{subValue}</div> : null}
         </div>
         <div className={iconWrapClass}>
           <Icon className="h-5 w-5" />
@@ -144,9 +130,9 @@ export default function CommerceManagerPage() {
 
   const [notes, setNotes] = useState("");
   const [manualInput, setManualInput] = useState("");
+  const [removeInput, setRemoveInput] = useState("");
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [removeInput, setRemoveInput] = useState("");
   const [excelCodes, setExcelCodes] = useState([]);
   const [excelFileName, setExcelFileName] = useState("");
   const [excelLoading, setExcelLoading] = useState(false);
@@ -169,12 +155,12 @@ export default function CommerceManagerPage() {
 
   const selectedProductsMap = useMemo(() => {
     const map = new Map();
-
     safeArray(adminProducts).forEach((product) => {
       const code = getProductCode(product);
-      if (code) map.set(code, product);
+      if (code) {
+        map.set(code, product);
+      }
     });
-
     return map;
   }, [adminProducts]);
 
@@ -395,7 +381,9 @@ export default function CommerceManagerPage() {
           getTextFromCell(row.sku) ||
           getTextFromCell(row.SKU);
 
-        if (code) detectedCodes.push(code);
+        if (code) {
+          detectedCodes.push(code);
+        }
       });
 
       const normalized = normalizeCodes(detectedCodes);
@@ -436,16 +424,15 @@ export default function CommerceManagerPage() {
       const XLSX = await import("xlsx");
 
       const data = [
-        { productCode: "000243" },
-        { productCode: "000456" },
-        { productCode: "000999" },
+        { productCode: "00243" },
+        { productCode: "00456" },
+        { productCode: "00999" },
         { productCode: "TOP-001" },
       ];
 
       const worksheet = XLSX.utils.json_to_sheet(data);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
-
       worksheet["!cols"] = [{ wch: 18 }];
 
       XLSX.writeFile(workbook, "commerce-manager-product-codes-sample.xlsx");
@@ -545,7 +532,7 @@ export default function CommerceManagerPage() {
         </section>
 
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-          <div className={`${cardClass} p-5 md:p-6 xl:col-span-1`}>
+          <div className={`${cardClass} p-5 md:p-6`}>
             <div className="mb-4 flex items-center gap-3">
               <div className={iconWrapClass}>
                 <Plus className="h-5 w-5" />
@@ -561,7 +548,7 @@ export default function CommerceManagerPage() {
             <textarea
               value={manualInput}
               onChange={(e) => setManualInput(e.target.value)}
-              placeholder={`Example:\n000243\n000456\nTOP-001\nDRS900`}
+              placeholder={`Example:\n00243\n00456\nTOP-001\nDRS900`}
               rows={8}
               className={`${softInputClass} resize-none`}
             />
@@ -578,7 +565,7 @@ export default function CommerceManagerPage() {
             </div>
           </div>
 
-          <div className={`${cardClass} p-5 md:p-6 xl:col-span-1`}>
+          <div className={`${cardClass} p-5 md:p-6`}>
             <div className="mb-4 flex items-center gap-3">
               <div className={iconWrapClass}>
                 <Trash2 className="h-5 w-5" />
@@ -594,7 +581,7 @@ export default function CommerceManagerPage() {
             <textarea
               value={removeInput}
               onChange={(e) => setRemoveInput(e.target.value)}
-              placeholder={`Example:\n000243\nTOP-001`}
+              placeholder={`Example:\n00243\nTOP-001`}
               rows={8}
               className={`${softInputClass} resize-none`}
             />
@@ -620,7 +607,7 @@ export default function CommerceManagerPage() {
             </div>
           </div>
 
-          <div className={`${cardClass} p-5 md:p-6 xl:col-span-1`}>
+          <div className={`${cardClass} p-5 md:p-6`}>
             <div className="mb-4 flex items-center gap-3">
               <div className={iconWrapClass}>
                 <FileSpreadsheet className="h-5 w-5" />
@@ -651,19 +638,17 @@ export default function CommerceManagerPage() {
               }}
               onDrop={handleDrop}
               className={`rounded-[22px] p-5 text-center transition ${
-                dragActive ? "bg-[#ededed] ring-2 ring-black/15" : "bg-[#f6f6f6] ring-1 ring-black/5"
+                dragActive
+                  ? "bg-[#ededed] ring-2 ring-black/15"
+                  : "bg-[#f6f6f6] ring-1 ring-black/5"
               }`}
             >
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white ring-1 ring-black/5">
                 <Upload className="h-6 w-6" />
               </div>
 
-              <div className="text-sm font-medium">
-                Drag & drop excel here
-              </div>
-              <div className="mt-1 text-xs text-zinc-500">
-                Supports .xlsx, .xls, .csv
-              </div>
+              <div className="text-sm font-medium">Drag & drop excel here</div>
+              <div className="mt-1 text-xs text-zinc-500">Supports .xlsx, .xls, .csv</div>
 
               <input
                 ref={fileInputRef}
@@ -701,9 +686,7 @@ export default function CommerceManagerPage() {
                     {excelFileName || "No file selected"}
                   </div>
                   <div className="mt-1 text-xs text-zinc-500">
-                    {excelLoading
-                      ? "Reading file..."
-                      : `${excelCodes.length} code(s) ready`}
+                    {excelLoading ? "Reading file..." : `${excelCodes.length} code(s) ready`}
                   </div>
                 </div>
 
@@ -773,9 +756,9 @@ export default function CommerceManagerPage() {
             />
           </div>
 
-          <div className="mt-5 rounded-[22px] bg-[#fafafa] p-4 ring-1 ring-black/5">
-            <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
+          {!!pickerSelectedProductsPreview.length && (
+            <div className="mt-5 rounded-[22px] bg-[#fafafa] p-4 ring-1 ring-black/5">
+              <div className="mb-4">
                 <div className="text-sm font-semibold text-black">
                   Picker Selected Codes: {pickerSelectedCodes.length}
                 </div>
@@ -783,9 +766,7 @@ export default function CommerceManagerPage() {
                   Product code milne wale selected items hi add honge.
                 </div>
               </div>
-            </div>
 
-            {!!pickerSelectedProductsPreview.length && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {pickerSelectedProductsPreview.map((item) => (
                   <div
@@ -816,68 +797,20 @@ export default function CommerceManagerPage() {
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </section>
 
         <section className={`${cardClass} p-5 md:p-6`}>
-          <div className="mb-5 flex items-center gap-3">
-            <div className={iconWrapClass}>
-              <ClipboardList className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">Selected Product Codes</h2>
-              <p className="text-sm text-zinc-500">
-                Yehi codes commerce manager feed ke liye use honge.
-              </p>
-            </div>
-          </div>
+     
+     
 
-          {!loading && !matchedSelectedProducts.length ? (
-            <div className="rounded-[24px] bg-[#f8f8f8] px-6 py-10 text-center text-sm text-zinc-500 ring-1 ring-black/5">
-              No product codes selected yet.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {matchedSelectedProducts.map((item) => (
-                <div
-                  key={item.code}
-                  className="flex items-center gap-3 rounded-[22px] bg-[#fafafa] p-3 ring-1 ring-black/5"
-                >
-                  <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
-                    {item.image ? (
-                      <img
-                        src={item.image}
-                        alt={item.title}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-[10px] text-zinc-500">NO IMG</span>
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-black">
-                      {item.title}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
-                      <Hash className="h-3.5 w-3.5" />
-                      {item.code}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleRemoveSingleCode(item.code)}
-                    disabled={actionLoading}
-                    className="rounded-2xl bg-white p-2.5 text-black ring-1 ring-black/8 transition hover:bg-[#f4f4f4] disabled:opacity-60"
-                    title="Remove code"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <SelectedProductCodesTable
+            codes={matchedSelectedProducts.map((item) => item.code)}
+            onRemove={handleRemoveSingleCode}
+            onClear={handleClearAll}
+            emptyText={loading ? "Loading..." : "No product codes selected yet."}
+          />
         </section>
 
         <section className={`${cardClass} p-5 md:p-6`}>
