@@ -145,9 +145,9 @@ function OrderRow({ order, onUpdated }) {
 
   // stable navigation
   const goToOrder = useCallback(() => {
-    if (!orderId) return;
-    router.push(`/orders/${orderId}`);
-  }, [router, orderId]);
+  if (!orderId || typeof window === "undefined") return;
+  window.open(`/orders/${orderId}`, "_blank", "noopener,noreferrer");
+}, [orderId]);
 
   // stable update callback
   const handleUpdated = useCallback(
