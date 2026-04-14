@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAdminProductStore } from "@/store/adminProductStore";
+import ExportFilteredProductsButton from "@/components/product/ExportFilteredProductsButton";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 const PAGE_SIZE = 100;
@@ -621,19 +622,24 @@ export default function ProductsPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => loadProducts(page || 1)} className="btn btn-dark">
-            {loading ? <Loader2 className="animate-spin" size={18} /> : <RefreshCw size={18} />}
-          </button>
+      <div className="flex flex-wrap items-center gap-2">
+  <button onClick={() => loadProducts(page || 1)} className="btn btn-dark">
+    {loading ? <Loader2 className="animate-spin" size={18} /> : <RefreshCw size={18} />}
+  </button>
 
-          <button onClick={resetFilters} className="btn btn-dark">
-            Clear Filters
-          </button>
+  <button onClick={resetFilters} className="btn btn-dark">
+    Clear Filters
+  </button>
 
-          <button onClick={() => router.push("/products/add")} className="btn btn-primary">
-            + Add Product
-          </button>
-        </div>
+  <ExportFilteredProductsButton
+    buildQuery={buildQuery}
+    fileName="products-filtered-export"
+  />
+
+  <button onClick={() => router.push("/products/add")} className="btn btn-primary">
+    + Add Product
+  </button>
+</div>
       </div>
 
       {!loading && (
