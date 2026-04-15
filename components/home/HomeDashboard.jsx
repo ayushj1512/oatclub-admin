@@ -56,6 +56,7 @@ const QUOTES = [
 
 const DOMAIN_LIST = [
   { id: "designing", name: "Designing", icon: Palette, route: "/designing" },
+  { id: "design_lab", name: "Design Lab", icon: Sparkles, route: "/design-lab" },
   { id: "production", name: "Production / Tailoring", icon: Ticket, route: "/production" },
   { id: "accounts", name: "Accounts", icon: Calculator, route: "/accounts" },
   { id: "products", name: "Products", icon: Package, route: "/products" },
@@ -90,6 +91,7 @@ const DOMAIN_LIST = [
 ];
 
 const CARD_HINTS = {
+  design_lab: "Creative apparel design workspace",
   rma: "View Return / Exchange requests",
   collaboration: "Track ongoing influencer collaborations",
   footwear: "Manage footwear catalog & variants",
@@ -98,6 +100,8 @@ const CARD_HINTS = {
   reviews: "Moderate product reviews & ratings",
   fabrics: "Manage fabric records & mappings",
 };
+
+const isFeaturedCard = (id) => id === "design_lab";
 
 export default function HomeDashboard() {
   const router = useRouter();
@@ -225,34 +229,71 @@ export default function HomeDashboard() {
           className="grid grid-cols-2 gap-3 sm:gap-6 sm:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
         >
           <AnimatePresence initial={false}>
-            {sortedDomains.map(({ id, name, icon: Icon, route }) => (
-              <motion.button
-                key={id}
-                layout
-                type="button"
-                onClick={() => router.push(route)}
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                className="group flex min-h-[150px] flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white px-3 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md sm:min-h-[170px] sm:px-4 sm:py-6"
-              >
-                <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 p-3 text-white shadow-md transition-transform group-hover:scale-110 sm:p-4">
-                  <Icon size={24} className="sm:hidden" />
-                  <Icon size={30} className="hidden sm:block" />
-                </div>
+            {sortedDomains.map(({ id, name, icon: Icon, route }) => {
+              const featured = isFeaturedCard(id);
 
-                <h2 className="mt-3 text-center text-sm font-semibold text-gray-900 group-hover:text-blue-700 sm:mt-4 sm:text-lg">
-                  {name}
-                </h2>
+              return (
+                <motion.button
+                  key={id}
+                  layout
+                  type="button"
+                  onClick={() => router.push(route)}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                  className={[
+                    "group relative flex min-h-[150px] flex-col items-center justify-center overflow-hidden rounded-2xl px-3 py-5 shadow-sm transition-all duration-300 sm:min-h-[170px] sm:px-4 sm:py-6",
+                    featured
+                      ? "border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 via-white to-pink-50 ring-1 ring-fuchsia-100 hover:-translate-y-1.5 hover:shadow-[0_16px_40px_rgba(217,70,239,0.18)]"
+                      : "border border-gray-200 bg-white hover:-translate-y-1 hover:shadow-md",
+                  ].join(" ")}
+                >
+                  {featured && (
+                    <>
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(217,70,239,0.16),_transparent_45%)]" />
+                     
+                    </>
+                  )}
 
-                {CARD_HINTS[id] && (
-                  <p className="mt-1 text-center text-[11px] text-gray-500 sm:text-xs">
-                    {CARD_HINTS[id]}
-                  </p>
-                )}
-              </motion.button>
-            ))}
+                  <div
+                    className={[
+                      "relative rounded-xl p-3 text-white shadow-md transition-transform group-hover:scale-110 sm:p-4",
+                      featured
+                        ? "bg-gradient-to-br from-fuchsia-600 via-pink-500 to-rose-500 shadow-[0_12px_24px_rgba(217,70,239,0.28)]"
+                        : "bg-gradient-to-br from-blue-600 to-blue-500",
+                    ].join(" ")}
+                  >
+                    <Icon size={24} className="sm:hidden" />
+                    <Icon size={30} className="hidden sm:block" />
+                  </div>
+
+                  <h2
+                    className={[
+                      "relative mt-3 text-center font-semibold sm:mt-4",
+                      featured
+                        ? "text-base text-fuchsia-700 sm:text-xl"
+                        : "text-sm text-gray-900 group-hover:text-blue-700 sm:text-lg",
+                    ].join(" ")}
+                  >
+                    {name}
+                  </h2>
+
+                  {CARD_HINTS[id] && (
+                    <p
+                      className={[
+                        "relative mt-1 text-center sm:text-xs",
+                        featured
+                          ? "max-w-[220px] text-[11px] text-fuchsia-700/80"
+                          : "text-[11px] text-gray-500",
+                      ].join(" ")}
+                    >
+                      {CARD_HINTS[id]}
+                    </p>
+                  )}
+                </motion.button>
+              );
+            })}
           </AnimatePresence>
         </motion.div>
       )}

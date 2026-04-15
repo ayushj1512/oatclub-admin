@@ -2,6 +2,7 @@
 
 export const DOMAIN_PERMISSIONS = {
   designing: "manageDesigning",
+  design_lab: "manageDesignLab",
   production: "manageProduction",
   accounts: "manageAccounts",
   products: "manageProducts",
@@ -27,10 +28,7 @@ export const DOMAIN_PERMISSIONS = {
   tickets: "manageTickets",
   coupons: "manageCoupons",
   wordpress: "manageWordpressOrders",
-
-  // ✅ UPDATED (for influencer-collaboration-program)
   collaboration: "manageInfluencerProgram",
-
   warehouse: "manageProduction",
 };
 
@@ -57,7 +55,7 @@ export const ROLE_DEFAULT_PERMS = {
   influencer: [
     "manageMedia",
     "manageReels",
-    "manageInfluencerProgram", // ✅ added access
+    "manageInfluencerProgram",
   ],
 
   warehouse: ["manageProduction", "manageOrders"],

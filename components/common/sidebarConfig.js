@@ -29,6 +29,12 @@ export const sidebarMenus = {
     { label: "Marquee Manager", href: "/designing/marquee" },
   ],
 
+  design_lab: [
+    { label: "Design Lab Home", href: "/design-lab" },
+    { label: "All Tailors", href: "/design-lab/tailors" },
+    { label: "Add Tailor", href: "/design-lab/tailors/new" },
+  ],
+
   production: [
     { label: "Production Dashboard", href: "/production" },
     { label: "All Production Jobs", href: "/production/all-production-job" },
@@ -141,7 +147,7 @@ export const sidebarMenus = {
     { label: "Processing", href: "/orders/processing" },
     { label: "Packed", href: "/orders/packed" },
     { label: "Shipped", href: "/orders/shipped" },
-      { label: "Out for Delivery", href: "/orders/out-for-delivery" },
+    { label: "Out for Delivery", href: "/orders/out-for-delivery" },
     { label: "Delivered", href: "/orders/delivered" },
     { label: "Failed", href: "/orders/failed" },
     { label: "Cancelled", href: "/orders/cancelled" },
@@ -233,7 +239,7 @@ export const sidebarMenus = {
 
   shiprocket: [
     { label: "Shiprocket Dashboard", href: "/shiprocket" },
-      { label: "Serviceability Check", href: "/shiprocket/serviceability-check" },
+    { label: "Serviceability Check", href: "/shiprocket/serviceability-check" },
     { label: "Authentication API", href: "/shiprocket/authentication-api" },
     { label: "Not Deliverables", href: "/shiprocket/not-deliverables" },
   ],
@@ -312,6 +318,7 @@ export const routeSidebarMap = [
   { prefix: "/shiprocket", key: "shiprocket" },
   { prefix: "/bluedart", key: "bluedart" },
   { prefix: "/dashboard", key: "dashboard" },
+  { prefix: "/design-lab", key: "design_lab" },
   { prefix: "/designing", key: "designing" },
   { prefix: "/production", key: "production" },
   { prefix: "/accounts", key: "accounts" },
