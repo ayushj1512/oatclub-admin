@@ -52,29 +52,82 @@ export default function ProductionDashboardPage() {
     null;
 
   const [searchInput, setSearchInput] = useState(filters?.q || "");
-  const [datePreset, setDatePreset] = useState("today");
-  const [useCustomRange, setUseCustomRange] = useState(false);
-  const [rangeFrom, setRangeFrom] = useState(toYYYYMMDD(new Date()));
-  const [rangeTo, setRangeTo] = useState(toYYYYMMDD(new Date()));
+  const [datePreset, setDatePreset] = useState(
+    filters?.from || filters?.to ? "custom" : "all"
+  );
+  const [useCustomRange, setUseCustomRange] = useState(
+    Boolean(filters?.from || filters?.to)
+  );
+  const [rangeFrom, setRangeFrom] = useState(filters?.from || "");
+  const [rangeTo, setRangeTo] = useState(filters?.to || "");
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [packingIds, setPackingIds] = useState(() => new Set());
   const [bulkPacking, setBulkPacking] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [jumpPage, setJumpPage] = useState("1");
 
+  const currentPackability = filters?.packability || "all";
+  const currentLimit = Number(queuePagination?.limit || filters?.limit || 100);
+
+  const buildQueuePayload = (overrides = {}) => {
+    const from =
+      overrides.from !== undefined
+        ? overrides.from
+        : filters?.from ?? rangeFrom ?? "";
+
+    const to =
+      overrides.to !== undefined
+        ? overrides.to
+        : filters?.to ?? rangeTo ?? "";
+
+    return {
+      q: overrides.q !== undefined ? overrides.q : filters?.q || "",
+      from,
+      to,
+      packability:
+        overrides.packability !== undefined
+          ? overrides.packability
+          : currentPackability,
+      fulfillmentStatus:
+        overrides.fulfillmentStatus !== undefined
+          ? overrides.fulfillmentStatus
+          : fulfillmentStatus || filters?.fulfillmentStatus || "processing",
+      page:
+        overrides.page !== undefined
+          ? Number(overrides.page || 1)
+          : Number(queuePagination?.page || filters?.page || 1),
+      limit:
+        overrides.limit !== undefined
+          ? Number(overrides.limit || 100)
+          : currentLimit,
+    };
+  };
+
   useEffect(() => {
     fetchProductionSummary();
-    fetchProductionQueue({
-      ...filters,
-      fulfillmentStatus: fulfillmentStatus || "processing",
-      limit: 100,
-    });
+    fetchProductionQueue(
+      buildQueuePayload({
+        page: 1,
+        limit: currentLimit,
+        fulfillmentStatus: fulfillmentStatus || "processing",
+        from: filters?.from || "",
+        to: filters?.to || "",
+      })
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     setSearchInput(filters?.q || "");
   }, [filters?.q]);
+
+  useEffect(() => {
+    const hasRange = Boolean(filters?.from || filters?.to);
+    setRangeFrom(filters?.from || "");
+    setRangeTo(filters?.to || "");
+    setUseCustomRange(hasRange);
+    setDatePreset(hasRange ? "custom" : "all");
+  }, [filters?.from, filters?.to]);
 
   useEffect(() => {
     setJumpPage(String(queuePagination?.page || 1));
@@ -90,8 +143,6 @@ export default function ProductionDashboardPage() {
       return next;
     });
   }, [queue]);
-
-  const currentPackability = filters?.packability || "all";
 
   const packableVisibleIds = useMemo(() => {
     return (queue || [])
@@ -109,11 +160,15 @@ export default function ProductionDashboardPage() {
     return packableVisibleIds.every((id) => selectedIds.has(id));
   }, [packableVisibleIds, selectedIds]);
 
+  const runQueueRefresh = async (overrides = {}) => {
+    await refreshQueue(buildQueuePayload(overrides));
+  };
+
   const goToPage = async (page) => {
     const safePage = Math.max(1, Number(page || 1));
     setQueuePage(safePage);
     setSelectedIds(new Set());
-    await refreshQueue({ page: safePage });
+    await runQueueRefresh({ page: safePage });
   };
 
   const doMarkPacked = async (orderId) => {
@@ -151,7 +206,7 @@ export default function ProductionDashboardPage() {
         return next;
       });
 
-      await refreshQueue();
+      await runQueueRefresh();
       await fetchProductionSummary();
       toast.success(`Order packed: ${order?.orderNumber || oid}`);
     } catch (e) {
@@ -202,10 +257,15 @@ export default function ProductionDashboardPage() {
   const applyPreset = async (key) => {
     setUseCustomRange(false);
     setDatePreset(key);
+    clearSelection();
+    setQueuePage(1);
+    setJumpPage("1");
 
     if (key === "all") {
+      setRangeFrom("");
+      setRangeTo("");
       setDateRange({ from: "", to: "" });
-      await refreshQueue({ from: "", to: "", page: 1 });
+      await runQueueRefresh({ from: "", to: "", page: 1 });
       return;
     }
 
@@ -213,20 +273,38 @@ export default function ProductionDashboardPage() {
     const from = range.from ? toYYYYMMDD(range.from) : "";
     const to = range.to ? toYYYYMMDD(range.to) : "";
 
+    setRangeFrom(from);
+    setRangeTo(to);
     setDateRange({ from, to });
-    await refreshQueue({ from, to, page: 1 });
+    await runQueueRefresh({ from, to, page: 1 });
   };
 
   const applyCustomRange = async () => {
+    const from = rangeFrom || "";
+    const to = rangeTo || "";
+
+    if (from && to && new Date(from) > new Date(to)) {
+      toast.error("From date cannot be after To date");
+      return;
+    }
+
     setUseCustomRange(true);
-    setDateRange({ from: rangeFrom || "", to: rangeTo || "" });
-    await refreshQueue({ from: rangeFrom || "", to: rangeTo || "", page: 1 });
+    setDatePreset("custom");
+    clearSelection();
+    setQueuePage(1);
+    setJumpPage("1");
+    setDateRange({ from, to });
+
+    await runQueueRefresh({ from, to, page: 1 });
   };
 
   const onSearchSubmit = async (e) => {
     e?.preventDefault?.();
+    clearSelection();
+    setQueuePage(1);
+    setJumpPage("1");
     setSearch(searchInput);
-    await refreshQueue({ q: searchInput, page: 1 });
+    await runQueueRefresh({ q: searchInput, page: 1 });
   };
 
   const clearSelection = () => setSelectedIds(new Set());
@@ -262,7 +340,7 @@ export default function ProductionDashboardPage() {
       <ProductionHeader
         onRefresh={async () => {
           await fetchProductionSummary();
-          await refreshQueue();
+          await runQueueRefresh();
         }}
         onExport={onExportExcel}
         exporting={exporting}
@@ -290,7 +368,9 @@ export default function ProductionDashboardPage() {
           onClick={async () => {
             setFulfillmentStatus("processing");
             clearSelection();
-            await refreshQueue({ fulfillmentStatus: "processing", page: 1 });
+            setQueuePage(1);
+            setJumpPage("1");
+            await runQueueRefresh({ fulfillmentStatus: "processing", page: 1 });
           }}
         />
         <ProductionMetricCard
@@ -301,7 +381,9 @@ export default function ProductionDashboardPage() {
           onClick={async () => {
             setFulfillmentStatus("packed");
             clearSelection();
-            await refreshQueue({ fulfillmentStatus: "packed", page: 1 });
+            setQueuePage(1);
+            setJumpPage("1");
+            await runQueueRefresh({ fulfillmentStatus: "packed", page: 1 });
           }}
         />
       </div>
@@ -323,13 +405,17 @@ export default function ProductionDashboardPage() {
         onPackabilityChange={async (value) => {
           setPackability(value);
           clearSelection();
-          await refreshQueue({ packability: value, page: 1 });
+          setQueuePage(1);
+          setJumpPage("1");
+          await runQueueRefresh({ packability: value, page: 1 });
         }}
         fulfillmentStatus={fulfillmentStatus}
         onStatusChange={async (value) => {
           clearSelection();
           setFulfillmentStatus(value);
-          await refreshQueue({ fulfillmentStatus: value, page: 1 });
+          setQueuePage(1);
+          setJumpPage("1");
+          await runQueueRefresh({ fulfillmentStatus: value, page: 1 });
         }}
         total={total}
         loadingQueue={loadingQueue}
@@ -395,9 +481,12 @@ export default function ProductionDashboardPage() {
           await goToPage(safePage);
         }}
         onLimitChange={async (value) => {
-          setQueueLimit(value);
+          const nextLimit = Number(value || 100);
+          setQueueLimit(nextLimit);
           clearSelection();
-          await refreshQueue({ limit: Number(value || 100), page: 1 });
+          setQueuePage(1);
+          setJumpPage("1");
+          await runQueueRefresh({ limit: nextLimit, page: 1 });
         }}
       />
     </div>
