@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Palette,
@@ -21,16 +21,13 @@ import {
   FileText,
   Headset,
   Clapperboard,
-  Sparkles,
-  ArrowUpDown,
-  RefreshCw,
-  Quote,
   Globe,
   RotateCcw,
   Handshake,
   Footprints,
   Star,
   Scissors,
+  Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -40,19 +37,7 @@ import {
   DOMAIN_PERMISSIONS,
   hasPermission,
 } from "@/config/loginConfig";
-
-const QUOTES = [
-  { text: "Small progress every day beats big plans someday.", tag: "Consistency" },
-  { text: "Discipline turns goals into results — show up today.", tag: "Discipline" },
-  { text: "Consistency is the real shortcut. Do the work daily.", tag: "Daily Work" },
-  { text: "Today’s effort is tomorrow’s advantage.", tag: "Momentum" },
-  { text: "Win the day. Repeat.", tag: "Execution" },
-  { text: "Focus on what you can do today — momentum will follow.", tag: "Focus" },
-  { text: "Action creates clarity. Start now.", tag: "Action" },
-  { text: "Work the plan. Trust the process.", tag: "Process" },
-  { text: "Done today is better than perfect tomorrow.", tag: "Progress" },
-  { text: "One focused hour beats a whole day distracted.", tag: "Deep Work" },
-];
+import LiveClock from "@/components/dashboard/LiveClock";
 
 const DOMAIN_LIST = [
   { id: "designing", name: "Designing", icon: Palette, route: "/designing" },
@@ -105,118 +90,32 @@ const isFeaturedCard = (id) => id === "design_lab";
 
 export default function HomeDashboard() {
   const router = useRouter();
-
   const admin = useLoginStore((s) => s.admin);
   const role = admin?.role || "viewer";
 
+  // Resolve permissions
   const permissions = useMemo(() => {
     if (admin?.permissions?.length) return admin.permissions;
     return ROLE_DEFAULT_PERMS[role] || [];
   }, [admin?.permissions, role]);
 
-  const [quote, setQuote] = useState(QUOTES[0]);
-  const [sortBy, setSortBy] = useState("name_asc");
-  const lastQuoteIndex = useRef(-1);
-
-  const pickQuote = () => {
-    if (!QUOTES.length) return;
-
-    let nextIndex = Math.floor(Math.random() * QUOTES.length);
-    if (nextIndex === lastQuoteIndex.current) {
-      nextIndex = (nextIndex + 1) % QUOTES.length;
-    }
-
-    lastQuoteIndex.current = nextIndex;
-    setQuote(QUOTES[nextIndex]);
-  };
-
-  useEffect(() => {
-    pickQuote();
-    const timer = setInterval(pickQuote, 9000);
-    return () => clearInterval(timer);
-  }, []);
-
+  // Allowed cards only
   const allowedDomains = useMemo(() => {
     return DOMAIN_LIST.filter((item) =>
       hasPermission(permissions, DOMAIN_PERMISSIONS[item.id])
     );
   }, [permissions]);
 
+  // Sort by name
   const sortedDomains = useMemo(() => {
-    const items = [...allowedDomains];
-    return items.sort((a, b) =>
-      sortBy === "name_desc"
-        ? b.name.localeCompare(a.name)
-        : a.name.localeCompare(b.name)
-    );
-  }, [allowedDomains, sortBy]);
+    return [...allowedDomains].sort((a, b) => a.name.localeCompare(b.name));
+  }, [allowedDomains]);
 
   return (
-    <div className="min-h-screen bg-gray-50 px-3 py-6 sm:px-6 sm:py-10 md:px-8">
+    <div className="min-h-screen bg-gray-50 px-3 py-6 sm:px-6 sm:py-8 md:px-8">
+      {/* Single merged top card */}
       <div className="mb-6">
-        <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-4 py-4 shadow-sm sm:px-5">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
-                <Sparkles size={18} className="text-blue-700" />
-              </span>
-
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="font-semibold text-gray-900">Daily Focus</div>
-
-                  <span className="hidden items-center gap-1 rounded-full bg-blue-600 px-2 py-1 text-[11px] text-white sm:inline-flex">
-                    <Quote size={12} /> Quote
-                  </span>
-
-                  <span className="inline-flex items-center rounded-full border border-blue-100 bg-white px-2 py-1 text-[11px] text-blue-700">
-                    {quote.tag}
-                  </span>
-                </div>
-
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.div
-                    key={quote.text}
-                    initial={{ opacity: 0, y: 10, filter: "blur(2px)" }}
-                    animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                    exit={{ opacity: 0, y: -10, filter: "blur(2px)" }}
-                    transition={{ duration: 0.28 }}
-                    className="mt-1 break-words text-sm leading-snug text-gray-700 sm:text-[15px]"
-                  >
-                    <span className="font-semibold text-blue-700">“</span>
-                    {quote.text}
-                    <span className="font-semibold text-blue-700">”</span>
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-            </div>
-
-            <div className="flex w-full items-center gap-2 md:w-auto">
-              <button
-                type="button"
-                onClick={pickQuote}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:bg-gray-50"
-              >
-                <RefreshCw size={16} />
-              </button>
-
-              <div className="flex w-full items-center gap-2 md:w-auto">
-                <div className="hidden items-center gap-2 text-xs text-gray-500 md:flex">
-                  <ArrowUpDown size={14} /> Sort
-                </div>
-
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none shadow-sm hover:bg-gray-50 md:w-auto"
-                >
-                  <option value="name_asc">Name (A → Z)</option>
-                  <option value="name_desc">Name (Z → A)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
+        <LiveClock />
       </div>
 
       {sortedDomains.length === 0 ? (
@@ -250,10 +149,7 @@ export default function HomeDashboard() {
                   ].join(" ")}
                 >
                   {featured && (
-                    <>
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(217,70,239,0.16),_transparent_45%)]" />
-                     
-                    </>
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(217,70,239,0.16),_transparent_45%)]" />
                   )}
 
                   <div
@@ -282,10 +178,10 @@ export default function HomeDashboard() {
                   {CARD_HINTS[id] && (
                     <p
                       className={[
-                        "relative mt-1 text-center sm:text-xs",
+                        "relative mt-1 text-center text-[11px]",
                         featured
-                          ? "max-w-[220px] text-[11px] text-fuchsia-700/80"
-                          : "text-[11px] text-gray-500",
+                          ? "max-w-[220px] text-fuchsia-700/80"
+                          : "text-gray-500",
                       ].join(" ")}
                     >
                       {CARD_HINTS[id]}
