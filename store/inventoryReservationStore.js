@@ -12,6 +12,14 @@ const qs = (params = {}) => {
 
   for (const [k, v] of Object.entries(params)) {
     if (v == null) continue;
+
+    if (Array.isArray(v)) {
+      const arr = v.map((x) => String(x).trim()).filter(Boolean);
+      if (!arr.length) continue;
+      q.set(k, arr.join(","));
+      continue;
+    }
+
     const s = String(v).trim();
     if (!s) continue;
     q.set(k, s);
@@ -28,6 +36,7 @@ const invLog = (...a) => INV_DEBUG && console.log("[INV_RES]", ...a);
 
 const upsert = (list = [], doc) => {
   if (!doc?._id) return list;
+
   const id = String(doc._id);
   const idx = list.findIndex((x) => String(x?._id) === id);
 
@@ -52,6 +61,7 @@ const DEFAULT_FILTERS = {
   status: "",
   refType: "",
   refId: "",
+  refIds: [],
   orderLineId: "",
 };
 
@@ -89,11 +99,11 @@ export const useInventoryReservationStore = create((set, get) => ({
 
       set({
         reservations: data?.data || [],
-        total: Number(data?.count || 0),
+        total: Number(data?.count || data?.total || 0),
         loading: false,
       });
 
-      invLog("fetchReservations <-", { count: data?.count || 0 });
+      invLog("fetchReservations <-", { count: data?.count || data?.total || 0 });
       return data;
     } catch (e) {
       const m = msg(e, "Failed to fetch reservations");
@@ -363,11 +373,7 @@ export const useInventoryReservationStore = create((set, get) => ({
   },
 
   releaseOrderReservations: async (orderId, reason = "") => {
-    return get().cancelOrderReservations(
-      orderId,
-      reason || "order cancelled",
-      "released"
-    );
+    return get().cancelOrderReservations(orderId, reason || "order cancelled", "released");
   },
 
   /* ---------------- expire due ---------------- */

@@ -33,11 +33,13 @@ const buildQueryString = (params = {}) => {
   const priority = toCSV(params.priority);
   const orderType = toCSV(params.orderType);
   const provider = toCSV(params.provider);
+  const packability = safeStr(params.packability);
 
   if (fulfillmentStatus) qs.set("fulfillmentStatus", fulfillmentStatus);
   if (priority) qs.set("priority", priority);
   if (orderType) qs.set("orderType", orderType);
   if (provider) qs.set("provider", provider);
+  if (packability) qs.set("packability", packability);
 
   const q = safeStr(params.q);
   const from = safeStr(params.from);
@@ -109,7 +111,10 @@ const DEFAULT_FILTERS = {
   from: "",
   to: "",
   sort: "createdAt:desc",
-  all: true,
+  page: 1,
+  limit: 100,
+  packability: "all",
+  all: false,
 };
 
 const DEFAULT_JOB_FILTERS = {
@@ -141,6 +146,14 @@ const DEFAULT_JOB_PAGINATION = {
   hasMore: false,
 };
 
+const DEFAULT_QUEUE_PAGINATION = {
+  total: 0,
+  page: 1,
+  limit: 100,
+  pages: 1,
+  hasMore: false,
+};
+
 export const useAdminProductionStore = create((set, get) => ({
   /* =========================================================
      STATE
@@ -168,6 +181,7 @@ export const useAdminProductionStore = create((set, get) => ({
 
   fulfillmentStatus: "processing",
   filters: { ...DEFAULT_FILTERS },
+  queuePagination: { ...DEFAULT_QUEUE_PAGINATION },
   productionJobFilters: { ...DEFAULT_JOB_FILTERS },
 
   total: 0,
@@ -194,17 +208,28 @@ export const useAdminProductionStore = create((set, get) => ({
       filters: {
         ...state.filters,
         fulfillmentStatus: status || "processing",
+        page: 1,
       },
     })),
 
   setFilters: (partial = {}) =>
-    set((state) => ({
-      filters: { ...state.filters, ...partial },
-    })),
+    set((state) => {
+      const next = { ...state.filters, ...partial };
+      const changedKeys = Object.keys(partial || {});
+      const shouldResetPage = changedKeys.some((key) => key !== "page");
+
+      if (shouldResetPage && !("page" in partial)) next.page = 1;
+
+      return { filters: next };
+    }),
 
   setSearch: (q = "") =>
     set((state) => ({
-      filters: { ...state.filters, q: safeStr(q) },
+      filters: {
+        ...state.filters,
+        q: safeStr(q),
+        page: 1,
+      },
     })),
 
   setDateRange: ({ from = "", to = "" } = {}) =>
@@ -213,6 +238,33 @@ export const useAdminProductionStore = create((set, get) => ({
         ...state.filters,
         from: safeStr(from),
         to: safeStr(to),
+        page: 1,
+      },
+    })),
+
+  setQueuePage: (page = 1) =>
+    set((state) => ({
+      filters: {
+        ...state.filters,
+        page: Math.max(1, toNum(page, 1)),
+      },
+    })),
+
+  setQueueLimit: (limit = 25) =>
+    set((state) => ({
+      filters: {
+        ...state.filters,
+        limit: Math.max(1, toNum(limit, 25)),
+        page: 1,
+      },
+    })),
+
+  setPackability: (packability = "all") =>
+    set((state) => ({
+      filters: {
+        ...state.filters,
+        packability: safeStr(packability) || "all",
+        page: 1,
       },
     })),
 
@@ -220,6 +272,9 @@ export const useAdminProductionStore = create((set, get) => ({
     set({
       fulfillmentStatus: "processing",
       filters: { ...DEFAULT_FILTERS },
+      queuePagination: { ...DEFAULT_QUEUE_PAGINATION },
+      total: 0,
+      queue: [],
     }),
 
   setProductionJobFilters: (partial = {}) =>
@@ -228,9 +283,7 @@ export const useAdminProductionStore = create((set, get) => ({
       const changedKeys = Object.keys(partial || {});
       const shouldResetPage = changedKeys.some((key) => key !== "page");
 
-      if (shouldResetPage && !("page" in partial)) {
-        next.page = 1;
-      }
+      if (shouldResetPage && !("page" in partial)) next.page = 1;
 
       return { productionJobFilters: next };
     }),
@@ -272,7 +325,10 @@ export const useAdminProductionStore = create((set, get) => ({
         merged.fulfillmentStatus || state.fulfillmentStatus || "processing";
 
       merged.fulfillmentStatus = status;
-      if (merged.all == null) merged.all = true;
+      if (merged.all == null) merged.all = false;
+      if (toNum(merged.page, 0) <= 0) merged.page = 1;
+if (toNum(merged.limit, 0) <= 0) merged.limit = state.filters.limit || 100;
+      merged.packability = safeStr(merged.packability) || "all";
 
       const query = buildQueryString(merged);
       const res = await fetch(`${API}/production/queue?${query}`, {
@@ -281,17 +337,48 @@ export const useAdminProductionStore = create((set, get) => ({
 
       const data = await parseJson(res);
 
+      const orders = Array.isArray(data?.orders) ? data.orders : [];
+      const total = toNum(data?.total, 0);
+      const currentPage = toNum(data?.page, merged.page || 1);
+      const currentLimit = toNum(data?.limit, merged.limit || 25);
+      const currentPages = Math.max(
+        1,
+        toNum(data?.pages, Math.ceil(total / Math.max(1, currentLimit)) || 1)
+      );
+
       set((s) => ({
-        queue: Array.isArray(data.orders) ? data.orders : [],
-        total: Number(data.total || (data.orders || []).length || 0),
+        queue: orders,
+        total,
         fulfillmentStatus: status,
-        filters: { ...s.filters, ...merged, fulfillmentStatus: status },
+        filters: {
+          ...s.filters,
+          ...merged,
+          fulfillmentStatus: status,
+          page: currentPage,
+          limit: currentLimit,
+          packability: safeStr(
+            data?.filtersApplied?.packability || merged.packability || "all"
+          ),
+          all: Boolean(data?.all),
+        },
+        queuePagination: {
+          total,
+          page: currentPage,
+          limit: currentLimit,
+          pages: currentPages,
+          hasMore: currentPage < currentPages,
+        },
       }));
 
-      return Array.isArray(data.orders) ? data.orders : [];
+      return orders;
     } catch (e) {
       console.error("❌ fetchProductionQueue error:", e);
-      set({ error: e.message, queue: [] });
+      set({
+        error: e.message,
+        queue: [],
+        total: 0,
+        queuePagination: { ...DEFAULT_QUEUE_PAGINATION },
+      });
       toast.error(e.message);
       return [];
     } finally {
@@ -591,12 +678,18 @@ export const useAdminProductionStore = create((set, get) => ({
             ? (state.queue || []).filter((o) => !shippedIdSet.has(String(o?._id)))
             : state.queue || [];
 
+        const nextTotal =
+          String(state.fulfillmentStatus || "").toLowerCase() === "packed"
+            ? Math.max(0, Number(state.total || 0) - modifiedCount)
+            : state.total;
+
         return {
           queue: nextQueue,
-          total:
-            String(state.fulfillmentStatus || "").toLowerCase() === "packed"
-              ? Math.max(0, Number(state.total || 0) - modifiedCount)
-              : state.total,
+          total: nextTotal,
+          queuePagination: {
+            ...state.queuePagination,
+            total: Number(nextTotal || 0),
+          },
         };
       });
 
@@ -628,8 +721,6 @@ export const useAdminProductionStore = create((set, get) => ({
 
   /* =========================================================
      FETCH PROCESSING ORDER PRODUCTS
-     - processing orders
-     - grouped from order items
   ========================================================= */
   fetchProcessingOrderProducts: async (params = {}) => {
     try {
@@ -714,6 +805,10 @@ export const useAdminProductionStore = create((set, get) => ({
   ========================================================= */
   refreshProductionJobs: async () => {
     return get().fetchProductionJobs(get().productionJobFilters);
+  },
+
+  refreshQueue: async (params = {}) => {
+    return get().fetchProductionQueue({ ...get().filters, ...params });
   },
 
   refreshAll: async () => {

@@ -1,622 +1,176 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import useAdminProductionStore from "@/store/adminProductionStore";
-import { useInventoryReservationStore } from "@/store/inventoryReservationStore";
-import SyncInventoryButton from "@/components/production/SyncInventoryButton";
 import { toast } from "react-hot-toast";
-import { useAdminProductStore } from "@/store/adminProductStore";
+import useAdminProductionStore from "@/store/adminProductionStore";
 
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
-
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
-
-const STATUS_OPTIONS = [
-  { label: "Processing (To Produce)", value: "processing" },
-  { label: "Packed (Ready to Ship)", value: "packed" },
-  { label: "Shipped", value: "shipped" },
-  { label: "Delivered", value: "delivered" },
-  { label: "Cancelled", value: "cancelled" },
-];
-
-const DATE_PRESETS = [
-  { key: "today", label: "Today" },
-  { key: "yesterday", label: "Yesterday" },
-  { key: "7d", label: "Last 7 Days" },
-  { key: "30d", label: "Last 30 Days" },
-  { key: "all", label: "All" },
-];
-
-/* ============================
-   Date helpers
-============================ */
-const startOfDay = (d) => {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-};
-
-const endOfDay = (d) => {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-};
-
-const toYYYYMMDD = (d) => {
-  const x = new Date(d);
-  const y = x.getFullYear();
-  const m = String(x.getMonth() + 1).padStart(2, "0");
-  const day = String(x.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
-
-const getPresetRange = (key) => {
-  const now = new Date();
-  const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
-
-  if (key === "today") return { from: todayStart, to: todayEnd };
-
-  if (key === "yesterday") {
-    const y = new Date(todayStart);
-    y.setDate(y.getDate() - 1);
-    return { from: startOfDay(y), to: endOfDay(y) };
-  }
-
-  if (key === "7d") {
-    const from = new Date(todayStart);
-    from.setDate(from.getDate() - 6);
-    return { from: startOfDay(from), to: todayEnd };
-  }
-
-  if (key === "30d") {
-    const from = new Date(todayStart);
-    from.setDate(from.getDate() - 29);
-    return { from: startOfDay(from), to: todayEnd };
-  }
-
-  return { from: null, to: null };
-};
-
-/* ============================
-   URL + Proxy Helpers
-============================ */
-const toAbsoluteUrl = (url) => {
-  const u = String(url || "").trim();
-  if (!u) return "";
-  if (u.startsWith("http://") || u.startsWith("https://")) return u;
-  if (u.startsWith("//")) return `https:${u}`;
-  if (u.startsWith("/")) return `https://mirayfashions.in${u}`;
-  return `https://mirayfashions.in/${u}`;
-};
-
-const proxifyImage = (url) => {
-  const abs = toAbsoluteUrl(url);
-  if (!abs) return "";
-  return `${BASE_URL}/api/proxy-image?url=${encodeURIComponent(abs)}`;
-};
-
-const getProductId = (item) => String(item?.productId?._id || item?.productId || "");
-const getVariantIdFromItem = (item) => String(item?.variant?.variantId || "");
-const safeId = (v) => String(v?._id || v || "").trim();
-
-const resolveItemImage = (item, productMap) => {
-  const pid = getProductId(item);
-  const product = productMap?.[pid];
-  const variantId = item?.variant?.variantId ? String(item.variant.variantId) : "";
-
-  if (product && variantId && Array.isArray(product?.variants)) {
-    const v = product.variants.find((x) => String(x?._id) === variantId);
-    if (v?.image) return proxifyImage(v.image);
-  }
-
-  if (product?.thumbnail) return proxifyImage(product.thumbnail);
-  if (Array.isArray(product?.images) && product.images.length) {
-    return proxifyImage(product.images[0]);
-  }
-
-  return proxifyImage(
-    item?.variant?.image ||
-      item?.productSnapshot?.thumbnail ||
-      (item?.productSnapshot?.images || [])[0] ||
-      ""
-  );
-};
-
-const getReservedQtyForItem = (orderId, item, reservationList) => {
-  const oid = String(orderId || "").trim();
-  if (!oid) return 0;
-
-  const pid = safeId(item?.productId);
-  const vid = getVariantIdFromItem(item);
-
-  return (reservationList || [])
-    .filter((r) => {
-      if (String(r?.status) !== "reserved") return false;
-      if (String(r?.refType) !== "order") return false;
-      if (String(r?.refId) !== oid) return false;
-      if (safeId(r?.productId) !== pid) return false;
-
-      const rVid = safeId(r?.variantId);
-      if (!vid) return !rVid;
-      return rVid === vid;
-    })
-    .reduce((sum, r) => sum + Number(r?.qty || 0), 0);
-};
-
-const getOrderPackability = (order, reservationList = []) => {
-  const items = order?.items || [];
-  for (const it of items) {
-    const req = Number(it?.quantity || 0);
-    const resv = getReservedQtyForItem(order?._id, it, reservationList);
-    if (resv < req) {
-      const title = it?.productSnapshot?.title || "Item";
-      return {
-        fullyReserved: false,
-        reason: `Not fully reserved: ${title} (${resv}/${req})`,
-      };
-    }
-  }
-  return { fullyReserved: true, reason: "" };
-};
-
-/* ============================================================
-   Excel Export
-============================================================ */
-async function exportProductionXLSX(orders, productMap, filename = "production.xlsx") {
-  if (!orders?.length) return;
-
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Production Dashboard";
-  workbook.created = new Date();
-
-  const sheet = workbook.addWorksheet("Production", {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
-
-  sheet.columns = [
-    { header: "Image", key: "image", width: 16 },
-    { header: "Order#", key: "orderNumber", width: 16 },
-    { header: "Date", key: "date", width: 22 },
-    { header: "Customer", key: "customer", width: 22 },
-    { header: "Phone", key: "phone", width: 16 },
-    { header: "Product", key: "productName", width: 34 },
-    { header: "Size", key: "size", width: 10 },
-    { header: "Color", key: "color", width: 12 },
-    { header: "SKU", key: "sku", width: 18 },
-    { header: "Qty", key: "qty", width: 6 },
-  ];
-
-  const headerRow = sheet.getRow(1);
-  headerRow.font = { bold: true };
-  headerRow.height = 18;
-
-  let rowIndex = 2;
-
-  for (const order of orders) {
-    const orderNumber = order?.orderNumber || "";
-    const customer = order?.shippingAddressSnapshot?.fullName || "";
-    const phone = order?.shippingAddressSnapshot?.phone || "";
-    const date = new Date(order?.createdAt || order?.orderDate || Date.now()).toLocaleString();
-
-    for (const it of order?.items || []) {
-      const title = it?.productSnapshot?.title || "Item";
-      const imageUrl = resolveItemImage(it, productMap);
-      const size = it?.selectedSize || "";
-      const color = it?.selectedColor || "";
-      const sku = it?.variant?.sku || it?.productSnapshot?.sku || "";
-      const qty = Number(it?.quantity || 1);
-
-      sheet.addRow({
-        image: "",
-        orderNumber,
-        date,
-        customer,
-        phone,
-        productName: title,
-        size,
-        color,
-        sku,
-        qty,
-      });
-
-      const row = sheet.getRow(rowIndex);
-      row.height = 55;
-      row.alignment = { vertical: "middle" };
-
-      if (imageUrl) {
-        try {
-          const imgRes = await fetch(imageUrl);
-          const blob = await imgRes.blob();
-          const buffer = await blob.arrayBuffer();
-
-          const ext = blob.type.includes("png") ? "png" : "jpeg";
-          const imageId = workbook.addImage({ buffer, extension: ext });
-
-          sheet.addImage(imageId, {
-            tl: { col: 0, row: rowIndex - 1 },
-            ext: { width: 70, height: 70 },
-          });
-        } catch {
-          console.warn("Image embed failed:", imageUrl);
-        }
-      }
-
-      rowIndex++;
-    }
-  }
-
-  const buf = await workbook.xlsx.writeBuffer();
-  const fileBlob = new Blob([buf], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-
-  saveAs(fileBlob, filename);
-}
+import ProductionHeader from "@/components/production/ProductionHeader";
+import ProductionFilters from "@/components/production/ProductionFilters";
+import ProductionBulkBar from "@/components/production/ProductionBulkBar";
+import ProductionOrderCard from "@/components/production/ProductionOrderCard";
+import ProductionPagination from "@/components/production/ProductionPagination";
+import ProductionMetricCard from "@/components/production/ProductionMetricCard";
+import {
+  exportProductionXLSX,
+  getPresetRange,
+  toYYYYMMDD,
+} from "@/components/production/productionUtils";
 
 export default function ProductionDashboardPage() {
   const router = useRouter();
-  const prodStore = useAdminProductionStore();
+  const store = useAdminProductionStore();
 
   const {
-    queue: storeQueue,
-    summary: storeSummary,
+    queue,
+    summary,
+    total,
+    filters,
+    queuePagination,
     loadingQueue,
     loadingSummary,
     error,
     fulfillmentStatus,
     setFulfillmentStatus,
+    setSearch,
+    setDateRange,
+    setPackability,
+    setQueuePage,
+    setQueueLimit,
     fetchProductionQueue,
     fetchProductionSummary,
     clearError,
-  } = prodStore;
+    refreshQueue,
+  } = store;
 
   const markPackedFn =
-    prodStore?.markOrderPacked ||
-    prodStore?.markPacked ||
-    prodStore?.markPackedOrder ||
-    prodStore?.updateOrderStatus ||
-    prodStore?.setOrderStatus ||
+    store?.markOrderPacked ||
+    store?.markPacked ||
+    store?.markPackedOrder ||
+    store?.updateOrderStatus ||
+    store?.setOrderStatus ||
     null;
 
-  const { reservations: storeReservations, fetchReservations: fetchInventoryReservations } =
-    useInventoryReservationStore();
-
-  const { fetchProductsByIds } = useAdminProductStore();
-
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState(filters?.q || "");
   const [datePreset, setDatePreset] = useState("today");
-  const [exporting, setExporting] = useState(false);
-
+  const [useCustomRange, setUseCustomRange] = useState(false);
   const [rangeFrom, setRangeFrom] = useState(toYYYYMMDD(new Date()));
   const [rangeTo, setRangeTo] = useState(toYYYYMMDD(new Date()));
-  const [useCustomRange, setUseCustomRange] = useState(false);
-
-  const [productMap, setProductMap] = useState({});
-  const [localQueue, setLocalQueue] = useState([]);
-  const [localReservations, setLocalReservations] = useState([]);
-  const [localSummary, setLocalSummary] = useState({});
-
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [packingIds, setPackingIds] = useState(() => new Set());
   const [bulkPacking, setBulkPacking] = useState(false);
-
-  const didMountRef = useRef(false);
-
-  const buildQueueParams = useCallback(() => {
-    const base = { fulfillmentStatus, all: true };
-
-    if (useCustomRange) {
-      return {
-        ...base,
-        from: rangeFrom || "",
-        to: rangeTo || "",
-      };
-    }
-
-    return base;
-  }, [fulfillmentStatus, useCustomRange, rangeFrom, rangeTo]);
-
-  const safeRefresh = useCallback(async () => {
-    try {
-      await fetchProductionSummary();
-      await fetchProductionQueue(buildQueueParams());
-    } catch (e) {
-      console.error("safeRefresh failed:", e);
-      toast.error("Refresh failed");
-    }
-  }, [fetchProductionSummary, fetchProductionQueue, buildQueueParams]);
+  const [exporting, setExporting] = useState(false);
+  const [jumpPage, setJumpPage] = useState("1");
 
   useEffect(() => {
-    safeRefresh();
-  }, [safeRefresh]);
-
-  useEffect(() => {
-    if (!didMountRef.current) {
-      didMountRef.current = true;
-      return;
-    }
-    fetchProductionQueue(buildQueueParams());
-  }, [fulfillmentStatus, fetchProductionQueue, buildQueueParams]);
-
-  useEffect(() => {
-    const onlyConfirmed = (Array.isArray(storeQueue) ? storeQueue : []).filter(
-      (o) => o?.isConfirmed === true
-    );
-    setLocalQueue(onlyConfirmed);
-  }, [storeQueue]);
-
-  useEffect(() => {
-    setLocalSummary(storeSummary || {});
-  }, [storeSummary]);
-
-  useEffect(() => {
-    setLocalReservations(Array.isArray(storeReservations) ? storeReservations : []);
-  }, [storeReservations]);
-
-  useEffect(() => {
-    const run = async () => {
-      const ids = Array.from(
-        new Set(
-          (localQueue || [])
-            .flatMap((o) => (o?.items || []).map((it) => getProductId(it)))
-            .filter(Boolean)
-        )
-      );
-
-      if (!ids.length) return;
-
-      const products = await fetchProductsByIds(ids);
-      const map = {};
-      (products || []).forEach((p) => {
-        map[String(p._id)] = p;
-      });
-      setProductMap(map);
-    };
-
-    run();
-  }, [localQueue, fetchProductsByIds]);
-
-  useEffect(() => {
-    const run = async () => {
-      if (!localQueue?.length) return;
-
-      const refIds = localQueue
-        .map((o) => String(o?._id || "").trim())
-        .filter(Boolean);
-
-      try {
-        await fetchInventoryReservations({
-          status: "reserved",
-          refType: "order",
-          refIds,
-        });
-      } catch {
-        await fetchInventoryReservations({
-          status: "reserved",
-          refType: "order",
-        });
-      }
-    };
-
-    run();
-  }, [localQueue, fetchInventoryReservations]);
-
-  const activeDateRange = useMemo(() => {
-    if (useCustomRange) {
-      const from = rangeFrom ? startOfDay(new Date(rangeFrom)) : null;
-      const to = rangeTo ? endOfDay(new Date(rangeTo)) : null;
-      return { from, to };
-    }
-    return getPresetRange(datePreset);
-  }, [datePreset, useCustomRange, rangeFrom, rangeTo]);
-
-  const filteredQueue = useMemo(() => {
-    const q = Array.isArray(localQueue) ? localQueue.slice() : [];
-    const term = String(search || "").trim().toLowerCase();
-    const { from, to } = activeDateRange;
-
-    return q.filter((o) => {
-      if (o?.isConfirmed !== true) return false;
-
-      const created = new Date(o?.createdAt || o?.orderDate || Date.now());
-      const inRange = (!from || created >= from) && (!to || created <= to);
-      if (!inRange) return false;
-
-      if (!term) return true;
-
-      const orderNumber = String(o?.orderNumber || "").toLowerCase();
-      const name = String(o?.shippingAddressSnapshot?.fullName || "").toLowerCase();
-      const phone = String(o?.shippingAddressSnapshot?.phone || "").toLowerCase();
-
-      const itemsText = (o?.items || [])
-        .map((it) => it?.productSnapshot?.title || "")
-        .join(" ")
-        .toLowerCase();
-
-      return (
-        orderNumber.includes(term) ||
-        name.includes(term) ||
-        phone.includes(term) ||
-        itemsText.includes(term)
-      );
+    fetchProductionSummary();
+    fetchProductionQueue({
+      ...filters,
+      fulfillmentStatus: fulfillmentStatus || "processing",
+      limit: 100,
     });
-  }, [localQueue, search, activeDateRange]);
-
-  const packabilityMap = useMemo(() => {
-    const map = {};
-    for (const o of filteredQueue) {
-      map[String(o?._id)] = getOrderPackability(o, localReservations);
-    }
-    return map;
-  }, [filteredQueue, localReservations]);
-
-  const packableFilteredIds = useMemo(() => {
-    return (filteredQueue || [])
-      .filter((o) => {
-        if (!o) return false;
-        const id = String(o?._id || "");
-        const p = packabilityMap?.[id];
-
-        if (o?.isConfirmed !== true) return false;
-        if (String(o?.fulfillmentStatus) !== "processing") return false;
-        if (!p?.fullyReserved) return false;
-
-        return true;
-      })
-      .map((o) => String(o?._id));
-  }, [filteredQueue, packabilityMap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
+    setSearchInput(filters?.q || "");
+  }, [filters?.q]);
+
+  useEffect(() => {
+    setJumpPage(String(queuePagination?.page || 1));
+  }, [queuePagination?.page]);
+
+  useEffect(() => {
+    const visible = new Set((queue || []).map((o) => String(o?._id)));
     setSelectedIds((prev) => {
       const next = new Set();
-      const visible = new Set(filteredQueue.map((o) => String(o?._id)));
       for (const id of prev) {
         if (visible.has(String(id))) next.add(String(id));
       }
       return next;
     });
-  }, [filteredQueue]);
+  }, [queue]);
 
-  const selectedCount = selectedIds.size;
+  const currentPackability = filters?.packability || "all";
 
-  const onOpenOrder = (orderId) => {
-    router.push(`/production/order/${orderId}`);
+  const packableVisibleIds = useMemo(() => {
+    return (queue || [])
+      .filter(
+        (o) =>
+          o?.isConfirmed === true &&
+          String(o?.fulfillmentStatus) === "processing" &&
+          o?.isPackable === true
+      )
+      .map((o) => String(o?._id));
+  }, [queue]);
+
+  const allPackableVisibleSelected = useMemo(() => {
+    if (!packableVisibleIds.length) return false;
+    return packableVisibleIds.every((id) => selectedIds.has(id));
+  }, [packableVisibleIds, selectedIds]);
+
+  const goToPage = async (page) => {
+    const safePage = Math.max(1, Number(page || 1));
+    setQueuePage(safePage);
+    setSelectedIds(new Set());
+    await refreshQueue({ page: safePage });
   };
 
-  const applyLocalRemovalAfterPacked = useCallback((orderId) => {
-    setLocalQueue((prev) => prev.filter((o) => String(o?._id) !== String(orderId)));
+  const doMarkPacked = async (orderId) => {
+    if (!orderId || !markPackedFn) {
+      toast.error("Pack action not available");
+      return;
+    }
 
-    setLocalReservations((prev) =>
-      (prev || []).filter((r) => String(r?.refId) !== String(orderId))
-    );
+    const oid = String(orderId);
+    const order = (queue || []).find((o) => String(o?._id) === oid);
 
-    setLocalSummary((prev) => {
-      const p = { ...(prev || {}) };
-      p.processing = Math.max(0, Number(p.processing || 0) - 1);
-      p.packed = Number(p.packed || 0) + 1;
-      return p;
-    });
-  }, []);
+    if (!order) return;
+    if (!order?.isConfirmed) return toast.error("Only confirmed orders can be packed");
+    if (String(order?.fulfillmentStatus) !== "processing") {
+      return toast.error("Only processing orders can be packed");
+    }
+    if (!order?.isPackable) {
+      return toast.error("Order is not packable");
+    }
+    if (packingIds.has(oid)) return;
 
-  const doMarkPacked = useCallback(
-    async (orderId) => {
-      if (!orderId) return;
-      if (!markPackedFn) {
-        console.error("No mark packed function found in production store");
-        toast.error("Pack action not available");
-        return;
-      }
+    setPackingIds((prev) => new Set(prev).add(oid));
 
-      const oid = String(orderId);
-      const order = (localQueue || []).find((o) => String(o?._id) === oid);
+    try {
+      const isStatusFn =
+        markPackedFn === store.updateOrderStatus ||
+        markPackedFn === store.setOrderStatus;
 
-      if (!order) {
-        console.error("Order not found in localQueue:", oid);
-        return;
-      }
+      if (isStatusFn) await markPackedFn(oid, "packed");
+      else await markPackedFn(oid);
 
-      if (order?.isConfirmed !== true) {
-        console.warn("Blocked packing for unconfirmed order:", oid);
-        toast.error("Only confirmed orders can be packed");
-        return;
-      }
-
-      if (String(order?.fulfillmentStatus) !== "processing") {
-        console.warn("Blocked packing. Not in processing:", oid, order?.fulfillmentStatus);
-        toast.error("Only processing orders can be packed");
-        return;
-      }
-
-      if (packingIds.has(oid)) return;
-
-      setPackingIds((prev) => {
+      setSelectedIds((prev) => {
         const next = new Set(prev);
-        next.add(oid);
+        next.delete(oid);
         return next;
       });
 
-      try {
-        const isStatusFn =
-          markPackedFn === prodStore.updateOrderStatus ||
-          markPackedFn === prodStore.setOrderStatus;
-
-        if (isStatusFn) await markPackedFn(oid, "packed");
-        else await markPackedFn(oid);
-
-        applyLocalRemovalAfterPacked(oid);
-
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(oid);
-          return next;
-        });
-
-        toast.success(`Order packed: ${order?.orderNumber || oid}`);
-      } catch (e) {
-        console.error(e);
-        toast.error(e?.message || "Failed to mark packed");
-      } finally {
-        setPackingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(oid);
-          return next;
-        });
-      }
-    },
-    [
-      applyLocalRemovalAfterPacked,
-      localQueue,
-      markPackedFn,
-      packingIds,
-      prodStore.updateOrderStatus,
-      prodStore.setOrderStatus,
-    ]
-  );
-
-  const onMarkPacked = (orderId) => doMarkPacked(orderId);
-
-  const toggleSelect = (orderId) => {
-    const id = String(orderId);
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+      await refreshQueue();
+      await fetchProductionSummary();
+      toast.success(`Order packed: ${order?.orderNumber || oid}`);
+    } catch (e) {
+      toast.error(e?.message || "Failed to mark packed");
+    } finally {
+      setPackingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(oid);
+        return next;
+      });
+    }
   };
-
-  const clearSelection = () => setSelectedIds(new Set());
-
-  const selectAllPackableFiltered = () => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      for (const id of packableFilteredIds) next.add(String(id));
-      return next;
-    });
-  };
-
-  const deselectAllVisible = () => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      for (const o of filteredQueue) next.delete(String(o?._id));
-      return next;
-    });
-  };
-
-  const allPackableVisibleSelected = useMemo(() => {
-    if (!packableFilteredIds.length) return false;
-    return packableFilteredIds.every((id) => selectedIds.has(String(id)));
-  }, [packableFilteredIds, selectedIds]);
 
   const onBulkMarkPacked = async () => {
     if (bulkPacking) return;
 
     const ids = Array.from(selectedIds).filter((id) => {
-      const p = packabilityMap[String(id)];
-      return p?.fullyReserved;
+      const order = (queue || []).find((o) => String(o?._id) === String(id));
+      return order?.isPackable === true;
     });
 
     if (!ids.length) return;
@@ -634,501 +188,218 @@ export default function ProductionDashboardPage() {
   const onExportExcel = async () => {
     try {
       setExporting(true);
-      const filename = `production-${fulfillmentStatus}-${toYYYYMMDD(new Date())}.xlsx`;
-      await exportProductionXLSX(filteredQueue, productMap, filename);
-    } catch (e) {
-      console.error("Export error:", e);
+      const filename = `production-${fulfillmentStatus}-${currentPackability}-${toYYYYMMDD(
+        new Date()
+      )}.xlsx`;
+      await exportProductionXLSX(queue, filename);
+    } catch {
       toast.error("Export failed");
     } finally {
       setExporting(false);
     }
   };
 
+  const applyPreset = async (key) => {
+    setUseCustomRange(false);
+    setDatePreset(key);
+
+    if (key === "all") {
+      setDateRange({ from: "", to: "" });
+      await refreshQueue({ from: "", to: "", page: 1 });
+      return;
+    }
+
+    const range = getPresetRange(key);
+    const from = range.from ? toYYYYMMDD(range.from) : "";
+    const to = range.to ? toYYYYMMDD(range.to) : "";
+
+    setDateRange({ from, to });
+    await refreshQueue({ from, to, page: 1 });
+  };
+
+  const applyCustomRange = async () => {
+    setUseCustomRange(true);
+    setDateRange({ from: rangeFrom || "", to: rangeTo || "" });
+    await refreshQueue({ from: rangeFrom || "", to: rangeTo || "", page: 1 });
+  };
+
+  const onSearchSubmit = async (e) => {
+    e?.preventDefault?.();
+    setSearch(searchInput);
+    await refreshQueue({ q: searchInput, page: 1 });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const toggleSelect = (orderId) => {
+    const id = String(orderId);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllPackableVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of packableVisibleIds) next.add(id);
+      return next;
+    });
+  };
+
+  const deselectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const o of queue || []) next.delete(String(o?._id));
+      return next;
+    });
+  };
+
   return (
-    <div className="px-3 md:px-6 py-5 space-y-4 bg-gray-50 min-h-screen">
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-        <div>
-          <h1 className="text-xl md:text-2xl font-semibold text-gray-900">Production</h1>
-          <p className="text-xs text-gray-500">
-            Confirmed orders only • Fully reserved orders can be packed in bulk
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={safeRefresh}
-            className="px-3 py-2 rounded-xl bg-white text-xs text-gray-800 shadow-sm hover:shadow transition"
-          >
-            Refresh
-          </button>
-
-          {/* <SyncInventoryButton /> */}
-
-          <button
-            onClick={onExportExcel}
-            disabled={exporting || !filteredQueue.length}
-            className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 disabled:opacity-50"
-          >
-            {exporting ? "Exporting..." : "Export Excel"}
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50 px-3 py-5 md:px-6 space-y-4">
+      <ProductionHeader
+        onRefresh={async () => {
+          await fetchProductionSummary();
+          await refreshQueue();
+        }}
+        onExport={onExportExcel}
+        exporting={exporting}
+        canExport={!!queue.length}
+      />
 
       {error ? (
-        <div className="px-3 py-2 rounded-xl bg-red-50 text-red-700 text-xs flex items-center justify-between">
+        <div className="flex items-center justify-between rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">
           <span>{error}</span>
           <button
             onClick={clearError}
-            className="text-xs px-2 py-1 rounded-lg bg-white shadow-sm hover:shadow transition"
+            className="rounded-lg bg-white px-2 py-1 text-xs shadow-sm"
           >
             Dismiss
           </button>
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-        <MetricCard
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+        <ProductionMetricCard
           title="Processing"
-          value={localSummary?.processing}
+          value={summary?.processing}
           loading={loadingSummary}
-          onClick={() => setFulfillmentStatus("processing")}
           active={fulfillmentStatus === "processing"}
+          onClick={async () => {
+            setFulfillmentStatus("processing");
+            clearSelection();
+            await refreshQueue({ fulfillmentStatus: "processing", page: 1 });
+          }}
         />
-        <MetricCard
+        <ProductionMetricCard
           title="Packed"
-          value={localSummary?.packed}
+          value={summary?.packed}
           loading={loadingSummary}
-          onClick={() => setFulfillmentStatus("packed")}
           active={fulfillmentStatus === "packed"}
+          onClick={async () => {
+            setFulfillmentStatus("packed");
+            clearSelection();
+            await refreshQueue({ fulfillmentStatus: "packed", page: 1 });
+          }}
         />
       </div>
 
-      <div className="flex flex-col gap-3 bg-white rounded-2xl shadow-sm ring-1 ring-black/5 p-3">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          {DATE_PRESETS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => {
-                setUseCustomRange(false);
-                setDatePreset(p.key);
-              }}
-              className={`whitespace-nowrap px-3 py-2 rounded-full text-xs shadow-sm transition ${
-                !useCustomRange && datePreset === p.key
-                  ? "bg-black text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+      <ProductionFilters
+        datePreset={datePreset}
+        useCustomRange={useCustomRange}
+        setUseCustomRange={setUseCustomRange}
+        rangeFrom={rangeFrom}
+        rangeTo={rangeTo}
+        setRangeFrom={setRangeFrom}
+        setRangeTo={setRangeTo}
+        applyPreset={applyPreset}
+        applyCustomRange={applyCustomRange}
+        searchInput={searchInput}
+        setSearchInput={setSearchInput}
+        onSearchSubmit={onSearchSubmit}
+        currentPackability={currentPackability}
+        onPackabilityChange={async (value) => {
+          setPackability(value);
+          clearSelection();
+          await refreshQueue({ packability: value, page: 1 });
+        }}
+        fulfillmentStatus={fulfillmentStatus}
+        onStatusChange={async (value) => {
+          clearSelection();
+          setFulfillmentStatus(value);
+          await refreshQueue({ fulfillmentStatus: value, page: 1 });
+        }}
+        total={total}
+        loadingQueue={loadingQueue}
+      />
 
-          <button
-            onClick={() => setUseCustomRange((v) => !v)}
-            className={`whitespace-nowrap px-3 py-2 rounded-full text-xs shadow-sm transition ${
-              useCustomRange ? "bg-black text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            Custom Range
-          </button>
-        </div>
-
-        {useCustomRange ? (
-          <div className="flex flex-col md:flex-row gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 w-10">From</span>
-              <input
-                type="date"
-                value={rangeFrom}
-                onChange={(e) => setRangeFrom(e.target.value)}
-                className="px-3 py-2 rounded-xl bg-gray-50 text-xs ring-1 ring-black/5"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 w-10">To</span>
-              <input
-                type="date"
-                value={rangeTo}
-                onChange={(e) => setRangeTo(e.target.value)}
-                className="px-3 py-2 rounded-xl bg-gray-50 text-xs ring-1 ring-black/5"
-              />
-            </div>
-
-            <button
-              onClick={() => {
-                setUseCustomRange(true);
-                fetchProductionQueue({
-                  fulfillmentStatus,
-                  all: true,
-                  from: rangeFrom || "",
-                  to: rangeTo || "",
-                });
-              }}
-              className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 md:ml-auto"
-            >
-              Apply
-            </button>
-          </div>
-        ) : null}
-
-        <div className="flex flex-col md:flex-row gap-2 md:items-center">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Status</span>
-            <select
-              value={fulfillmentStatus}
-              onChange={(e) => {
-                setFulfillmentStatus(e.target.value);
-                clearSelection();
-              }}
-              className="px-3 py-2 rounded-xl bg-gray-50 text-xs ring-1 ring-black/5"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex-1">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search: order #, name, phone, product..."
-              className="w-full px-3 py-2 rounded-xl bg-gray-50 text-xs ring-1 ring-black/5"
-            />
-          </div>
-
-          <div className="text-xs text-gray-500 md:w-[120px] text-right">
-            {loadingQueue ? "Loading..." : `${filteredQueue.length} orders`}
-          </div>
-        </div>
-
-        {fulfillmentStatus === "processing" ? (
-          <div className="flex flex-col md:flex-row md:items-center gap-2 rounded-2xl bg-gray-50 ring-1 ring-black/5 p-3">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={allPackableVisibleSelected}
-                onChange={(e) => {
-                  if (e.target.checked) selectAllPackableFiltered();
-                  else deselectAllVisible();
-                }}
-                className="h-4 w-4 accent-black"
-              />
-              <span className="text-xs text-gray-700">
-                Select all <span className="font-semibold">packable</span> (fully reserved) from current list
-              </span>
-              <span className="text-[11px] text-gray-500">• {packableFilteredIds.length} packable</span>
-            </div>
-
-            <div className="flex items-center gap-2 md:ml-auto">
-              <div className="text-xs text-gray-600">
-                Selected: <span className="font-semibold">{selectedCount}</span>
-              </div>
-
-              <button
-                onClick={clearSelection}
-                disabled={!selectedCount}
-                className="px-3 py-2 rounded-xl bg-white text-xs ring-1 ring-black/10 hover:shadow disabled:opacity-50"
-              >
-                Clear
-              </button>
-
-              <button
-                onClick={onBulkMarkPacked}
-                disabled={!selectedCount || bulkPacking}
-                className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 disabled:opacity-50"
-              >
-                {bulkPacking ? "Packing..." : "Mark Selected Packed"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
+      {fulfillmentStatus === "processing" ? (
+        <ProductionBulkBar
+          checked={allPackableVisibleSelected}
+          packableCount={packableVisibleIds.length}
+          selectedCount={selectedIds.size}
+          bulkPacking={bulkPacking}
+          onToggleAll={(checked) => {
+            if (checked) selectAllPackableVisible();
+            else deselectAllVisible();
+          }}
+          onClear={clearSelection}
+          onBulkMarkPacked={onBulkMarkPacked}
+        />
+      ) : null}
 
       <div className="space-y-2">
         {loadingQueue ? (
-          <div className="p-6 text-center text-gray-500 text-sm">Loading orders...</div>
-        ) : filteredQueue.length === 0 ? (
-          <div className="p-6 text-center text-gray-500 text-sm">
+          <div className="p-6 text-center text-sm text-gray-500">Loading orders...</div>
+        ) : !queue.length ? (
+          <div className="p-6 text-center text-sm text-gray-500">
             No orders found in selected filter.
           </div>
         ) : (
-          filteredQueue.map((order, idx) => {
+          queue.map((order, idx) => {
             const id = String(order?._id);
-            const pack = packabilityMap[id] || { fullyReserved: false, reason: "" };
-            const selected = selectedIds.has(id);
-            const isPacking = packingIds.has(id);
-
             return (
-              <OrderCard
+              <ProductionOrderCard
                 key={String(order?._id || order?.orderNumber || `order-${idx}`)}
                 order={order}
-                productMap={productMap}
-                reservationList={localReservations}
-                onOpen={() => onOpenOrder(order._id)}
-                onMarkPacked={() => onMarkPacked(order._id)}
-                canMarkPacked={order.fulfillmentStatus === "processing"}
+                onOpen={() => router.push(`/production/order/${order._id}`)}
+                onMarkPacked={() => doMarkPacked(order._id)}
+                canMarkPacked={String(order?.fulfillmentStatus) === "processing"}
                 showSelect={fulfillmentStatus === "processing"}
-                isPackable={pack.fullyReserved}
-                packDisabledReason={pack.reason}
-                selected={selected}
+                isPackable={!!order?.isPackable}
+                selected={selectedIds.has(id)}
                 onToggleSelect={() => toggleSelect(order._id)}
-                packing={isPacking}
+                packing={packingIds.has(id)}
               />
             );
           })
         )}
       </div>
 
-      <div className="text-[11px] text-gray-500">
-        ✅ Packed orders are removed instantly. Inventory consume happens from backend on packed.
-      </div>
+      <ProductionPagination
+        page={queuePagination?.page || 1}
+        pages={queuePagination?.pages || 1}
+        total={queuePagination?.total || 0}
+        limit={queuePagination?.limit || 100}
+        hasMore={queuePagination?.hasMore}
+        jumpPage={jumpPage}
+        setJumpPage={setJumpPage}
+        onPrev={() => goToPage((queuePagination?.page || 1) - 1)}
+        onNext={() => goToPage((queuePagination?.page || 1) + 1)}
+        onJump={async (forcedPage) => {
+          const totalPages = Number(queuePagination?.pages || 1);
+          const pageToGo = forcedPage ? Number(forcedPage) : Number(jumpPage || 1);
+          const safePage = Math.min(Math.max(1, pageToGo), totalPages);
+          await goToPage(safePage);
+        }}
+        onLimitChange={async (value) => {
+          setQueueLimit(value);
+          clearSelection();
+          await refreshQueue({ limit: Number(value || 100), page: 1 });
+        }}
+      />
     </div>
-  );
-}
-
-/* ------------------------------------------------
-  UI Components
-------------------------------------------------- */
-
-function MetricCard({ title, value, loading, onClick, active }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`p-3 rounded-2xl bg-white shadow-sm hover:shadow transition text-left ${
-        active ? "ring-2 ring-black/80" : "ring-1 ring-black/5"
-      }`}
-    >
-      <div className="text-[11px] text-gray-500">{title}</div>
-      <div className="text-lg font-semibold mt-1 text-gray-900">
-        {loading ? "—" : Number(value || 0)}
-      </div>
-    </button>
-  );
-}
-
-function OrderCard({
-  order,
-  onOpen,
-  onMarkPacked,
-  canMarkPacked,
-  productMap,
-  reservationList = [],
-  showSelect = false,
-  isPackable = false,
-  packDisabledReason = "",
-  selected = false,
-  onToggleSelect,
-  packing = false,
-}) {
-  const items = order?.items || [];
-  const itemsCount = items.reduce((sum, it) => sum + Number(it?.quantity || 0), 0);
-  const packCheck = useMemo(() => getOrderPackability(order, reservationList), [order, reservationList]);
-  const disablePackBtn = !packCheck.fullyReserved || packing;
-
-  return (
-    <div
-      className={`bg-white rounded-2xl shadow-sm ring-1 ring-black/5 hover:shadow transition cursor-pointer ${
-        selected ? "ring-2 ring-black/70" : ""
-      }`}
-      onClick={onOpen}
-    >
-      <div className="px-3 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div className="min-w-0 flex items-start gap-2">
-          {showSelect ? (
-            <div
-              className="pt-0.5"
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={selected}
-                disabled={!isPackable}
-                title={isPackable ? "Select order" : packDisabledReason || "Order not fully reserved"}
-                onChange={() => onToggleSelect?.()}
-                className="h-4 w-4 accent-black disabled:opacity-40"
-              />
-            </div>
-          ) : null}
-
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-gray-900 text-sm truncate">{order.orderNumber}</h3>
-              <StatusPill status={order.fulfillmentStatus} />
-              <span className="text-[11px] text-gray-500">• {itemsCount} pcs</span>
-
-              {showSelect ? (
-                isPackable ? (
-                  <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-green-100 text-green-800">
-                    Packable
-                  </span>
-                ) : (
-                  <span
-                    className="px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700"
-                    title={packDisabledReason || "Not fully reserved"}
-                  >
-                    Not packable
-                  </span>
-                )
-              ) : null}
-            </div>
-
-            <div className="text-[11px] text-gray-500 truncate mt-0.5">
-              {order?.shippingAddressSnapshot?.fullName || "—"} •{" "}
-              {order?.shippingAddressSnapshot?.phone || "—"} •{" "}
-              {new Date(order.createdAt || order.orderDate || Date.now()).toLocaleString()}
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="flex items-center gap-2"
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          <div className="text-right">
-            <div className="text-sm font-semibold text-gray-900">
-              ₹{Number(order.finalPayable || 0).toFixed(0)}
-            </div>
-            <div className="text-[11px] text-gray-500">
-              {String(order.paymentMethod || "").toUpperCase()} • {order.paymentStatus || "pending"}
-            </div>
-          </div>
-
-          {canMarkPacked ? (
-            <button
-              onClick={onMarkPacked}
-              disabled={disablePackBtn}
-              title={
-                packCheck.fullyReserved
-                  ? packing
-                    ? "Packing..."
-                    : "Mark Packed"
-                  : packCheck.reason || "Order not fully reserved"
-              }
-              className="px-3 py-2 rounded-xl bg-black text-white text-xs hover:opacity-90 disabled:opacity-50"
-            >
-              {packing ? "Packing..." : "Mark Packed"}
-            </button>
-          ) : (
-            <div className="text-xs text-gray-400 px-2">—</div>
-          )}
-        </div>
-      </div>
-
-      <div className="px-3 pb-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {items.map((it, idx) => (
-            <ItemRow
-              key={String(
-                it?._id || `${safeId(it?.productId)}-${getVariantIdFromItem(it) || "simple"}-${idx}`
-              )}
-              item={it}
-              productMap={productMap}
-              orderId={order?._id}
-              reservationList={reservationList}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ReservationPill({ requiredQty, reservedQty }) {
-  const req = Number(requiredQty || 0);
-  const resv = Number(reservedQty || 0);
-
-  if (!req) {
-    return (
-      <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">
-        Reserved: —
-      </span>
-    );
-  }
-
-  const pct = Math.min(1, resv / req);
-
-  const label =
-    pct >= 1 ? "Reserved ✅" : pct > 0 ? `Partial Reserved (${resv}/${req})` : "Not Reserved";
-
-  const cls =
-    pct >= 1
-      ? "bg-green-100 text-green-800"
-      : pct > 0
-      ? "bg-yellow-100 text-yellow-800"
-      : "bg-red-100 text-red-800";
-
-  return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>{label}</span>;
-}
-
-function ItemRow({ item, productMap, orderId, reservationList }) {
-  const title = item?.productSnapshot?.title || "Item";
-  const img = resolveItemImage(item, productMap);
-
-  const qty = Number(item?.quantity || 1);
-  const size = item?.selectedSize || "";
-  const color = item?.selectedColor || "";
-  const sku = item?.variant?.sku || item?.productSnapshot?.sku || "";
-  const reservedQty = getReservedQtyForItem(orderId, item, reservationList);
-
-  return (
-    <div className="flex gap-2 p-2 rounded-xl bg-gray-50">
-      <div className="w-12 h-12 rounded-xl bg-white overflow-hidden ring-1 ring-black/5 flex items-center justify-center shrink-0">
-        {img ? (
-          <img src={img} alt={title} className="w-full h-full object-cover" />
-        ) : (
-          <div className="text-[10px] text-gray-400">No Image</div>
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <div className="text-xs font-medium text-gray-900 truncate flex-1">{title}</div>
-          <ReservationPill requiredQty={qty} reservedQty={reservedQty} />
-        </div>
-
-        <div className="text-[11px] text-gray-600 mt-1 flex flex-wrap gap-1">
-          <Tag label={`Qty: ${qty}`} />
-          {size ? <Tag label={`Size: ${size}`} /> : null}
-          {color ? <Tag label={`Color: ${color}`} /> : null}
-          {sku ? <Tag label={`SKU: ${sku}`} /> : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Tag({ label }) {
-  return (
-    <span className="px-2 py-1 rounded-full bg-white ring-1 ring-black/5 text-[11px] text-gray-700">
-      {label}
-    </span>
-  );
-}
-
-function StatusPill({ status }) {
-  const s = String(status || "processing");
-  const map = {
-    processing: "bg-yellow-100 text-yellow-800",
-    packed: "bg-blue-100 text-blue-800",
-    shipped: "bg-purple-100 text-purple-800",
-    out_for_delivery: "bg-indigo-100 text-indigo-800",
-    delivered: "bg-green-100 text-green-800",
-    cancelled: "bg-red-100 text-red-800",
-    rto: "bg-gray-200 text-gray-800",
-  };
-
-  const cls = map[s] || "bg-gray-100 text-gray-800";
-
-  return (
-    <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${cls}`}>
-      {s.replaceAll("_", " ")}
-    </span>
   );
 }
