@@ -2,199 +2,590 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TicketPercent, Pencil, Trash2, RefreshCcw, AlertTriangle } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle,
+  FolderTree,
+  Globe2,
+  Layers3,
+  Lock,
+  Pencil,
+  PlusCircle,
+  RefreshCcw,
+  Search,
+  Sparkles,
+  Target,
+  TicketPercent,
+  Trash2,
+  XCircle,
+} from "lucide-react";
+
 import { useCouponStore } from "@/store/couponStore";
+
+const ruleLabels = {
+  primary_required: "Primary",
+  secondary_required: "Secondary",
+  category_required: "Category",
+  collection_required: "Collection",
+
+  // old fallback
+  none: "Basic",
+  primary_secondary: "Primary + Secondary",
+  category_collection: "Category / Collection",
+};
+
+const targetLabels = {
+  cart: "Cart",
+  primary_products: "Primary Products",
+  secondary_products: "Secondary Products",
+  category_products: "Category Products",
+  collection_products: "Collection Products",
+  matched_products: "Matched Products",
+};
 
 export default function ManageCouponsPage() {
   const router = useRouter();
+
   const { coupons, loading, fetchCoupons, deleteCoupon } = useCouponStore();
+
   const [deletingId, setDeletingId] = useState(null);
-  const [filters, setFilters] = useState({ visibility: "", type: "", isActive: "" });
+
+  const [filters, setFilters] = useState({
+    search: "",
+    visibility: "",
+    type: "",
+    isActive: "",
+    autoApply: "",
+    ruleType: "",
+    discountTarget: "",
+  });
 
   useEffect(() => {
     fetchCoupons();
   }, [fetchCoupons]);
 
+  const now = useMemo(() => new Date(), []);
+
+  const getRules = (coupon) => {
+    if (Array.isArray(coupon?.cartRules) && coupon.cartRules.length) {
+      return coupon.cartRules.filter((rule) => rule?.isActive !== false);
+    }
+
+    const oldRule = coupon?.cartRule;
+    if (!oldRule?.enabled || oldRule?.ruleType === "none") return [];
+
+    return [{ ruleType: oldRule.ruleType, isActive: true }];
+  };
+
+  const getRuleLabel = (coupon) => {
+    const rules = getRules(coupon);
+
+    if (!rules.length) return "Basic";
+
+    const labels = rules
+      .map((rule) => ruleLabels[rule.ruleType] || "Rule")
+      .filter(Boolean);
+
+    return labels.join(" + ");
+  };
+
+  const getRuleIcon = (coupon) => {
+    const rules = getRules(coupon);
+    const types = rules.map((rule) => rule.ruleType);
+
+    if (!rules.length) return TicketPercent;
+    if (types.includes("category_required") || types.includes("collection_required")) {
+      return FolderTree;
+    }
+    if (types.includes("primary_required") || types.includes("secondary_required")) {
+      return Layers3;
+    }
+
+    return Target;
+  };
+
+  const getDiscountTarget = (coupon) =>
+    coupon.discountTarget || coupon?.cartRule?.discountTarget || "cart";
+
   const filteredCoupons = useMemo(() => {
-    return coupons.filter((c) => {
-      if (filters.visibility && c.visibility !== filters.visibility) return false;
-      if (filters.type && c.type !== filters.type) return false;
+    const q = filters.search.trim().toLowerCase();
+
+    return coupons.filter((coupon) => {
+      const rules = getRules(coupon);
+      const ruleTypes = rules.map((rule) => rule.ruleType);
+      const discountTarget = getDiscountTarget(coupon);
+
+      if (q) {
+        const haystack = [
+          coupon.code,
+          coupon.couponNumber,
+          coupon.description,
+          coupon.type,
+          coupon.visibility,
+          discountTarget,
+          ...ruleTypes,
+          getRuleLabel(coupon),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        if (!haystack.includes(q)) return false;
+      }
+
+      if (filters.visibility && coupon.visibility !== filters.visibility) {
+        return false;
+      }
+
+      if (filters.type && coupon.type !== filters.type) {
+        return false;
+      }
+
       if (filters.isActive !== "") {
         const wantActive = filters.isActive === "true";
-        if (!!c.isActive !== wantActive) return false;
+        if (Boolean(coupon.isActive) !== wantActive) return false;
       }
+
+      if (filters.autoApply !== "") {
+        const wantAuto = filters.autoApply === "true";
+        if (Boolean(coupon.autoApply) !== wantAuto) return false;
+      }
+
+      if (filters.ruleType) {
+        if (filters.ruleType === "basic" && rules.length) return false;
+        if (
+          filters.ruleType !== "basic" &&
+          !ruleTypes.includes(filters.ruleType)
+        ) {
+          return false;
+        }
+      }
+
+      if (filters.discountTarget && discountTarget !== filters.discountTarget) {
+        return false;
+      }
+
       return true;
     });
   }, [coupons, filters]);
 
-  const getStatusBadge = (coupon) => {
-    const now = new Date();
-    const expiry = new Date(coupon.validTill);
-
-    if (!coupon.isActive) return <span className="badge bg-red-100 text-red-700">Inactive</span>;
-    if (expiry < now) return <span className="badge bg-orange-100 text-orange-700">Expired</span>;
-    return <span className="badge bg-green-100 text-green-700">Active</span>;
+  const resetFilters = () => {
+    setFilters({
+      search: "",
+      visibility: "",
+      type: "",
+      isActive: "",
+      autoApply: "",
+      ruleType: "",
+      discountTarget: "",
+    });
   };
 
-  const getVisibilityBadge = (coupon) => (
-    <span className={`badge ${coupon.visibility === "private" ? "bg-gray-200 text-gray-800" : "bg-blue-100 text-blue-700"}`}>
-      {coupon.visibility === "private" ? "Private" : "Public"}
-    </span>
-  );
+  const updateFilter = (key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
 
-  const getTargetBadge = (coupon) => {
-    const targeted = !!(coupon.targetEmail || coupon.targetPhone);
-    if (!targeted) return null;
-    return <span className="badge bg-yellow-100 text-yellow-800">Targeted</span>;
+  const formatDiscount = (coupon) => {
+    if (coupon.discountType === "percentage") return `${coupon.discountValue}%`;
+    return `₹${coupon.discountValue}`;
+  };
+
+  const getStatus = (coupon) => {
+    const expiry = new Date(coupon.validTill);
+
+    if (!coupon.isActive) {
+      return {
+        label: "Inactive",
+        tone: "red",
+        icon: XCircle,
+      };
+    }
+
+    if (expiry < now) {
+      return {
+        label: "Expired",
+        tone: "amber",
+        icon: AlertTriangle,
+      };
+    }
+
+    return {
+      label: "Active",
+      tone: "green",
+      icon: CheckCircle,
+    };
   };
 
   const handleDelete = async (id) => {
     if (!confirm("Are you sure you want to delete this coupon?")) return;
+
     try {
       setDeletingId(id);
       await deleteCoupon(id);
-    } catch (e) {
-      alert(e?.message || "Error deleting coupon.");
+    } catch (err) {
+      alert(err?.message || "Error deleting coupon.");
     } finally {
       setDeletingId(null);
     }
   };
 
+  const Badge = ({ children, tone = "gray" }) => {
+    const tones = {
+      gray: "bg-gray-100 text-gray-700",
+      dark: "bg-gray-950 text-white",
+      blue: "bg-blue-50 text-blue-700",
+      green: "bg-green-50 text-green-700",
+      amber: "bg-amber-50 text-amber-700",
+      purple: "bg-purple-50 text-purple-700",
+      red: "bg-red-50 text-red-700",
+      slate: "bg-slate-100 text-slate-700",
+    };
+
+    return (
+      <span
+        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+          tones[tone] || tones.gray
+        }`}
+      >
+        {children}
+      </span>
+    );
+  };
+
+  const selectClass =
+    "rounded-2xl bg-gray-50 px-3 py-2.5 text-sm text-gray-700 outline-none ring-1 ring-gray-100 transition focus:bg-white focus:ring-gray-300";
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-50">
-      <div className="mx-auto px-5 sm:px-8 py-8 space-y-6">
-        {/* HEADER */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-200/40">
-              <TicketPercent size={34} />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Manage Coupons</h1>
-              <p className="text-sm sm:text-base text-gray-500">View, edit and delete all coupons.</p>
-            </div>
-          </div>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
+        <div className="rounded-3xl bg-white p-5 shadow-[0_12px_35px_rgba(0,0,0,0.04)] ring-1 ring-gray-100 sm:p-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gray-950 text-white">
+                <TicketPercent size={25} />
+              </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-            {/* FILTERS */}
-            <div className="flex gap-2 flex-wrap justify-end">
-              <select
-                className="input !py-2 !px-3 !rounded-xl !text-sm"
-                value={filters.visibility}
-                onChange={(e) => setFilters((p) => ({ ...p, visibility: e.target.value }))}
-              >
-                <option value="">All Visibility</option>
-                <option value="public">Public</option>
-                <option value="private">Private</option>
-              </select>
-
-              <select
-                className="input !py-2 !px-3 !rounded-xl !text-sm"
-                value={filters.type}
-                onChange={(e) => setFilters((p) => ({ ...p, type: e.target.value }))}
-              >
-                <option value="">All Types</option>
-                <option value="general">General</option>
-                <option value="influencer">Influencer</option>
-                <option value="system">System</option>
-                <option value="company">Company</option>
-              </select>
-
-              <select
-                className="input !py-2 !px-3 !rounded-xl !text-sm"
-                value={filters.isActive}
-                onChange={(e) => setFilters((p) => ({ ...p, isActive: e.target.value }))}
-              >
-                <option value="">All Status</option>
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
-              </select>
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">
+                  Manage Coupons
+                </h1>
+                <p className="mt-1 text-sm leading-6 text-gray-500">
+                  View, filter, edit and delete all coupon rules.
+                </p>
+              </div>
             </div>
 
-            {/* Refresh Button */}
-            <button
-              onClick={() => fetchCoupons()}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white font-medium shadow-md hover:shadow-lg transition active:scale-[0.99]"
-            >
-              <RefreshCcw size={16} /> Refresh
-            </button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                onClick={() => fetchCoupons()}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-100 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
+              >
+                <RefreshCcw size={16} />
+                Refresh
+              </button>
+
+              <button
+                onClick={() => router.push("/coupons/create")}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-black"
+              >
+                <PlusCircle size={16} />
+                Create Coupon
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* TABLE CARD */}
-        <div className="rounded-2xl bg-white/80 backdrop-blur shadow-sm hover:shadow-md transition overflow-hidden">
+        <div className="mt-5 rounded-3xl bg-white p-4 shadow-[0_12px_35px_rgba(0,0,0,0.035)] ring-1 ring-gray-100">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.4fr_repeat(6,1fr)_auto]">
+            <div className="relative">
+              <Search
+                size={17}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                value={filters.search}
+                onChange={(e) => updateFilter("search", e.target.value)}
+                placeholder="Search code, rule, target..."
+                className="w-full rounded-2xl bg-gray-50 py-2.5 pl-10 pr-3 text-sm text-gray-700 outline-none ring-1 ring-gray-100 transition placeholder:text-gray-400 focus:bg-white focus:ring-gray-300"
+              />
+            </div>
+
+            <select
+              className={selectClass}
+              value={filters.visibility}
+              onChange={(e) => updateFilter("visibility", e.target.value)}
+            >
+              <option value="">All Visibility</option>
+              <option value="public">Public</option>
+              <option value="private">Private</option>
+            </select>
+
+            <select
+              className={selectClass}
+              value={filters.type}
+              onChange={(e) => updateFilter("type", e.target.value)}
+            >
+              <option value="">All Types</option>
+              <option value="general">General</option>
+              <option value="influencer">Influencer</option>
+              <option value="system">System</option>
+              <option value="company">Company</option>
+            </select>
+
+            <select
+              className={selectClass}
+              value={filters.isActive}
+              onChange={(e) => updateFilter("isActive", e.target.value)}
+            >
+              <option value="">All Status</option>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+
+            <select
+              className={selectClass}
+              value={filters.autoApply}
+              onChange={(e) => updateFilter("autoApply", e.target.value)}
+            >
+              <option value="">All Apply</option>
+              <option value="true">Auto</option>
+              <option value="false">Manual</option>
+            </select>
+
+            <select
+              className={selectClass}
+              value={filters.ruleType}
+              onChange={(e) => updateFilter("ruleType", e.target.value)}
+            >
+              <option value="">All Rules</option>
+              <option value="basic">Basic</option>
+              <option value="primary_required">Primary Required</option>
+              <option value="secondary_required">Secondary Required</option>
+              <option value="category_required">Category Required</option>
+              <option value="collection_required">Collection Required</option>
+            </select>
+
+            <select
+              className={selectClass}
+              value={filters.discountTarget}
+              onChange={(e) => updateFilter("discountTarget", e.target.value)}
+            >
+              <option value="">All Targets</option>
+              <option value="cart">Cart</option>
+              <option value="primary_products">Primary Products</option>
+              <option value="secondary_products">Secondary Products</option>
+              <option value="category_products">Category Products</option>
+              <option value="collection_products">Collection Products</option>
+              <option value="matched_products">Matched Products</option>
+            </select>
+
+            <button
+              onClick={resetFilters}
+              className="rounded-2xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
+            >
+              Clear
+            </button>
+          </div>
+
+          <p className="mt-3 text-sm text-gray-500">
+            Showing{" "}
+            <span className="font-semibold text-gray-950">
+              {filteredCoupons.length}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-gray-950">
+              {coupons.length}
+            </span>{" "}
+            coupons
+          </p>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-3xl bg-white shadow-[0_12px_35px_rgba(0,0,0,0.035)] ring-1 ring-gray-100">
           {loading ? (
-            <div className="text-center py-12 text-gray-500">Loading coupons...</div>
+            <div className="py-14 text-center text-sm text-gray-500">
+              Loading coupons...
+            </div>
           ) : filteredCoupons.length === 0 ? (
-            <div className="text-center py-14 text-gray-500 flex flex-col items-center gap-3">
-              <AlertTriangle size={34} className="text-gray-400" />
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center text-sm text-gray-500">
+              <AlertTriangle size={34} className="text-gray-300" />
               No coupons found.
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[1240px] text-sm">
                 <thead>
-                  <tr className="text-left text-gray-500 bg-gray-50/60">
-                    <th className="py-4 px-4 font-medium">Code</th>
-                    <th className="py-4 px-4 font-medium">Type</th>
-                    <th className="py-4 px-4 font-medium">Badges</th>
-                    <th className="py-4 px-4 font-medium">Discount</th>
-                    <th className="py-4 px-4 font-medium">Valid Till</th>
-                    <th className="py-4 px-4 font-medium">Used</th>
-                    <th className="py-4 px-4 font-medium">Status</th>
-                    <th className="py-4 px-4 font-medium text-right">Actions</th>
+                  <tr className="bg-gray-50/70 text-left text-xs uppercase tracking-wide text-gray-400">
+                    <th className="px-4 py-4 font-medium">No.</th>
+                    <th className="px-4 py-4 font-medium">Coupon</th>
+                    <th className="px-4 py-4 font-medium">Rules</th>
+                    <th className="px-4 py-4 font-medium">Target</th>
+                    <th className="px-4 py-4 font-medium">Badges</th>
+                    <th className="px-4 py-4 font-medium">Discount</th>
+                    <th className="px-4 py-4 font-medium">Min / Max</th>
+                    <th className="px-4 py-4 font-medium">Usage</th>
+                    <th className="px-4 py-4 font-medium">Valid Till</th>
+                    <th className="px-4 py-4 font-medium">Status</th>
+                    <th className="px-4 py-4 text-right font-medium">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
 
-                <tbody>
-                  {filteredCoupons.map((coupon) => (
-                    <tr
-                      key={coupon._id}
-                      className="hover:bg-gray-50/60 transition border-b border-gray-100/60 last:border-0"
-                    >
-                      <td className="py-4 px-4 font-semibold text-gray-900">{coupon.code}</td>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredCoupons.map((coupon) => {
+                    const status = getStatus(coupon);
+                    const StatusIcon = status.icon;
+                    const RuleIcon = getRuleIcon(coupon);
+                    const rules = getRules(coupon);
+                    const discountTarget = getDiscountTarget(coupon);
 
-                      <td className="py-4 px-4 capitalize text-gray-600">{coupon.type}</td>
+                    const targeted = Boolean(
+                      coupon.targetEmail || coupon.targetPhone
+                    );
 
-                      <td className="py-4 px-4">
-                        <div className="flex gap-2 flex-wrap">
-                          {getVisibilityBadge(coupon)}
-                          {getTargetBadge(coupon)}
-                        </div>
-                      </td>
+                    const hasCategory =
+                      Array.isArray(coupon.categories) &&
+                      coupon.categories.length > 0;
 
-                      <td className="py-4 px-4 text-gray-800">
-                        {coupon.discountType === "percentage" ? `${coupon.discountValue}%` : `₹${coupon.discountValue}`}
-                      </td>
+                    const hasCollection =
+                      Array.isArray(coupon.collections) &&
+                      coupon.collections.length > 0;
 
-                      <td className="py-4 px-4 text-gray-500">
-                        {new Date(coupon.validTill).toLocaleDateString()}
-                      </td>
+                    return (
+                      <tr
+                        key={coupon._id}
+                        className="transition hover:bg-gray-50/70"
+                      >
+                        <td className="px-4 py-4">
+                          <span className="font-semibold text-gray-950">
+                            #{coupon.couponNumber || "---"}
+                          </span>
+                        </td>
 
-                      <td className="py-4 px-4 text-gray-700">{coupon.usedCount || 0}</td>
+                        <td className="px-4 py-4">
+                          <div className="font-semibold text-gray-950">
+                            {coupon.code}
+                          </div>
+                          <div className="mt-0.5 max-w-[220px] truncate text-xs text-gray-400">
+                            {coupon.description || "No description"}
+                          </div>
+                        </td>
 
-                      <td className="py-4 px-4">{getStatusBadge(coupon)}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2 text-gray-700">
+                            <RuleIcon size={15} className="text-gray-400" />
+                            <span className="max-w-[220px] truncate">
+                              {getRuleLabel(coupon)}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-xs text-gray-400">
+                            {rules.length ? `${rules.length} rule(s)` : "No rule"}
+                          </div>
+                        </td>
 
-                      <td className="py-4 px-4">
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            onClick={() => router.push(`/coupons/edit/${coupon._id}`)}
-                            className="p-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
-                          >
-                            <Pencil size={16} />
-                          </button>
+                        <td className="px-4 py-4">
+                          <Badge tone="slate">
+                            {targetLabels[discountTarget] || discountTarget}
+                          </Badge>
+                        </td>
 
-                          <button
-                            onClick={() => handleDelete(coupon._id)}
-                            disabled={deletingId === coupon._id}
-                            className="p-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 transition disabled:opacity-60"
-                          >
-                            {deletingId === coupon._id ? "..." : <Trash2 size={16} />}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-4 py-4">
+                          <div className="flex flex-wrap gap-1.5">
+                            {coupon.visibility === "private" ? (
+                              <Badge tone="dark">
+                                <Lock size={12} className="mr-1" />
+                                Private
+                              </Badge>
+                            ) : (
+                              <Badge tone="blue">
+                                <Globe2 size={12} className="mr-1" />
+                                Public
+                              </Badge>
+                            )}
+
+                            {coupon.autoApply && (
+                              <Badge tone="purple">
+                                <Sparkles size={12} className="mr-1" />
+                                Auto
+                              </Badge>
+                            )}
+
+                            {targeted && <Badge tone="amber">Targeted</Badge>}
+                            {hasCategory && (
+                              <Badge tone="green">Category</Badge>
+                            )}
+                            {hasCollection && (
+                              <Badge tone="green">Collection</Badge>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4 font-medium text-gray-800">
+                          {formatDiscount(coupon)}
+                        </td>
+
+                        <td className="px-4 py-4 text-gray-600">
+                          <div>Min ₹{coupon.minPurchase || 0}</div>
+                          <div className="text-xs text-gray-400">
+                            Max{" "}
+                            {coupon.maxDiscount > 0
+                              ? `₹${coupon.maxDiscount}`
+                              : "No cap"}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4 text-gray-700">
+                          {coupon.usedCount || 0}
+                          {coupon.usageLimit > 0
+                            ? ` / ${coupon.usageLimit}`
+                            : " / ∞"}
+                        </td>
+
+                        <td className="px-4 py-4 text-gray-500">
+                          {coupon.validTill
+                            ? new Date(coupon.validTill).toLocaleDateString()
+                            : "-"}
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <Badge tone={status.tone}>
+                            <StatusIcon size={12} className="mr-1" />
+                            {status.label}
+                          </Badge>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() =>
+                                router.push(`/coupons/edit/${coupon._id}`)
+                              }
+                              className="rounded-2xl bg-gray-100 p-2.5 text-gray-700 transition hover:bg-gray-200"
+                              title="Edit coupon"
+                            >
+                              <Pencil size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => handleDelete(coupon._id)}
+                              disabled={deletingId === coupon._id}
+                              className="rounded-2xl bg-red-50 p-2.5 text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              title="Delete coupon"
+                            >
+                              {deletingId === coupon._id ? (
+                                <RefreshCcw
+                                  size={16}
+                                  className="animate-spin"
+                                />
+                              ) : (
+                                <Trash2 size={16} />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

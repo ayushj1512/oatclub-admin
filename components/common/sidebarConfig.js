@@ -174,7 +174,6 @@ export const sidebarMenus = {
     { label: "Create Coupon", href: "/coupons/create" },
     { label: "Manage Coupons", href: "/coupons/manage" },
     { label: "Coupon Usage Reports", href: "/coupons/reports" },
-    { label: "Auto Discounts", href: "/coupons/auto" },
   ],
 
   operations: [
