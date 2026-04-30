@@ -9,8 +9,11 @@ export const DOMAIN_PERMISSIONS = {
   footwear: "manageFootwear",
   orders: "manageOrders",
 
-  // ✅ NEW (Refunds)
+  // ✅ Refunds
   refunds: "manageRefunds",
+
+  // ✅ NEW → Fast2SMS
+  fast2sms: "manageFast2SMS",
 
   shiprocket: "manageOrders",
   bluedart: "manageOrders",
@@ -49,7 +52,8 @@ export const ROLE_DEFAULT_PERMS = {
     "manageSupport",
     "manageOrders",
     "manageReviews",
-    "manageRefunds", // ✅ allow refund handling
+    "manageRefunds",
+    "manageFast2SMS", // ✅ added
   ],
 
   staff: [
@@ -57,7 +61,7 @@ export const ROLE_DEFAULT_PERMS = {
     "manageInventory",
     "manageFabrics",
     "manageReviews",
-    // ❌ no refunds by default (safe)
+    // ❌ no Fast2SMS (safe)
   ],
 
   viewer: ["viewReports", "viewAnalytics"],

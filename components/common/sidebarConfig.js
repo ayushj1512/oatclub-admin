@@ -48,6 +48,26 @@ export const sidebarMenus = {
     { label: "Barcode Generator", href: "/production/barcode" },
   ],
 
+  fast2sms: [
+  { label: "Fast2SMS Dashboard", href: "/fast2sms" },
+  {
+    label: "WhatsApp Logs",
+    href: "/fast2sms/whatsapp-confirmation-message",
+  },
+  {
+    label: "Send Test Message",
+    href: "/fast2sms/whatsapp-confirmation-message/send",
+  },
+  {
+    label: "Analytics",
+    href: "/fast2sms/whatsapp-confirmation-message/analytics",
+  },
+  {
+    label: "Settings",
+    href: "/fast2sms/whatsapp-confirmation-message/settings",
+  },
+],
+
   reviews: [
     { label: "Reviews Dashboard", href: "/reviews" },
     { label: "Manage Reviews", href: "/reviews/manage" },
@@ -347,4 +367,5 @@ export const routeSidebarMap = [
   { prefix: "/customers", key: "customers" },
   { prefix: "/sales", key: "sales" },
   { prefix: "/account", key: "account_user" },
+  { prefix: "/fast2sms", key: "fast2sms" }, 
 ];

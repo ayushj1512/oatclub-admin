@@ -29,6 +29,7 @@ import {
   Scissors,
   Sparkles,
   CreditCard,
+  MessageCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -49,6 +50,7 @@ const DOMAIN_LIST = [
   { id: "footwear", name: "Footwear", icon: Footprints, route: "/footwear" },
   { id: "orders", name: "Orders", icon: ClipboardList, route: "/orders" },
   { id: "refunds", name: "Refunds", icon: CreditCard, route: "/refunds" },
+  { id: "fast2sms", name: "Fast2SMS", icon: MessageCircle, route: "/fast2sms" },
   { id: "shiprocket", name: "Shiprocket", icon: Package, route: "/shiprocket" },
   { id: "bluedart", name: "Blue Dart", icon: Truck, route: "/bluedart" },
   { id: "reviews", name: "Reviews", icon: Star, route: "/reviews" },
@@ -80,6 +82,7 @@ const DOMAIN_LIST = [
 const CARD_HINTS = {
   design_lab: "Creative apparel design workspace",
   refunds: "Manage Razorpay refunds & manual refund proofs",
+  fast2sms: "View WhatsApp confirmation logs & message status",
   rma: "View Return / Exchange requests",
   collaboration: "Track ongoing influencer collaborations",
   footwear: "Manage footwear catalog & variants",
