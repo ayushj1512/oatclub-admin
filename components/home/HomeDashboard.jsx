@@ -28,6 +28,7 @@ import {
   Star,
   Scissors,
   Sparkles,
+  CreditCard,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -47,6 +48,7 @@ const DOMAIN_LIST = [
   { id: "products", name: "Products", icon: Package, route: "/products" },
   { id: "footwear", name: "Footwear", icon: Footprints, route: "/footwear" },
   { id: "orders", name: "Orders", icon: ClipboardList, route: "/orders" },
+  { id: "refunds", name: "Refunds", icon: CreditCard, route: "/refunds" },
   { id: "shiprocket", name: "Shiprocket", icon: Package, route: "/shiprocket" },
   { id: "bluedart", name: "Blue Dart", icon: Truck, route: "/bluedart" },
   { id: "reviews", name: "Reviews", icon: Star, route: "/reviews" },
@@ -77,6 +79,7 @@ const DOMAIN_LIST = [
 
 const CARD_HINTS = {
   design_lab: "Creative apparel design workspace",
+  refunds: "Manage Razorpay refunds & manual refund proofs",
   rma: "View Return / Exchange requests",
   collaboration: "Track ongoing influencer collaborations",
   footwear: "Manage footwear catalog & variants",
@@ -93,27 +96,23 @@ export default function HomeDashboard() {
   const admin = useLoginStore((s) => s.admin);
   const role = admin?.role || "viewer";
 
-  // Resolve permissions
   const permissions = useMemo(() => {
     if (admin?.permissions?.length) return admin.permissions;
     return ROLE_DEFAULT_PERMS[role] || [];
   }, [admin?.permissions, role]);
 
-  // Allowed cards only
   const allowedDomains = useMemo(() => {
     return DOMAIN_LIST.filter((item) =>
       hasPermission(permissions, DOMAIN_PERMISSIONS[item.id])
     );
   }, [permissions]);
 
-  // Sort by name
   const sortedDomains = useMemo(() => {
     return [...allowedDomains].sort((a, b) => a.name.localeCompare(b.name));
   }, [allowedDomains]);
 
   return (
     <div className="min-h-screen bg-gray-50 px-3 py-6 sm:px-6 sm:py-8 md:px-8">
-      {/* Single merged top card */}
       <div className="mb-6">
         <LiveClock />
       </div>
@@ -193,6 +192,10 @@ export default function HomeDashboard() {
           </AnimatePresence>
         </motion.div>
       )}
+
+      <div className="mt-8 text-center text-xs font-medium text-gray-400">
+        Powered by Razorpay
+      </div>
     </div>
   );
 }

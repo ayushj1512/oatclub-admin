@@ -8,6 +8,10 @@ export const DOMAIN_PERMISSIONS = {
   products: "manageProducts",
   footwear: "manageFootwear",
   orders: "manageOrders",
+
+  // ✅ NEW (Refunds)
+  refunds: "manageRefunds",
+
   shiprocket: "manageOrders",
   bluedart: "manageOrders",
   reviews: "manageReviews",
@@ -41,13 +45,19 @@ export const ROLE_DEFAULT_PERMS = {
 
   admin: [...ALL_PERMISSIONS],
 
-  customer_care: ["manageSupport", "manageOrders", "manageReviews"],
+  customer_care: [
+    "manageSupport",
+    "manageOrders",
+    "manageReviews",
+    "manageRefunds", // ✅ allow refund handling
+  ],
 
   staff: [
     "manageOrders",
     "manageInventory",
     "manageFabrics",
     "manageReviews",
+    // ❌ no refunds by default (safe)
   ],
 
   viewer: ["viewReports", "viewAnalytics"],

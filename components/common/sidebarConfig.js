@@ -271,6 +271,18 @@ export const sidebarMenus = {
     { label: "Products RMA Insights", href: "/reports/products-rma-insights" },
   ],
 
+    refunds: [
+    { label: "Refund Dashboard", href: "/refunds" },
+    { label: "All Refunds", href: "/refunds/list" },
+    { label: "Create Refund", href: "/refunds/create" },
+    { label: "Razorpay Queue", href: "/refunds/razorpay" },
+    { label: "Manual Refunds", href: "/refunds/manual" },
+    { label: "Failed Refunds", href: "/refunds/failed" },
+    { label: "Refund Reports", href: "/refunds/reports" },
+    { label: "Refund Settings", href: "/refunds/settings" },
+  ],
+
+
   account_user: [
     { label: "Profile", href: "/account/profile" },
     { label: "Change Password", href: "/account/password" },
@@ -303,6 +315,8 @@ export const sidebarMenus = {
 };
 
 export const routeSidebarMap = [
+  { prefix: "/refunds", key: "refunds" },
+
   { prefix: "/superadmin", key: "superadmin" },
   { prefix: "/customer-support", key: "customer_support" },
   { prefix: "/reports", key: "reports" },
