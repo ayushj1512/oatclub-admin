@@ -20,6 +20,7 @@ import OrderRmaMention from "../../../components/orders/OrderRma";
 import OrderTrackingCard from "@/components/orders/OrderTrackingCard";
 import OrderCreateRmaPanel from "@/components/orders/OrderCreateRmaPanel";
 import OrderServiceabilityCard from "@/components/orders/OrderServiceabilityCard";
+import OrderFulfillmentTimeline from "@/components/orders/OrderFulfillmentTimeline";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 const STORE_URL = "https://www.mirayfashions.com";
@@ -392,6 +393,8 @@ export default function OrderDetailsClient({ id }) {
             </div>
           )}
         </Card>
+
+        <OrderFulfillmentTimeline order={order} />
 
         {/* ✅ TOTALS */}
         <Card>
