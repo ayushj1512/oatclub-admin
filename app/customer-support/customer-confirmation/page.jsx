@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { useOrderStore } from "@/store/orderStore";
 import EditableAddressCard from "@/components/orders/EditableAddressCard";
+import { useCancelOrderFlow } from "@/hooks/useCancelOrderFlow";
+import CancelOrderModal from "@/components/orders/CancelOrderModal";
 
 const safe = (v) => String(v ?? "").trim();
 const money = (n) => Number(n || 0).toLocaleString("en-IN");
@@ -108,7 +110,6 @@ export default function CustomerConfirmationPage() {
 
     updateOrder,
     confirmOrder,
-    updateOrderStatus,
   } = useOrderStore();
 
   const [localOrders, setLocalOrders] = useState([]);
@@ -136,6 +137,17 @@ export default function CustomerConfirmationPage() {
 
   const LIMIT = 50;
   const [pageLoading, setPageLoading] = useState(false);
+
+  const {
+  cancelModalOpen,
+  cancelTargetOrder,
+  cancelLoading,
+  openCancelModal,
+  closeCancelModal,
+  confirmCancel,
+} = useCancelOrderFlow();
+
+
 
   const BASE_SERVER_FILTERS = useMemo(
     () => ({
@@ -323,45 +335,55 @@ export default function CustomerConfirmationPage() {
     }
   };
 
-  const handleCancel = async (orderIdStr) => {
-    const prev = localOrders;
-    try {
-      setLocalError(null);
-      setSuccessMsg("");
+  const handleCancel = (orderIdStr) => {
+  const target = localOrders.find(
+    (o) => String(o?._id || o?.id || "") === String(orderIdStr)
+  );
 
-      const ok = window.confirm("Are you sure you want to cancel this order?");
-      if (!ok) return;
+  if (!target?._id) return;
 
-      setActionLoading((p) => ({ ...p, cancelId: orderIdStr }));
+  openCancelModal(target);
+};
 
-      patchLocalOrder(orderIdStr, {
-        fulfillmentStatus: "cancelled",
+const handleCancelConfirm = async (reason = "") => {
+  const targetId = cancelTargetOrder?._id;
+  if (!targetId) return;
+
+  const prev = localOrders;
+
+  try {
+    setLocalError(null);
+    setSuccessMsg("");
+    setActionLoading((p) => ({ ...p, cancelId: String(targetId) }));
+
+    patchLocalOrder(targetId, {
+      fulfillmentStatus: "cancelled",
+      cancellation: {
+        ...(cancelTargetOrder?.cancellation || {}),
+        isCancelled: true,
         cancelledBy: "admin",
-        adminRemarks: "cancelled_by_admin",
-        updatedAt: new Date().toISOString(),
-      });
+        reason: String(reason || "").trim(),
+      },
+      adminRemarks: "cancelled_by_admin",
+      updatedAt: new Date().toISOString(),
+    });
 
-      const updated = await updateOrderStatus(orderIdStr, {
-        fulfillmentStatus: "cancelled",
-        reason: "cancelled_by_admin",
-        cancelledBy: "admin",
-        adminRemarks: "cancelled_by_admin",
-        customerMessage: "",
-      });
+    const updated = await confirmCancel(reason);
 
-      if (updated?._id) {
-        patchLocalOrder(orderIdStr, updated);
-      }
-
-      setSuccessMsg("❌ Order Cancelled (Admin)!");
-    } catch (e) {
-      setLocalOrders(prev);
-      setLocalError(e?.message || "Cancel failed");
-    } finally {
-      setActionLoading((p) => ({ ...p, cancelId: null }));
-      setTimeout(() => setSuccessMsg(""), 2500);
+    if (updated?._id) {
+      patchLocalOrder(targetId, updated);
     }
-  };
+
+    setSuccessMsg("❌ Order Cancelled (Admin)!");
+  } catch (e) {
+    setLocalOrders(prev);
+    setLocalError(e?.message || "Cancel failed");
+  } finally {
+    setActionLoading((p) => ({ ...p, cancelId: null }));
+    setTimeout(() => setSuccessMsg(""), 2500);
+  }
+};
+
 
   const saveCustomerCareRemark = async (orderIdStr) => {
     const prev = localOrders;
@@ -610,8 +632,7 @@ export default function CustomerConfirmationPage() {
                     <div className="grid grid-cols-3 gap-2">
                       <button
                         onClick={() => handleConfirm(orderIdStr)}
-                        disabled={loading || isConfirmLoading || isCancelLoading}
-                        className="col-span-1 inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-xl bg-green-600 text-white text-xs sm:text-sm font-semibold hover:bg-green-700 disabled:opacity-60"
+disabled={loading || isCancelLoading || isConfirmLoading || cancelLoading}                        className="col-span-1 inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-xl bg-green-600 text-white text-xs sm:text-sm font-semibold hover:bg-green-700 disabled:opacity-60"
                       >
                         {isConfirmLoading ? (
                           <Loader2 size={16} className="animate-spin" />
@@ -924,6 +945,16 @@ export default function CustomerConfirmationPage() {
             })}
           </AnimatePresence>
         </div>
+
+         <CancelOrderModal
+      open={cancelModalOpen}
+      order={cancelTargetOrder}
+      loading={cancelLoading}
+      onClose={closeCancelModal}
+      onConfirm={handleCancelConfirm}
+    />
+
+    
 
         {!loading && filteredOrders.length > 0 && (
           <div className="flex justify-center py-4">

@@ -1,4 +1,5 @@
 "use client";
+
 import OrderActionCenter from "@/components/orders/OrderActionCenter";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -11,23 +12,22 @@ import {
   User,
   BadgeIndianRupee,
   ExternalLink,
-} from "lucide-react";  
+} from "lucide-react";
 import EditableAddressCard from "@/components/orders/EditableAddressCard";
 import { toast } from "react-hot-toast";
 import { useOrderStore } from "@/store/orderStore";
+import { useCancelOrderFlow } from "@/hooks/useCancelOrderFlow";
+import CancelOrderModal from "@/components/orders/CancelOrderModal";
 import OrderPrintPanel from "@/components/orders/OrderPrintPanel";
 import OrderRmaMention from "../../../components/orders/OrderRma";
 import OrderTrackingCard from "@/components/orders/OrderTrackingCard";
 import OrderCreateRmaPanel from "@/components/orders/OrderCreateRmaPanel";
 import OrderServiceabilityCard from "@/components/orders/OrderServiceabilityCard";
 import OrderFulfillmentTimeline from "@/components/orders/OrderFulfillmentTimeline";
-
+import OrderCancellationDetails from "@/components/orders/OrderCancellationDetails";
 const API = process.env.NEXT_PUBLIC_API_URL;
 const STORE_URL = "https://www.mirayfashions.com";
 
-/**
- * ✅ NEW fulfillmentStatus (forward + terminal only)
- */
 const FULFILLMENT_OPTIONS = [
   { value: "processing", label: "Processing" },
   { value: "packed", label: "Packed" },
@@ -35,7 +35,7 @@ const FULFILLMENT_OPTIONS = [
   { value: "shipped", label: "Shipped" },
   { value: "out_for_delivery", label: "Out for Delivery" },
   { value: "delivered", label: "Delivered" },
-  { value: "exchanged", label: "Exchanged" }, // ✅ terminal
+  { value: "exchanged", label: "Exchanged" },
   { value: "rto", label: "RTO" },
   { value: "cancelled", label: "Cancelled" },
 ];
@@ -67,7 +67,7 @@ const statusBadgeStyle = (status) => {
 
 const Card = ({ children, className = "" }) => (
   <div
-    className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-5 ${className}`}
+    className={`rounded-2xl border border-gray-100 bg-white/90 p-5 shadow-sm backdrop-blur ${className}`}
   >
     {children}
   </div>
@@ -80,9 +80,9 @@ const PRIORITY_LABELS = {
 };
 
 const PRIORITY_BADGE = {
-  normal: "bg-gray-100 text-gray-700 border border-gray-200",
-  medium: "bg-yellow-50 text-yellow-800 border border-yellow-200",
-  high: "bg-red-50 text-red-700 border border-red-200",
+  normal: "border border-gray-200 bg-gray-100 text-gray-700",
+  medium: "border border-yellow-200 bg-yellow-50 text-yellow-800",
+  high: "border border-red-200 bg-red-50 text-red-700",
 };
 
 const getPriorityBadge = (order) => {
@@ -113,6 +113,15 @@ export default function OrderDetailsClient({ id }) {
     updateOrderStatus,
   } = useOrderStore();
 
+  const {
+    cancelModalOpen,
+    cancelTargetOrder,
+    cancelLoading,
+    openCancelModal,
+    closeCancelModal,
+    confirmCancel,
+  } = useCancelOrderFlow();
+
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [newStatus, setNewStatus] = useState("processing");
 
@@ -131,9 +140,11 @@ export default function OrderDetailsClient({ id }) {
     return ok ? v : "processing";
   }, [order?.fulfillmentStatus]);
 
-  const orderStatusLabel = useMemo(() => pretty(safeCurrentStatus), [safeCurrentStatus]);
+  const orderStatusLabel = useMemo(
+    () => pretty(safeCurrentStatus),
+    [safeCurrentStatus]
+  );
 
-  /* ✅ Load order */
   useEffect(() => {
     if (!id) return;
     fetchOrderById(id);
@@ -141,11 +152,9 @@ export default function OrderDetailsClient({ id }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  /* ✅ Hydrate inputs */
   useEffect(() => {
     if (!order) return;
 
-    // ✅ keep dropdown safe even if old status exists
     const v = String(order.fulfillmentStatus || "processing").trim();
     const ok = FULFILLMENT_OPTIONS.some((o) => o.value === v);
     setNewStatus(ok ? v : "processing");
@@ -160,31 +169,21 @@ export default function OrderDetailsClient({ id }) {
     setRemarks(order.adminRemarks || "");
   }, [order]);
 
-  /* ✅ Update status (PATCH payload updated for new enum) */
   const handleUpdateStatus = async () => {
     if (!order?._id) return;
 
+    if (newStatus === "cancelled") {
+      openCancelModal(order);
+      return;
+    }
+
     setStatusUpdating(true);
+
     try {
-      let payload = { fulfillmentStatus: newStatus };
-
-      // ✅ Cancel flow (keep your backend fields)
-      if (newStatus === "cancelled") {
-        payload = {
-          fulfillmentStatus: "cancelled",
-          reason: "cancelled_by_admin",
-          cancelledBy: "admin",
-          adminRemarks: "cancelled_by_admin",
-          customerMessage: "",
-        };
-      }
-
-      // ✅ IMPORTANT:
-      // No "returned/refunded" here anymore; refund is tracked in `rmas[].status`.
-      // Exchanged is allowed as a terminal state only.
-      if (newStatus === "exchanged") {
-        payload = { fulfillmentStatus: "exchanged" };
-      }
+      const payload =
+        newStatus === "exchanged"
+          ? { fulfillmentStatus: "exchanged" }
+          : { fulfillmentStatus: newStatus };
 
       await updateOrderStatus(order._id, payload);
       toast.success("Order status updated ✅");
@@ -196,7 +195,20 @@ export default function OrderDetailsClient({ id }) {
     }
   };
 
-  /* ✅ Update tracking */
+  const handleCancelConfirm = async (reason = "") => {
+    if (!order?._id) return;
+
+    try {
+      await confirmCancel(reason);
+      toast.success("Order cancelled ✅");
+      await fetchOrderById(order._id);
+      setNewStatus("cancelled");
+    } catch (e) {
+      toast.error(e?.message || "Failed to cancel order");
+      setNewStatus(safeCurrentStatus);
+    }
+  };
+
   const updateTracking = async () => {
     if (!order?._id) return;
 
@@ -217,11 +229,11 @@ export default function OrderDetailsClient({ id }) {
     }
   };
 
-  /* ✅ Update remarks */
   const updateRemarks = async () => {
     if (!order?._id) return;
 
     setRemarksSaving(true);
+
     try {
       const res = await fetch(`${API}/api/orders/${order._id}`, {
         method: "PUT",
@@ -241,13 +253,13 @@ export default function OrderDetailsClient({ id }) {
     }
   };
 
-  /* ✅ LOADING */
-  if (loading)
+  if (loading) {
     return (
-      <div className="p-10 flex justify-center">
+      <div className="flex justify-center p-10">
         <Loader2 className="animate-spin text-gray-600" size={34} />
       </div>
     );
+  }
 
   if (error) return <p className="p-10 text-red-500">{error}</p>;
   if (!order) return <p className="p-10 text-red-500">Order not found</p>;
@@ -255,316 +267,320 @@ export default function OrderDetailsClient({ id }) {
   const items = Array.isArray(order.items) ? order.items : [];
 
   return (
-    <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-8">
-      <div className="mx-auto space-y-6">
-        {/* BACK */}
-        <button
-          onClick={() => router.push("/orders/all")}
-          className="flex items-center gap-2 text-sm text-gray-600 hover:text-black"
-        >
-          <ArrowLeft size={18} /> Back to Orders
-        </button>
+    <>
+      <section className="min-h-screen bg-[#f6f7fb] px-4 py-8 sm:px-6 lg:px-10">
+        <div className="mx-auto space-y-6">
+          <button
+            onClick={() => router.push("/orders/all")}
+            className="flex items-center gap-2 text-sm text-gray-600 hover:text-black"
+          >
+            <ArrowLeft size={18} /> Back to Orders
+          </button>
 
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Order #{order.orderNumber}
-            </h1>
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Order #{order.orderNumber}
+              </h1>
 
-            {/* ✅ PRIORITY BADGE */}
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${pri.cls} ring-1 ring-black/5`}
+              >
+                Priority: {pri.label}
+              </span>
+
+              <p className="mt-0.5 text-sm text-gray-500">
+                Manage customer details, tracking & printing.
+              </p>
+            </div>
+
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${pri.cls} ring-1 ring-black/5`}
+              className={`w-fit rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${statusBadgeStyle(
+                safeCurrentStatus
+              )}`}
             >
-              Priority: {pri.label}
+              {orderStatusLabel}
             </span>
-
-            <p className="text-sm text-gray-500 mt-0.5">
-              Manage customer details, tracking & printing.
-            </p>
           </div>
 
-          <span
-            className={`px-3 py-1.5 rounded-full capitalize font-semibold text-xs w-fit ${statusBadgeStyle(
-              safeCurrentStatus
-            )}`}
-          >
-            {orderStatusLabel}
-          </span>
-        </div>
+          <Card>
+            <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
+              <Package size={18} /> Items in this Order
+            </h2>
 
-        {/* ✅ ORDER ITEMS */}
-        <Card>
-          <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
-            <Package size={18} /> Items in this Order
-          </h2>
+            {items.length === 0 ? (
+              <p className="text-sm text-gray-500">No items found.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-gray-100 text-gray-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">Product</th>
+                      <th className="px-4 py-3 text-left font-semibold">Variant</th>
+                      <th className="px-4 py-3 text-left font-semibold">Qty</th>
+                      <th className="px-4 py-3 text-left font-semibold">Price</th>
+                      <th className="px-4 py-3 text-left font-semibold">Subtotal</th>
+                    </tr>
+                  </thead>
 
-          {items.length === 0 ? (
-            <p className="text-sm text-gray-500">No items found.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-gray-500 border-b border-gray-100">
-                  <tr>
-                    <th className="py-3 px-4 text-left font-semibold">Product</th>
-                    <th className="py-3 px-4 text-left font-semibold">Variant</th>
-                    <th className="py-3 px-4 text-left font-semibold">Qty</th>
-                    <th className="py-3 px-4 text-left font-semibold">Price</th>
-                    <th className="py-3 px-4 text-left font-semibold">Subtotal</th>
-                  </tr>
-                </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {items.map((it, idx) => {
+                      const snap = it?.productSnapshot || {};
+                      const v = it?.variant || {};
+                      const productUrl = it?.productId?._id
+                        ? `${STORE_URL}/category/products/name/${it.productId._id}`
+                        : "";
 
-                <tbody className="divide-y divide-gray-100">
-                  {items.map((it, idx) => {
-                    const snap = it?.productSnapshot || {};
-                    const v = it?.variant || {};
-                    const productUrl = it?.productId?._id
-                      ? `${STORE_URL}/category/products/name/${it.productId._id}`
-                      : "";
+                      const size = it?.selectedSize || "-";
+                      const color = it?.selectedColor || "-";
+                      const sku = v?.sku || snap?.sku || "-";
 
-                    const size = it?.selectedSize || "-";
-                    const color = it?.selectedColor || "-";
-                    const sku = v?.sku || snap?.sku || "-";
+                      return (
+                        <tr key={idx} className="transition hover:bg-gray-50">
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={snap.thumbnail || "/placeholder.png"}
+                                alt={snap.title || "Product"}
+                                className="h-12 w-12 rounded-xl border border-gray-100 object-cover"
+                              />
+                              <div>
+                                <p className="font-semibold text-gray-900">
+                                  {snap.title || "-"}
+                                </p>
 
-                    return (
-                      <tr key={idx} className="hover:bg-gray-50 transition">
-                        {/* Product */}
-                        <td className="py-4 px-4">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={snap.thumbnail || "/placeholder.png"}
-                              alt={snap.title || "Product"}
-                              className="w-12 h-12 rounded-xl object-cover border border-gray-100"
-                            />
-                            <div>
-                              <p className="font-semibold text-gray-900">
-                                {snap.title || "-"}
+                                {productUrl && (
+                                  <a
+                                    href={productUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                                  >
+                                    View Product <ExternalLink size={13} />
+                                  </a>
+                                )}
+
+                                <p className="text-xs text-gray-500">
+                                  Code: {snap.productCode || "-"} • SKU: {sku}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4 text-gray-700">
+                            <div className="space-y-1 text-xs">
+                              <p>
+                                <span className="font-medium">Size:</span> {size}
                               </p>
-
-                              {productUrl && (
-                                <a
-                                  href={productUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-blue-600 font-semibold hover:underline inline-flex items-center gap-1 mt-0.5"
-                                >
-                                  View Product <ExternalLink size={13} />
-                                </a>
-                              )}
-
-                              <p className="text-xs text-gray-500">
-                                Code: {snap.productCode || "-"} • SKU: {sku}
+                              <p>
+                                <span className="font-medium">Color:</span> {color}
                               </p>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Variant */}
-                        <td className="py-4 px-4 text-gray-700">
-                          <div className="space-y-1 text-xs">
-                            <p>
-                              <span className="font-medium">Size:</span> {size}
-                            </p>
-                            <p>
-                              <span className="font-medium">Color:</span> {color}
-                            </p>
-                          </div>
-                        </td>
+                          <td className="px-4 py-4 font-semibold text-gray-900">
+                            {it.quantity}
+                          </td>
 
-                        {/* Qty */}
-                        <td className="py-4 px-4 font-semibold text-gray-900">
-                          {it.quantity}
-                        </td>
+                          <td className="px-4 py-4 text-gray-800">
+                            ₹{Number(it.price || 0)}
+                          </td>
 
-                        {/* Price */}
-                        <td className="py-4 px-4 text-gray-800">
-                          ₹{Number(it.price || 0)}
-                        </td>
+                          <td className="px-4 py-4 font-semibold text-gray-900">
+                            ₹{Number(it.subtotal || 0)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
 
-                        {/* Subtotal */}
-                        <td className="py-4 px-4 font-semibold text-gray-900">
-                          ₹{Number(it.subtotal || 0)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <OrderFulfillmentTimeline order={order} />
+
+          <OrderCancellationDetails order={order} />
+
+          <Card>
+            <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
+              <BadgeIndianRupee size={18} /> Payment Summary
+            </h2>
+
+            <div className="grid gap-3 text-sm text-gray-700 sm:grid-cols-2">
+              <p className="flex justify-between">
+                <span>Subtotal</span>
+                <span className="font-semibold">₹{order.subtotal}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>Discount</span>
+                <span className="font-semibold">₹{order.discount}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>Shipping Fee</span>
+                <span className="font-semibold">₹{order.shippingFee}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>Tax</span>
+                <span className="font-semibold">₹{order.tax}</span>
+              </p>
+
+              <div className="flex justify-between border-t border-gray-100 pt-4 text-base font-bold text-gray-900 sm:col-span-2">
+                <span>Final Payable</span>
+                <span>₹{order.finalPayable}</span>
+              </div>
             </div>
-          )}
-        </Card>
+          </Card>
 
-        <OrderFulfillmentTimeline order={order} />
+          <Card>
+            <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
+              <User size={18} /> Customer
+            </h2>
 
-        {/* ✅ TOTALS */}
-        <Card>
-          <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
-            <BadgeIndianRupee size={18} /> Payment Summary
-          </h2>
-
-          <div className="grid sm:grid-cols-2 gap-3 text-sm text-gray-700">
-            <p className="flex justify-between">
-              <span>Subtotal</span>
-              <span className="font-semibold">₹{order.subtotal}</span>
-            </p>
-            <p className="flex justify-between">
-              <span>Discount</span>
-              <span className="font-semibold">₹{order.discount}</span>
-            </p>
-            <p className="flex justify-between">
-              <span>Shipping Fee</span>
-              <span className="font-semibold">₹{order.shippingFee}</span>
-            </p>
-            <p className="flex justify-between">
-              <span>Tax</span>
-              <span className="font-semibold">₹{order.tax}</span>
+            <p className="font-semibold text-gray-900">
+              {order.customerId?.name || "-"}
             </p>
 
-            <div className="sm:col-span-2 border-t border-gray-100 pt-4 flex justify-between text-base font-bold text-gray-900">
-              <span>Final Payable</span>
-              <span>₹{order.finalPayable}</span>
+            <div className="mt-2 grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
+              <p className="flex items-center gap-2">
+                <Phone size={15} /> {order.customerId?.phone || "-"}
+              </p>
+              <p className="flex items-center gap-2">
+                <Mail size={15} /> {order.customerId?.email || "-"}
+              </p>
             </div>
+          </Card>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <EditableAddressCard
+              orderId={order._id}
+              type="shipping"
+              address={order.shippingAddressSnapshot}
+              onRefresh={() => fetchOrderById(order._id)}
+            />
+
+            <EditableAddressCard
+              orderId={order._id}
+              type="billing"
+              address={order.billingAddressSnapshot}
+              onRefresh={() => fetchOrderById(order._id)}
+            />
           </div>
-        </Card>
 
-        {/* CUSTOMER */}
-        <Card>
-          <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
-            <User size={18} /> Customer
-          </h2>
+          <OrderServiceabilityCard order={order} />
 
-          <p className="font-semibold text-gray-900">
-            {order.customerId?.name || "-"}
-          </p>
+          <Card>
+            <h2 className="mb-4 text-base font-semibold">Order Status</h2>
 
-          <div className="grid sm:grid-cols-2 gap-2 text-sm text-gray-600 mt-2">
-            <p className="flex items-center gap-2">
-              <Phone size={15} /> {order.customerId?.phone || "-"}
-            </p>
-            <p className="flex items-center gap-2">
-              <Mail size={15} /> {order.customerId?.email || "-"}
-            </p>
-          </div>
-        </Card>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="w-full sm:w-64">
+                <label className="text-xs font-semibold text-gray-600">
+                  Fulfillment Status
+                </label>
 
-        <div className="grid md:grid-cols-2 gap-5">
-          <EditableAddressCard
-            orderId={order._id}
-            type="shipping"
-            address={order.shippingAddressSnapshot}
-            onRefresh={() => fetchOrderById(order._id)}
-          />
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                >
+                  {FULFILLMENT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <EditableAddressCard
-            orderId={order._id}
-            type="billing"
-            address={order.billingAddressSnapshot}
-            onRefresh={() => fetchOrderById(order._id)}
-          />
-
-        
-        </div>
-  <OrderServiceabilityCard order={order} />
-        {/* STATUS UPDATE */}
-        <Card>
-          <h2 className="text-base font-semibold mb-4">Order Status</h2>
-
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-            <div className="w-full sm:w-64">
-              <label className="text-xs font-semibold text-gray-600">
-                Fulfillment Status
-              </label>
-
-              <select
-                value={newStatus}
-                onChange={(e) => setNewStatus(e.target.value)}
-                className="mt-2 w-full px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              <button
+                onClick={handleUpdateStatus}
+                disabled={statusUpdating || cancelLoading}
+                className="h-[42px] rounded-lg bg-black px-6 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
               >
-                {FULFILLMENT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+                {statusUpdating || cancelLoading ? "Updating..." : "Update"}
+              </button>
             </div>
 
-            <button
-              onClick={handleUpdateStatus}
-              disabled={statusUpdating}
-              className="h-[42px] px-6 rounded-lg bg-black text-white text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition"
-            >
-              {statusUpdating ? "Updating..." : "Update"}
-            </button>
-          </div>
+            <p className="mt-3 text-xs text-gray-500">
+              Note: Return/Exchange progress is tracked in RMA section, not in fulfillment status.
+            </p>
+          </Card>
 
-          {/* Optional helper note for admins */}
-          <p className="mt-3 text-xs text-gray-500">
-            Note: Return/Exchange progress is tracked in RMA section, not in fulfillment status.
-          </p>
-        </Card>
-
-        <OrderCreateRmaPanel
-  order={order}
-  onCreated={() => fetchOrderById(order._id)}
-/>
-
-<OrderRmaMention orderId={order._id} />
-
-        <OrderActionCenter
-          order={order}
-          trackingId={trackingId}
-          courierName={courierName}
-          trackingUrl={
-            order?.shipment?.shiprocket?.trackingUrl ||
-            order?.trackingDetails?.trackingUrl ||
-            ""
-          }
-          onRefresh={() => fetchOrderById(order._id)}
-        />
-
-        <OrderTrackingCard
-          orderId={order._id}
-          shipment={order?.shipment}
-          trackingDetails={order?.trackingDetails}
-          onRefresh={() => fetchOrderById(order._id)}
-        />
-
-        {/* REMARKS */}
-        <Card>
-          <h2 className="text-base font-semibold mb-4">Admin Remarks</h2>
-
-          <label className="text-xs font-semibold text-gray-600">
-            Notes / Remarks
-          </label>
-
-          <textarea
-            className="mt-2 px-3 py-3 rounded-lg bg-gray-50 border border-gray-200 w-full h-28 text-sm outline-none focus:ring-2 focus:ring-black/10"
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
+          <OrderCreateRmaPanel
+            order={order}
+            onCreated={() => fetchOrderById(order._id)}
           />
 
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center mt-4">
-            <button
-              onClick={updateRemarks}
-              disabled={remarksSaving}
-              className="px-6 py-2.5 rounded-lg bg-black text-white text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition"
-            >
-              {remarksSaving ? "Saving..." : "Save Remarks"}
-            </button>
+          <OrderRmaMention orderId={order._id} />
 
-            <button
-              onClick={updateTracking}
-              className="px-6 py-2.5 rounded-lg bg-white text-black border border-gray-200 text-sm font-semibold hover:bg-gray-50 transition"
-              type="button"
-            >
-              Save Tracking
-            </button>
-          </div>
-        </Card>
+          <OrderActionCenter
+            order={order}
+            trackingId={trackingId}
+            courierName={courierName}
+            trackingUrl={
+              order?.shipment?.shiprocket?.trackingUrl ||
+              order?.trackingDetails?.trackingUrl ||
+              ""
+            }
+            onRefresh={() => fetchOrderById(order._id)}
+          />
 
-        {/* ✅ PRINT PANEL */}
-        <OrderPrintPanel order={order} courierName={courierName} trackingId={trackingId} />
-      </div>
-    </section>
+          <OrderTrackingCard
+            orderId={order._id}
+            shipment={order?.shipment}
+            trackingDetails={order?.trackingDetails}
+            onRefresh={() => fetchOrderById(order._id)}
+          />
+
+          <Card>
+            <h2 className="mb-4 text-base font-semibold">Admin Remarks</h2>
+
+            <label className="text-xs font-semibold text-gray-600">
+              Notes / Remarks
+            </label>
+
+            <textarea
+              className="mt-2 h-28 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+            />
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button
+                onClick={updateRemarks}
+                disabled={remarksSaving}
+                className="rounded-lg bg-black px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              >
+                {remarksSaving ? "Saving..." : "Save Remarks"}
+              </button>
+
+              <button
+                onClick={updateTracking}
+                className="rounded-lg border border-gray-200 bg-white px-6 py-2.5 text-sm font-semibold text-black transition hover:bg-gray-50"
+                type="button"
+              >
+                Save Tracking
+              </button>
+            </div>
+          </Card>
+
+          <OrderPrintPanel
+            order={order}
+            courierName={courierName}
+            trackingId={trackingId}
+          />
+        </div>
+      </section>
+
+      <CancelOrderModal
+        open={cancelModalOpen}
+        order={cancelTargetOrder}
+        loading={cancelLoading}
+        onClose={() => {
+          closeCancelModal();
+          setNewStatus(safeCurrentStatus);
+        }}
+        onConfirm={handleCancelConfirm}
+      />
+    </>
   );
 }

@@ -1,154 +1,49 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { useReactToPrint } from "react-to-print";
-import { FileText, Loader2, RefreshCcw, Search } from "lucide-react";
+import { useState } from "react";
+import CancelOrderModal from "@/components/orders/CancelOrderModal";
 
-import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
-import { useOrderInvoiceStore } from "@/store/orderInvoiceStore";
+export default function TestPage() {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-const PREFIX = "MIRAY-";
-const DIGITS = 6;
-
-const normalizeOrderNumber = (value = "") => {
-  const raw = String(value ?? "").trim().toUpperCase();
-  if (!raw) return "";
-
-  if (/^MIRAY-\d{6}$/.test(raw)) return raw;
-
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return "";
-
-  return `${PREFIX}${digits.slice(-DIGITS).padStart(DIGITS, "0")}`;
-};
-
-const parseOrderNumbers = (input = "") =>
-  [...new Set(input.split(/[\n,\s]+/).map(normalizeOrderNumber).filter(Boolean))];
-
-export default function OrdersInvoicePage() {
-  const printRef = useRef(null);
-  const [input, setInput] = useState("");
-  const [pageError, setPageError] = useState("");
-
-  const {
-    invoices,
-    loading,
-    fetchInvoiceByOrderNumber,
-    fetchInvoicesByOrderNumbers,
-    clearInvoices,
-  } = useOrderInvoiceStore();
-
-  const orderNumbers = useMemo(() => parseOrderNumbers(input), [input]);
-
-  const printInvoices = useReactToPrint({
-    contentRef: printRef,
-  });
-
-  const handleFetch = async () => {
-    setPageError("");
-
-    if (!orderNumbers.length) {
-      setPageError("Enter at least one order number");
-      return;
-    }
-
-    try {
-      clearInvoices();
-
-      // 🔥 IMPORTANT LOGIC
-      if (orderNumbers.length === 1) {
-        const single = await fetchInvoiceByOrderNumber(orderNumbers[0]);
-        if (!single) {
-          setPageError("Invoice not found");
-        }
-      } else {
-        const many = await fetchInvoicesByOrderNumbers(orderNumbers);
-        if (!many?.length) {
-          setPageError("No invoices found");
-        }
-      }
-    } catch (err) {
-      console.error(err);
-      setPageError(err?.message || "Failed to fetch invoice");
-    }
+  // dummy order for UI testing
+  const order = {
+    _id: "test123",
+    orderNumber: "MIRAY-004312",
+    fulfillmentStatus: "processing",
   };
 
-  const handlePrint = async () => {
-    if (!invoices?.length) {
-      await handleFetch();
-    }
+  const handleConfirm = async (reason) => {
+    console.log("Cancel triggered with reason:", reason);
 
-    if (!invoices?.length) return;
+    setLoading(true);
 
+    // simulate API
     setTimeout(() => {
-      printInvoices?.();
-    }, 80);
-  };
-
-  const handleReset = () => {
-    setInput("");
-    setPageError("");
-    clearInvoices();
+      setLoading(false);
+      setOpen(false);
+    }, 1200);
   };
 
   return (
-    <div className="p-4 max-w-5xl mx-auto space-y-4">
-      <div className="bg-white p-4 rounded-xl border">
-        <h1 className="font-bold text-lg">Invoice Panel</h1>
+    <div className="p-6">
+      <h1 className="text-xl font-semibold mb-4">Cancel Modal Test</h1>
 
-        <textarea
-          className="w-full border p-3 rounded mt-3"
-          rows={4}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="1056 or MIRAY-001056"
-        />
+      <button
+        onClick={() => setOpen(true)}
+        className="rounded-full bg-black px-5 py-2 text-white"
+      >
+        Open Cancel Modal
+      </button>
 
-        <div className="flex gap-2 mt-3">
-          <button onClick={handleFetch} className="btn">
-            {loading ? <Loader2 className="animate-spin" /> : <Search />}
-            Fetch
-          </button>
-
-          <button onClick={handlePrint} className="btn-dark">
-            <FileText /> Print
-          </button>
-
-          <button onClick={handleReset} className="btn-outline">
-            <RefreshCcw /> Reset
-          </button>
-        </div>
-
-        {pageError && (
-          <div className="text-red-500 mt-2 text-sm">{pageError}</div>
-        )}
-      </div>
-
-      {/* Preview */}
-      <div>
-        {!invoices?.length ? (
-          <div className="text-center text-gray-500 py-10">
-            No invoices loaded
-          </div>
-        ) : (
-          invoices.map((inv, i) => (
-            <div key={i} className="border rounded mb-4 p-2">
-              <InvoiceTemplate data={inv} />
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Print hidden */}
-      <div style={{ position: "absolute", left: "-99999px" }}>
-        <div ref={printRef}>
-          {invoices?.map((inv, i) => (
-            <div key={i}>
-              <InvoiceTemplate data={inv} />
-            </div>
-          ))}
-        </div>
-      </div>
+      <CancelOrderModal
+        open={open}
+        order={order}
+        loading={loading}
+        onClose={() => setOpen(false)}
+        onConfirm={handleConfirm}
+      />
     </div>
   );
 }

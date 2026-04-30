@@ -450,25 +450,26 @@ duplicateLoading: false,
     return order;
   },
 
-  cancelOrder: async (orderId, reason = "cancelled_by_admin") => {
-    if (!orderId) return null;
+  cancelOrder: async (orderId, reason = "") => {
+  if (!orderId) return null;
 
-    const data = await get()._post(`/api/orders/${orderId}/cancel`, {
-      reason: reason || "cancelled_by_admin",
-      cancelledBy: "admin",
-      adminRemarks: "cancelled_by_admin",
-    });
+  const data = await get()._patch(`/api/orders/${orderId}/status`, {
+    fulfillmentStatus: "cancelled",
+    cancelledBy: "admin",
+    reason: String(reason || "").trim(),
+    adminRemarks: "cancelled_by_admin",
+  });
 
-    const order = get()._normalizeOrder(data);
+  const order = get()._normalizeOrder(data);
 
-    if (order?._id) {
-      set({ order });
-      get()._syncOrderInList(order);
-      get()._syncCustomerSupportDetail(order);
-    }
+  if (order?._id) {
+    set({ order });
+    get()._syncOrderInList(order);
+    get()._syncCustomerSupportDetail(order);
+  }
 
-    return order;
-  },
+  return order;
+},
 
   confirmOrder: async (orderId) => {
     if (!orderId) return null;
