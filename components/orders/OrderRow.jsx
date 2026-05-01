@@ -2,87 +2,18 @@
 
 import { memo, useCallback, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown";
 import OrderPriorityDropdown from "@/components/orders/OrderPriorityDropdown";
+import OrderPaymentStatusDropdown from "@/components/orders/OrderPaymentStatusDropdown";
 import OrderRowActions from "@/components/orders/OrderRowActions";
 
 const BASE_URL = "https://mirayfashions.com";
 
-/* ---------------------------------------------
-   Helpers
---------------------------------------------- */
 const safe = (v) => (v == null ? "" : String(v));
 
 const money = (n) =>
   Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-IN") : "0";
-
-const getPaymentBadge = (order) => {
-  const pm = String(order?.paymentMethod || "").toLowerCase();
-  const ps = String(order?.paymentStatus || "").toLowerCase();
-
-  if (pm === "exchange") {
-    return {
-      label: "Exchange",
-      cls: "bg-blue-50 text-blue-700 border border-blue-100",
-    };
-  }
-
-  if (pm === "cod") {
-    return {
-      label: "COD",
-      cls: "bg-gray-100 text-gray-700 border border-gray-200",
-    };
-  }
-
-  if (pm === "razorpay") {
-    if (ps === "paid") {
-      return {
-        label: "Paid ✅",
-        cls: "bg-green-50 text-green-700 border border-green-100",
-      };
-    }
-
-    if (ps === "pending") {
-      return {
-        label: "Pending ⏳",
-        cls: "bg-yellow-50 text-yellow-700 border border-yellow-100",
-      };
-    }
-
-    if (ps === "refund_pending") {
-      return {
-        label: "Refund Pending ⏳",
-        cls: "bg-orange-50 text-orange-700 border border-orange-100",
-      };
-    }
-
-    if (ps === "refunded") {
-      return {
-        label: "Refunded ✅",
-        cls: "bg-emerald-50 text-emerald-700 border border-emerald-100",
-      };
-    }
-
-    return {
-      label: "Failed ❌",
-      cls: "bg-red-50 text-red-700 border border-red-100",
-    };
-  }
-
-  if (ps === "not_applicable") {
-    return {
-      label: "N/A",
-      cls: "bg-gray-50 text-gray-600 border border-gray-200",
-    };
-  }
-
-  return {
-    label: "Unknown",
-    cls: "bg-gray-100 text-gray-700 border border-gray-200",
-  };
-};
 
 const formatOrderDateTime = (value) => {
   if (!value) return { time: "", date: "" };
@@ -109,11 +40,7 @@ const buildProductUrl = (item) => {
   return productId ? `${BASE_URL}/category/products/name/${productId}` : "";
 };
 
-/* ---------------------------------------------
-   Component
---------------------------------------------- */
 function OrderRow({ order, onUpdated }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   const items = useMemo(
@@ -123,11 +50,14 @@ function OrderRow({ order, onUpdated }) {
 
   const orderId = order?._id || order?.id;
 
-  const paymentBadge = useMemo(() => getPaymentBadge(order), [order]);
-
   const effectiveStatus = useMemo(
     () => String(order?.fulfillmentStatus || "processing").toLowerCase(),
     [order?.fulfillmentStatus]
+  );
+
+  const paymentStatus = useMemo(
+    () => String(order?.paymentStatus || "pending").toLowerCase(),
+    [order?.paymentStatus]
   );
 
   const dt = useMemo(
@@ -138,18 +68,15 @@ function OrderRow({ order, onUpdated }) {
   const firstItem = items[0] || null;
   const firstTitle = firstItem?.productSnapshot?.title || "";
 
-  // stable toggle
   const toggleOpen = useCallback(() => {
     setOpen((prev) => !prev);
   }, []);
 
-  // stable navigation
   const goToOrder = useCallback(() => {
-  if (!orderId || typeof window === "undefined") return;
-  window.open(`/orders/${orderId}`, "_blank", "noopener,noreferrer");
-}, [orderId]);
+    if (!orderId || typeof window === "undefined") return;
+    window.open(`/orders/${orderId}`, "_blank", "noopener,noreferrer");
+  }, [orderId]);
 
-  // stable update callback
   const handleUpdated = useCallback(
     (payload) => {
       onUpdated?.(payload?.order ?? payload);
@@ -159,9 +86,7 @@ function OrderRow({ order, onUpdated }) {
 
   return (
     <>
-      {/* ================= MAIN ROW ================= */}
       <tr className="hover:bg-black/[0.03] transition">
-        {/* Order info */}
         <td className="py-4 px-5 font-semibold text-gray-900">
           <div className="flex items-center gap-2">
             <button
@@ -176,12 +101,6 @@ function OrderRow({ order, onUpdated }) {
             <button
               type="button"
               onClick={goToOrder}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  goToOrder();
-                }
-              }}
               title="Open order"
               className="text-left inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-black/[0.05] focus:outline-none focus:ring-2 focus:ring-black/10"
             >
@@ -217,7 +136,6 @@ function OrderRow({ order, onUpdated }) {
           </div>
         </td>
 
-        {/* Customer */}
         <td className="py-4 px-5">
           <div className="font-medium text-gray-900">
             {order?.customerId?.name ||
@@ -236,30 +154,27 @@ function OrderRow({ order, onUpdated }) {
           </div>
         </td>
 
-        {/* Payment */}
         <td className="py-4 px-5">
-          <span
-            className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${paymentBadge.cls}`}
-          >
-            {paymentBadge.label}
-          </span>
-        </td>
-
-        {/* Status */}
-        <td className="py-4 px-5">
-          <OrderStatusDropdown
+          <OrderPaymentStatusDropdown
             orderId={orderId}
-            currentStatus={effectiveStatus}
+            currentStatus={paymentStatus}
             onUpdated={handleUpdated}
           />
         </td>
 
-        {/* Amount */}
+        <td className="py-4 px-5">
+          <OrderStatusDropdown
+            orderId={orderId}
+            currentStatus={effectiveStatus}
+            order={order}
+            onUpdated={handleUpdated}
+          />
+        </td>
+
         <td className="py-4 px-5 font-semibold text-gray-900">
           ₹{money(order?.finalPayable)}
         </td>
 
-        {/* Date */}
         <td className="py-4 px-5 text-gray-700">
           <div className="leading-tight">
             <div className="text-sm font-medium text-gray-900">{dt.time}</div>
@@ -267,24 +182,23 @@ function OrderRow({ order, onUpdated }) {
           </div>
         </td>
 
-        {/* Actions */}
         <td className="py-4 px-5">
           <div className="flex items-center justify-end gap-2">
             <OrderRowActions
               order={order}
-              courierName={order?.shipment?.courierName || order?.courierName || ""}
+              courierName={
+                order?.shipment?.courierName || order?.courierName || ""
+              }
               trackingId={order?.shipment?.awb || order?.trackingId || ""}
             />
           </div>
         </td>
       </tr>
 
-      {/* ================= EXPANDED SECTION ================= */}
       {open ? (
         <tr className="bg-black/[0.015]">
           <td colSpan={7} className="px-5 pb-4">
             <div className="mt-3 bg-white rounded-2xl px-4 py-4 space-y-4">
-              {/* Items */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-900">
@@ -315,7 +229,10 @@ function OrderRow({ order, onUpdated }) {
 
                       const variantText =
                         size || color
-                          ? [size ? `Size: ${size}` : "", color ? `Color: ${color}` : ""]
+                          ? [
+                              size ? `Size: ${size}` : "",
+                              color ? `Color: ${color}` : "",
+                            ]
                               .filter(Boolean)
                               .join(" • ")
                           : Array.isArray(variant?.attributes)
@@ -389,7 +306,6 @@ function OrderRow({ order, onUpdated }) {
                 )}
               </div>
 
-              {/* Totals */}
               <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2 text-xs text-gray-700">
                 <span className="px-3 py-1 rounded-full bg-gray-100">
                   Subtotal: <b>₹{money(order?.subtotal)}</b>
@@ -415,11 +331,6 @@ function OrderRow({ order, onUpdated }) {
   );
 }
 
-/* ---------------------------------------------
-   Memo:
-   Row sirf tab rerender ho jab order object ya
-   callback actual me change ho
---------------------------------------------- */
 export default memo(OrderRow, (prev, next) => {
   return prev.order === next.order && prev.onUpdated === next.onUpdated;
 });

@@ -5,6 +5,7 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  Download,
   IndianRupee,
   Loader2,
   RefreshCw,
@@ -17,7 +18,7 @@ import { useOrderRefundStore } from "@/store/orderRefundStore";
 const PAGE_SIZE = 100;
 
 const Card = ({ children, className = "" }) => (
-  <div className={`rounded-2xl border border-gray-100 bg-white p-6 shadow-sm ${className}`}>
+  <div className={`rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100 ${className}`}>
     {children}
   </div>
 );
@@ -34,48 +35,85 @@ const formatINR = (value) =>
     maximumFractionDigits: 0,
   }).format(toNum(value));
 
-const getPaginationItems = (currentPage, totalPages) => {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, i) => i + 1);
-  }
+const formatDate = (date) => {
+  if (!date) return "-";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
 
-  if (currentPage <= 4) {
-    return [1, 2, 3, 4, 5, "...", totalPages];
-  }
+const getCustomerName = (order) =>
+  order?.customer?.name ||
+  order?.customerName ||
+  order?.shippingAddress?.name ||
+  order?.billingAddress?.name ||
+  "-";
+
+const getCustomerPhone = (order) =>
+  order?.customer?.phone ||
+  order?.phone ||
+  order?.shippingAddress?.phone ||
+  order?.billingAddress?.phone ||
+  "-";
+
+const getCustomerEmail = (order) =>
+  order?.customer?.email || order?.email || "-";
+
+const getRefundAmount = (order) =>
+  toNum(
+    order?.refundSummary?.totalRefundable ??
+      order?.refundSummary?.totalRefunded ??
+      order?.finalPayable ??
+      order?.totalAmount ??
+      order?.grandTotal
+  );
+
+const sanitizeExcelCell = (value) => {
+  const str = String(value ?? "").replace(/"/g, '""');
+  return `"${str}"`;
+};
+
+const downloadCSV = (rows, filename = "refund-escalation-orders.csv") => {
+  const csv = rows.map((row) => row.map(sanitizeExcelCell).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+const getPaginationItems = (currentPage, totalPages) => {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  if (currentPage <= 4) return [1, 2, 3, 4, 5, "...", totalPages];
 
   if (currentPage >= totalPages - 3) {
-    return [
-      1,
-      "...",
-      totalPages - 4,
-      totalPages - 3,
-      totalPages - 2,
-      totalPages - 1,
-      totalPages,
-    ];
+    return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
   }
 
-  return [
-    1,
-    "...",
-    currentPage - 1,
-    currentPage,
-    currentPage + 1,
-    "...",
-    totalPages,
-  ];
+  return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
 };
 
 function SummaryCard({ title, value, icon: Icon, tone = "gray", subtext = "" }) {
   const styles = {
-    gray: "bg-gray-50 text-gray-700 border-gray-100",
-    red: "bg-red-50 text-red-700 border-red-100",
-    orange: "bg-orange-50 text-orange-700 border-orange-100",
-    green: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    gray: "bg-gray-50 text-gray-700 ring-gray-100",
+    red: "bg-red-50 text-red-700 ring-red-100",
+    orange: "bg-orange-50 text-orange-700 ring-orange-100",
+    green: "bg-emerald-50 text-emerald-700 ring-emerald-100",
   };
 
   return (
-    <div className={`rounded-2xl border p-5 ${styles[tone] || styles.gray}`}>
+    <div className={`rounded-2xl p-5 ring-1 ${styles[tone] || styles.gray}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold opacity-80">{title}</p>
@@ -91,14 +129,7 @@ function SummaryCard({ title, value, icon: Icon, tone = "gray", subtext = "" }) 
   );
 }
 
-function PaginationBar({
-  currentPage,
-  totalPages,
-  totalCount,
-  loading,
-  onRefresh,
-  onPageChange,
-}) {
+function PaginationBar({ currentPage, totalPages, totalCount, loading, onRefresh, onPageChange }) {
   const items = getPaginationItems(currentPage, totalPages);
 
   return (
@@ -124,7 +155,7 @@ function PaginationBar({
             className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
               loading
                 ? "cursor-not-allowed bg-gray-200 text-gray-500"
-                : "border border-gray-200 bg-white hover:bg-gray-50"
+                : "bg-white ring-1 ring-gray-200 hover:bg-gray-50"
             }`}
           >
             {loading ? (
@@ -146,7 +177,7 @@ function PaginationBar({
             className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
               loading || currentPage <= 1
                 ? "cursor-not-allowed bg-gray-200 text-gray-500"
-                : "border border-gray-200 bg-white hover:bg-gray-50"
+                : "bg-white ring-1 ring-gray-200 hover:bg-gray-50"
             }`}
           >
             <ChevronLeft size={16} />
@@ -183,8 +214,8 @@ function PaginationBar({
                 currentPage === item
                   ? "bg-black text-white"
                   : loading
-                  ? "cursor-not-allowed border border-gray-200 bg-gray-100 text-gray-400"
-                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  ? "cursor-not-allowed bg-gray-100 text-gray-400 ring-1 ring-gray-200"
+                  : "bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50"
               }`}
             >
               {item}
@@ -234,11 +265,17 @@ export default function RefundEscalationPage() {
         ...next,
         page: 1,
         limit: PAGE_SIZE,
+        search: next.search ?? filters.search,
+        paymentStatus: next.paymentStatus ?? filters.paymentStatus,
+        fulfillmentStatus: next.fulfillmentStatus ?? filters.fulfillmentStatus,
         startDate: next.startDate ?? filters.startDate,
         endDate: next.endDate ?? filters.endDate,
+        sortBy: next.sortBy ?? filters.sortBy,
+        sortOrder: next.sortOrder ?? filters.sortOrder,
+        onlyActionRequired: next.onlyActionRequired ?? filters.onlyActionRequired,
       });
     },
-    [fetchRefundOrders, filters.startDate, filters.endDate]
+    [fetchRefundOrders, filters]
   );
 
   const handleSearch = useCallback(() => {
@@ -248,11 +285,13 @@ export default function RefundEscalationPage() {
   const handleClear = useCallback(async () => {
     resetFilters();
     setSearchInput("");
+
     await fetchRefundOrders({
       page: 1,
       limit: PAGE_SIZE,
       search: "",
       paymentStatus: "",
+      fulfillmentStatus: "",
       startDate: "",
       endDate: "",
       sortBy: "createdAt",
@@ -273,6 +312,58 @@ export default function RefundEscalationPage() {
     [updateOrderInList]
   );
 
+  const handleDownloadExcel = useCallback(() => {
+  const header = [
+    "Order Number",
+    "Customer Name",
+    "Phone",
+    "Email",
+    "Payment Method",
+    "Payment Status",
+    "Fulfillment Status",
+    "Refund Amount",
+    "Final Payable",
+  ];
+
+  const body = orders.map((order) => {
+    const name =
+      order?.customerName ||
+      order?.customerId?.name ||
+      order?.shippingAddressSnapshot?.fullName ||
+      order?.billingAddressSnapshot?.fullName ||
+      "-";
+
+    const phone =
+      order?.customerPhone ||
+      order?.customerId?.phone ||
+      order?.shippingAddressSnapshot?.phone ||
+      order?.billingAddressSnapshot?.phone ||
+      "-";
+
+    const email =
+      order?.customerEmail ||
+      order?.customerId?.email ||
+      order?.shippingAddressSnapshot?.email ||
+      order?.billingAddressSnapshot?.email ||
+      "-";
+
+    return [
+      order?.orderNumber || order?._id || "-",
+      name,
+      phone,
+      email,
+      order?.paymentMethod || "-",
+      order?.paymentStatus || "-",
+      order?.fulfillmentStatus || "-",
+      getRefundAmount(order),
+      toNum(order?.finalPayable ?? order?.totalAmount ?? order?.grandTotal),
+    ];
+  });
+
+  const date = new Date().toISOString().slice(0, 10);
+  downloadCSV([header, ...body], `refund-escalation-orders-${date}.csv`);
+}, [orders]);
+
   const currentPage = Math.max(1, toNum(pagination?.page, 1));
   const totalPages = Math.max(1, toNum(pagination?.totalPages, 1));
   const totalCount = toNum(pagination?.totalCount, 0);
@@ -283,6 +374,7 @@ export default function RefundEscalationPage() {
       { label: "Action Required", type: "action" },
       { label: "Refund Pending", type: "paymentStatus", value: "refund_pending" },
       { label: "Paid", type: "paymentStatus", value: "paid" },
+      { label: "Cancelled", type: "fulfillmentStatus", value: "cancelled" },
       { label: "Newest", type: "sortBy", value: "createdAt" },
       { label: "Highest Amount", type: "sortBy", value: "finalPayable" },
     ],
@@ -290,11 +382,11 @@ export default function RefundEscalationPage() {
   );
 
   return (
-    <section className="min-h-screen bg-[#f6f7fb] px-4 py-10 sm:px-6 lg:px-10">
-      <div className="mx-auto space-y-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+    <section className="min-h-screen bg-[#f6f7fb] px-4 py-8 sm:px-6 lg:px-10">
+      <div className="space-y-8">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+            <h1 className="text-3xl font-bold tracking-tight text-gray-950">
               Refund Escalation
             </h1>
             <p className="mt-1 text-gray-500">
@@ -317,33 +409,63 @@ export default function RefundEscalationPage() {
             </div>
           </div>
 
-          <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
-            <div className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm xl:w-96">
-              <Search size={18} className="text-gray-400" />
-              <input
-                type="text"
-                value={searchInput}
-                placeholder="Search order / customer / email / phone / payment id..."
-                className="w-full bg-transparent text-sm outline-none placeholder:text-gray-400"
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              />
+          <div className="flex w-full flex-col gap-3 xl:w-auto">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                onClick={handleDownloadExcel}
+                disabled={!orders?.length}
+                className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold shadow-sm transition ${
+                  orders?.length
+                    ? "bg-black text-white hover:opacity-90"
+                    : "cursor-not-allowed bg-gray-200 text-gray-500"
+                }`}
+              >
+                <Download size={18} />
+                Download Excel
+              </button>
+
+              <button
+                onClick={handleRefresh}
+                disabled={loading || refreshing}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-gray-800 shadow-sm ring-1 ring-gray-100 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                {loading || refreshing ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={18} />
+                )}
+                Refresh
+              </button>
             </div>
 
-            <button
-              onClick={handleSearch}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50"
-            >
-              <Search size={18} />
-              Search
-            </button>
+            <div className="flex w-full flex-col gap-3 sm:flex-row">
+              <div className="flex w-full items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-gray-100 xl:w-96">
+                <Search size={18} className="text-gray-400" />
+                <input
+                  type="text"
+                  value={searchInput}
+                  placeholder="Search order / customer / email / phone / payment id..."
+                  className="w-full bg-transparent text-sm outline-none placeholder:text-gray-400"
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                />
+              </div>
 
-            <button
-              onClick={handleClear}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-100 px-5 py-3 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-200"
-            >
-              Clear
-            </button>
+              <button
+                onClick={handleSearch}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-gray-800 shadow-sm ring-1 ring-gray-100 transition hover:bg-gray-50"
+              >
+                <Search size={18} />
+                Search
+              </button>
+
+              <button
+                onClick={handleClear}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-100 px-5 py-3 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-200"
+              >
+                Clear
+              </button>
+            </div>
           </div>
         </div>
 
@@ -379,60 +501,71 @@ export default function RefundEscalationPage() {
         </div>
 
         <Card>
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-6">
             <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Payment Status
-              </label>
+              <label className="text-sm font-semibold text-gray-700">Payment Status</label>
               <select
-                value={filters.paymentStatus}
+                value={filters.paymentStatus || ""}
                 onChange={(e) => applyFilters({ paymentStatus: e.target.value })}
-                className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 outline-none transition focus:ring-2 focus:ring-black/10"
+                className="mt-2 w-full rounded-xl bg-gray-50 px-3 py-2.5 outline-none ring-1 ring-gray-200 transition focus:ring-2 focus:ring-black/10"
               >
                 <option value="">All</option>
                 <option value="paid">Paid</option>
                 <option value="refund_pending">Refund Pending</option>
+                <option value="refunded">Refunded</option>
+                <option value="partially_refunded">Partially Refunded</option>
               </select>
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Start Date
-              </label>
+              <label className="text-sm font-semibold text-gray-700">Fulfillment</label>
+              <select
+                value={filters.fulfillmentStatus || ""}
+                onChange={(e) => applyFilters({ fulfillmentStatus: e.target.value })}
+                className="mt-2 w-full rounded-xl bg-gray-50 px-3 py-2.5 outline-none ring-1 ring-gray-200 transition focus:ring-2 focus:ring-black/10"
+              >
+                <option value="">All</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="returned">Returned</option>
+                <option value="refunded">Refunded</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Start Date</label>
               <input
                 type="date"
-                value={filters.startDate}
+                value={filters.startDate || ""}
                 onChange={(e) => {
                   const value = e.target.value;
                   setFilters({ startDate: value, page: 1 });
                   applyFilters({ startDate: value });
                 }}
-                className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 outline-none transition focus:ring-2 focus:ring-black/10"
+                className="mt-2 w-full rounded-xl bg-gray-50 px-3 py-2.5 outline-none ring-1 ring-gray-200 transition focus:ring-2 focus:ring-black/10"
               />
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-gray-700">
-                End Date
-              </label>
+              <label className="text-sm font-semibold text-gray-700">End Date</label>
               <input
                 type="date"
-                value={filters.endDate}
+                value={filters.endDate || ""}
                 onChange={(e) => {
                   const value = e.target.value;
                   setFilters({ endDate: value, page: 1 });
                   applyFilters({ endDate: value });
                 }}
-                className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 outline-none transition focus:ring-2 focus:ring-black/10"
+                className="mt-2 w-full rounded-xl bg-gray-50 px-3 py-2.5 outline-none ring-1 ring-gray-200 transition focus:ring-2 focus:ring-black/10"
               />
             </div>
 
             <div>
               <label className="text-sm font-semibold text-gray-700">Sort By</label>
               <select
-                value={filters.sortBy}
+                value={filters.sortBy || "createdAt"}
                 onChange={(e) => applyFilters({ sortBy: e.target.value })}
-                className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 outline-none transition focus:ring-2 focus:ring-black/10"
+                className="mt-2 w-full rounded-xl bg-gray-50 px-3 py-2.5 outline-none ring-1 ring-gray-200 transition focus:ring-2 focus:ring-black/10"
               >
                 <option value="createdAt">Created At</option>
                 <option value="finalPayable">Refund Amount</option>
@@ -444,9 +577,9 @@ export default function RefundEscalationPage() {
             <div>
               <label className="text-sm font-semibold text-gray-700">Sort Order</label>
               <select
-                value={filters.sortOrder}
+                value={filters.sortOrder || "desc"}
                 onChange={(e) => applyFilters({ sortOrder: e.target.value })}
-                className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 outline-none transition focus:ring-2 focus:ring-black/10"
+                className="mt-2 w-full rounded-xl bg-gray-50 px-3 py-2.5 outline-none ring-1 ring-gray-200 transition focus:ring-2 focus:ring-black/10"
               >
                 <option value="desc">Descending</option>
                 <option value="asc">Ascending</option>
@@ -460,27 +593,39 @@ export default function RefundEscalationPage() {
                 const isActive =
                   chip.type === "reset"
                     ? !filters.paymentStatus &&
+                      !filters.fulfillmentStatus &&
                       !filters.onlyActionRequired &&
                       filters.sortBy === "createdAt"
                     : chip.type === "action"
                     ? Boolean(filters.onlyActionRequired)
                     : chip.type === "paymentStatus"
                     ? filters.paymentStatus === chip.value
+                    : chip.type === "fulfillmentStatus"
+                    ? filters.fulfillmentStatus === chip.value
                     : filters.sortBy === chip.value;
 
                 const handleClick = async () => {
                   if (chip.type === "reset") return handleClear();
+
                   if (chip.type === "action") {
                     return applyFilters({
                       onlyActionRequired: !filters.onlyActionRequired,
                     });
                   }
+
                   if (chip.type === "paymentStatus") {
                     return applyFilters({
-                      paymentStatus:
-                        filters.paymentStatus === chip.value ? "" : chip.value,
+                      paymentStatus: filters.paymentStatus === chip.value ? "" : chip.value,
                     });
                   }
+
+                  if (chip.type === "fulfillmentStatus") {
+                    return applyFilters({
+                      fulfillmentStatus:
+                        filters.fulfillmentStatus === chip.value ? "" : chip.value,
+                    });
+                  }
+
                   return applyFilters({ sortBy: chip.value });
                 };
 
@@ -500,7 +645,7 @@ export default function RefundEscalationPage() {
               })}
             </div>
 
-            <label className="inline-flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700">
+            <label className="inline-flex items-center gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 ring-1 ring-gray-200">
               <input
                 type="checkbox"
                 checked={Boolean(filters.onlyActionRequired)}
@@ -528,7 +673,7 @@ export default function RefundEscalationPage() {
         </Card>
 
         {error ? (
-          <Card className="border-red-100 bg-red-50/80">
+          <Card className="bg-red-50/80 ring-red-100">
             <div className="flex items-start gap-3 text-red-700">
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
               <div>
@@ -539,7 +684,29 @@ export default function RefundEscalationPage() {
           </Card>
         ) : null}
 
-        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
+          <div className="flex items-center justify-between gap-4 border-b border-gray-100 bg-white px-5 py-4">
+            <div>
+              <h2 className="font-semibold text-gray-950">Refund Orders</h2>
+              <p className="text-sm text-gray-500">
+                Showing {orders?.length || 0} orders on this page.
+              </p>
+            </div>
+
+            <button
+              onClick={handleDownloadExcel}
+              disabled={!orders?.length}
+              className={`hidden items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition sm:inline-flex ${
+                orders?.length
+                  ? "bg-gray-950 text-white hover:opacity-90"
+                  : "cursor-not-allowed bg-gray-200 text-gray-500"
+              }`}
+            >
+              <Download size={16} />
+              Excel
+            </button>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-gray-100 bg-gray-50 text-gray-600">

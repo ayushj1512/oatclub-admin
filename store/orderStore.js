@@ -399,6 +399,40 @@ duplicateLoading: false,
     return order;
   },
 
+
+    updateOrderPaymentStatus: async (orderId, paymentStatus) => {
+    if (!orderId) return null;
+
+    const status = String(paymentStatus || "").trim().toLowerCase();
+
+    const allowedStatuses = [
+      "pending",
+      "paid",
+      "failed",
+      "refunded",
+      "refund_pending",
+      "not_applicable",
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      throw new Error("Invalid payment status");
+    }
+
+    const data = await get()._patch(`/api/orders/${orderId}/payment-status`, {
+      paymentStatus: status,
+    });
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return order;
+  },
+
   updateTracking: async (orderId, payload) => {
     if (!orderId) return null;
 
