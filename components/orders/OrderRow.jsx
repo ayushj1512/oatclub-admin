@@ -1,7 +1,14 @@
 "use client";
 
 import { memo, useCallback, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  CreditCard,
+  Banknote,
+  RefreshCw,
+} from "lucide-react";
 
 import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown";
 import OrderPriorityDropdown from "@/components/orders/OrderPriorityDropdown";
@@ -40,6 +47,32 @@ const buildProductUrl = (item) => {
   return productId ? `${BASE_URL}/category/products/name/${productId}` : "";
 };
 
+const paymentMethodMeta = (method) => {
+  const key = String(method || "cod").toLowerCase();
+
+  if (key === "razorpay") {
+    return {
+      label: "Razorpay",
+      icon: CreditCard,
+      className: "bg-blue-50 text-blue-700 border-blue-100",
+    };
+  }
+
+  if (key === "exchange") {
+    return {
+      label: "Exchange",
+      icon: RefreshCw,
+      className: "bg-purple-50 text-purple-700 border-purple-100",
+    };
+  }
+
+  return {
+    label: "COD",
+    icon: Banknote,
+    className: "bg-amber-50 text-amber-700 border-amber-100",
+  };
+};
+
 function OrderRow({ order, onUpdated }) {
   const [open, setOpen] = useState(false);
 
@@ -59,6 +92,13 @@ function OrderRow({ order, onUpdated }) {
     () => String(order?.paymentStatus || "pending").toLowerCase(),
     [order?.paymentStatus]
   );
+
+  const paymentMethod = useMemo(
+    () => paymentMethodMeta(order?.paymentMethod),
+    [order?.paymentMethod]
+  );
+
+  const PaymentMethodIcon = paymentMethod.icon;
 
   const dt = useMemo(
     () => formatOrderDateTime(order?.createdAt || order?.orderDate),
@@ -139,16 +179,19 @@ function OrderRow({ order, onUpdated }) {
         <td className="py-4 px-5">
           <div className="font-medium text-gray-900">
             {order?.customerId?.name ||
+              order?.customerName ||
               order?.shippingAddressSnapshot?.fullName ||
               "Unknown"}
           </div>
           <div className="text-xs text-gray-500">
             {order?.customerId?.phone ||
+              order?.customerPhone ||
               order?.shippingAddressSnapshot?.phone ||
               ""}
           </div>
           <div className="text-xs text-gray-500">
             {order?.customerId?.email ||
+              order?.customerEmail ||
               order?.shippingAddressSnapshot?.email ||
               ""}
           </div>
@@ -160,6 +203,15 @@ function OrderRow({ order, onUpdated }) {
             currentStatus={paymentStatus}
             onUpdated={handleUpdated}
           />
+        </td>
+
+        <td className="py-4 px-5">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${paymentMethod.className}`}
+          >
+            <PaymentMethodIcon size={13} />
+            {paymentMethod.label}
+          </span>
         </td>
 
         <td className="py-4 px-5">
@@ -187,9 +239,20 @@ function OrderRow({ order, onUpdated }) {
             <OrderRowActions
               order={order}
               courierName={
-                order?.shipment?.courierName || order?.courierName || ""
+                order?.shipment?.courierName ||
+                order?.shipment?.shiprocket?.courierName ||
+                order?.shipment?.xpressbees?.courierName ||
+                order?.courierName ||
+                ""
               }
-              trackingId={order?.shipment?.awb || order?.trackingId || ""}
+              trackingId={
+                order?.shipment?.awb ||
+                order?.shipment?.shiprocket?.awb ||
+                order?.shipment?.xpressbees?.awb ||
+                order?.trackingId ||
+                order?.trackingDetails?.trackingId ||
+                ""
+              }
             />
           </div>
         </td>
@@ -197,7 +260,7 @@ function OrderRow({ order, onUpdated }) {
 
       {open ? (
         <tr className="bg-black/[0.015]">
-          <td colSpan={7} className="px-5 pb-4">
+          <td colSpan={8} className="px-5 pb-4">
             <div className="mt-3 bg-white rounded-2xl px-4 py-4 space-y-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
