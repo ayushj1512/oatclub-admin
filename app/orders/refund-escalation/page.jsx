@@ -16,6 +16,17 @@ import OrderRow from "@/components/orders/OrderRow";
 import { useOrderRefundStore } from "@/store/orderRefundStore";
 
 const PAGE_SIZE = 100;
+const DEFAULT_PAYMENT_STATUS = "refund_pending";
+
+const PAYMENT_STATUS_OPTIONS = [
+  { label: "All", value: "" },
+  { label: "Pending", value: "pending" },
+  { label: "Paid", value: "paid" },
+  { label: "Failed", value: "failed" },
+  { label: "Refund Pending", value: "refund_pending" },
+  { label: "Refunded", value: "refunded" },
+  { label: "Not Applicable", value: "not_applicable" },
+];
 
 const Card = ({ children, className = "" }) => (
   <div className={`rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100 ${className}`}>
@@ -34,34 +45,6 @@ const formatINR = (value) =>
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(toNum(value));
-
-const formatDate = (date) => {
-  if (!date) return "-";
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
-
-const getCustomerName = (order) =>
-  order?.customer?.name ||
-  order?.customerName ||
-  order?.shippingAddress?.name ||
-  order?.billingAddress?.name ||
-  "-";
-
-const getCustomerPhone = (order) =>
-  order?.customer?.phone ||
-  order?.phone ||
-  order?.shippingAddress?.phone ||
-  order?.billingAddress?.phone ||
-  "-";
-
-const getCustomerEmail = (order) =>
-  order?.customer?.email || order?.email || "-";
 
 const getRefundAmount = (order) =>
   toNum(
@@ -251,9 +234,15 @@ export default function RefundEscalationPage() {
   }, [filters.search]);
 
   const loadData = useCallback(async () => {
-    await fetchRefundOrders({ limit: PAGE_SIZE });
+    await fetchRefundOrders({
+      page: 1,
+      limit: PAGE_SIZE,
+      paymentStatus: filters.paymentStatus || DEFAULT_PAYMENT_STATUS,
+    });
+
+    setFilters({ paymentStatus: filters.paymentStatus || DEFAULT_PAYMENT_STATUS });
     setHasLoadedOnce(true);
-  }, [fetchRefundOrders]);
+  }, [fetchRefundOrders, filters.paymentStatus, setFilters]);
 
   useEffect(() => {
     loadData();
@@ -266,7 +255,7 @@ export default function RefundEscalationPage() {
         page: 1,
         limit: PAGE_SIZE,
         search: next.search ?? filters.search,
-        paymentStatus: next.paymentStatus ?? filters.paymentStatus,
+        paymentStatus: next.paymentStatus ?? filters.paymentStatus ?? DEFAULT_PAYMENT_STATUS,
         fulfillmentStatus: next.fulfillmentStatus ?? filters.fulfillmentStatus,
         startDate: next.startDate ?? filters.startDate,
         endDate: next.endDate ?? filters.endDate,
@@ -290,7 +279,7 @@ export default function RefundEscalationPage() {
       page: 1,
       limit: PAGE_SIZE,
       search: "",
-      paymentStatus: "",
+      paymentStatus: DEFAULT_PAYMENT_STATUS,
       fulfillmentStatus: "",
       startDate: "",
       endDate: "",
@@ -298,7 +287,9 @@ export default function RefundEscalationPage() {
       sortOrder: "desc",
       onlyActionRequired: false,
     });
-  }, [fetchRefundOrders, resetFilters]);
+
+    setFilters({ paymentStatus: DEFAULT_PAYMENT_STATUS });
+  }, [fetchRefundOrders, resetFilters, setFilters]);
 
   const handleRefresh = useCallback(async () => {
     await refreshRefundOrders();
@@ -313,56 +304,56 @@ export default function RefundEscalationPage() {
   );
 
   const handleDownloadExcel = useCallback(() => {
-  const header = [
-    "Order Number",
-    "Customer Name",
-    "Phone",
-    "Email",
-    "Payment Method",
-    "Payment Status",
-    "Fulfillment Status",
-    "Refund Amount",
-    "Final Payable",
-  ];
-
-  const body = orders.map((order) => {
-    const name =
-      order?.customerName ||
-      order?.customerId?.name ||
-      order?.shippingAddressSnapshot?.fullName ||
-      order?.billingAddressSnapshot?.fullName ||
-      "-";
-
-    const phone =
-      order?.customerPhone ||
-      order?.customerId?.phone ||
-      order?.shippingAddressSnapshot?.phone ||
-      order?.billingAddressSnapshot?.phone ||
-      "-";
-
-    const email =
-      order?.customerEmail ||
-      order?.customerId?.email ||
-      order?.shippingAddressSnapshot?.email ||
-      order?.billingAddressSnapshot?.email ||
-      "-";
-
-    return [
-      order?.orderNumber || order?._id || "-",
-      name,
-      phone,
-      email,
-      order?.paymentMethod || "-",
-      order?.paymentStatus || "-",
-      order?.fulfillmentStatus || "-",
-      getRefundAmount(order),
-      toNum(order?.finalPayable ?? order?.totalAmount ?? order?.grandTotal),
+    const header = [
+      "Order Number",
+      "Customer Name",
+      "Phone",
+      "Email",
+      "Payment Method",
+      "Payment Status",
+      "Fulfillment Status",
+      "Refund Amount",
+      "Final Payable",
     ];
-  });
 
-  const date = new Date().toISOString().slice(0, 10);
-  downloadCSV([header, ...body], `refund-escalation-orders-${date}.csv`);
-}, [orders]);
+    const body = orders.map((order) => {
+      const name =
+        order?.customerName ||
+        order?.customerId?.name ||
+        order?.shippingAddressSnapshot?.fullName ||
+        order?.billingAddressSnapshot?.fullName ||
+        "-";
+
+      const phone =
+        order?.customerPhone ||
+        order?.customerId?.phone ||
+        order?.shippingAddressSnapshot?.phone ||
+        order?.billingAddressSnapshot?.phone ||
+        "-";
+
+      const email =
+        order?.customerEmail ||
+        order?.customerId?.email ||
+        order?.shippingAddressSnapshot?.email ||
+        order?.billingAddressSnapshot?.email ||
+        "-";
+
+      return [
+        order?.orderNumber || order?._id || "-",
+        name,
+        phone,
+        email,
+        order?.paymentMethod || "-",
+        order?.paymentStatus || "-",
+        order?.fulfillmentStatus || "-",
+        getRefundAmount(order),
+        toNum(order?.finalPayable ?? order?.totalAmount ?? order?.grandTotal),
+      ];
+    });
+
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCSV([header, ...body], `refund-escalation-orders-${date}.csv`);
+  }, [orders]);
 
   const currentPage = Math.max(1, toNum(pagination?.page, 1));
   const totalPages = Math.max(1, toNum(pagination?.totalPages, 1));
@@ -370,10 +361,12 @@ export default function RefundEscalationPage() {
 
   const chips = useMemo(
     () => [
-      { label: "All", type: "reset" },
+      { label: "All", type: "paymentStatus", value: "" },
       { label: "Action Required", type: "action" },
       { label: "Refund Pending", type: "paymentStatus", value: "refund_pending" },
       { label: "Paid", type: "paymentStatus", value: "paid" },
+      { label: "Failed", type: "paymentStatus", value: "failed" },
+      { label: "Refunded", type: "paymentStatus", value: "refunded" },
       { label: "Cancelled", type: "fulfillmentStatus", value: "cancelled" },
       { label: "Newest", type: "sortBy", value: "createdAt" },
       { label: "Highest Amount", type: "sortBy", value: "finalPayable" },
@@ -503,17 +496,19 @@ export default function RefundEscalationPage() {
         <Card>
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-6">
             <div>
-              <label className="text-sm font-semibold text-gray-700">Payment Status</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Payment Status
+              </label>
               <select
-                value={filters.paymentStatus || ""}
+                value={filters.paymentStatus ?? DEFAULT_PAYMENT_STATUS}
                 onChange={(e) => applyFilters({ paymentStatus: e.target.value })}
                 className="mt-2 w-full rounded-xl bg-gray-50 px-3 py-2.5 outline-none ring-1 ring-gray-200 transition focus:ring-2 focus:ring-black/10"
               >
-                <option value="">All</option>
-                <option value="paid">Paid</option>
-                <option value="refund_pending">Refund Pending</option>
-                <option value="refunded">Refunded</option>
-                <option value="partially_refunded">Partially Refunded</option>
+                {PAYMENT_STATUS_OPTIONS.map((option) => (
+                  <option key={option.label} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -525,9 +520,20 @@ export default function RefundEscalationPage() {
                 className="mt-2 w-full rounded-xl bg-gray-50 px-3 py-2.5 outline-none ring-1 ring-gray-200 transition focus:ring-2 focus:ring-black/10"
               >
                 <option value="">All</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="processing">Processing</option>
+                <option value="packed">Packed</option>
+                <option value="picked">Picked</option>
+                <option value="shipped">Shipped</option>
+                <option value="out_for_delivery">Out For Delivery</option>
+                <option value="delivered">Delivered</option>
+                <option value="pickup_initiated">Pickup Initiated</option>
+                <option value="return_requested">Return Requested</option>
+                <option value="exchange_requested">Exchange Requested</option>
                 <option value="returned">Returned</option>
                 <option value="refunded">Refunded</option>
+                <option value="exchanged">Exchanged</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="rto">RTO</option>
                 <option value="failed">Failed</option>
               </select>
             </div>
@@ -591,22 +597,15 @@ export default function RefundEscalationPage() {
             <div className="flex flex-wrap gap-2">
               {chips.map((chip) => {
                 const isActive =
-                  chip.type === "reset"
-                    ? !filters.paymentStatus &&
-                      !filters.fulfillmentStatus &&
-                      !filters.onlyActionRequired &&
-                      filters.sortBy === "createdAt"
-                    : chip.type === "action"
+                  chip.type === "action"
                     ? Boolean(filters.onlyActionRequired)
                     : chip.type === "paymentStatus"
-                    ? filters.paymentStatus === chip.value
+                    ? (filters.paymentStatus ?? DEFAULT_PAYMENT_STATUS) === chip.value
                     : chip.type === "fulfillmentStatus"
                     ? filters.fulfillmentStatus === chip.value
                     : filters.sortBy === chip.value;
 
                 const handleClick = async () => {
-                  if (chip.type === "reset") return handleClear();
-
                   if (chip.type === "action") {
                     return applyFilters({
                       onlyActionRequired: !filters.onlyActionRequired,
@@ -614,9 +613,7 @@ export default function RefundEscalationPage() {
                   }
 
                   if (chip.type === "paymentStatus") {
-                    return applyFilters({
-                      paymentStatus: filters.paymentStatus === chip.value ? "" : chip.value,
-                    });
+                    return applyFilters({ paymentStatus: chip.value });
                   }
 
                   if (chip.type === "fulfillmentStatus") {
@@ -714,6 +711,9 @@ export default function RefundEscalationPage() {
                   <th className="px-5 py-4 text-left font-semibold">Order #</th>
                   <th className="px-5 py-4 text-left font-semibold">Customer</th>
                   <th className="px-5 py-4 text-left font-semibold">Payment</th>
+                  <th className="px-5 py-4 text-left font-semibold">
+                    Payment Method
+                  </th>
                   <th className="px-5 py-4 text-left font-semibold">Fulfillment</th>
                   <th className="px-5 py-4 text-left font-semibold">Amount</th>
                   <th className="px-5 py-4 text-left font-semibold">Date</th>
@@ -724,7 +724,7 @@ export default function RefundEscalationPage() {
               <tbody className="divide-y divide-gray-100">
                 {loading && !hasLoadedOnce ? (
                   <tr>
-                    <td colSpan={7} className="py-14 text-center text-gray-500">
+                    <td colSpan={8} className="py-14 text-center text-gray-500">
                       <div className="inline-flex items-center gap-2">
                         <Loader2 size={18} className="animate-spin" />
                         Loading refund escalation orders...
@@ -749,7 +749,7 @@ export default function RefundEscalationPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">
+                    <td colSpan={8} className="py-12 text-center text-gray-500">
                       No refund escalation orders found.
                     </td>
                   </tr>
