@@ -506,19 +506,22 @@ duplicateLoading: false,
 },
 
   confirmOrder: async (orderId) => {
-    if (!orderId) return null;
+  if (!orderId) return null;
 
-    const data = await get()._post(`/api/orders/${orderId}/confirm`, {});
-    const order = get()._normalizeOrder(data);
+  const data = await get()._post(`/api/orders/${orderId}/confirm`, {
+    confirmedBy: "admin",
+  });
 
-    if (order?._id) {
-      set({ order });
-      get()._syncOrderInList(order);
-      get()._syncCustomerSupportDetail(order);
-    }
+  const order = get()._normalizeOrder(data);
 
-    return order;
-  },
+  if (order?._id) {
+    set({ order });
+    get()._syncOrderInList(order);
+    get()._syncCustomerSupportDetail(order);
+  }
+
+  return order;
+},
 
   duplicateExchangeOrder: async (orderId, payload = {}) => {
     if (!orderId) return null;

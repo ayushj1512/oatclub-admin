@@ -25,6 +25,7 @@ import OrderCreateRmaPanel from "@/components/orders/OrderCreateRmaPanel";
 import OrderServiceabilityCard from "@/components/orders/OrderServiceabilityCard";
 import OrderFulfillmentTimeline from "@/components/orders/OrderFulfillmentTimeline";
 import OrderCancellationDetails from "@/components/orders/OrderCancellationDetails";
+import OrderConfirmationDetails from "@/components/orders/OrderConfirmationDetails";
 const API = process.env.NEXT_PUBLIC_API_URL;
 const STORE_URL = "https://www.mirayfashions.com";
 
@@ -399,6 +400,9 @@ export default function OrderDetailsClient({ id }) {
           </Card>
 
           <OrderFulfillmentTimeline order={order} />
+
+          <OrderConfirmationDetails order={order} />
+
 
           <OrderCancellationDetails order={order} />
 
