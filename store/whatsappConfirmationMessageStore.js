@@ -33,7 +33,7 @@ const useWhatsappConfirmationMessageStore = create((set, get) => ({
   pagination: {
     total: 0,
     page: 1,
-    limit: 20,
+    limit: 100,
     pages: 1,
   },
 
@@ -68,7 +68,7 @@ const useWhatsappConfirmationMessageStore = create((set, get) => ({
       pagination: {
         total: 0,
         page: 1,
-        limit: 20,
+        limit: 100,
         pages: 1,
       },
     }),

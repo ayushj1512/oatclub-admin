@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   RefreshCcw,
@@ -12,9 +12,12 @@ import {
   AlertCircle,
   Clock3,
   X,
+  Loader2,
+  ShieldCheck,
 } from "lucide-react";
 
 import useWhatsappConfirmationMessageStore from "@/store/whatsappConfirmationMessageStore";
+import { useOrderStore } from "@/store/orderStore";
 
 const STATUS_STYLES = {
   pending: "bg-gray-100 text-gray-700",
@@ -48,6 +51,9 @@ const formatDate = (value) => {
   });
 };
 
+const getOrderKey = (item) =>
+  item?.orderId?._id || item?.orderId?.orderNumber || item?.orderId || "";
+
 const getOrderNumber = (item) =>
   item?.orderId?.orderNumber || item?.orderId || "—";
 
@@ -66,9 +72,61 @@ export default function WhatsappConfirmationMessagePage() {
     clearError,
   } = useWhatsappConfirmationMessageStore();
 
+  const { fetchOrderConfirmationDetails } = useOrderStore();
+
+  const [confirmationMap, setConfirmationMap] = useState({});
+  const [confirmationLoadingMap, setConfirmationLoadingMap] = useState({});
+
   useEffect(() => {
     fetchMessages(1);
-  }, []);
+  }, [fetchMessages]);
+
+  useEffect(() => {
+    if (!messages?.length) return;
+
+    const loadConfirmationDetails = async () => {
+      const uniqueOrderKeys = [
+        ...new Set(messages.map((item) => getOrderKey(item)).filter(Boolean)),
+      ];
+
+      const pendingKeys = uniqueOrderKeys.filter((key) => !confirmationMap[key]);
+
+      if (!pendingKeys.length) return;
+
+      setConfirmationLoadingMap((prev) => {
+        const next = { ...prev };
+        pendingKeys.forEach((key) => {
+          next[key] = true;
+        });
+        return next;
+      });
+
+      await Promise.allSettled(
+        pendingKeys.map(async (key) => {
+          try {
+            const details = await fetchOrderConfirmationDetails(key);
+
+            setConfirmationMap((prev) => ({
+              ...prev,
+              [key]: details || null,
+            }));
+          } catch {
+            setConfirmationMap((prev) => ({
+              ...prev,
+              [key]: null,
+            }));
+          } finally {
+            setConfirmationLoadingMap((prev) => ({
+              ...prev,
+              [key]: false,
+            }));
+          }
+        })
+      );
+    };
+
+    loadConfirmationDetails();
+  }, [messages, fetchOrderConfirmationDetails]);
 
   const stats = useMemo(() => {
     return messages.reduce(
@@ -225,14 +283,17 @@ export default function WhatsappConfirmationMessagePage() {
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-left text-sm">
+          <table className="w-full min-w-[1180px] text-left text-sm">
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-4 py-3 font-semibold">Order</th>
                 <th className="px-4 py-3 font-semibold">Customer</th>
                 <th className="px-4 py-3 font-semibold">Phone</th>
                 <th className="px-4 py-3 font-semibold">Template</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
+                <th className="px-4 py-3 font-semibold">Message Status</th>
+                <th className="px-4 py-3 font-semibold">Confirmed</th>
+                <th className="px-4 py-3 font-semibold">Confirmed By</th>
+                <th className="px-4 py-3 font-semibold">Confirmed At</th>
                 <th className="px-4 py-3 font-semibold">Sent At</th>
                 <th className="px-4 py-3 font-semibold text-right">Action</th>
               </tr>
@@ -241,19 +302,29 @@ export default function WhatsappConfirmationMessagePage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                  <td
+                    colSpan={10}
+                    className="px-4 py-10 text-center text-gray-500"
+                  >
                     Loading message logs...
                   </td>
                 </tr>
               ) : messages.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                  <td
+                    colSpan={10}
+                    className="px-4 py-10 text-center text-gray-500"
+                  >
                     No WhatsApp confirmation messages found.
                   </td>
                 </tr>
               ) : (
                 messages.map((item) => {
                   const StatusIcon = STATUS_ICON[item.status] || Clock3;
+                  const orderKey = getOrderKey(item);
+                  const details = confirmationMap[orderKey];
+                  const isConfirmationLoading =
+                    confirmationLoadingMap[orderKey];
 
                   return (
                     <tr key={item._id} className="transition hover:bg-gray-50/70">
@@ -303,6 +374,36 @@ export default function WhatsappConfirmationMessagePage() {
                         </span>
                       </td>
 
+                      <td className="px-4 py-3">
+                        {isConfirmationLoading ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                            <Loader2 size={13} className="animate-spin" />
+                            Loading
+                          </span>
+                        ) : details?.isConfirmed ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
+                            <ShieldCheck size={13} />
+                            Yes
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                            <Clock3 size={13} />
+                            No
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span className="capitalize text-gray-700">
+                          {details?.confirmedBy || "—"}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-600">
+                        {details?.confirmedAtIST ||
+                          formatDate(details?.confirmedAt)}
+                      </td>
+
                       <td className="px-4 py-3 text-gray-600">
                         {formatDate(item?.sentAt || item?.createdAt)}
                       </td>
@@ -331,8 +432,14 @@ export default function WhatsappConfirmationMessagePage() {
 
         <div className="flex flex-col gap-3 border-t border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-500">
-            Page <span className="font-semibold text-gray-800">{pagination.page}</span>{" "}
-            of <span className="font-semibold text-gray-800">{pagination.pages || 1}</span>{" "}
+            Page{" "}
+            <span className="font-semibold text-gray-800">
+              {pagination.page}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-gray-800">
+              {pagination.pages || 1}
+            </span>{" "}
             · {pagination.total || 0} logs
           </p>
 
@@ -359,4 +466,4 @@ export default function WhatsappConfirmationMessagePage() {
       </div>
     </div>
   );
-}   
+}

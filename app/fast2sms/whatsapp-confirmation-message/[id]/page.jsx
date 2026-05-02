@@ -7,13 +7,16 @@ import {
   AlertCircle,
   CheckCheck,
   Clock3,
+  Loader2,
   MessageCircle,
   RefreshCcw,
   Send,
+  ShieldCheck,
   X,
 } from "lucide-react";
 
 import useWhatsappConfirmationMessageStore from "@/store/whatsappConfirmationMessageStore";
+import { useOrderStore } from "@/store/orderStore";
 
 const STATUS_STYLES = {
   pending: "bg-gray-100 text-gray-700",
@@ -82,8 +85,8 @@ const TimelineItem = ({ label, value, active, danger }) => (
           danger
             ? "bg-red-500 ring-red-50"
             : active
-            ? "bg-gray-950 ring-gray-100"
-            : "bg-gray-300 ring-gray-50",
+              ? "bg-gray-950 ring-gray-100"
+              : "bg-gray-300 ring-gray-50",
         ].join(" ")}
       />
       <div className="h-full w-px bg-gray-100" />
@@ -117,13 +120,27 @@ export default function WhatsappConfirmationMessageDetailsPage() {
     clearSelectedMessage,
   } = useWhatsappConfirmationMessageStore();
 
+  const {
+    confirmationDetails,
+    confirmationDetailsLoading,
+    fetchOrderConfirmationDetails,
+  } = useOrderStore();
+
   useEffect(() => {
     if (id) fetchMessageById(id);
 
     return () => clearSelectedMessage();
-  }, [id]);
+  }, [id, fetchMessageById, clearSelectedMessage]);
 
   const item = selectedMessage;
+
+  const orderKey = useMemo(() => {
+    return item?.orderId?._id || item?.orderId?.orderNumber || item?.orderId || "";
+  }, [item]);
+
+  useEffect(() => {
+    if (orderKey) fetchOrderConfirmationDetails(orderKey);
+  }, [orderKey, fetchOrderConfirmationDetails]);
 
   const StatusIcon = STATUS_ICON[item?.status] || Clock3;
 
@@ -158,7 +175,9 @@ export default function WhatsappConfirmationMessageDetailsPage() {
         <div>
           <button
             type="button"
-            onClick={() => router.push("/fast2sms/whatsapp-confirmation-message")}
+            onClick={() =>
+              router.push("/fast2sms/whatsapp-confirmation-message")
+            }
             className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-gray-500 transition hover:text-gray-950"
           >
             <ArrowLeft size={16} />
@@ -178,10 +197,16 @@ export default function WhatsappConfirmationMessageDetailsPage() {
 
         <button
           type="button"
-          onClick={() => fetchMessageById(id)}
+          onClick={async () => {
+            await fetchMessageById(id);
+            if (orderKey) await fetchOrderConfirmationDetails(orderKey);
+          }}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50"
         >
-          <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
+          <RefreshCcw
+            size={16}
+            className={loading || confirmationDetailsLoading ? "animate-spin" : ""}
+          />
           Refresh
         </button>
       </div>
@@ -242,6 +267,96 @@ export default function WhatsappConfirmationMessageDetailsPage() {
               </div>
             </div>
 
+            <div
+              className={[
+                "rounded-2xl p-5 shadow-sm ring-1",
+                confirmationDetails?.isConfirmed
+                  ? "bg-green-50 ring-green-100"
+                  : "bg-amber-50 ring-amber-100",
+              ].join(" ")}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={[
+                      "rounded-xl p-2",
+                      confirmationDetails?.isConfirmed
+                        ? "bg-green-100 text-green-700"
+                        : "bg-amber-100 text-amber-700",
+                    ].join(" ")}
+                  >
+                    <ShieldCheck size={18} />
+                  </div>
+
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-950">
+                      Order Confirmation
+                    </h3>
+                    <p
+                      className={[
+                        "mt-0.5 text-xs font-medium",
+                        confirmationDetails?.isConfirmed
+                          ? "text-green-700"
+                          : "text-amber-700",
+                      ].join(" ")}
+                    >
+                      {confirmationDetails?.isConfirmed
+                        ? "Order confirmed successfully"
+                        : "Order confirmation pending"}
+                    </p>
+                  </div>
+                </div>
+
+                <span
+                  className={[
+                    "rounded-full px-3 py-1 text-xs font-semibold",
+                    confirmationDetails?.isConfirmed
+                      ? "bg-green-600 text-white"
+                      : "bg-amber-500 text-white",
+                  ].join(" ")}
+                >
+                  {confirmationDetails?.isConfirmed ? "Confirmed" : "Pending"}
+                </span>
+              </div>
+
+              {confirmationDetailsLoading ? (
+                <div className="mt-4 flex items-center gap-2 rounded-2xl bg-white/70 p-4 text-sm text-gray-600 ring-1 ring-white/80">
+                  <Loader2 size={16} className="animate-spin" />
+                  Fetching confirmation details...
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl bg-white/75 px-4 ring-1 ring-white/80">
+                  <InfoRow
+                    label="Confirmed"
+                    value={confirmationDetails?.isConfirmed ? "Yes" : "No"}
+                  />
+                  <InfoRow
+                    label="Confirmed By"
+                    value={confirmationDetails?.confirmedBy}
+                  />
+                  <InfoRow
+                    label="Confirmed At"
+                    value={
+                      confirmationDetails?.confirmedAtIST ||
+                      formatDate(confirmationDetails?.confirmedAt)
+                    }
+                  />
+                  <InfoRow
+                    label="Payment Method"
+                    value={confirmationDetails?.paymentMethod}
+                  />
+                  <InfoRow
+                    label="Fulfillment Status"
+                    value={confirmationDetails?.fulfillmentStatus}
+                  />
+                  <InfoRow
+                    label="Cancelled"
+                    value={confirmationDetails?.isCancelled ? "Yes" : "No"}
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
               <h3 className="text-base font-semibold text-gray-950">
                 Message Info
@@ -252,8 +367,14 @@ export default function WhatsappConfirmationMessageDetailsPage() {
                 <InfoRow label="Language" value={item?.templateLanguage} />
                 <InfoRow label="Message Type" value={item?.messageType} />
                 <InfoRow label="Direction" value={item?.direction} />
-                <InfoRow label="Fast2SMS Request ID" value={item?.fast2smsRequestId} />
-                <InfoRow label="Fast2SMS Message ID" value={item?.fast2smsMessageId} />
+                <InfoRow
+                  label="Fast2SMS Request ID"
+                  value={item?.fast2smsRequestId}
+                />
+                <InfoRow
+                  label="Fast2SMS Message ID"
+                  value={item?.fast2smsMessageId}
+                />
                 <InfoRow label="Failure Reason" value={item?.failureReason} />
                 <InfoRow label="Notes" value={item?.notes} />
               </div>
@@ -311,10 +432,16 @@ export default function WhatsappConfirmationMessageDetailsPage() {
               </h3>
 
               <div className="mt-3">
-                <InfoRow label="Name" value={item?.customerName || item?.customerId?.name} />
+                <InfoRow
+                  label="Name"
+                  value={item?.customerName || item?.customerId?.name}
+                />
                 <InfoRow label="Phone" value={item?.phone} />
                 <InfoRow label="Email" value={item?.customerId?.email} />
-                <InfoRow label="Customer Code" value={item?.customerId?.customerCode} />
+                <InfoRow
+                  label="Customer Code"
+                  value={item?.customerId?.customerCode}
+                />
               </div>
             </div>
 

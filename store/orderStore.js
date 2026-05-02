@@ -81,6 +81,8 @@ export const useOrderStore = create((set, get) => ({
   customerSupportOrderDetails: {},
   duplicateAlerts: [],
 duplicateLoading: false,
+confirmationDetails: null,
+confirmationDetailsLoading: false,
 
   _start: () => set({ loading: true, error: null }),
   _success: () => set({ loading: false }),
@@ -523,6 +525,34 @@ duplicateLoading: false,
   return order;
 },
 
+fetchOrderConfirmationDetails: async (orderId) => {
+  if (!orderId) return null;
+
+  set({ confirmationDetailsLoading: true, error: null });
+
+  try {
+    const data = await get()._get(
+      `/api/orders/${orderId}/confirmation-details`,
+      { silent: true }
+    );
+
+    const details = data?.data || data || null;
+
+    set({
+      confirmationDetails: details,
+      confirmationDetailsLoading: false,
+    });
+
+    return details;
+  } catch (error) {
+    set({
+      confirmationDetailsLoading: false,
+      error: error?.message || "Failed to fetch confirmation details",
+    });
+    throw error;
+  }
+},
+
   duplicateExchangeOrder: async (orderId, payload = {}) => {
     if (!orderId) return null;
 
@@ -705,5 +735,7 @@ markDuplicateOrderAlerts: async () => {
       productOrderCount: null,
       ordersMeta: null,
       customerSupportOrderDetails: {},
+      confirmationDetails: null,
+confirmationDetailsLoading: false,
     }),
 }));
