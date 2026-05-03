@@ -12,6 +12,7 @@ import WishlistSection from "@/components/customer/WishlistSection";
 import AddressSection from "@/components/customer/AddressSection";
 import OrderSection from "@/components/customer/OrderSection";
 import SupportTicketSection from "@/components/customer/SupportTicketSection";
+import CustomerAnalyticsSection from "@/components/customer/CustomerAnalyticsSection";
 
 import { useCustomerStore } from "@/store/customerStore";
 
@@ -135,6 +136,7 @@ export default function CustomerDetailPage() {
     <div className="p-6 md:p-8 space-y-8 bg-[#fafafa] min-h-screen">
       {/* Top sections */}
       <CustomerSection customerId={routeId} />
+      <CustomerAnalyticsSection customer={customer} />
 
       {/* ✅ NEW: Banking / UPI Refund Details */}
       <Card>

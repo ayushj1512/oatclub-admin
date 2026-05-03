@@ -216,18 +216,25 @@ export const sidebarMenus = {
   ],
 
   customers: [
-    { label: "Customer Dashboard", href: "/customers/dashboard" },
-    { label: "Customer List", href: "/customers" },
-    { label: "Customer Search", href: "/customers/search" },
-    { label: "Banking / Refund Details", href: "/customers/bankingDetails" },
-    { label: "Customer / Address", href: "/customers/address" },
-    { label: "Cart Adds", href: "/customers/cart-adds" },
-    { label: "Abandoned Carts", href: "/customers/abandoned-carts" },
-    { label: "Wishlist", href: "/customers/wishlist" },
-    { label: "Tickets & Support", href: "/customers/support" },
-    { label: "Newsletter Subscribers", href: "/customers/newsletter" },
-    { label: "Analytics", href: "/customers/analytics" },
-  ],
+  { label: "Customer Dashboard", href: "/customers/dashboard" },
+  { label: "Customer List", href: "/customers" },
+  { label: "Customer Search", href: "/customers/search" },
+
+  { label: "Customer Analytics", href: "/customers/analytics" },
+  { label: "Segments Analytics", href: "/customers/analytics/segments" },
+  { label: "Risk / RTO Analytics", href: "/customers/analytics/risk" },
+  { label: "Revenue Analytics", href: "/customers/analytics/revenue" },
+  { label: "Retention Analytics", href: "/customers/analytics/retention" },
+  { label: "Analytics Reports", href: "/customers/analytics/reports" },
+
+  { label: "Banking / Refund Details", href: "/customers/bankingDetails" },
+  { label: "Customer / Address", href: "/customers/address" },
+  { label: "Cart Adds", href: "/customers/cart-adds" },
+  { label: "Abandoned Carts", href: "/customers/abandoned-carts" },
+  { label: "Wishlist", href: "/customers/wishlist" },
+  { label: "Tickets & Support", href: "/customers/support" },
+  { label: "Newsletter Subscribers", href: "/customers/newsletter" },
+],
 
   customer_support: [
     { label: "Support Dashboard", href: "/customer-support" },

@@ -13,6 +13,12 @@ export const useCustomerStore = create((set, get) => ({
   total: 0,
   page: 1,
   pages: 1,
+  limit: 20,
+
+  customerAnalyticsSummary: null,
+  loadingSummary: false,
+  syncingAnalytics: false,
+  syncingAllAnalytics: false,
 
   addresses: [],
   addressesTotal: 0,
@@ -20,7 +26,6 @@ export const useCustomerStore = create((set, get) => ({
 
   customer: null,
 
-  // ✅ cartAdds
   cartAdds: [],
   cartAddsTotal: 0,
   loadingCartAdds: false,
@@ -29,7 +34,6 @@ export const useCustomerStore = create((set, get) => ({
   loadingSingle: false,
   saving: false,
 
-  // ✅ NEW: payout details save state
   payoutSaving: false,
   payoutError: "",
 
@@ -37,12 +41,42 @@ export const useCustomerStore = create((set, get) => ({
 
   /* ---------------- HELPERS ---------------- */
   setError: (msg = "") => set({ error: msg }),
+  clearError: () => set({ error: "", payoutError: "" }),
+
   clearAddresses: () => set({ addresses: [], addressesTotal: 0 }),
+
   clearCustomer: () =>
-    set({ customer: null, cartAdds: [], cartAddsTotal: 0, payoutError: "" }),
+    set({
+      customer: null,
+      cartAdds: [],
+      cartAddsTotal: 0,
+      payoutError: "",
+    }),
+
+  buildUrl: (path, params = {}) => {
+    const url = new URL(`${API}${path}`);
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        url.searchParams.set(key, String(value));
+      }
+    });
+
+    return url.toString();
+  },
+
+  updateCustomerInList: (updatedCustomer) => {
+    if (!updatedCustomer?._id) return;
+
+    set((state) => ({
+      customers: state.customers.map((item) =>
+        item?._id === updatedCustomer._id ? updatedCustomer : item
+      ),
+    }));
+  },
 
   /* ----------------------------------------------------
-     FETCH ALL CUSTOMERS (ADMIN LIST)
+     FETCH ALL CUSTOMERS
      GET /api/customers
   ---------------------------------------------------- */
   fetchCustomers: async (params = {}) => {
@@ -51,35 +85,141 @@ export const useCustomerStore = create((set, get) => ({
     set({ loadingList: true, error: "" });
 
     try {
-      const url = new URL(`${API}/api/customers`);
+      const url = get().buildUrl("/api/customers", params);
 
-      Object.entries(params).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== "")
-          url.searchParams.set(k, String(v));
-      });
-
-      const res = await fetch(url.toString(), { cache: "no-store" });
+      const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.message || "Failed to load customers");
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to load customers");
+      }
 
       set({
-        customers: data.items || [],
-        total: data.total || 0,
-        page: data.page || 1,
-        pages: data.pages || 1,
+        customers: data?.items || [],
+        total: data?.total || 0,
+        page: data?.page || 1,
+        pages: data?.pages || 1,
+        limit: data?.limit || params?.limit || 20,
       });
+
+      return data;
     } catch (err) {
-      set({ error: err?.message || "Failed to load customers" });
+      const msg = err?.message || "Failed to load customers";
+      set({ error: msg });
+      return { success: false, error: msg };
     } finally {
       set({ loadingList: false });
     }
   },
 
   /* ----------------------------------------------------
-     FETCH SINGLE CUSTOMER (DETAIL PAGE)
+     FETCH CUSTOMER ANALYTICS SUMMARY
+     GET /api/customers/analytics/summary
+  ---------------------------------------------------- */
+  fetchCustomerAnalyticsSummary: async () => {
+    if (!API) return;
+
+    set({ loadingSummary: true, error: "" });
+
+    try {
+      const res = await fetch(`${API}/api/customers/analytics/summary`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to load customer summary");
+      }
+
+      set({ customerAnalyticsSummary: data });
+      return data;
+    } catch (err) {
+      const msg = err?.message || "Failed to load customer summary";
+      set({ error: msg });
+      return { success: false, error: msg };
+    } finally {
+      set({ loadingSummary: false });
+    }
+  },
+
+  /* ----------------------------------------------------
+     SYNC SINGLE CUSTOMER ANALYTICS
+     PATCH /api/customers/:id/analytics/sync
+  ---------------------------------------------------- */
+  syncCustomerAnalytics: async (id) => {
+    if (!API || !id) return { success: false, error: "Missing customer id" };
+
+    set({ syncingAnalytics: true, error: "" });
+
+    try {
+      const res = await fetch(`${API}/api/customers/${id}/analytics/sync`, {
+        method: "PATCH",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Customer analytics sync failed");
+      }
+
+      const updated = data?.customer || null;
+      const cartAdds = Array.isArray(updated?.cartAdds)
+        ? updated.cartAdds
+        : get().cartAdds || [];
+
+      if (updated?._id) {
+        set({
+          customer: updated,
+          cartAdds,
+          cartAddsTotal: cartAdds.length,
+        });
+
+        get().updateCustomerInList(updated);
+      }
+
+      return { success: true, customer: updated };
+    } catch (err) {
+      const msg = err?.message || "Customer analytics sync failed";
+      set({ error: msg });
+      return { success: false, error: msg };
+    } finally {
+      set({ syncingAnalytics: false });
+    }
+  },
+
+  /* ----------------------------------------------------
+     SYNC ALL CUSTOMER ANALYTICS
+     PATCH /api/customers/analytics/sync-all
+  ---------------------------------------------------- */
+  syncAllCustomerAnalytics: async () => {
+    if (!API) return { success: false, error: "Missing API URL" };
+
+    set({ syncingAllAnalytics: true, error: "" });
+
+    try {
+      const res = await fetch(`${API}/api/customers/analytics/sync-all`, {
+        method: "PATCH",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Bulk analytics sync failed");
+      }
+
+      await get().fetchCustomerAnalyticsSummary();
+
+      return { success: true, data };
+    } catch (err) {
+      const msg = err?.message || "Bulk analytics sync failed";
+      set({ error: msg });
+      return { success: false, error: msg };
+    } finally {
+      set({ syncingAllAnalytics: false });
+    }
+  },
+
+  /* ----------------------------------------------------
+     FETCH SINGLE CUSTOMER
      GET /api/customers/:id
-     ✅ Also sets cartAdds from customer payload (if present)
   ---------------------------------------------------- */
   fetchCustomerById: async (id) => {
     if (!API || !id) return;
@@ -92,25 +232,30 @@ export const useCustomerStore = create((set, get) => ({
       });
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.message || "Customer not found");
+      if (!res.ok) {
+        throw new Error(data?.message || "Customer not found");
+      }
 
       const customer = data || null;
       const cartAdds = Array.isArray(customer?.cartAdds) ? customer.cartAdds : [];
 
       set({ customer, cartAdds, cartAddsTotal: cartAdds.length });
+      return customer;
     } catch (err) {
-      set({ error: err?.message || "Failed to load customer" });
+      const msg = err?.message || "Failed to load customer";
+      set({ error: msg });
+      return null;
     } finally {
       set({ loadingSingle: false });
     }
   },
 
   /* ----------------------------------------------------
-     ✅ FETCH CUSTOMER CART ADDS (OPTIONAL, explicit)
+     FETCH CUSTOMER CART ADDS
      GET /api/customers/:id
   ---------------------------------------------------- */
   fetchCustomerCartAdds: async (id) => {
-    if (!API || !id) return;
+    if (!API || !id) return [];
 
     set({ loadingCartAdds: true, error: "" });
 
@@ -120,10 +265,13 @@ export const useCustomerStore = create((set, get) => ({
       });
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.message || "Customer not found");
+      if (!res.ok) {
+        throw new Error(data?.message || "Customer not found");
+      }
 
       const cartAdds = Array.isArray(data?.cartAdds) ? data.cartAdds : [];
       set({ cartAdds, cartAddsTotal: cartAdds.length });
+
       return cartAdds;
     } catch (err) {
       set({ error: err?.message || "Failed to load customer cartAdds" });
@@ -138,7 +286,7 @@ export const useCustomerStore = create((set, get) => ({
      PUT /api/customers/:id
   ---------------------------------------------------- */
   updateCustomer: async (id, payload) => {
-    if (!API || !id) return;
+    if (!API || !id) return { success: false, error: "Missing customer id" };
 
     set({ saving: true, error: "" });
 
@@ -148,9 +296,12 @@ export const useCustomerStore = create((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.message || "Update failed");
+      if (!res.ok) {
+        throw new Error(data?.message || "Update failed");
+      }
 
       const updated = data?.customer || null;
       const cartAdds = Array.isArray(updated?.cartAdds)
@@ -158,25 +309,24 @@ export const useCustomerStore = create((set, get) => ({
         : get().cartAdds || [];
 
       set({ customer: updated, cartAdds, cartAddsTotal: cartAdds.length });
-      return { success: true };
+      get().updateCustomerInList(updated);
+
+      return { success: true, customer: updated };
     } catch (err) {
-      set({ error: err?.message || "Failed to update customer" });
-      return { success: false, error: err?.message };
+      const msg = err?.message || "Failed to update customer";
+      set({ error: msg });
+      return { success: false, error: msg };
     } finally {
       set({ saving: false });
     }
   },
 
   /* ----------------------------------------------------
-     ✅ NEW: UPDATE CUSTOMER PAYOUT DETAILS (Bank OR UPI)
+     UPDATE CUSTOMER PAYOUT DETAILS
      PATCH /api/customers/:id/payout-details
-     payload example:
-       { upi: { upiId: "name@paytm" } }
-       { bank: { accountHolderName, accountNumber, ifscCode } }
-       { bank: {...}, upi: {...} }
   ---------------------------------------------------- */
   updateCustomerPayoutDetails: async (id, payload) => {
-    if (!API || !id) return { success: false, error: "Missing id" };
+    if (!API || !id) return { success: false, error: "Missing customer id" };
 
     set({ payoutSaving: true, payoutError: "", error: "" });
 
@@ -186,11 +336,13 @@ export const useCustomerStore = create((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.message || "Payout update failed");
+      if (!res.ok) {
+        throw new Error(data?.message || "Payout update failed");
+      }
 
-      // controller returns { customer } OR { payoutDetails, customer }
       const updatedCustomer = data?.customer || null;
 
       if (updatedCustomer?._id) {
@@ -203,16 +355,19 @@ export const useCustomerStore = create((set, get) => ({
           cartAdds,
           cartAddsTotal: cartAdds.length,
         });
+
+        get().updateCustomerInList(updatedCustomer);
       } else {
-        // fallback: merge payoutDetails into current customer (if controller doesn't return full doc)
         const current = get().customer;
+
         if (current?._id) {
-          set({
-            customer: {
-              ...current,
-              payoutDetails: data?.payoutDetails || current.payoutDetails,
-            },
-          });
+          const merged = {
+            ...current,
+            payoutDetails: data?.payoutDetails || current.payoutDetails,
+          };
+
+          set({ customer: merged });
+          get().updateCustomerInList(merged);
         }
       }
 
@@ -227,11 +382,11 @@ export const useCustomerStore = create((set, get) => ({
   },
 
   /* ----------------------------------------------------
-     UPDATE CUSTOMER ANALYTICS
+     UPDATE MANUAL CUSTOMER ANALYTICS
      PATCH /api/customers/:id/analytics
   ---------------------------------------------------- */
   updateAnalytics: async (id, analyticsPayload) => {
-    if (!API || !id) return;
+    if (!API || !id) return { success: false, error: "Missing customer id" };
 
     set({ saving: true, error: "" });
 
@@ -241,9 +396,12 @@ export const useCustomerStore = create((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(analyticsPayload),
       });
+
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.message || "Analytics update failed");
+      if (!res.ok) {
+        throw new Error(data?.message || "Analytics update failed");
+      }
 
       const updated = data?.customer || null;
       const cartAdds = Array.isArray(updated?.cartAdds)
@@ -251,47 +409,58 @@ export const useCustomerStore = create((set, get) => ({
         : get().cartAdds || [];
 
       set({ customer: updated, cartAdds, cartAddsTotal: cartAdds.length });
-      return { success: true };
+      get().updateCustomerInList(updated);
+
+      return { success: true, customer: updated };
     } catch (err) {
-      set({ error: err?.message || "Failed to update analytics" });
-      return { success: false, error: err?.message };
+      const msg = err?.message || "Failed to update analytics";
+      set({ error: msg });
+      return { success: false, error: msg };
     } finally {
       set({ saving: false });
     }
   },
 
   /* ----------------------------------------------------
-     DELETE CUSTOMER (ADMIN)
+     DELETE CUSTOMER
      DELETE /api/customers/:id
   ---------------------------------------------------- */
   deleteCustomer: async (id) => {
-    if (!API || !id) return;
+    if (!API || !id) return { success: false, error: "Missing customer id" };
 
     set({ saving: true, error: "" });
 
     try {
-      const res = await fetch(`${API}/api/customers/${id}`, { method: "DELETE" });
+      const res = await fetch(`${API}/api/customers/${id}`, {
+        method: "DELETE",
+      });
+
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.message || "Delete failed");
+      if (!res.ok) {
+        throw new Error(data?.message || "Delete failed");
+      }
 
       set((state) => ({
         customers: state.customers.filter((c) => c._id !== id),
+        total: Math.max(0, Number(state.total || 0) - 1),
         customer: null,
         cartAdds: [],
         cartAddsTotal: 0,
       }));
+
       return { success: true };
     } catch (err) {
-      set({ error: err?.message || "Failed to delete customer" });
-      return { success: false, error: err?.message };
+      const msg = err?.message || "Failed to delete customer";
+      set({ error: msg });
+      return { success: false, error: msg };
     } finally {
       set({ saving: false });
     }
   },
 
   /* ----------------------------------------------------
-     FETCH ALL ADDRESSES (ADMIN)
+     FETCH ALL ADDRESSES
      GET /api/addresses
   ---------------------------------------------------- */
   fetchAllAddresses: async () => {
@@ -303,20 +472,29 @@ export const useCustomerStore = create((set, get) => ({
       const res = await fetch(`${API}/api/addresses`, { cache: "no-store" });
       const data = await res.json();
 
-      if (!res.ok || data?.success === false)
+      if (!res.ok || data?.success === false) {
         throw new Error(data?.message || "Failed to load addresses");
+      }
 
       const list = Array.isArray(data?.data) ? data.data : [];
-      set({ addresses: list, addressesTotal: data?.count ?? list.length });
+
+      set({
+        addresses: list,
+        addressesTotal: data?.count ?? list.length,
+      });
+
+      return list;
     } catch (err) {
-      set({ error: err?.message || "Failed to load addresses" });
+      const msg = err?.message || "Failed to load addresses";
+      set({ error: msg });
+      return [];
     } finally {
       set({ loadingAddresses: false });
     }
   },
 
   /* ----------------------------------------------------
-     FETCH ALL CUSTOMERS (DASHBOARD) - fetch all pages
+     FETCH ALL CUSTOMERS FOR DASHBOARD
      GET /api/customers
   ---------------------------------------------------- */
   fetchAllCustomersForDashboard: async (params = {}) => {
@@ -325,17 +503,15 @@ export const useCustomerStore = create((set, get) => ({
     set({ loadingList: true, error: "" });
 
     try {
-      const url = new URL(`${API}/api/customers`);
       const firstParams = { page: 1, limit: 200, ...params };
+      const url = get().buildUrl("/api/customers", firstParams);
 
-      Object.entries(firstParams).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== "")
-          url.searchParams.set(k, String(v));
-      });
-
-      const res1 = await fetch(url.toString(), { cache: "no-store" });
+      const res1 = await fetch(url, { cache: "no-store" });
       const data1 = await res1.json();
-      if (!res1.ok) throw new Error(data1?.message || "Failed to load customers");
+
+      if (!res1.ok) {
+        throw new Error(data1?.message || "Failed to load customers");
+      }
 
       const items1 = data1?.items || [];
       const totalPages = data1?.pages || 1;
@@ -344,23 +520,24 @@ export const useCustomerStore = create((set, get) => ({
 
       if (totalPages > 1) {
         const pageFetches = [];
+
         for (let p = 2; p <= totalPages; p++) {
-          const u = new URL(`${API}/api/customers`);
-          Object.entries({ ...firstParams, page: p }).forEach(([k, v]) => {
-            if (v !== undefined && v !== null && v !== "")
-              u.searchParams.set(k, String(v));
+          const pageUrl = get().buildUrl("/api/customers", {
+            ...firstParams,
+            page: p,
           });
 
           pageFetches.push(
-            fetch(u.toString(), { cache: "no-store" }).then((r) =>
-              r.json().then((j) => ({ ok: r.ok, j }))
+            fetch(pageUrl, { cache: "no-store" }).then((r) =>
+              r.json().then((j) => ({ ok: r.ok, data: j }))
             )
           );
         }
 
         const rest = await Promise.all(pageFetches);
-        rest.forEach(({ ok, j }) => {
-          if (ok) all.push(...(j?.items || []));
+
+        rest.forEach(({ ok, data }) => {
+          if (ok) all.push(...(data?.items || []));
         });
       }
 
@@ -369,9 +546,14 @@ export const useCustomerStore = create((set, get) => ({
         total: data1?.total || all.length,
         page: 1,
         pages: totalPages,
+        limit: firstParams.limit,
       });
+
+      return all;
     } catch (err) {
-      set({ error: err?.message || "Failed to load customers" });
+      const msg = err?.message || "Failed to load customers";
+      set({ error: msg });
+      return [];
     } finally {
       set({ loadingList: false });
     }
