@@ -323,14 +323,14 @@ export default function ProductionJobPage() {
       } catch (err) {
         console.error("overall product code count error:", err);
       } finally {
-        try {
-          await fetchProductionJobs({
-            ...productionJobFilters,
-            page: currentPage,
-            limit: currentLimit,
-            all: false,
-          });
-        } catch {}
+        // try {
+        //   await fetchProductionJobs({
+        //     ...productionJobFilters,
+        //     page: currentPage,
+        //     limit: currentLimit,
+        //     all: false,
+        //   });
+        // } catch {}
 
         if (!cancelled && reqId === countReqRef.current) {
           setLoadingOverallCount(false);
@@ -349,8 +349,8 @@ export default function ProductionJobPage() {
     if (downloadingExcel) return;
 
     setDownloadingExcel(true);
-    const currentPage = Math.max(1, num(productionJobPagination?.page) || 1);
-    const currentLimit = Math.max(1, num(productionJobFilters?.limit) || 50);
+    // const currentPage = Math.max(1, num(productionJobPagination?.page) || 1);
+    // const currentLimit = Math.max(1, num(productionJobFilters?.limit) || 50);
 
     try {
       const allRawJobs = await fetchAllJobs();
