@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  MousePointerClick,
-  Radio,
-  BadgeCheck,
-} from "lucide-react";
+import { MousePointerClick, Radio, BadgeCheck } from "lucide-react";
 
 import {
   FaFacebookF,
@@ -85,6 +81,195 @@ const sourceMeta = {
 
 const clean = (v) => String(v || "").trim();
 
+const normalizeKey = (v) =>
+  clean(v)
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\s+/g, "_")
+    .replace(/[.-]/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+
+const normalizeSource = (value = "") => {
+  const raw = normalizeKey(value);
+
+  if (!raw) return "direct";
+
+  const aliases = {
+    // Facebook / Meta
+    fb: "facebook",
+    fbook: "facebook",
+    facebook: "facebook",
+    facebookcom: "facebook",
+    facebook_com: "facebook",
+    facebookads: "facebook",
+    facebook_ads: "facebook",
+    facebookad: "facebook",
+    facebook_ad: "facebook",
+    fbads: "facebook",
+    fb_ads: "facebook",
+    fbad: "facebook",
+    fb_ad: "facebook",
+    meta: "facebook",
+    metaads: "facebook",
+    meta_ads: "facebook",
+    metad: "facebook",
+    meta_ad: "facebook",
+    businessfacebook: "facebook",
+    business_facebook: "facebook",
+
+    // Instagram
+    ig: "instagram",
+    insta: "instagram",
+    instagram: "instagram",
+    instagramcom: "instagram",
+    instagram_com: "instagram",
+    instagramads: "instagram",
+    instagram_ads: "instagram",
+    instagramad: "instagram",
+    instagram_ad: "instagram",
+    igads: "instagram",
+    ig_ads: "instagram",
+    igad: "instagram",
+    ig_ad: "instagram",
+
+    // Google
+    google: "google",
+    googlecom: "google",
+    google_com: "google",
+    googleads: "google",
+    google_ads: "google",
+    googlead: "google",
+    google_ad: "google",
+    adwords: "google",
+    googleadwords: "google",
+    google_adwords: "google",
+    gads: "google",
+    g_ads: "google",
+    gclid: "google",
+    pmax: "google",
+    performancemax: "google",
+    performance_max: "google",
+
+    // YouTube
+    youtube: "youtube",
+    youtubecom: "youtube",
+    youtube_com: "youtube",
+    yt: "youtube",
+    ytads: "youtube",
+    yt_ads: "youtube",
+    youtubeads: "youtube",
+    youtube_ads: "youtube",
+    youtubead: "youtube",
+    youtube_ad: "youtube",
+
+    // Snapchat
+    snapchat: "snapchat",
+    snap: "snapchat",
+    sc: "snapchat",
+    snapads: "snapchat",
+    snap_ads: "snapchat",
+    snapchatads: "snapchat",
+    snapchat_ads: "snapchat",
+    snapchatad: "snapchat",
+    snapchat_ad: "snapchat",
+
+    // WhatsApp
+    whatsapp: "whatsapp",
+    whats_app: "whatsapp",
+    wa: "whatsapp",
+    waba: "whatsapp",
+    whatsappcampaign: "whatsapp",
+    whatsapp_campaign: "whatsapp",
+
+    // Internal marketing
+    marketing: "marketing",
+    campaign: "marketing",
+    miraycampaign: "marketing",
+    miray_campaign: "marketing",
+    sms: "marketing",
+    fast2sms: "marketing",
+    email: "marketing",
+    newsletter: "marketing",
+    broadcast: "marketing",
+    push: "marketing",
+    notification: "marketing",
+
+    // Direct / website
+    direct: "direct",
+    organic: "direct",
+    website: "direct",
+    web: "direct",
+    storefront: "direct",
+    miray: "direct",
+    mirayfashions: "direct",
+    mirayfashionscom: "direct",
+    mirayfashions_com: "direct",
+    none: "direct",
+    null: "direct",
+    undefined: "direct",
+    unknown: "direct",
+  };
+
+  if (aliases[raw]) return aliases[raw];
+
+  if (
+    raw.includes("facebook") ||
+    raw.includes("meta") ||
+    raw === "fb" ||
+    raw.startsWith("fb_") ||
+    raw.includes("_fb") ||
+    raw.includes("fbads")
+  ) {
+    return "facebook";
+  }
+
+  if (
+    raw.includes("instagram") ||
+    raw.includes("insta") ||
+    raw === "ig" ||
+    raw.startsWith("ig_") ||
+    raw.includes("_ig")
+  ) {
+    return "instagram";
+  }
+
+  if (
+    raw.includes("google") ||
+    raw.includes("adwords") ||
+    raw.includes("gads") ||
+    raw.includes("gclid") ||
+    raw.includes("pmax")
+  ) {
+    return "google";
+  }
+
+  if (raw.includes("youtube") || raw === "yt" || raw.startsWith("yt_")) {
+    return "youtube";
+  }
+
+  if (raw.includes("snapchat") || raw.includes("snap_") || raw === "snap") {
+    return "snapchat";
+  }
+
+  if (raw.includes("whatsapp") || raw === "wa" || raw.includes("waba")) {
+    return "whatsapp";
+  }
+
+  if (
+    raw.includes("campaign") ||
+    raw.includes("marketing") ||
+    raw.includes("sms") ||
+    raw.includes("email") ||
+    raw.includes("newsletter") ||
+    raw.includes("broadcast")
+  ) {
+    return "marketing";
+  }
+
+  return raw;
+};
+
 const pretty = (v) =>
   clean(v)
     .replace(/_/g, " ")
@@ -126,7 +311,7 @@ export default function OrderSourceAttributionCard({ order }) {
   const attr = order?.attribution || {};
   const label = getOrderAttributionLabel(order);
 
-  const sourceKey = clean(label.source).toLowerCase() || "direct";
+  const sourceKey = normalizeSource(label.source || attr.source);
 
   const meta = sourceMeta[sourceKey] || {
     label: pretty(sourceKey || "Unknown"),
@@ -199,8 +384,10 @@ export default function OrderSourceAttributionCard({ order }) {
               </h2>
 
               <p className="mt-0.5 text-sm text-gray-500">
-                {pretty(label.medium)}{" "}
-                {label.campaign ? `• ${label.campaign}` : ""}
+                {pretty(label.medium || attr.medium)}{" "}
+                {label.campaign || attr.campaign
+                  ? `• ${label.campaign || attr.campaign}`
+                  : ""}
               </p>
             </div>
           </div>
@@ -211,10 +398,10 @@ export default function OrderSourceAttributionCard({ order }) {
               Captured
             </span>
 
-            {label.shortCode && (
+            {(label.shortCode || attr.shortCode) && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700">
                 <HiOutlineHashtag size={13} />
-                {label.shortCode}
+                {label.shortCode || attr.shortCode}
               </span>
             )}
           </div>
@@ -224,32 +411,28 @@ export default function OrderSourceAttributionCard({ order }) {
           <InfoRow
             icon={FaBullhorn}
             label="Campaign"
-            value={label.campaign}
+            value={label.campaign || attr.campaign}
           />
 
           <InfoRow
             icon={Radio}
             label="Medium"
-            value={pretty(label.medium)}
+            value={pretty(label.medium || attr.medium)}
           />
 
           <InfoRow
             icon={HiOutlineLink}
             label="Marketing Link"
-            value={label.marketingLinkId}
+            value={label.marketingLinkId || attr.marketingLinkId}
           />
 
           <InfoRow
             icon={HiOutlineHashtag}
             label="Short Code"
-            value={label.shortCode}
+            value={label.shortCode || attr.shortCode}
           />
 
-          <InfoRow
-            icon={MousePointerClick}
-            label="Click ID"
-            value={clickId}
-          />
+          <InfoRow icon={MousePointerClick} label="Click ID" value={clickId} />
 
           <InfoRow
             icon={FaGlobe}
@@ -266,11 +449,7 @@ export default function OrderSourceAttributionCard({ order }) {
               value={attr.visitorId}
             />
 
-            <InfoRow
-              icon={Radio}
-              label="Session ID"
-              value={attr.sessionId}
-            />
+            <InfoRow icon={Radio} label="Session ID" value={attr.sessionId} />
           </div>
         )}
       </div>
