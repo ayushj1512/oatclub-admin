@@ -297,6 +297,7 @@ export const sidebarMenus = {
     { label: "Operations Status", href: "/reports/Operations-Order-Status" },
     { label: "RTO Report", href: "/reports/RTO" },
     { label: "Cancellation Report", href: "/reports/Cancellation" },
+    { label: "Cancellation Analytics", href: "/reports/Cancellation-Analytics" },
     { label: "Products RMA Insights", href: "/reports/products-rma-insights" },
   ],
 
