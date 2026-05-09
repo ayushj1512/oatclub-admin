@@ -208,12 +208,14 @@ export const sidebarMenus = {
   ],
 
   marketing: [
-    { label: "Marketing Dashboard", href: "/marketing" },
-    { label: "Email Marketing", href: "/marketing/email" },
-    { label: "Marketing Spend", href: "/marketing/marketingSpend" },
-    { label: "ROAS Report", href: "/marketing/ROAS" },
-    { label: "Commerce Manager", href: "/marketing/commerceManager" },
-  ],
+  { label: "Dashboard", href: "/marketing" },
+  { label: "Campaigns", href: "/marketing/campaigns" },
+  { label: "Create Campaign", href: "/marketing/campaigns/create" },
+  { label: "Email", href: "/marketing/email" },
+  { label: "Marketing Spend", href: "/marketing/marketingSpend" },
+  { label: "ROAS", href: "/marketing/ROAS" },
+  { label: "Commerce Manager", href: "/marketing/commerceManager" },
+],
 
   customers: [
   { label: "Customer Dashboard", href: "/customers/dashboard" },
@@ -299,15 +301,28 @@ export const sidebarMenus = {
   ],
 
     refunds: [
-    { label: "Refund Dashboard", href: "/refunds" },
-    { label: "All Refunds", href: "/refunds/list" },
-    { label: "Create Refund", href: "/refunds/create" },
-    { label: "Razorpay Queue", href: "/refunds/razorpay" },
-    { label: "Manual Refunds", href: "/refunds/manual" },
-    { label: "Failed Refunds", href: "/refunds/failed" },
-    { label: "Refund Reports", href: "/refunds/reports" },
-    { label: "Refund Settings", href: "/refunds/settings" },
-  ],
+  { label: "Dashboard", href: "/refunds" },
+
+  // 🎯 Entry point (important)
+  { label: "Eligible Orders", href: "/refunds/eligible-orders" },
+
+  // 🧾 Core
+  { label: "All Refunds", href: "/refunds/list" },
+  { label: "Create Refund", href: "/refunds/create" },
+
+  // ⚙️ Processing queues
+  { label: "Razorpay Queue", href: "/refunds/razorpay" },
+  { label: "Manual Refunds", href: "/refunds/manual" },
+
+  // ⚠️ Monitoring
+  { label: "Failed Refunds", href: "/refunds/failed" },
+
+  // 📊 Insights
+  { label: "Reports", href: "/refunds/reports" },
+
+  // ⚙️ Config
+  { label: "Settings", href: "/refunds/settings" },
+],
 
 
   account_user: [

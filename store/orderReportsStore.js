@@ -115,11 +115,24 @@ const initialOperationsSummary = () => ({
   refundsProcessed: 0,
 });
 
+const initialCancellationSummary = () => ({
+  totalCancelledOrders: 0,
+  totalCancelledRevenue: 0,
+  avgCancelledOrderValue: 0,
+  codCancelled: 0,
+  prepaidCancelled: 0,
+  confirmedCancelled: 0,
+  unconfirmedCancelled: 0,
+  refundPendingOrders: 0,
+  totalOrders: 0,
+  cancellationRate: 0,
+});
+
 export const useOrderReportsStore = create((set, get) => ({
   rows: [],
   unsoldRows: [],
   lowSellingRows: [],
-  
+
 
   summary: initialSummary(),
   unsoldSummary: initialUnsoldSummary(),
@@ -157,6 +170,18 @@ export const useOrderReportsStore = create((set, get) => ({
   overviewInitialized: false,
   roasInitialized: false,
   operationsInitialized: false,
+
+  cancellationSummary: initialCancellationSummary(),
+
+  cancellationReasonBreakdown: [],
+  cancellationByBreakdown: [],
+  cancellationPaymentMethodBreakdown: [],
+  cancellationDailyTrend: [],
+  topCancelledProducts: [],
+
+  cancellationLoading: false,
+  cancellationError: "",
+  cancellationInitialized: false,
 
   setFilter: (key, value) => {
     set((state) => ({
@@ -626,6 +651,90 @@ export const useOrderReportsStore = create((set, get) => ({
     }
   },
 
+  fetchCancellationAnalyticsReport: async (override = {}) => {
+    const filters = { ...get().filters, ...override };
+    set({ cancellationLoading: true, cancellationError: "" });
+
+    try {
+      const res = await fetch(
+        buildUrl(
+          `/api/orders/reports/cancellations${qs({
+            range: filters.range,
+            from: filters.from,
+            to: filters.to,
+          })}`
+        ),
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }
+      );
+
+      const data = await safeJson(res);
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message || "Failed to fetch cancellation analytics report"
+        );
+      }
+
+      set((state) => ({
+        cancellationSummary: {
+          totalCancelledOrders: toNum(data?.summary?.totalCancelledOrders),
+          totalCancelledRevenue: toNum(data?.summary?.totalCancelledRevenue),
+          avgCancelledOrderValue: toNum(data?.summary?.avgCancelledOrderValue),
+          codCancelled: toNum(data?.summary?.codCancelled),
+          prepaidCancelled: toNum(data?.summary?.prepaidCancelled),
+          confirmedCancelled: toNum(data?.summary?.confirmedCancelled),
+          unconfirmedCancelled: toNum(data?.summary?.unconfirmedCancelled),
+          refundPendingOrders: toNum(data?.summary?.refundPendingOrders),
+          totalOrders: toNum(data?.summary?.totalOrders),
+          cancellationRate: toNum(data?.summary?.cancellationRate),
+        },
+
+        cancellationReasonBreakdown: safeArr(data?.reasonBreakdown),
+        cancellationByBreakdown: safeArr(data?.cancelledByBreakdown),
+        cancellationPaymentMethodBreakdown: safeArr(data?.paymentMethodBreakdown),
+        cancellationDailyTrend: safeArr(data?.dailyTrend),
+        topCancelledProducts: safeArr(data?.topCancelledProducts),
+
+        filters: {
+          ...state.filters,
+          range: data?.filters?.range ?? filters.range ?? "",
+          from: data?.filters?.from ?? filters.from ?? "",
+          to: data?.filters?.to ?? filters.to ?? "",
+        },
+
+        cancellationLoading: false,
+        cancellationError: "",
+        cancellationInitialized: true,
+      }));
+
+      return { success: true, data };
+    } catch (error) {
+      set({
+        cancellationSummary: initialCancellationSummary(),
+        cancellationReasonBreakdown: [],
+        cancellationByBreakdown: [],
+        cancellationPaymentMethodBreakdown: [],
+        cancellationDailyTrend: [],
+        topCancelledProducts: [],
+        cancellationLoading: false,
+        cancellationError:
+          error?.message || "Failed to fetch cancellation analytics report",
+        cancellationInitialized: true,
+      });
+
+      return {
+        success: false,
+        message:
+          error?.message || "Failed to fetch cancellation analytics report",
+      };
+    }
+  },
+
   fetchOverviewAndProducts: async (override = {}) => {
     const filters = { ...get().filters, ...override };
     set({ filters: { ...get().filters, ...filters } });
@@ -648,6 +757,7 @@ export const useOrderReportsStore = create((set, get) => ({
   refreshAll: async () => get().fetchOverviewAndProducts(),
   refreshROAS: async () => get().fetchROASReport(),
   refreshOperations: async () => get().fetchOperationsStatusReport(),
+  refreshCancellations: async () => get().fetchCancellationAnalyticsReport(),
 
   goToNextPage: async () => {
     const { pagination, filters } = get();
@@ -736,6 +846,12 @@ export const useOrderReportsStore = create((set, get) => ({
     return get().fetchOperationsStatusReport(next);
   },
 
+  hydrateAndFetchCancellations: async (patch = {}) => {
+    const next = { ...get().filters, ...patch };
+    set({ filters: next });
+    return get().fetchCancellationAnalyticsReport(next);
+  },
+
   clearReport: () => {
     set({
       rows: [],
@@ -765,6 +881,16 @@ export const useOrderReportsStore = create((set, get) => ({
       overviewInitialized: false,
       roasInitialized: false,
       operationsInitialized: false,
+      cancellationSummary: initialCancellationSummary(),
+      cancellationReasonBreakdown: [],
+      cancellationByBreakdown: [],
+      cancellationPaymentMethodBreakdown: [],
+      cancellationDailyTrend: [],
+      topCancelledProducts: [],
+
+      cancellationError: "",
+      cancellationInitialized: false,
+      cancellationLoading: false,
     });
   },
 }));

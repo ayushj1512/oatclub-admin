@@ -15,7 +15,12 @@ import axios from "axios";
 
 import MediaPickerModal from "@/components/media/MediaPickerModal";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000";
+
+const REFUND_API = `${API}/api/order-refunds`;
 
 const refundMethods = {
   razorpay: ["razorpay_source"],
@@ -45,23 +50,19 @@ export default function CreateRefundPage() {
     refundType: "full",
     reason: "",
     adminNote: "",
-    rmaNumber: "",
 
     upiId: "",
     accountHolderName: "",
     bankName: "",
     accountNumberLast4: "",
     ifsc: "",
-
-    utr: "",
-    transactionId: "",
-    paidFrom: "",
-    paidTo: "",
   });
 
   const availableMethods = useMemo(() => {
     return refundMethods[order?.paymentMethod] || refundMethods.cod;
   }, [order?.paymentMethod]);
+
+  const isRazorpayOrder = order?.paymentMethod === "razorpay";
 
   const update = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -75,7 +76,9 @@ export default function CreateRefundPage() {
       setError("");
 
       const { data } = await axios.get(
-        `${API}/api/orders/admin/search?search=${encodeURIComponent(orderSearch)}`,
+        `${API}/api/orders/admin/search?search=${encodeURIComponent(
+          orderSearch.trim()
+        )}`,
         { withCredentials: true }
       );
 
@@ -87,15 +90,23 @@ export default function CreateRefundPage() {
         return;
       }
 
+      const razorpay = found.paymentMethod === "razorpay";
+
       setOrder(found);
-
-      const isRazorpay = found.paymentMethod === "razorpay";
-
       setForm((prev) => ({
         ...prev,
-        amount: found.finalPayable || "",
-        refundMode: isRazorpay ? "automatic" : "manual",
-        refundMethod: isRazorpay ? "razorpay_source" : "upi",
+        amount:
+          found?.refundSummary?.pendingAmount ||
+          found?.refundSummary?.eligibleAmount ||
+          found?.finalPayable ||
+          "",
+        refundMode: razorpay ? "automatic" : "manual",
+        refundMethod: razorpay ? "razorpay_source" : "upi",
+        reason:
+          prev.reason ||
+          (razorpay
+            ? "Paid order cancelled before shipment"
+            : "Manual refund requested"),
       }));
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to search order");
@@ -109,12 +120,14 @@ export default function CreateRefundPage() {
 
     setProofs((prev) => [
       ...prev,
-      ...list.map((m) => ({
-        type: "screenshot",
-        url: m.url,
-        publicId: m.publicId || "",
-        note: "Refund proof",
-      })),
+      ...list
+        .filter((m) => m?.url)
+        .map((m) => ({
+          type: "screenshot",
+          url: m.url,
+          publicId: m.publicId || "",
+          note: "Refund proof",
+        })),
     ]);
 
     setMediaOpen(false);
@@ -122,6 +135,18 @@ export default function CreateRefundPage() {
 
   const removeProof = (index) => {
     setProofs((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const attachProofs = async (refundId) => {
+    if (!refundId || !proofs.length) return;
+
+    await Promise.all(
+      proofs.map((proof) =>
+        axios.post(`${REFUND_API}/${refundId}/proofs`, proof, {
+          withCredentials: true,
+        })
+      )
+    );
   };
 
   const createRefund = async () => {
@@ -139,44 +164,49 @@ export default function CreateRefundPage() {
       setCreating(true);
       setError("");
 
-      const payload = {
-        orderId: order._id,
+      const commonPayload = {
         amount: Number(form.amount),
-        refundMode: form.refundMode,
-        refundMethod: form.refundMethod,
-        refundType: form.refundType,
         reason: form.reason,
-        adminNote: form.adminNote,
-        rmaNumber: form.rmaNumber,
-        proofs,
-
-        customerRefundDetails: {
-          mode:
-            form.refundMethod === "upi"
-              ? "upi"
-              : form.refundMethod === "bank_transfer"
-              ? "bank"
-              : form.refundMethod,
-          upiId: form.upiId,
-          accountHolderName: form.accountHolderName,
-          bankName: form.bankName,
-          accountNumberLast4: form.accountNumberLast4,
-          ifsc: form.ifsc,
-        },
-
-        manualRefund: {
-          utr: form.utr,
-          transactionId: form.transactionId,
-          paidFrom: form.paidFrom,
-          paidTo: form.paidTo,
-        },
       };
 
-      const { data } = await axios.post(`${API}/api/admin/refunds`, payload, {
-        withCredentials: true,
-      });
+      let data;
 
-      router.push(`/refunds/${data?.refund?._id}`);
+      if (isRazorpayOrder) {
+        const response = await axios.post(
+          `${REFUND_API}/razorpay/order/${order._id}/create`,
+          commonPayload,
+          { withCredentials: true }
+        );
+
+        data = response.data;
+      } else {
+        const response = await axios.post(
+          `${REFUND_API}/manual/order/${order._id}/create`,
+          {
+            ...commonPayload,
+            refundMethod: form.refundMethod,
+            adminNote: form.adminNote,
+            customerRefundDetails: {
+              upiId: form.upiId,
+              accountHolderName: form.accountHolderName,
+              bankName: form.bankName,
+              accountNumberLast4: form.accountNumberLast4,
+              ifsc: form.ifsc,
+            },
+          },
+          { withCredentials: true }
+        );
+
+        data = response.data;
+      }
+
+      const refundId = data?.refund?._id || data?.refund?.id;
+
+      if (refundId && proofs.length) {
+        await attachProofs(refundId);
+      }
+
+      router.push(refundId ? `/refunds/${refundId}` : "/refunds/list");
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to create refund");
     } finally {
@@ -240,7 +270,11 @@ export default function CreateRefundPage() {
             disabled={loadingOrder}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-gray-950 px-5 text-sm font-medium text-white disabled:opacity-60"
           >
-            {loadingOrder ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+            {loadingOrder ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Search size={16} />
+            )}
             Search
           </button>
         </div>
@@ -277,6 +311,7 @@ export default function CreateRefundPage() {
                 value={form.refundType}
                 onChange={(e) => update("refundType", e.target.value)}
                 className="input"
+                disabled
               >
                 <option value="full">Full</option>
                 <option value="partial">Partial</option>
@@ -284,11 +319,7 @@ export default function CreateRefundPage() {
             </Field>
 
             <Field label="Refund Mode">
-              <select
-                value={form.refundMode}
-                onChange={(e) => update("refundMode", e.target.value)}
-                className="input"
-              >
+              <select value={form.refundMode} className="input" disabled>
                 <option value="automatic">Automatic</option>
                 <option value="manual">Manual</option>
               </select>
@@ -299,6 +330,7 @@ export default function CreateRefundPage() {
                 value={form.refundMethod}
                 onChange={(e) => update("refundMethod", e.target.value)}
                 className="input"
+                disabled={isRazorpayOrder}
               >
                 {availableMethods.map((m) => (
                   <option key={m} value={m}>
@@ -308,35 +340,30 @@ export default function CreateRefundPage() {
               </select>
             </Field>
 
-            <Field label="RMA Number">
-              <input
-                value={form.rmaNumber}
-                onChange={(e) => update("rmaNumber", e.target.value)}
-                className="input"
-                placeholder="Optional"
-              />
-            </Field>
-
-            <Field label="Reason">
-              <input
-                value={form.reason}
-                onChange={(e) => update("reason", e.target.value)}
-                className="input"
-                placeholder="Refund reason"
-              />
-            </Field>
-
             <div className="md:col-span-2">
-              <Field label="Admin Note">
-                <textarea
-                  value={form.adminNote}
-                  onChange={(e) => update("adminNote", e.target.value)}
-                  rows={4}
-                  className="input min-h-[110px] resize-none py-3"
-                  placeholder="Internal note"
+              <Field label="Reason">
+                <input
+                  value={form.reason}
+                  onChange={(e) => update("reason", e.target.value)}
+                  className="input"
+                  placeholder="Refund reason"
                 />
               </Field>
             </div>
+
+            {!isRazorpayOrder && (
+              <div className="md:col-span-2">
+                <Field label="Admin Note">
+                  <textarea
+                    value={form.adminNote}
+                    onChange={(e) => update("adminNote", e.target.value)}
+                    rows={4}
+                    className="input min-h-[110px] resize-none py-3"
+                    placeholder="Internal note"
+                  />
+                </Field>
+              </div>
+            )}
           </div>
         </div>
 
@@ -382,7 +409,7 @@ export default function CreateRefundPage() {
         </div>
       </section>
 
-      {form.refundMethod === "upi" && (
+      {!isRazorpayOrder && form.refundMethod === "upi" && (
         <ManualBox title="UPI Details">
           <Field label="UPI ID">
             <input
@@ -395,7 +422,7 @@ export default function CreateRefundPage() {
         </ManualBox>
       )}
 
-      {form.refundMethod === "bank_transfer" && (
+      {!isRazorpayOrder && form.refundMethod === "bank_transfer" && (
         <ManualBox title="Bank Details">
           <Field label="Account Holder Name">
             <input
@@ -432,46 +459,6 @@ export default function CreateRefundPage() {
         </ManualBox>
       )}
 
-      {form.refundMode === "manual" && (
-        <ManualBox title="Manual Payment Tracking">
-          <Field label="UTR">
-            <input
-              value={form.utr}
-              onChange={(e) => update("utr", e.target.value)}
-              className="input"
-              placeholder="Optional now"
-            />
-          </Field>
-
-          <Field label="Transaction ID">
-            <input
-              value={form.transactionId}
-              onChange={(e) => update("transactionId", e.target.value)}
-              className="input"
-              placeholder="Optional now"
-            />
-          </Field>
-
-          <Field label="Paid From">
-            <input
-              value={form.paidFrom}
-              onChange={(e) => update("paidFrom", e.target.value)}
-              className="input"
-              placeholder="Your account / UPI"
-            />
-          </Field>
-
-          <Field label="Paid To">
-            <input
-              value={form.paidTo}
-              onChange={(e) => update("paidTo", e.target.value)}
-              className="input"
-              placeholder="Customer account / UPI"
-            />
-          </Field>
-        </ManualBox>
-      )}
-
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
         <button
           onClick={() => router.push("/refunds/list")}
@@ -485,7 +472,11 @@ export default function CreateRefundPage() {
           disabled={creating}
           className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-950 px-5 py-3 text-sm font-medium text-white disabled:opacity-60"
         >
-          {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+          {creating ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Plus size={16} />
+          )}
           Create Refund
         </button>
       </div>
@@ -516,6 +507,11 @@ export default function CreateRefundPage() {
         .input:focus {
           background: white;
           box-shadow: inset 0 0 0 1px #d1d5db;
+        }
+        .input:disabled {
+          cursor: not-allowed;
+          color: #6b7280;
+          background: #f3f4f6;
         }
       `}</style>
     </main>

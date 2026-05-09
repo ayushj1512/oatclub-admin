@@ -71,6 +71,19 @@ const normalizeOrdersPayload = (data) => {
   return { orders: [], meta: data?.meta || null };
 };
 
+export const getOrderAttributionLabel = (order = {}) => {
+  const attr = order?.attribution || {};
+
+  return {
+    source: attr.source || "direct",
+    medium: attr.medium || "direct",
+    campaign: attr.campaign || "",
+    campaignSlug: attr.campaignSlug || "",
+    shortCode: attr.shortCode || "",
+    marketingLinkId: attr.marketingLinkId || "",
+  };
+};
+
 export const useOrderStore = create((set, get) => ({
   orders: [],
   order: null,
@@ -236,18 +249,34 @@ confirmationDetailsLoading: false,
   },
 
   fetchAllOrders: async (filters = {}) => {
-    const f = { ...(filters || {}) };
+  const f = { ...(filters || {}) };
 
-    if (f.page == null) f.page = 1;
-    if (f.limit == null) f.limit = 200;
+  // ✅ Attribution filter aliases for admin UI
+  if (f.source && !f.attributionSource) {
+    f.attributionSource = f.source;
+    delete f.source;
+  }
 
-    const qs = buildQueryString(f);
-    const data = await get()._get(`/api/orders${qs}`);
-    const { orders, meta } = normalizeOrdersPayload(data);
+  if (f.medium && !f.attributionMedium) {
+    f.attributionMedium = f.medium;
+    delete f.medium;
+  }
 
-    set({ orders, ordersMeta: meta || null });
-    return orders;
-  },
+  if (f.campaign && !f.attributionCampaign) {
+    f.attributionCampaign = f.campaign;
+    delete f.campaign;
+  }
+
+  if (f.page == null) f.page = 1;
+  if (f.limit == null) f.limit = 200;
+
+  const qs = buildQueryString(f);
+  const data = await get()._get(`/api/orders${qs}`);
+  const { orders, meta } = normalizeOrdersPayload(data);
+
+  set({ orders, ordersMeta: meta || null });
+  return orders;
+},
 
   fetchNextOrdersPage: async (filters = {}) => {
     const currMeta = get().ordersMeta;

@@ -1,298 +1,264 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useEffect, useMemo } from "react";
 import {
-  Mail,
-  MessageCircle,
+  BarChart3,
+  ChevronRight,
   Megaphone,
-  Tag,
-  Search,
-  Users,
-  ArrowRight,
-  Sparkles,
+  MousePointerClick,
+  Plus,
+  Send,
+  ShoppingBag,
   TrendingUp,
-  ClipboardList,
 } from "lucide-react";
+import { useAdminMarketingCampaignStore } from "@/store/adminMarketingCampaignStore";
 
-export default function MarketingClient() {
-  const router = useRouter();
+const formatMoney = (value = 0) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
 
-  const cards = useMemo(
-    () => [
-      {
-        title: "Email Marketing",
-        desc: "Import subscribers, choose templates, send campaigns.",
-        href: "/marketing/email",
-        icon: Mail,
-        tone: "blue",
-      },
-      {
-        title: "WhatsApp Broadcasts",
-        desc: "Send broadcast messages to segmented audiences.",
-        href: "/marketing/whatsapp",
-        icon: MessageCircle,
-        tone: "green",
-      },
-      {
-        title: "Campaigns",
-        desc: "Plan, track, and manage ongoing campaigns.",
-        href: "/marketing/campaigns",
-        icon: Megaphone,
-        tone: "purple",
-      },
-      {
-        title: "Coupons & Discounts",
-        desc: "Create coupons and run discount strategies.",
-        href: "/marketing/coupons",
-        icon: Tag,
-        tone: "amber",
-      },
-      {
-        title: "SEO Tools",
-        desc: "Optimize meta titles, descriptions, and keywords.",
-        href: "/marketing/seo",
-        icon: Search,
-        tone: "rose",
-      },
-      {
-        title: "Influencer / Collabs",
-        desc: "Manage collab leads, briefs, and deliverables.",
-        href: "/marketing/collabs",
-        icon: Users,
-        tone: "slate",
-      },
-    ],
-    []
-  );
+const slugify = (value = "") =>
+  String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
 
-  const stats = useMemo(
-    () => [
-      { label: "Subscribers", value: "—", icon: Users },
-      { label: "Campaigns Active", value: "—", icon: Megaphone },
-      { label: "Coupons Live", value: "—", icon: Tag },
-      { label: "Revenue Lift", value: "—", icon: TrendingUp },
-    ],
-    []
-  );
+export default function MarketingOverviewPage() {
+  const { campaigns, isLoading, error, fetchCampaigns } =
+    useAdminMarketingCampaignStore();
 
-  const Card = ({ children, className = "", onClick }) => (
-    <div
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={(e) => {
-        if (!onClick) return;
-        if (e.key === "Enter" || e.key === " ") onClick();
-      }}
-      className={[
-        "rounded-2xl bg-white shadow-sm ring-1 ring-black/5",
-        onClick ? "cursor-pointer hover:shadow-md transition active:scale-[0.99]" : "",
-        className,
-      ].join(" ")}
-    >
-      {children}
-    </div>
-  );
+  useEffect(() => {
+    fetchCampaigns();
+  }, [fetchCampaigns]);
 
-  const Badge = ({ children }) => (
-    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-gray-50 ring-1 ring-black/5 text-gray-700">
-      <Sparkles className="w-3 h-3" />
-      {children}
-    </span>
-  );
+  const summary = useMemo(() => {
+    return campaigns.reduce(
+      (acc, item) => {
+        acc.sent += Number(item.totalSent || 0);
+        acc.clicks += Number(item.uniqueClicks || 0);
+        acc.orders += Number(item.totalOrders || 0);
+        acc.revenue += Number(item.totalRevenue || 0);
+        return acc;
+      },
+      { sent: 0, clicks: 0, orders: 0, revenue: 0 }
+    );
+  }, [campaigns]);
 
-  const toneClasses = (tone) => {
-    switch (tone) {
-      case "blue":
-        return "bg-blue-50 text-blue-700";
-      case "green":
-        return "bg-green-50 text-green-700";
-      case "purple":
-        return "bg-purple-50 text-purple-700";
-      case "amber":
-        return "bg-amber-50 text-amber-800";
-      case "rose":
-        return "bg-rose-50 text-rose-700";
-      default:
-        return "bg-slate-50 text-slate-700";
-    }
-  };
+  const cards = [
+    {
+      title: "Campaigns",
+      value: campaigns.length,
+      icon: Megaphone,
+    },
+    {
+      title: "Messages Sent",
+      value: summary.sent,
+      icon: Send,
+    },
+    {
+      title: "Unique Clicks",
+      value: summary.clicks,
+      icon: MousePointerClick,
+    },
+    {
+      title: "Revenue",
+      value: formatMoney(summary.revenue),
+      icon: TrendingUp,
+    },
+  ];
+
+  const recentCampaigns = campaigns.slice(0, 5);
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-6"
-      >
-        <div>
-          <h1 className="text-3xl font-bold text-blue-700">Marketing</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            One place to run campaigns, emails, WhatsApp, coupons & growth.
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Badge>Quick Dashboard</Badge>
-          <Badge>Admin Tools</Badge>
-        </div>
-      </motion.div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {stats.map((s, idx) => {
-          const Icon = s.icon;
-          return (
-            <Card key={idx} className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500">{s.label}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
-                </div>
-                <div className="w-10 h-10 rounded-2xl bg-gray-50 ring-1 ring-black/5 flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-gray-700" />
-                </div>
-              </div>
-              <p className="text-[11px] text-gray-500 mt-3">
-                Connect analytics later (Meta/GA/Shopify/Woo).
-              </p>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Main cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        {cards.map((c, idx) => {
-          const Icon = c.icon;
-          return (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.03 }}
-            >
-              <Card
-                onClick={() => router.push(c.href)}
-                className="p-5"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex gap-3">
-                    <div
-                      className={[
-                        "w-11 h-11 rounded-2xl flex items-center justify-center",
-                        toneClasses(c.tone),
-                      ].join(" ")}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </div>
-
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{c.title}</h3>
-                      <p className="text-sm text-gray-500 mt-1">{c.desc}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-1 text-gray-400">
-                    <ArrowRight className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">
-                    Open module
-                  </span>
-                  <span className="text-xs px-2 py-1 rounded-full bg-gray-50 ring-1 ring-black/5 text-gray-700">
-                    {c.href}
-                  </span>
-                </div>
-              </Card>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {/* Bottom section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Activity */}
-        <Card className="p-5 lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-gray-700" />
-              Recent Activity
-            </h2>
-
-            <span className="text-xs text-gray-500 bg-gray-50 ring-1 ring-black/5 px-2 py-1 rounded-full">
-              placeholder
-            </span>
+    <div className="min-h-screen bg-white px-4 py-5 md:px-6 lg:px-8">
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-gray-400">
+              Admin Marketing
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-black md:text-3xl">
+              Marketing Overview
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Track campaigns, clicks, conversions and revenue.
+            </p>
           </div>
 
-          <div className="mt-4 space-y-3">
-            {[
-              { t: "Email campaign draft saved", d: "Today" },
-              { t: "Coupon created (WINTER10)", d: "Yesterday" },
-              { t: "WhatsApp broadcast queued", d: "2 days ago" },
-            ].map((x, i) => (
+          <Link
+            href="/marketing/campaigns/create"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
+          >
+            <Plus size={16} />
+            Create Campaign
+          </Link>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {cards.map((card) => {
+            const Icon = card.icon;
+
+            return (
               <div
-                key={i}
-                className="flex items-center justify-between rounded-2xl bg-gray-50 ring-1 ring-black/5 px-4 py-3"
+                key={card.title}
+                className="rounded-2xl bg-gray-50 p-4 shadow-sm ring-1 ring-gray-100"
               >
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{x.t}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{x.d}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-gray-500">{card.title}</p>
+                    <p className="mt-2 text-2xl font-semibold text-black">
+                      {card.value}
+                    </p>
+                  </div>
+
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-black shadow-sm ring-1 ring-gray-100">
+                    <Icon size={18} />
+                  </div>
                 </div>
-                <span className="text-xs text-gray-500">—</span>
               </div>
-            ))}
-          </div>
-        </Card>
+            );
+          })}
+        </div>
 
-        {/* Quick actions */}
-        <Card className="p-5">
-          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-gray-700" />
-            Quick Actions
-          </h2>
+        <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
+          <div className="rounded-2xl bg-gray-50 p-4 shadow-sm ring-1 ring-gray-100 md:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-black">
+                  Recent Campaigns
+                </h2>
+                <p className="text-sm text-gray-500">
+                  Latest WhatsApp marketing campaigns.
+                </p>
+              </div>
 
-          <div className="mt-4 flex flex-col gap-2">
-            <button
-              onClick={() => router.push("/marketing/email")}
-              className="w-full rounded-2xl bg-blue-600 text-white hover:bg-blue-700 px-4 py-3 text-sm font-medium active:scale-[0.99] transition flex items-center justify-between"
-            >
-              Create Email Campaign
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              <Link
+                href="/marketing/campaigns"
+                className="inline-flex items-center gap-1 text-sm font-medium text-black hover:text-gray-600"
+              >
+                View all
+                <ChevronRight size={15} />
+              </Link>
+            </div>
 
-            <button
-              onClick={() => router.push("/marketing/coupons")}
-              className="w-full rounded-2xl bg-gray-50 ring-1 ring-black/5 hover:bg-gray-100 px-4 py-3 text-sm font-medium active:scale-[0.99] transition flex items-center justify-between text-gray-900"
-            >
-              Create Coupon
-              <ArrowRight className="w-4 h-4 text-gray-500" />
-            </button>
+            <div className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
+              {isLoading ? (
+                <div className="p-8 text-center text-sm text-gray-500">
+                  Loading campaigns...
+                </div>
+              ) : error ? (
+                <div className="p-8 text-center text-sm text-red-500">
+                  {error}
+                </div>
+              ) : recentCampaigns.length === 0 ? (
+                <div className="p-8 text-center text-sm text-gray-500">
+                  No campaigns created yet.
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {recentCampaigns.map((campaign) => {
+                    const slug = campaign.slug || slugify(campaign.name);
 
-            <button
-              onClick={() => router.push("/marketing/whatsapp")}
-              className="w-full rounded-2xl bg-gray-50 ring-1 ring-black/5 hover:bg-gray-100 px-4 py-3 text-sm font-medium active:scale-[0.99] transition flex items-center justify-between text-gray-900"
-            >
-              WhatsApp Broadcast
-              <ArrowRight className="w-4 h-4 text-gray-500" />
-            </button>
+                    return (
+                      <Link
+                        key={campaign._id}
+                        href={`/marketing/campaigns/${slug}`}
+                        className="flex items-center justify-between gap-3 p-4 transition hover:bg-gray-50"
+                      >
+                        <div>
+                          <p className="font-medium text-black">
+                            {campaign.name}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-400">
+                            {campaign.channel || "whatsapp"} ·{" "}
+                            {campaign.provider || "fast2sms"} ·{" "}
+                            {campaign.status || "draft"}
+                          </p>
+                        </div>
 
-            <div className="mt-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 p-4">
-              <p className="text-xs text-gray-600">
-                Later we can plug in analytics values into the stats cards.
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                For now this is a clean navigation hub ✅
-              </p>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-black">
+                            {formatMoney(campaign.totalRevenue)}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-400">
+                            {campaign.uniqueClicks || 0} clicks
+                          </p>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
-        </Card>
+
+          <div className="rounded-2xl bg-gray-50 p-4 shadow-sm ring-1 ring-gray-100 md:p-5">
+            <h2 className="text-base font-semibold text-black">
+              Campaign Quick Actions
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Manage your marketing campaign setup.
+            </p>
+
+            <div className="mt-4 grid gap-3">
+              <QuickAction
+                href="/marketing/campaigns"
+                icon={BarChart3}
+                title="All Campaigns"
+                desc="View campaign list and performance."
+              />
+
+              <QuickAction
+                href="/marketing/campaigns/create"
+                icon={Plus}
+                title="Create Campaign"
+                desc="Setup a new WhatsApp campaign."
+              />
+
+              <QuickAction
+                href="/marketing/ROAS"
+                icon={TrendingUp}
+                title="ROAS"
+                desc="View marketing revenue performance."
+              />
+
+              <QuickAction
+                href="/marketing/marketingSpend"
+                icon={ShoppingBag}
+                title="Marketing Spend"
+                desc="Manage campaign spend data."
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+  );
+}
+
+function QuickAction({ href, icon: Icon, title, desc }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100 transition hover:bg-gray-50"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-50 text-black ring-1 ring-gray-100">
+          <Icon size={18} />
+        </div>
+
+        <div>
+          <p className="text-sm font-semibold text-black">{title}</p>
+          <p className="mt-1 text-xs text-gray-500">{desc}</p>
+        </div>
+      </div>
+
+      <ChevronRight size={16} className="text-gray-400" />
+    </Link>
   );
 }

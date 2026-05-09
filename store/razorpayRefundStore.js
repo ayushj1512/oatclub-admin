@@ -1,158 +1,249 @@
-    // store/razorpayRefundStore.js
+// store/razorpayRefundStore.js
 
-    import { create } from "zustand";
-    import axios from "axios";
+import { create } from "zustand";
+import axios from "axios";
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000";
 
-    const cleanError = (err) =>
-    err?.response?.data?.message || err?.message || "Something went wrong";
+const BASE = `${API}/api/razorpay/admin/refunds`;
 
-    const useRazorpayRefundStore = create((set, get) => ({
-    loading: false,
-    actionLoading: false,
-    error: null,
+const cleanError = (err) =>
+  err?.response?.data?.message || err?.message || "Something went wrong";
 
-    refunds: [],
-    refund: null,
-    razorpayRefund: null,
+const normalizeRefund = (refund = {}) => ({
+  ...refund,
+  id: refund?._id || refund?.id || "",
+  amount: Number(refund?.amount || 0),
+  status: refund?.status || "",
+  refundNumber: refund?.refundNumber || "",
+  paymentMethod: refund?.paymentMethod || "",
+  refundMode: refund?.refundMode || "",
+  refundMethod: refund?.refundMethod || "",
+  razorpay: refund?.razorpay || {},
+});
 
-    pagination: {
-        page: 1,
-        limit: 20,
-        total: 0,
-        pages: 1,
-    },
+const normalizeOrder = (order = {}) => ({
+  ...order,
+  id: order?._id || order?.id || "",
+  refundSummary: order?.refundSummary || {},
+  razorpay: order?.razorpay || {},
+});
 
-    setError: (error) => set({ error }),
-    clearError: () => set({ error: null }),
-    clearRefund: () => set({ refund: null, razorpayRefund: null }),
+const useRazorpayRefundStore = create((set, get) => ({
+  loading: false,
+  actionLoading: false,
+  error: null,
 
-    fetchRefunds: async (params = {}) => {
-        set({ loading: true, error: null });
+  pendingOrders: [],
+  refunds: [],
+  refund: null,
+  order: null,
+  razorpayRefund: null,
 
-        try {
-        const { data } = await axios.get(`${API}/api/admin/refunds`, {
-            params,
-            withCredentials: true,
-        });
+  summary: {
+    count: 0,
+    totalRefundAmount: 0,
+  },
 
-        set({
-            refunds: data?.data || [],
-            pagination: data?.pagination || {
-            page: 1,
-            limit: 20,
-            total: 0,
-            pages: 1,
-            },
-            loading: false,
-        });
+  setError: (error) => set({ error }),
+  clearError: () => set({ error: null }),
 
-        return data;
-        } catch (err) {
-        const error = cleanError(err);
-        set({ error, loading: false });
-        throw new Error(error);
-        }
-    },
+  clearRefund: () =>
+    set({
+      refund: null,
+      order: null,
+      razorpayRefund: null,
+    }),
 
-    fetchRefundById: async (refundId) => {
-        if (!refundId) return null;
+  fetchPendingOrders: async () => {
+    set({ loading: true, error: null });
 
-        set({ loading: true, error: null });
+    try {
+      const { data } = await axios.get(`${BASE}/pending-orders`, {
+        withCredentials: true,
+      });
 
-        try {
-        const { data } = await axios.get(`${API}/api/admin/refunds/${refundId}`, {
-            withCredentials: true,
-        });
+      const orders = Array.isArray(data?.orders)
+        ? data.orders.map(normalizeOrder)
+        : [];
 
-        set({
-            refund: data?.refund || null,
-            loading: false,
-        });
-
-        return data;
-        } catch (err) {
-        const error = cleanError(err);
-        set({ error, loading: false });
-        throw new Error(error);
-        }
-    },
-
-    createRefund: async (payload = {}) => {
-        set({ actionLoading: true, error: null });
-
-        try {
-        const { data } = await axios.post(`${API}/api/admin/refunds`, payload, {
-            withCredentials: true,
-        });
-
-        set({
-            refund: data?.refund || null,
-            actionLoading: false,
-        });
-
-        return data;
-        } catch (err) {
-        const error = cleanError(err);
-        set({ error, actionLoading: false });
-        throw new Error(error);
-        }
-    },
-
-    processRazorpayRefund: async (refundId, payload = {}) => {
-        if (!refundId) return null;
-
-        set({ actionLoading: true, error: null });
-
-        try {
-        const { data } = await axios.post(
-            `${API}/api/razorpay/admin/refunds/${refundId}/process`,
-            {
-            speed: payload.speed || "normal",
-            notes: payload.notes || {},
-            },
-            { withCredentials: true }
+      const totalRefundAmount = orders.reduce((sum, order) => {
+        return (
+          sum +
+          Number(
+            order?.refundSummary?.pendingAmount ||
+              order?.refundSummary?.eligibleAmount ||
+              order?.finalPayable ||
+              0
+          )
         );
+      }, 0);
 
-        set({
-            refund: data?.refund || null,
-            razorpayRefund: data?.razorpayRefund || null,
-            actionLoading: false,
-        });
+      set({
+        pendingOrders: orders,
+        summary: {
+          count: Number(data?.count || orders.length),
+          totalRefundAmount,
+        },
+        loading: false,
+      });
 
-        return data;
-        } catch (err) {
-        const error = cleanError(err);
-        set({ error, actionLoading: false });
-        throw new Error(error);
-        }
-    },
+      return data;
+    } catch (err) {
+      const error = cleanError(err);
+      set({ error, loading: false });
+      return null;
+    }
+  },
 
-    fetchRazorpayRefundStatus: async (refundId) => {
-        if (!refundId) return null;
+  createRefundFromOrder: async (orderId, payload = {}) => {
+    if (!orderId) return null;
 
-        set({ actionLoading: true, error: null });
+    set({ actionLoading: true, error: null });
 
-        try {
-        const { data } = await axios.get(
-            `${API}/api/razorpay/admin/refunds/${refundId}/status`,
-            { withCredentials: true }
-        );
+    try {
+      const { data } = await axios.post(
+        `${BASE}/order/${orderId}/create`,
+        payload,
+        { withCredentials: true }
+      );
 
-        set({
-            refund: data?.refund || null,
-            razorpayRefund: data?.razorpayRefund || null,
-            actionLoading: false,
-        });
+      const refund = normalizeRefund(data?.refund);
+      const order = normalizeOrder(data?.order);
 
-        return data;
-        } catch (err) {
-        const error = cleanError(err);
-        set({ error, actionLoading: false });
-        throw new Error(error);
-        }
-    },
-    }));
+      set((state) => ({
+        refund,
+        order,
+        refunds: [
+          refund,
+          ...state.refunds.filter((r) => String(r.id) !== String(refund.id)),
+        ],
+        pendingOrders: state.pendingOrders.map((item) =>
+          String(item.id) === String(order.id) ? order : item
+        ),
+        actionLoading: false,
+      }));
 
-    export default useRazorpayRefundStore;
+      return data;
+    } catch (err) {
+      const error = cleanError(err);
+      set({ error, actionLoading: false });
+      return null;
+    }
+  },
+
+  processRazorpayRefund: async (refundId, payload = {}) => {
+    if (!refundId) return null;
+
+    set({ actionLoading: true, error: null });
+
+    try {
+      const { data } = await axios.post(
+        `${BASE}/${refundId}/process`,
+        {
+          speed: payload?.speed || "normal",
+          notes: payload?.notes || {},
+        },
+        { withCredentials: true }
+      );
+
+      const refund = normalizeRefund(data?.refund);
+      const order = normalizeOrder(data?.order);
+
+      set((state) => ({
+        refund,
+        order,
+        razorpayRefund: data?.razorpayRefund || null,
+        refunds: [
+          refund,
+          ...state.refunds.filter((r) => String(r.id) !== String(refund.id)),
+        ],
+        pendingOrders: state.pendingOrders.map((item) =>
+          String(item.id) === String(order.id) ? order : item
+        ),
+        actionLoading: false,
+      }));
+
+      return data;
+    } catch (err) {
+      const error = cleanError(err);
+      set({ error, actionLoading: false });
+      return null;
+    }
+  },
+
+  fetchRazorpayRefundStatus: async (refundId) => {
+    if (!refundId) return null;
+
+    set({ actionLoading: true, error: null });
+
+    try {
+      const { data } = await axios.get(`${BASE}/${refundId}/status`, {
+        withCredentials: true,
+      });
+
+      const refund = normalizeRefund(data?.refund);
+      const order = normalizeOrder(data?.order);
+
+      set((state) => ({
+        refund,
+        order,
+        razorpayRefund: data?.razorpayRefund || null,
+        refunds: [
+          refund,
+          ...state.refunds.filter((r) => String(r.id) !== String(refund.id)),
+        ],
+        pendingOrders: state.pendingOrders.map((item) =>
+          String(item.id) === String(order.id) ? order : item
+        ),
+        actionLoading: false,
+      }));
+
+      return data;
+    } catch (err) {
+      const error = cleanError(err);
+      set({ error, actionLoading: false });
+      return null;
+    }
+  },
+
+  createAndProcessRefund: async (orderId, payload = {}) => {
+    const created = await get().createRefundFromOrder(orderId, payload);
+    const refundId = created?.refund?._id || created?.refund?.id;
+
+    if (!refundId) return created;
+
+    return get().processRazorpayRefund(refundId, {
+      speed: payload?.speed || "normal",
+      notes: payload?.notes || {},
+    });
+  },
+
+  removePendingOrder: (orderId) =>
+    set((state) => ({
+      pendingOrders: state.pendingOrders.filter(
+        (order) => String(order.id) !== String(orderId)
+      ),
+    })),
+
+  reset: () =>
+    set({
+      loading: false,
+      actionLoading: false,
+      error: null,
+      pendingOrders: [],
+      refunds: [],
+      refund: null,
+      order: null,
+      razorpayRefund: null,
+      summary: {
+        count: 0,
+        totalRefundAmount: 0,
+      },
+    }),
+}));
+
+export default useRazorpayRefundStore;

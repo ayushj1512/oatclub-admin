@@ -26,6 +26,7 @@ import OrderServiceabilityCard from "@/components/orders/OrderServiceabilityCard
 import OrderFulfillmentTimeline from "@/components/orders/OrderFulfillmentTimeline";
 import OrderCancellationDetails from "@/components/orders/OrderCancellationDetails";
 import OrderConfirmationDetails from "@/components/orders/OrderConfirmationDetails";
+import OrderSourceAttributionCard from "@/components/orders/OrderSourceAttributionCard";
 const API = process.env.NEXT_PUBLIC_API_URL;
 const STORE_URL = "https://www.mirayfashions.com";
 
@@ -454,6 +455,8 @@ export default function OrderDetailsClient({ id }) {
               </p>
             </div>
           </Card>
+
+          <OrderSourceAttributionCard order={order} />
 
           <div className="grid gap-5 md:grid-cols-2">
             <EditableAddressCard
