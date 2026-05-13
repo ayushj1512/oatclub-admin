@@ -11,6 +11,13 @@ import {
   FileSearch,
   IndianRupee,
   Truck,
+  Filter,
+  X,
+  Hash,
+  CreditCard,
+  MapPin,
+  Boxes,
+  ExternalLink,
 } from "lucide-react";
 
 import { useBlueDartStore } from "@/store/bluedartStore";
@@ -19,294 +26,481 @@ const STATUS_OPTIONS = [
   { label: "All Statuses", value: "" },
   { label: "Processing", value: "processing" },
   { label: "Shipped", value: "shipped" },
+  { label: "In Transit", value: "in_transit" },
+  { label: "Out For Delivery", value: "out_for_delivery" },
   { label: "Delivered", value: "delivered" },
   { label: "Cancelled", value: "cancelled" },
+  { label: "RTO", value: "rto" },
+];
+
+const PAYMENT_OPTIONS = [
+  { label: "All Payments", value: "" },
+  { label: "COD", value: "cod" },
+  { label: "Prepaid", value: "prepaid" },
 ];
 
 const safe = (v) => (v == null ? "" : String(v));
 
-const formatCurrency = (amount, currency = "INR") => {
-  const value = Number(amount || 0);
-  if (!Number.isFinite(value)) return "-";
-  return `${currency} ${value.toLocaleString("en-IN")}`;
-};
-
 const labelize = (value = "") =>
   safe(value)
     .replace(/_/g, " ")
+    .replace(/-/g, " ")
     .replace(/\b\w/g, (m) => m.toUpperCase());
+
+const formatCurrency = (amount, currency = "INR") => {
+  const value = Number(amount || 0);
+  if (!Number.isFinite(value)) return "-";
+
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: currency || "INR",
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${currency || "INR"} ${value.toLocaleString("en-IN")}`;
+  }
+};
+
+const getReceiverName = (receiver = {}) => {
+  const name =
+    receiver?.name ||
+    receiver?.full_name ||
+    receiver?.fullName ||
+    [receiver?.first_name, receiver?.last_name].filter(Boolean).join(" ");
+
+  return safe(name).trim();
+};
+
+const getReceiverMeta = (receiver = {}) =>
+  [
+    receiver?.phone || receiver?.mobile,
+    receiver?.city,
+    receiver?.state,
+    receiver?.pincode || receiver?.zip,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+
+const getDetailId = (order = {}) =>
+  order?.orderId || order?.id || order?.orderNumber || order?.awbNumber || "";
+
+const getStatusTone = (status = "") => {
+  const s = safe(status).toLowerCase();
+
+  if (s.includes("deliver")) return "bg-emerald-50 text-emerald-700";
+  if (s.includes("cancel") || s.includes("fail"))
+    return "bg-rose-50 text-rose-700";
+  if (s.includes("rto") || s.includes("return"))
+    return "bg-orange-50 text-orange-700";
+  if (s.includes("ship") || s.includes("transit") || s.includes("ofd"))
+    return "bg-blue-50 text-blue-700";
+
+  return "bg-neutral-100 text-neutral-700";
+};
 
 export default function BlueDartExternalOrdersPage() {
   const {
     externalOrders,
+    externalResponse,
     externalOrdersLoading,
     fetchExternalOrders,
+    error,
   } = useBlueDartStore();
 
   const [search, setSearch] = useState("");
   const [shipStatus, setShipStatus] = useState("");
+  const [paymentMode, setPaymentMode] = useState("");
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
+  const [perPage, setPerPage] = useState(20);
 
-  useEffect(() => {
-    fetchExternalOrders({
+  const requestParams = useMemo(
+    () => ({
       page,
       perPage,
+      limit: perPage,
       shipStatus,
-    });
-  }, [fetchExternalOrders, page, perPage, shipStatus]);
+      status: shipStatus,
+      paymentMode,
+    }),
+    [page, perPage, shipStatus, paymentMode]
+  );
+
+  useEffect(() => {
+    fetchExternalOrders(requestParams);
+  }, [fetchExternalOrders, requestParams]);
 
   const filteredOrders = useMemo(() => {
     const q = safe(search).trim().toLowerCase();
-    if (!q) return externalOrders;
 
-    return externalOrders.filter((order) => {
-      const receiverName =
-        safe(order?.receiver?.first_name) +
-        " " +
-        safe(order?.receiver?.last_name);
+    return (externalOrders || []).filter((order) => {
+      const receiverName = getReceiverName(order?.receiver).toLowerCase();
+      const receiverMeta = getReceiverMeta(order?.receiver).toLowerCase();
 
-      return (
-        safe(order?.id).toLowerCase().includes(q) ||
-        safe(order?.orderId).toLowerCase().includes(q) ||
-        safe(order?.orderNumber).toLowerCase().includes(q) ||
-        safe(order?.awbNumber).toLowerCase().includes(q) ||
-        safe(order?.status).toLowerCase().includes(q) ||
-        safe(order?.shipStatus).toLowerCase().includes(q) ||
-        receiverName.toLowerCase().includes(q)
-      );
+      const matchesSearch =
+        !q ||
+        [
+          order?.id,
+          order?.orderId,
+          order?.orderNumber,
+          order?.awbNumber,
+          order?.awb,
+          order?.shipmentId,
+          order?.status,
+          order?.shipStatus,
+          order?.paymentMode,
+          receiverName,
+          receiverMeta,
+        ]
+          .map((x) => safe(x).toLowerCase())
+          .some((x) => x.includes(q));
+
+      const matchesPayment =
+        !paymentMode ||
+        safe(order?.paymentMode).toLowerCase() === paymentMode.toLowerCase();
+
+      return matchesSearch && matchesPayment;
     });
-  }, [externalOrders, search]);
+  }, [externalOrders, search, paymentMode]);
+
+  const stats = useMemo(() => {
+    const rows = filteredOrders || [];
+
+    const totalValue = rows.reduce(
+      (sum, order) => sum + Number(order?.shipmentValue || 0),
+      0
+    );
+
+    const codValue = rows.reduce(
+      (sum, order) => sum + Number(order?.codAmount || 0),
+      0
+    );
+
+    const totalItems = rows.reduce(
+      (sum, order) =>
+        sum + (Array.isArray(order?.items) ? order.items.length : 0),
+      0
+    );
+
+    const withAwb = rows.filter((order) => order?.awbNumber || order?.awb)
+      .length;
+
+    return {
+      total: rows.length,
+      fetched: externalOrders?.length || 0,
+      totalValue,
+      codValue,
+      totalItems,
+      withAwb,
+    };
+  }, [filteredOrders, externalOrders]);
 
   const handleRefresh = () => {
-    fetchExternalOrders({
-      page,
-      perPage,
-      shipStatus,
-    });
+    fetchExternalOrders(requestParams);
   };
 
+  const clearFilters = () => {
+    setSearch("");
+    setShipStatus("");
+    setPaymentMode("");
+    setPage(1);
+  };
+
+  const hasFilters = Boolean(search || shipStatus || paymentMode);
+
   return (
-    <main className="min-h-screen bg-[#f7f7f7] p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-3xl bg-white p-5 shadow-sm md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
-                BlueDart / eShipz
-              </p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">
-                External Orders
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm text-neutral-600">
-                eShipz se pushed orders dekho, search karo, aur single order
-                detail me inspect karo.
-              </p>
-            </div>
+    <main className="min-h-screen bg-[#f7f7f7] p-4 text-neutral-950 md:p-6">
+      <div className="mx-auto w-full max-w-[1600px] space-y-5">
+        <section className="overflow-hidden rounded-[2rem] bg-white shadow-sm">
+          <div className="relative p-5 md:p-7">
+            <div className="absolute right-0 top-0 h-32 w-32 rounded-bl-[4rem] bg-neutral-100/80" />
 
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={externalOrdersLoading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-60"
-            >
-              <RefreshCcw
-                className={`h-4 w-4 ${
-                  externalOrdersLoading ? "animate-spin" : ""
-                }`}
-              />
-              Refresh
-            </button>
-          </div>
-        </section>
+            <div className="relative flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  BlueDart / Eshipz
+                </div>
 
-        <section className="rounded-3xl bg-white p-5 shadow-sm md:p-6">
-          <div className="grid gap-4 lg:grid-cols-[1.5fr_0.8fr_0.6fr]">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-neutral-700">
-                Search
-              </label>
-              <div className="flex items-center rounded-2xl border border-neutral-200 bg-white px-3">
-                <Search className="h-4 w-4 text-neutral-400" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by order id, AWB, receiver..."
-                  className="w-full bg-transparent px-3 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400"
-                />
+                <h1 className="mt-4 text-2xl font-semibold tracking-tight text-neutral-950 md:text-3xl">
+                  External Orders
+                </h1>
+
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-500">
+                  Eshipz orders ko fetch, inspect aur verify karo. AWB, receiver,
+                  shipment status aur value ek jagah visible rahega.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {hasFilters ? (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2.5 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-200"
+                  >
+                    <X className="h-4 w-4" />
+                    Clear
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={externalOrdersLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-neutral-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <RefreshCcw
+                    className={`h-4 w-4 ${
+                      externalOrdersLoading ? "animate-spin" : ""
+                    }`}
+                  />
+                  Refresh
+                </button>
               </div>
             </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-neutral-700">
-                Ship Status
-              </label>
-              <select
-                value={shipStatus}
-                onChange={(e) => {
-                  setShipStatus(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none"
-              >
-                {STATUS_OPTIONS.map((item) => (
-                  <option key={item.value || "all"} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-neutral-700">
-                Per Page
-              </label>
-              <select
-                value={perPage}
-                onChange={(e) => {
-                  setPerPage(Number(e.target.value) || 10);
-                  setPage(1);
-                }}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none"
-              >
-                {[10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n} rows
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <TopCard
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <MetricCard
             icon={Package}
-            label="Fetched Orders"
-            value={String(externalOrders?.length || 0)}
+            label="Visible Orders"
+            value={stats.total}
+            hint={`${stats.fetched} fetched`}
           />
-          <TopCard
+          <MetricCard
             icon={Truck}
-            label="Filtered Results"
-            value={String(filteredOrders?.length || 0)}
+            label="AWB Assigned"
+            value={stats.withAwb}
+            hint="Visible rows"
           />
-          <TopCard
+          <MetricCard
             icon={IndianRupee}
-            label="Visible Order Value"
-            value={formatCurrency(
-              filteredOrders.reduce(
-                (sum, order) => sum + Number(order?.shipmentValue || 0),
-                0
-              )
-            )}
+            label="Shipment Value"
+            value={formatCurrency(stats.totalValue)}
+            hint="Filtered total"
+          />
+          <MetricCard
+            icon={CreditCard}
+            label="COD Amount"
+            value={formatCurrency(stats.codValue)}
+            hint="Filtered total"
+          />
+          <MetricCard
+            icon={Boxes}
+            label="Items"
+            value={stats.totalItems}
+            hint="Visible items"
           />
         </section>
 
-        <section className="overflow-hidden rounded-3xl bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4 md:px-6">
+        <section className="rounded-[2rem] bg-white p-4 shadow-sm md:p-5">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-neutral-800">
+            <Filter className="h-4 w-4" />
+            Filters
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[1.6fr_0.8fr_0.8fr_0.6fr]">
+            <div className="flex items-center rounded-2xl bg-neutral-50 px-3 ring-1 ring-neutral-100 transition focus-within:bg-white focus-within:ring-neutral-200">
+              <Search className="h-4 w-4 text-neutral-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search order, AWB, receiver, status..."
+                className="w-full bg-transparent px-3 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400"
+              />
+            </div>
+
+            <select
+              value={shipStatus}
+              onChange={(e) => {
+                setShipStatus(e.target.value);
+                setPage(1);
+              }}
+              className="w-full rounded-2xl bg-neutral-50 px-4 py-3 text-sm font-medium text-neutral-800 outline-none ring-1 ring-neutral-100 transition focus:bg-white focus:ring-neutral-200"
+            >
+              {STATUS_OPTIONS.map((item) => (
+                <option key={item.value || "all"} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={paymentMode}
+              onChange={(e) => {
+                setPaymentMode(e.target.value);
+                setPage(1);
+              }}
+              className="w-full rounded-2xl bg-neutral-50 px-4 py-3 text-sm font-medium text-neutral-800 outline-none ring-1 ring-neutral-100 transition focus:bg-white focus:ring-neutral-200"
+            >
+              {PAYMENT_OPTIONS.map((item) => (
+                <option key={item.value || "all"} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={perPage}
+              onChange={(e) => {
+                setPerPage(Number(e.target.value) || 20);
+                setPage(1);
+              }}
+              className="w-full rounded-2xl bg-neutral-50 px-4 py-3 text-sm font-medium text-neutral-800 outline-none ring-1 ring-neutral-100 transition focus:bg-white focus:ring-neutral-200"
+            >
+              {[10, 20, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n} rows
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
+
+        {error ? (
+          <section className="rounded-[2rem] bg-rose-50 p-4 text-sm font-medium text-rose-700">
+            {error}
+          </section>
+        ) : null}
+
+        <section className="overflow-hidden rounded-[2rem] bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 md:px-6">
             <div>
-              <h2 className="text-lg font-semibold text-neutral-900">
+              <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
                 Orders List
               </h2>
               <p className="mt-1 text-sm text-neutral-500">
-                External eShipz orders with quick inspection.
+                External Eshipz order data with quick route to detail page.
               </p>
             </div>
+
+            {externalResponse ? (
+              <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-500">
+                External response available
+              </span>
+            ) : null}
           </div>
 
           {externalOrdersLoading ? (
-            <div className="flex items-center gap-3 px-6 py-10 text-sm text-neutral-500">
-              <RefreshCcw className="h-4 w-4 animate-spin" />
-              Loading external orders...
-            </div>
+            <TableLoading />
           ) : filteredOrders?.length ? (
             <>
               <div className="overflow-x-auto">
                 <table className="min-w-full">
-                  <thead className="bg-neutral-50">
-                    <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
-                      <th className="px-6 py-4 font-medium">Order</th>
-                      <th className="px-6 py-4 font-medium">Receiver</th>
-                      <th className="px-6 py-4 font-medium">Status</th>
-                      <th className="px-6 py-4 font-medium">AWB</th>
-                      <th className="px-6 py-4 font-medium">Value</th>
-                      <th className="px-6 py-4 font-medium">Items</th>
-                      <th className="px-6 py-4 font-medium text-right">
+                  <thead className="bg-neutral-50/80">
+                    <tr className="text-left text-xs uppercase tracking-[0.14em] text-neutral-400">
+                      <th className="px-6 py-4 font-semibold">Order</th>
+                      <th className="px-6 py-4 font-semibold">Receiver</th>
+                      <th className="px-6 py-4 font-semibold">Status</th>
+                      <th className="px-6 py-4 font-semibold">AWB / Shipment</th>
+                      <th className="px-6 py-4 font-semibold">Payment</th>
+                      <th className="px-6 py-4 font-semibold">Value</th>
+                      <th className="px-6 py-4 font-semibold">Items</th>
+                      <th className="px-6 py-4 text-right font-semibold">
                         Action
                       </th>
                     </tr>
                   </thead>
 
-                  <tbody>
-                    {filteredOrders.map((order) => {
-                      const receiverName = [
-                        safe(order?.receiver?.first_name),
-                        safe(order?.receiver?.last_name),
-                      ]
-                        .filter(Boolean)
-                        .join(" ");
-
-                      const receiverMeta = [
-                        safe(order?.receiver?.phone),
-                        safe(order?.receiver?.city),
-                      ]
-                        .filter(Boolean)
-                        .join(" • ");
-
-                      const detailId = order?.orderId || order?.id;
+                  <tbody className="divide-y divide-neutral-100">
+                    {filteredOrders.map((order, index) => {
+                      const receiverName = getReceiverName(order?.receiver);
+                      const receiverMeta = getReceiverMeta(order?.receiver);
+                      const detailId = getDetailId(order);
 
                       return (
                         <tr
-                          key={`${order?.id}-${order?.orderId}`}
-                          className="border-t border-neutral-100 align-top"
+                          key={`${order?.id || "order"}-${
+                            order?.orderId || index
+                          }`}
+                          className="align-top transition hover:bg-neutral-50/60"
                         >
                           <td className="px-6 py-4">
-                            <div className="space-y-1">
-                              <p className="text-sm font-semibold text-neutral-900">
+                            <div className="min-w-[180px] space-y-1">
+                              <p className="text-sm font-semibold text-neutral-950">
                                 {order?.orderNumber || order?.orderId || "-"}
                               </p>
-                              <p className="text-xs text-neutral-500">
-                                ID: {order?.id || order?.orderId || "-"}
+                              <p className="flex items-center gap-1.5 text-xs text-neutral-500">
+                                <Hash className="h-3.5 w-3.5" />
+                                {order?.id || order?.orderId || "-"}
                               </p>
                             </div>
                           </td>
 
                           <td className="px-6 py-4">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium text-neutral-900">
+                            <div className="min-w-[210px] space-y-1">
+                              <p className="text-sm font-semibold text-neutral-900">
                                 {receiverName || "-"}
                               </p>
-                              <p className="text-xs text-neutral-500">
+                              <p className="flex items-center gap-1.5 text-xs text-neutral-500">
+                                <MapPin className="h-3.5 w-3.5" />
                                 {receiverMeta || "-"}
                               </p>
                             </div>
                           </td>
 
                           <td className="px-6 py-4">
-                            <div className="flex flex-col gap-2">
-                              <span className="inline-flex w-fit rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
+                            <div className="flex min-w-[150px] flex-col gap-2">
+                              <span
+                                className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${getStatusTone(
+                                  order?.status
+                                )}`}
+                              >
                                 {labelize(order?.status || "unknown")}
                               </span>
+
                               {order?.shipStatus ? (
-                                <span className="inline-flex w-fit rounded-full bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-500">
+                                <span
+                                  className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${getStatusTone(
+                                    order?.shipStatus
+                                  )}`}
+                                >
                                   {labelize(order.shipStatus)}
                                 </span>
                               ) : null}
                             </div>
                           </td>
 
-                          <td className="px-6 py-4 text-sm text-neutral-700">
-                            {order?.awbNumber || "-"}
+                          <td className="px-6 py-4">
+                            <div className="min-w-[170px] space-y-1">
+                              <p className="text-sm font-semibold text-neutral-800">
+                                {order?.awbNumber || order?.awb || "-"}
+                              </p>
+                              <p className="text-xs text-neutral-500">
+                                Shipment: {order?.shipmentId || "-"}
+                              </p>
+                            </div>
                           </td>
 
-                          <td className="px-6 py-4 text-sm text-neutral-700">
-                            {formatCurrency(
-                              order?.shipmentValue,
-                              order?.currency || "INR"
-                            )}
+                          <td className="px-6 py-4">
+                            <span className="inline-flex rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-700">
+                              {labelize(order?.paymentMode || "-")}
+                            </span>
                           </td>
 
-                          <td className="px-6 py-4 text-sm text-neutral-700">
+                          <td className="px-6 py-4">
+                            <div className="min-w-[120px] space-y-1">
+                              <p className="text-sm font-semibold text-neutral-900">
+                                {formatCurrency(
+                                  order?.shipmentValue,
+                                  order?.currency || "INR"
+                                )}
+                              </p>
+                              {Number(order?.codAmount || 0) > 0 ? (
+                                <p className="text-xs text-neutral-500">
+                                  COD:{" "}
+                                  {formatCurrency(
+                                    order?.codAmount,
+                                    order?.currency || "INR"
+                                  )}
+                                </p>
+                              ) : null}
+                            </div>
+                          </td>
+
+                          <td className="px-6 py-4 text-sm font-medium text-neutral-700">
                             {Array.isArray(order?.items)
                               ? order.items.length
                               : 0}
@@ -318,7 +512,7 @@ export default function BlueDartExternalOrdersPage() {
                                 href={`/bluedart/external-orders/${encodeURIComponent(
                                   detailId
                                 )}`}
-                                className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+                                className="inline-flex items-center gap-2 rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
                               >
                                 <FileSearch className="h-4 w-4" />
                                 View
@@ -336,7 +530,12 @@ export default function BlueDartExternalOrdersPage() {
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 px-5 py-4 md:px-6">
                 <p className="text-sm text-neutral-500">
-                  Showing {filteredOrders.length} result(s) on page {page}
+                  Showing{" "}
+                  <span className="font-semibold text-neutral-800">
+                    {filteredOrders.length}
+                  </span>{" "}
+                  result(s) on page{" "}
+                  <span className="font-semibold text-neutral-800">{page}</span>
                 </p>
 
                 <div className="flex items-center gap-2">
@@ -344,21 +543,23 @@ export default function BlueDartExternalOrdersPage() {
                     type="button"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1 || externalOrdersLoading}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Prev
                   </button>
 
-                  <div className="rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-700">
+                  <div className="rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white">
                     Page {page}
                   </div>
 
                   <button
                     type="button"
                     onClick={() => setPage((p) => p + 1)}
-                    disabled={externalOrdersLoading || externalOrders.length < perPage}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-50"
+                    disabled={
+                      externalOrdersLoading || (externalOrders || []).length < perPage
+                    }
+                    className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Next
                     <ChevronRight className="h-4 w-4" />
@@ -367,17 +568,7 @@ export default function BlueDartExternalOrdersPage() {
               </div>
             </>
           ) : (
-            <div className="px-6 py-12 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100">
-                <Package className="h-5 w-5 text-neutral-500" />
-              </div>
-              <h3 className="mt-4 text-base font-semibold text-neutral-900">
-                No external orders found
-              </h3>
-              <p className="mt-1 text-sm text-neutral-500">
-                Search ya filters change karke dubara try karo.
-              </p>
-            </div>
+            <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
           )}
         </section>
       </div>
@@ -385,22 +576,67 @@ export default function BlueDartExternalOrdersPage() {
   );
 }
 
-function TopCard({ icon: Icon, label, value }) {
+function MetricCard({ icon: Icon, label, value, hint }) {
   return (
-    <div className="rounded-3xl bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+    <div className="rounded-[2rem] bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">
             {label}
           </p>
-          <p className="mt-2 text-lg font-semibold text-neutral-900 break-all">
+          <p className="mt-2 truncate text-xl font-semibold tracking-tight text-neutral-950">
             {value}
           </p>
+          {hint ? <p className="mt-1 text-xs text-neutral-500">{hint}</p> : null}
         </div>
+
         <div className="rounded-2xl bg-neutral-100 p-3">
           <Icon className="h-5 w-5 text-neutral-700" />
         </div>
       </div>
+    </div>
+  );
+}
+
+function TableLoading() {
+  return (
+    <div className="space-y-3 px-6 py-8">
+      {[1, 2, 3, 4, 5].map((item) => (
+        <div
+          key={item}
+          className="h-16 animate-pulse rounded-2xl bg-neutral-100"
+        />
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ hasFilters, onClear }) {
+  return (
+    <div className="px-6 py-14 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-100">
+        <Package className="h-6 w-6 text-neutral-500" />
+      </div>
+
+      <h3 className="mt-4 text-base font-semibold text-neutral-950">
+        No external orders found
+      </h3>
+
+      <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-neutral-500">
+        Eshipz se orders nahi aaye ya current filters ke according result empty
+        hai.
+      </p>
+
+      {hasFilters ? (
+        <button
+          type="button"
+          onClick={onClear}
+          className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-neutral-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800"
+        >
+          <X className="h-4 w-4" />
+          Clear Filters
+        </button>
+      ) : null}
     </div>
   );
 }

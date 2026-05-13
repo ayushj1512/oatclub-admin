@@ -10,24 +10,29 @@ import {
   ChevronLeft,
   ChevronRight,
   Truck,
+  RadioTower,
 } from "lucide-react";
 
 import { useOrderStore } from "@/store/orderStore";
 import { useBlueDartStore } from "@/store/bluedartStore";
 import BlueDartBookingTable from "@/components/bluedart/BlueDartBookingTable";
-import BlueDartBookingFilters from "@/components/bluedart/BlueDartBookingFilters";
 
 const safe = (v) => (v == null ? "" : String(v));
 const lower = (v) => safe(v).toLowerCase().trim();
 
 const BOOKED_STATUSES = new Set([
   "created",
+  "booked",
   "pickup_pending",
+  "pickup_scheduled",
   "picked",
+  "shipped",
   "in_transit",
   "out_for_delivery",
   "delivered",
 ]);
+
+const PUSHED_STATUSES = new Set(["draft", "order_pushed", "processing"]);
 
 const LOCAL_PAGE_SIZE = 50;
 
@@ -83,15 +88,26 @@ const matchesSearch = (order, query) => {
   return tokens.some((token) => haystack.some((value) => value.includes(token)));
 };
 
+const hasShipmentIdentity = (shipment = {}) =>
+  Boolean(
+    safe(shipment?.awbNumber).trim() ||
+      safe(shipment?.awb).trim() ||
+      safe(shipment?.shipmentId).trim() ||
+      safe(shipment?.shipmentIdExternal).trim()
+  );
+
 const getShipmentPriorityScore = (shipment = {}) => {
   const status = lower(shipment?.status);
-  const hasAwb = Boolean(safe(shipment?.awbNumber).trim());
+  const hasIdentity = hasShipmentIdentity(shipment);
 
   let score = 0;
-  if (hasAwb) score += 100;
+
+  if (hasIdentity) score += 100;
   if (BOOKED_STATUSES.has(status)) score += 50;
-  if (status === "order_pushed") score += 25;
-  if (status === "cancelled" || status === "failed") score -= 100;
+  if (PUSHED_STATUSES.has(status)) score += 25;
+  if (status === "cancelled" || status === "failed" || status === "rto") {
+    score -= 100;
+  }
 
   const updatedAt = new Date(shipment?.updatedAt || 0).getTime() || 0;
   const createdAt = new Date(shipment?.createdAt || 0).getTime() || 0;
@@ -103,13 +119,35 @@ const getOrderBookingState = (shipment) => {
   if (!shipment?._id) return "not_booked";
 
   const status = lower(shipment?.status);
-  const hasAwb = Boolean(safe(shipment?.awbNumber).trim());
 
-  if (hasAwb || BOOKED_STATUSES.has(status)) return "booked";
-  if (status === "order_pushed") return "order_pushed";
+  if (hasShipmentIdentity(shipment) || BOOKED_STATUSES.has(status)) {
+    return "booked";
+  }
+
+  if (PUSHED_STATUSES.has(status)) {
+    return "order_pushed";
+  }
 
   return "not_booked";
 };
+
+const StatCard = ({ icon: Icon, label, value, hint }) => (
+  <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-neutral-100">
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="rounded-2xl bg-neutral-100 p-2.5 text-black">
+        <Icon size={18} />
+      </div>
+      {hint ? (
+        <span className="rounded-full bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-500 ring-1 ring-neutral-100">
+          {hint}
+        </span>
+      ) : null}
+    </div>
+
+    <p className="text-sm font-medium text-neutral-500">{label}</p>
+    <p className="mt-2 text-3xl font-bold tracking-tight text-black">{value}</p>
+  </div>
+);
 
 export default function BlueDartPage() {
   const {
@@ -128,6 +166,7 @@ export default function BlueDartPage() {
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [bookingFilter, setBookingFilter] = useState("all");
   const [fulfillmentFilter, setFulfillmentFilter] = useState("all");
+  const [carrierFilter, setCarrierFilter] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -144,12 +183,13 @@ export default function BlueDartPage() {
         fetchShipments({
           page: 1,
           limit: 2000,
+          carrierName: carrierFilter === "all" ? "" : carrierFilter,
         }),
       ]);
     } finally {
       setRefreshing(false);
     }
-  }, [fetchAllOrdersAllPages, fetchShipments]);
+  }, [fetchAllOrdersAllPages, fetchShipments, carrierFilter]);
 
   useEffect(() => {
     loadData();
@@ -163,6 +203,7 @@ export default function BlueDartPage() {
       if (!orderNumber) continue;
 
       const existing = map.get(orderNumber);
+
       if (
         !existing ||
         getShipmentPriorityScore(shipment) >= getShipmentPriorityScore(existing)
@@ -172,6 +213,19 @@ export default function BlueDartPage() {
     }
 
     return map;
+  }, [shipments]);
+
+  const carrierOptions = useMemo(() => {
+    const set = new Set();
+
+    for (const shipment of shipments || []) {
+      const carrier = safe(shipment?.carrierName || shipment?.courierName);
+      if (carrier) set.add(carrier);
+    }
+
+    if (!set.size) set.add("BlueDart");
+
+    return [...set];
   }, [shipments]);
 
   const allEligibleOrders = useMemo(
@@ -198,6 +252,14 @@ export default function BlueDartPage() {
       );
     }
 
+    if (carrierFilter !== "all") {
+      rows = rows.filter((order) => {
+        const shipment = shipmentMap.get(normalizeOrderNumber(order?.orderNumber));
+        const carrier = safe(shipment?.carrierName || shipment?.courierName);
+        return lower(carrier) === lower(carrierFilter);
+      });
+    }
+
     if (bookingFilter !== "all") {
       rows = rows.filter((order) => {
         const shipment = shipmentMap.get(normalizeOrderNumber(order?.orderNumber));
@@ -212,6 +274,7 @@ export default function BlueDartPage() {
     paymentFilter,
     fulfillmentFilter,
     bookingFilter,
+    carrierFilter,
     shipmentMap,
   ]);
 
@@ -222,7 +285,7 @@ export default function BlueDartPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, paymentFilter, fulfillmentFilter, bookingFilter]);
+  }, [search, paymentFilter, fulfillmentFilter, bookingFilter, carrierFilter]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -252,30 +315,41 @@ export default function BlueDartPage() {
       booked,
       pushed,
       notBooked,
+      localShipments: Array.isArray(shipments) ? shipments.length : 0,
     };
-  }, [filteredOrders, shipmentMap]);
+  }, [filteredOrders, shipmentMap, shipments]);
 
   const loading = ordersLoading || shipmentsLoading || refreshing;
 
   return (
-    <main className="space-y-6 bg-[#f5f5f5] p-4 sm:p-6">
-      <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="rounded-2xl bg-neutral-100 p-3 text-black">
+    <main className="min-h-screen space-y-6 bg-[#f6f6f6] p-4 sm:p-6">
+      <section className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-neutral-100">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="rounded-3xl bg-black p-3 text-white shadow-sm">
               <PackageCheck size={22} />
             </div>
 
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-black">
-                BlueDart Booking
-              </h1>
-              <p className="mt-1 text-sm text-neutral-500">
-                Sirf confirmed orders dikh rahe hain. Fulfillment filter se{" "}
-                <span className="font-semibold text-black">
-                  all / processing / packed
-                </span>{" "}
-                select kar sakte ho.
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-black">
+                  Eshipz / BlueDart Booking
+                </h1>
+
+                <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-600">
+                  Provider: eshipz
+                </span>
+
+                <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-600">
+                  Carrier: BlueDart
+                </span>
+              </div>
+
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-500">
+                Confirmed orders yahan se Eshipz partner ke through book honge.
+                BlueDart sirf carrier/courier hai, backend order model me provider{" "}
+                <span className="font-semibold text-black">eshipz</span> save
+                hoga.
               </p>
             </div>
           </div>
@@ -284,7 +358,7 @@ export default function BlueDartPage() {
             type="button"
             onClick={loadData}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-2xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
             Refresh
@@ -292,54 +366,26 @@ export default function BlueDartPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="rounded-2xl bg-neutral-100 p-2 text-black">
-              <Package size={18} />
-            </div>
-            <p className="text-sm font-medium text-neutral-500">
-              Total Matching Orders
-            </p>
-          </div>
-          <p className="text-3xl font-bold text-black">
-            {stats.totalMatchingOrders}
-          </p>
-        </div>
-
-        <div className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="rounded-2xl bg-neutral-100 p-2 text-black">
-              <CheckCircle2 size={18} />
-            </div>
-            <p className="text-sm font-medium text-neutral-500">Booked</p>
-          </div>
-          <p className="text-3xl font-bold text-black">{stats.booked}</p>
-        </div>
-
-        <div className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="rounded-2xl bg-neutral-100 p-2 text-black">
-              <Truck size={18} />
-            </div>
-            <p className="text-sm font-medium text-neutral-500">Pushed</p>
-          </div>
-          <p className="text-3xl font-bold text-black">{stats.pushed}</p>
-        </div>
-
-        <div className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="rounded-2xl bg-neutral-100 p-2 text-black">
-              <Clock3 size={18} />
-            </div>
-            <p className="text-sm font-medium text-neutral-500">Not Booked</p>
-          </div>
-          <p className="text-3xl font-bold text-black">{stats.notBooked}</p>
-        </div>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <StatCard
+          icon={Package}
+          label="Matching Orders"
+          value={stats.totalMatchingOrders}
+          hint="confirmed"
+        />
+        <StatCard icon={CheckCircle2} label="Booked" value={stats.booked} />
+        <StatCard icon={Truck} label="Pushed" value={stats.pushed} />
+        <StatCard icon={Clock3} label="Not Booked" value={stats.notBooked} />
+        <StatCard
+          icon={RadioTower}
+          label="Local Shipments"
+          value={stats.localShipments}
+          hint="eshipz"
+        />
       </section>
 
-      <section className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-neutral-100">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <div>
             <label className="mb-2 block text-sm font-medium text-neutral-700">
               Search
@@ -349,7 +395,7 @@ export default function BlueDartPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Order no, name, phone..."
-              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-black"
+              className="w-full rounded-2xl bg-neutral-50 px-4 py-2.5 text-sm outline-none ring-1 ring-neutral-200 transition focus:bg-white focus:ring-black"
             />
           </div>
 
@@ -360,22 +406,23 @@ export default function BlueDartPage() {
             <select
               value={paymentFilter}
               onChange={(e) => setPaymentFilter(e.target.value)}
-              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-black"
+              className="w-full rounded-2xl bg-neutral-50 px-4 py-2.5 text-sm outline-none ring-1 ring-neutral-200 transition focus:bg-white focus:ring-black"
             >
               <option value="all">All</option>
               <option value="cod">COD</option>
               <option value="razorpay">Razorpay</option>
+              <option value="exchange">Exchange</option>
             </select>
           </div>
 
           <div>
             <label className="mb-2 block text-sm font-medium text-neutral-700">
-              Fulfillment Status
+              Fulfillment
             </label>
             <select
               value={fulfillmentFilter}
               onChange={(e) => setFulfillmentFilter(e.target.value)}
-              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-black"
+              className="w-full rounded-2xl bg-neutral-50 px-4 py-2.5 text-sm outline-none ring-1 ring-neutral-200 transition focus:bg-white focus:ring-black"
             >
               <option value="all">All</option>
               <option value="processing">Processing</option>
@@ -385,12 +432,12 @@ export default function BlueDartPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-neutral-700">
-              Booking Status
+              Booking
             </label>
             <select
               value={bookingFilter}
               onChange={(e) => setBookingFilter(e.target.value)}
-              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-black"
+              className="w-full rounded-2xl bg-neutral-50 px-4 py-2.5 text-sm outline-none ring-1 ring-neutral-200 transition focus:bg-white focus:ring-black"
             >
               <option value="all">All</option>
               <option value="booked">Booked</option>
@@ -398,10 +445,28 @@ export default function BlueDartPage() {
               <option value="not_booked">Not Booked</option>
             </select>
           </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-neutral-700">
+              Carrier
+            </label>
+            <select
+              value={carrierFilter}
+              onChange={(e) => setCarrierFilter(e.target.value)}
+              className="w-full rounded-2xl bg-neutral-50 px-4 py-2.5 text-sm outline-none ring-1 ring-neutral-200 transition focus:bg-white focus:ring-black"
+            >
+              <option value="all">All</option>
+              {carrierOptions.map((carrier) => (
+                <option key={carrier} value={carrier}>
+                  {carrier}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-neutral-200 bg-white p-2 shadow-sm">
+      <section className="overflow-hidden rounded-[2rem] bg-white p-2 shadow-sm ring-1 ring-neutral-100">
         <BlueDartBookingTable
           orders={paginatedOrders}
           shipments={shipments}
@@ -409,7 +474,7 @@ export default function BlueDartPage() {
         />
       </section>
 
-      <section className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
+      <section className="rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-neutral-100">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-neutral-600">
             Showing{" "}
@@ -428,13 +493,13 @@ export default function BlueDartPage() {
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1 || loading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ChevronLeft size={16} />
               Prev
             </button>
 
-            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-2 text-sm font-semibold text-black">
+            <div className="rounded-2xl bg-neutral-50 px-4 py-2 text-sm font-semibold text-black ring-1 ring-neutral-100">
               {page} / {totalPages}
             </div>
 
@@ -442,7 +507,7 @@ export default function BlueDartPage() {
               type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages || loading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next
               <ChevronRight size={16} />

@@ -1069,25 +1069,27 @@ export default function OrdersListPage() {
         </Card>
 
         {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* Table */}
+<div className="overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-black/[0.04]">
   <div className="overflow-x-auto">
-    <table className="w-full text-sm">
-      <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
+    <table className="w-full min-w-[1180px] text-sm">
+      <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
         <tr>
-          <th className="py-4 px-5 text-left font-semibold">Order #</th>
-          <th className="py-4 px-5 text-left font-semibold">Customer</th>
-          <th className="py-4 px-5 text-left font-semibold">Payment</th>
-          <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
-          <th className="py-4 px-5 text-left font-semibold">Amount</th>
-          <th className="py-4 px-5 text-left font-semibold">Date</th>
-          <th className="py-4 px-5 text-left font-semibold">Action</th>
+          <th className="px-5 py-4 text-left font-semibold">Order</th>
+          <th className="px-5 py-4 text-left font-semibold">Customer</th>
+          <th className="px-5 py-4 text-left font-semibold">Payment Status</th>
+          <th className="px-5 py-4 text-left font-semibold">Method</th>
+          <th className="px-5 py-4 text-left font-semibold">Fulfillment</th>
+          <th className="px-5 py-4 text-left font-semibold">Amount</th>
+          <th className="px-5 py-4 text-left font-semibold">Date</th>
+          <th className="px-5 py-4 text-right font-semibold">Actions</th>
         </tr>
       </thead>
 
       <tbody className="divide-y divide-gray-100">
         {loading && !hasLoadedOnce ? (
           <tr>
-            <td colSpan={7} className="py-14 text-center text-gray-500">
+            <td colSpan={8} className="py-14 text-center text-gray-500">
               <div className="inline-flex items-center gap-2">
                 <Loader2 size={18} className="animate-spin" />
                 Loading orders...
@@ -1112,7 +1114,7 @@ export default function OrdersListPage() {
           })
         ) : (
           <tr>
-            <td colSpan={7} className="py-12 text-center text-gray-500">
+            <td colSpan={8} className="py-12 text-center text-gray-500">
               No orders found for applied filters.
             </td>
           </tr>

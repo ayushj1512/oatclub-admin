@@ -164,10 +164,13 @@ export default function OrderDetailsClient({ id }) {
     setTrackingId(order.trackingDetails?.trackingId || "");
     setCourierName(order.trackingDetails?.courierName || "");
     setTrackingUrl(
-      order?.shipment?.shiprocket?.trackingUrl ||
-        order?.trackingDetails?.trackingUrl ||
-        ""
-    );
+  order?.shipment?.shiprocket?.trackingUrl ||
+    order?.shipment?.xpressbees?.trackingUrl ||
+    order?.shipment?.bluedart?.trackingUrl ||
+    order?.shipment?.eshipz?.trackingUrl ||
+    order?.trackingDetails?.trackingUrl ||
+    ""
+);
     setRemarks(order.adminRemarks || "");
   }, [order]);
 
@@ -524,10 +527,13 @@ export default function OrderDetailsClient({ id }) {
             trackingId={trackingId}
             courierName={courierName}
             trackingUrl={
-              order?.shipment?.shiprocket?.trackingUrl ||
-              order?.trackingDetails?.trackingUrl ||
-              ""
-            }
+  order?.shipment?.shiprocket?.trackingUrl ||
+  order?.shipment?.xpressbees?.trackingUrl ||
+  order?.shipment?.bluedart?.trackingUrl ||
+  order?.shipment?.eshipz?.trackingUrl ||
+  order?.trackingDetails?.trackingUrl ||
+  ""
+}
             onRefresh={() => fetchOrderById(order._id)}
           />
 

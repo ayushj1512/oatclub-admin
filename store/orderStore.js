@@ -96,6 +96,8 @@ export const useOrderStore = create((set, get) => ({
 duplicateLoading: false,
 confirmationDetails: null,
 confirmationDetailsLoading: false,
+orderDashboard: null,
+orderDashboardLoading: false,
 
   _start: () => set({ loading: true, error: null }),
   _success: () => set({ loading: false }),
@@ -247,6 +249,35 @@ confirmationDetailsLoading: false,
     set({ orders, ordersMeta: null });
     return orders;
   },
+
+  fetchOrdersDashboard: async () => {
+  set({
+    orderDashboardLoading: true,
+    error: null,
+  });
+
+  try {
+    const data = await get()._get(`/api/orders/dashboard`, { silent: true });
+
+    const dashboard = data?.data || data || null;
+
+    set({
+      orderDashboard: dashboard,
+      orderDashboardLoading: false,
+      error: null,
+    });
+
+    return dashboard;
+  } catch (error) {
+    set({
+      orderDashboard: null,
+      orderDashboardLoading: false,
+      error: error?.message || "Failed to fetch orders dashboard",
+    });
+
+    throw error;
+  }
+},
 
   fetchAllOrders: async (filters = {}) => {
   const f = { ...(filters || {}) };
@@ -766,5 +797,8 @@ markDuplicateOrderAlerts: async () => {
       customerSupportOrderDetails: {},
       confirmationDetails: null,
 confirmationDetailsLoading: false,
+    // ✅ dashboard
+    orderDashboard: null,
+    orderDashboardLoading: false,
     }),
 }));

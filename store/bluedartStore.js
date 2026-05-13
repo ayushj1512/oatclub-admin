@@ -10,12 +10,13 @@ const API =
 
 const apiBase = API ? API.replace(/\/+$/, "") : "";
 
-/* ---------------- helpers ---------------- */
+const BASE_ROUTE = "/api/bluedart";
 
 const safe = (v) => (v == null ? "" : String(v));
 
 const safeJson = async (res) => {
   const text = await res.text();
+
   try {
     return text ? JSON.parse(text) : {};
   } catch {
@@ -84,6 +85,8 @@ const defaultFilters = {
   q: "",
   status: "",
   shipmentType: "",
+  carrierName: "",
+  carrierSlug: "",
   page: 1,
   limit: 20,
 };
@@ -106,51 +109,95 @@ const normalizeTrackingEvent = (ev = {}) => ({
 
 const normalizeShipment = (s = {}) => ({
   _id: s?._id || "",
+
+  provider: s?.provider || "eshipz",
+  partner: s?.partner || "eshipz",
+
+  carrierName: s?.carrierName || "BlueDart",
+  carrierSlug: s?.carrierSlug || "bluedart",
+
   orderNumber: s?.orderNumber || "",
   orderId: s?.orderId || null,
+  shipmentType: s?.shipmentType || "",
+
   referenceNumber: s?.referenceNumber || "",
-  awbNumber: s?.awbNumber || "",
-  shipmentIdExternal: s?.shipmentIdExternal || "",
+
+  awbNumber: s?.awbNumber || s?.awb || "",
+  awb: s?.awb || s?.awbNumber || "",
+
+  shipmentIdExternal: s?.shipmentIdExternal || s?.shipmentId || "",
+  shipmentId: s?.shipmentId || s?.shipmentIdExternal || "",
+
   externalOrderId: s?.externalOrderId || "",
+  eshipzOrderId: s?.eshipzOrderId || s?.externalOrderId || "",
+
+  trackingUrl: s?.trackingUrl || "",
   labelUrl: s?.labelUrl || "",
   manifestUrl: s?.manifestUrl || "",
   invoiceUrl: s?.invoiceUrl || "",
+
   status: s?.status || "",
+  rawStatus: s?.rawStatus || "",
   statusCode: s?.statusCode || "",
-  shipmentType: s?.shipmentType || "",
+
   paymentMode: s?.paymentMode || "",
   serviceType: s?.serviceType || "",
+
   declaredValue: Number(s?.declaredValue ?? 0) || 0,
   currency: s?.currency || "INR",
+
   weight: Number(s?.weight ?? 0) || 0,
   pieces: Number(s?.pieces ?? 1) || 1,
+
   dimensions: {
     length: Number(s?.dimensions?.length ?? 0) || 0,
     breadth: Number(s?.dimensions?.breadth ?? 0) || 0,
     height: Number(s?.dimensions?.height ?? 0) || 0,
   },
+
   codAmount: Number(s?.codAmount ?? 0) || 0,
+
   latestTrackingRemark: s?.latestTrackingRemark || "",
   latestTrackingLocation: s?.latestTrackingLocation || "",
+
   trackingEvents: Array.isArray(s?.trackingEvents)
     ? s.trackingEvents.map(normalizeTrackingEvent)
     : [],
-  deliveredAt: s?.deliveredAt || null,
-  shippedAt: s?.shippedAt || null,
-  pickedUpAt: s?.pickedUpAt || null,
+
+  expectedDelivery: s?.expectedDelivery || null,
+
   bookingRequestedAt: s?.bookingRequestedAt || null,
+  bookedAt: s?.bookedAt || null,
+  pickupScheduledAt: s?.pickupScheduledAt || null,
+  pickedUpAt: s?.pickedUpAt || null,
+  shippedAt: s?.shippedAt || null,
+  outForDeliveryAt: s?.outForDeliveryAt || null,
+  deliveredAt: s?.deliveredAt || null,
+  rtoAt: s?.rtoAt || null,
+  failedAt: s?.failedAt || null,
+
   lastSyncedAt: s?.lastSyncedAt || null,
+  lastTrackAt: s?.lastTrackAt || null,
+  lastWebhookAt: s?.lastWebhookAt || null,
+
   syncError: s?.syncError || "",
   syncPending: Boolean(s?.syncPending),
+
   isCancelled: Boolean(s?.isCancelled),
   cancelledAt: s?.cancelledAt || null,
+
   notes: s?.notes || "",
+
   recipient: s?.recipient || { ...defaultAddress },
   sender: s?.sender || { ...defaultAddress },
+
   externalMeta: s?.externalMeta || null,
+
   rawCreateRequest: s?.rawCreateRequest || null,
   rawCreateResponse: s?.rawCreateResponse || null,
   rawTrackingResponse: s?.rawTrackingResponse || null,
+  rawWebhookPayload: s?.rawWebhookPayload || null,
+
   createdAt: s?.createdAt || null,
   updatedAt: s?.updatedAt || null,
 });
@@ -160,8 +207,10 @@ const normalizeExternalOrder = (o = {}) => ({
   orderId: o?.order_id || o?.id || "",
   orderNumber: o?.order_number || o?.orderNumber || "",
   awbNumber: o?.awb_number || o?.awb || "",
+  awb: o?.awb || o?.awb_number || "",
+  shipmentId: o?.shipment_id || o?.shipmentId || "",
   status: o?.order_status || o?.status || "",
-  shipStatus: o?.ship_status || "",
+  shipStatus: o?.ship_status || o?.shipment_status || "",
   paymentMode: o?.payment_mode || "",
   shipmentValue: Number(o?.shipment_value ?? 0) || 0,
   codAmount: Number(o?.cod_amount ?? 0) || 0,
@@ -187,13 +236,8 @@ const normalizeEddPrediction = (input = null) => {
     minDays: Number(p?.min_days ?? p?.minimum_days ?? 0) || 0,
     maxDays: Number(p?.max_days ?? p?.maximum_days ?? 0) || 0,
     slaDays:
-      Number(
-        p?.exp_del_days ??
-          p?.sla_days ??
-          p?.predicted_days ??
-          0
-      ) || 0,
-    courier: p?.slug || p?.courier || "",
+      Number(p?.exp_del_days ?? p?.sla_days ?? p?.predicted_days ?? 0) || 0,
+    courier: p?.slug || p?.courier || p?.carrier || "bluedart",
     originPincode: p?.origin_pincode || "",
     destinationPincode: p?.destination_pincode || "",
     dispatchDate: p?.dispatch_date || "",
@@ -223,8 +267,6 @@ const withLoader = async (set, key, fn) => {
   }
 };
 
-/* ---------------- store ---------------- */
-
 export const useBlueDartStore = create((set, get) => ({
   shipments: [],
   shipment: null,
@@ -234,6 +276,8 @@ export const useBlueDartStore = create((set, get) => ({
   externalOrder: null,
   eddPrediction: null,
   externalResponse: null,
+
+  lastUpdatedOrder: null,
 
   listLoading: false,
   shipmentLoading: false,
@@ -253,7 +297,11 @@ export const useBlueDartStore = create((set, get) => ({
 
   setFilters: (patch = {}) =>
     set((state) => ({
-      filters: { ...state.filters, ...patch },
+      filters: {
+        ...state.filters,
+        ...patch,
+        page: patch.page ?? state.filters.page,
+      },
     })),
 
   resetFilters: () =>
@@ -270,6 +318,7 @@ export const useBlueDartStore = create((set, get) => ({
       externalOrder: null,
       eddPrediction: null,
       externalResponse: null,
+      lastUpdatedOrder: null,
       error: "",
       errorData: null,
       successMessage: "",
@@ -279,7 +328,7 @@ export const useBlueDartStore = create((set, get) => ({
     try {
       return await withLoader(set, "listLoading", async () => {
         const filters = { ...get().filters, ...override };
-        const data = await request("/api/bluedart/shipments", {}, filters);
+        const data = await request(`${BASE_ROUTE}/shipments`, {}, filters);
 
         set({
           shipments: Array.isArray(data?.shipments)
@@ -302,7 +351,7 @@ export const useBlueDartStore = create((set, get) => ({
   fetchShipmentById: async (id) => {
     try {
       return await withLoader(set, "shipmentLoading", async () => {
-        const data = await request(`/api/bluedart/shipments/${id}`);
+        const data = await request(`${BASE_ROUTE}/shipments/${id}`);
         const shipment = normalizeShipment(data?.shipment || {});
 
         set({
@@ -326,7 +375,7 @@ export const useBlueDartStore = create((set, get) => ({
     try {
       return await withLoader(set, "shipmentLoading", async () => {
         const data = await request(
-          `/api/bluedart/shipments/order/${encodeURIComponent(orderNumber)}`
+          `${BASE_ROUTE}/shipments/order/${encodeURIComponent(orderNumber)}`
         );
 
         const rows = Array.isArray(data?.shipments)
@@ -351,9 +400,9 @@ export const useBlueDartStore = create((set, get) => ({
   createShipmentFromOrder: async (payload) => {
     try {
       return await withLoader(set, "creating", async () => {
-        set({ externalResponse: null });
+        set({ externalResponse: null, lastUpdatedOrder: null });
 
-        const data = await request("/api/bluedart/shipments/create-from-order", {
+        const data = await request(`${BASE_ROUTE}/shipments/create-from-order`, {
           method: "POST",
           body: JSON.stringify(payload),
         });
@@ -362,7 +411,10 @@ export const useBlueDartStore = create((set, get) => ({
 
         set((state) => {
           const shipments = upsertById(state.shipments, shipment);
-          const total = Math.max(Number(state.pagination?.total || 0), shipments.length);
+          const total = Math.max(
+            Number(state.pagination?.total || 0),
+            shipments.length
+          );
 
           return {
             shipment,
@@ -371,6 +423,7 @@ export const useBlueDartStore = create((set, get) => ({
               : state.orderShipments,
             shipments,
             externalResponse: data?.externalResponse || null,
+            lastUpdatedOrder: data?.order || null,
             successMessage: data?.message || "Shipment created successfully",
             pagination: {
               ...state.pagination,
@@ -383,10 +436,12 @@ export const useBlueDartStore = create((set, get) => ({
           };
         });
 
-        toast.success(data?.message || "Shipment created");
+        toast.success(data?.message || "Eshipz shipment created");
+
         return {
           success: true,
           shipment,
+          order: data?.order || null,
           externalResponse: data?.externalResponse || null,
           data,
         };
@@ -401,7 +456,7 @@ export const useBlueDartStore = create((set, get) => ({
   trackShipment: async (id) => {
     try {
       return await withLoader(set, "tracking", async () => {
-        const data = await request(`/api/bluedart/shipments/${id}/track`, {
+        const data = await request(`${BASE_ROUTE}/shipments/${id}/track`, {
           method: "POST",
         });
 
@@ -411,11 +466,18 @@ export const useBlueDartStore = create((set, get) => ({
           shipment,
           orderShipments: replaceById(state.orderShipments, shipment),
           shipments: replaceById(state.shipments, shipment),
+          lastUpdatedOrder: data?.order || null,
           successMessage: data?.message || "Shipment tracked successfully",
         }));
 
         toast.success(data?.message || "Shipment tracked");
-        return { success: true, shipment, data };
+
+        return {
+          success: true,
+          shipment,
+          order: data?.order || null,
+          data,
+        };
       });
     } catch (err) {
       set({ error: err.message, errorData: err.data || null });
@@ -424,11 +486,12 @@ export const useBlueDartStore = create((set, get) => ({
     }
   },
 
-  bulkSyncShipments: async () => {
+  bulkSyncShipments: async (payload = {}) => {
     try {
       return await withLoader(set, "bulkSyncing", async () => {
-        const data = await request("/api/bluedart/shipments/bulk-sync", {
+        const data = await request(`${BASE_ROUTE}/shipments/bulk-sync`, {
           method: "POST",
+          body: JSON.stringify(payload || {}),
         });
 
         set({
@@ -436,6 +499,7 @@ export const useBlueDartStore = create((set, get) => ({
         });
 
         toast.success(data?.message || "Bulk sync completed");
+
         await get().fetchShipments();
 
         return { success: true, data };
@@ -450,7 +514,7 @@ export const useBlueDartStore = create((set, get) => ({
   fetchExternalOrders: async (params = {}) => {
     try {
       return await withLoader(set, "externalOrdersLoading", async () => {
-        const data = await request("/api/bluedart/orders-api", {}, params);
+        const data = await request(`${BASE_ROUTE}/orders-api`, {}, params);
 
         set({
           externalOrders: Array.isArray(data?.orders)
@@ -473,7 +537,7 @@ export const useBlueDartStore = create((set, get) => ({
     try {
       return await withLoader(set, "externalOrderLoading", async () => {
         const data = await request(
-          `/api/bluedart/orders-api/${encodeURIComponent(salesChannelOrderId)}`
+          `${BASE_ROUTE}/orders-api/${encodeURIComponent(salesChannelOrderId)}`
         );
 
         set({
@@ -494,7 +558,7 @@ export const useBlueDartStore = create((set, get) => ({
   fetchEddPrediction: async (payload) => {
     try {
       return await withLoader(set, "eddLoading", async () => {
-        const data = await request("/api/bluedart/edd-prediction", {
+        const data = await request(`${BASE_ROUTE}/edd-prediction`, {
           method: "POST",
           body: JSON.stringify(payload),
         });
