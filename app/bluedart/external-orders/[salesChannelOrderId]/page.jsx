@@ -14,11 +14,16 @@ import {
   Truck,
   Boxes,
   Hash,
-  FileJson,
   IndianRupee,
   ShieldCheck,
   ExternalLink,
-  Copy,
+  Phone,
+  Mail,
+  Ruler,
+  Weight,
+  CalendarClock,
+  Building2,
+  BadgeCheck,
 } from "lucide-react";
 
 import { useBlueDartStore } from "@/store/bluedartStore";
@@ -30,6 +35,21 @@ const labelize = (value = "") =>
     .replace(/_/g, " ")
     .replace(/-/g, " ")
     .replace(/\b\w/g, (m) => m.toUpperCase());
+
+const pick = (obj = {}, keys = []) => {
+  for (const key of keys) {
+    const value = obj?.[key];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return "";
+};
+
+const firstObject = (...items) =>
+  items.find((item) => item && typeof item === "object" && !Array.isArray(item)) ||
+  {};
+
+const firstArray = (...items) =>
+  items.find((item) => Array.isArray(item) && item.length) || [];
 
 const formatCurrency = (amount, currency = "INR") => {
   const value = Number(amount || 0);
@@ -46,6 +66,18 @@ const formatCurrency = (amount, currency = "INR") => {
   }
 };
 
+const formatDateTime = (value) => {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return safe(value);
+
+  return date.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+};
+
 const getStatusTone = (status = "") => {
   const s = safe(status).toLowerCase();
 
@@ -60,26 +92,25 @@ const getStatusTone = (status = "") => {
   return "bg-neutral-100 text-neutral-700";
 };
 
-const pick = (obj = {}, keys = []) => {
-  for (const key of keys) {
-    if (obj?.[key] !== undefined && obj?.[key] !== null && obj?.[key] !== "") {
-      return obj[key];
-    }
-  }
-  return "";
-};
-
 const getName = (person = {}) =>
   safe(
-    pick(person, ["name", "full_name", "fullName"]) ||
+    pick(person, ["name", "full_name", "fullName", "company_name"]) ||
       [person?.first_name, person?.last_name].filter(Boolean).join(" ") ||
       [person?.firstName, person?.lastName].filter(Boolean).join(" ")
   ).trim();
 
 const getPhone = (person = {}) =>
-  pick(person, ["phone", "mobile", "contact", "contact_number", "phone_number"]);
+  pick(person, [
+    "phone",
+    "mobile",
+    "contact",
+    "contact_number",
+    "phone_number",
+    "contactNo",
+  ]);
 
-const getEmail = (person = {}) => pick(person, ["email", "email_id"]);
+const getEmail = (person = {}) =>
+  pick(person, ["email", "email_id", "emailId"]);
 
 const getAddress = (person = {}) =>
   [
@@ -92,6 +123,36 @@ const getAddress = (person = {}) =>
   ]
     .filter(Boolean)
     .join(", ");
+
+const getWeightText = (obj = {}) => {
+  const weight =
+    obj?.weight?.value ??
+    obj?.weight_value ??
+    obj?.weight ??
+    obj?.actual_weight ??
+    obj?.dead_weight;
+
+  if (!weight) return "-";
+
+  return `${weight} ${safe(
+    obj?.weight?.unit_of_measurement ||
+      obj?.weight_unit ||
+      obj?.weightUnit ||
+      "kg"
+  )}`;
+};
+
+const getDimensionText = (obj = {}) => {
+  const d = obj?.dimensions || obj || {};
+
+  const length = d?.length ?? d?.l ?? d?.shipment_length;
+  const width = d?.width ?? d?.breadth ?? d?.b ?? d?.shipment_width;
+  const height = d?.height ?? d?.h ?? d?.shipment_height;
+
+  if (!length && !width && !height) return "-";
+
+  return `${length || 0} × ${width || 0} × ${height || 0}`;
+};
 
 const getItemTitle = (item = {}, index) =>
   pick(item, ["description", "name", "title", "product_name", "item_name"]) ||
@@ -115,30 +176,158 @@ const getItemAmount = (item = {}) =>
 const getItemCurrency = (item = {}, fallback = "INR") =>
   item?.value?.currency || item?.price?.currency || item?.currency || fallback;
 
-const getWeightText = (obj = {}) => {
-  const weight =
-    obj?.weight?.value ?? obj?.weight_value ?? obj?.weight ?? obj?.actual_weight;
+const normalizeOrder = (order = {}, externalResponse = {}) => {
+  const raw = order?.raw || externalResponse || {};
 
-  if (!weight) return "-";
+  const eshipzOrder =
+    order?.orders?.[0] ||
+    order?.order?.orders?.[0] ||
+    order?.data?.orders?.[0] ||
+    order?.result?.orders?.[0] ||
+    externalResponse?.orders?.[0] ||
+    externalResponse?.data?.orders?.[0] ||
+    raw?.orders?.[0] ||
+    raw?.data?.orders?.[0] ||
+    null;
 
-  return `${weight} ${safe(
-    obj?.weight?.unit_of_measurement ||
-      obj?.weight_unit ||
-      obj?.weightUnit ||
-      "kg"
-  )}`;
-};
+  const data = firstObject(
+    eshipzOrder,
+    order?.data,
+    order?.result,
+    order?.order,
+    raw?.data,
+    raw?.result,
+    raw?.order,
+    order
+  );
 
-const getDimensionText = (obj = {}) => {
-  const d = obj?.dimensions || obj || {};
+  const receiver = firstObject(
+    data?.receiver,
+    data?.receiver_details,
+    data?.receiver_address,
+    data?.consignee,
+    data?.to_address,
+    data?.shipping_address,
+    data?.delivery_address
+  );
 
-  const length = d?.length ?? d?.l ?? d?.shipment_length;
-  const width = d?.width ?? d?.breadth ?? d?.b ?? d?.shipment_width;
-  const height = d?.height ?? d?.h ?? d?.shipment_height;
+  const sender = firstObject(
+    data?.sender,
+    data?.sender_details,
+    data?.shipper_address,
+    data?.shipper,
+    data?.from_address,
+    data?.pickup_address,
+    data?.warehouse
+  );
 
-  if (!length && !width && !height) return "-";
+  const items = firstArray(
+    data?.items,
+    data?.order_items,
+    data?.products,
+    data?.line_items
+  );
 
-  return `${length || 0} × ${width || 0} × ${height || 0}`;
+  const parcels = firstArray(data?.parcels, data?.packages, data?.boxes);
+
+  const awb =
+    pick(data, [
+      "awbNumber",
+      "awb_number",
+      "awb",
+      "waybill",
+      "tracking_number",
+    ]) ||
+    parcels?.[0]?.awb ||
+    "";
+
+  return {
+    ...data,
+    raw,
+    receiver,
+    sender,
+    items,
+    parcels,
+
+    orderNumber:
+      pick(data, [
+        "orderNumber",
+        "order_number",
+        "order_id",
+        "sales_channel_order_id",
+        "customer_reference",
+        "reference_number",
+        "entity_id",
+        "trip_id",
+      ]) || "-",
+
+    orderId: pick(data, ["orderId", "order_id", "id", "_id"]) || "-",
+
+    shipmentId:
+      pick(data, [
+        "shipmentId",
+        "shipment_id",
+        "shipment_uuid",
+        "entity_id",
+        "trip_id",
+      ]) || "-",
+
+    status:
+      pick(data, ["status", "order_status", "current_status"]) ||
+      "-",
+
+    shipStatus:
+      pick(data, [
+        "shipStatus",
+        "ship_status",
+        "shipment_status",
+        "fulfilment_status",
+      ]) ||
+      pick(data, ["status", "order_status"]) ||
+      "-",
+
+    paymentMode: data?.is_cod ? "COD" : "Prepaid",
+
+    currency:
+      pick(data, ["currency", "currency_code", "order_currency"]) || "INR",
+
+    shipmentValue:
+      pick(data, [
+        "shipmentValue",
+        "shipment_value",
+        "invoice_value",
+        "order_value",
+        "value",
+        "amount",
+      ]) || 0,
+
+    codAmount:
+      pick(data, ["codAmount", "cod_amount", "collectable_amount"]) || 0,
+
+    awb,
+
+    carrier:
+      pick(data, ["carrier", "carrier_name", "slug", "courier_name"]) ||
+      "Eshipz",
+
+    createdAt:
+      pick(data, [
+        "created_at",
+        "createdAt",
+        "order_date",
+        "created",
+        "order_created_on",
+      ]) || "",
+
+    updatedAt:
+      pick(data, [
+        "updated_at",
+        "updatedAt",
+        "modified_at",
+        "last_updated_at",
+        "order_updated_on",
+      ]) || "",
+  };
 };
 
 export default function BlueDartExternalOrderDetailPage() {
@@ -163,7 +352,13 @@ export default function BlueDartExternalOrderDetailPage() {
     }
   }, [salesChannelOrderId, fetchExternalOrderById]);
 
-  const order = externalOrder || null;
+  const order = useMemo(
+    () =>
+      externalOrder || externalResponse
+        ? normalizeOrder(externalOrder, externalResponse)
+        : null,
+    [externalOrder, externalResponse]
+  );
 
   const receiverName = useMemo(() => getName(order?.receiver), [order]);
   const senderName = useMemo(() => getName(order?.sender), [order]);
@@ -173,33 +368,17 @@ export default function BlueDartExternalOrderDetailPage() {
     [order]
   );
 
-  const senderAddress = useMemo(
-    () => getAddress(order?.sender) || "-",
-    [order]
-  );
-
-  const rawJson = useMemo(
-    () => JSON.stringify(order?.raw || externalResponse || {}, null, 2),
-    [order, externalResponse]
-  );
-
-  const copyRaw = async () => {
-    try {
-      await navigator.clipboard.writeText(rawJson || "{}");
-    } catch {
-      // ignore clipboard errors
-    }
-  };
+  const senderAddress = useMemo(() => getAddress(order?.sender) || "-", [order]);
 
   return (
     <main className="min-h-screen bg-[#f7f7f7] p-4 text-neutral-950 md:p-6">
-      <div className="mx-auto w-full max-w-[1600px] space-y-5">
+      <div className="w-full space-y-5">
         <section className="overflow-hidden rounded-[2rem] bg-white shadow-sm">
           <div className="relative p-5 md:p-7">
             <div className="absolute right-0 top-0 h-32 w-32 rounded-bl-[4rem] bg-neutral-100/80" />
 
             <div className="relative flex flex-wrap items-start justify-between gap-4">
-              <div>
+              <div className="min-w-0">
                 <button
                   type="button"
                   onClick={() => router.back()}
@@ -211,16 +390,16 @@ export default function BlueDartExternalOrderDetailPage() {
 
                 <div className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
                   <ExternalLink className="h-3.5 w-3.5" />
-                  BlueDart / Eshipz
+                  Eshipz Order Detail
                 </div>
 
-                <h1 className="mt-4 break-all text-2xl font-semibold tracking-tight text-neutral-950 md:text-3xl">
-                  External Order {salesChannelOrderId}
+                <h1 className="mt-4 break-words text-2xl font-semibold tracking-tight text-neutral-950 md:text-3xl">
+                  {salesChannelOrderId}
                 </h1>
 
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-500">
-                  Single Eshipz order ka detailed view — receiver, sender,
-                  shipment, items, parcels aur raw response snapshot.
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-500">
+                  Professional single order view with shipment, customer,
+                  payment, item and parcel details.
                 </p>
               </div>
 
@@ -277,28 +456,20 @@ export default function BlueDartExternalOrderDetailPage() {
             </p>
           </section>
         ) : (
-          <>
+          <section className="space-y-5">
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <StatCard
-                icon={Hash}
-                label="Order ID"
-                value={order.orderId || order.id || "-"}
-              />
+              <StatCard icon={Hash} label="Order ID" value={order.orderId} />
               <StatCard
                 icon={Truck}
                 label="Ship Status"
-                value={labelize(order.shipStatus || order.status || "-")}
+                value={labelize(order.shipStatus || order.status)}
               />
               <StatCard
                 icon={CreditCard}
                 label="Payment"
-                value={labelize(order.paymentMode || "-")}
+                value={labelize(order.paymentMode)}
               />
-              <StatCard
-                icon={Package}
-                label="AWB"
-                value={order.awbNumber || order.awb || "-"}
-              />
+              <StatCard icon={Package} label="AWB" value={order.awb || "-"} />
               <StatCard
                 icon={IndianRupee}
                 label="Value"
@@ -306,222 +477,225 @@ export default function BlueDartExternalOrderDetailPage() {
               />
             </section>
 
-            <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-              <section className="space-y-5">
-                <Card title="Order Summary" icon={ShieldCheck}>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <InfoRow
-                      label="Order Number"
-                      value={order.orderNumber || "-"}
-                    />
-                    <InfoRow
-                      label="Order ID"
-                      value={order.orderId || order.id || "-"}
-                    />
-                    <InfoRow
-                      label="Shipment ID"
-                      value={order.shipmentId || "-"}
-                    />
-                    <InfoRow
-                      label="Order Status"
-                      value={labelize(order.status || "-")}
-                    />
-                    <InfoRow
-                      label="Ship Status"
-                      value={labelize(order.shipStatus || "-")}
-                    />
-                    <InfoRow
-                      label="Payment Mode"
-                      value={labelize(order.paymentMode || "-")}
-                    />
-                    <InfoRow
-                      label="Shipment Value"
-                      value={formatCurrency(
-                        order.shipmentValue,
-                        order.currency
-                      )}
-                    />
-                    <InfoRow
-                      label="COD Amount"
-                      value={formatCurrency(order.codAmount, order.currency)}
-                    />
-                    <InfoRow label="Currency" value={order.currency || "INR"} />
-                    <InfoRow
-                      label="AWB"
-                      value={order.awbNumber || order.awb || "-"}
-                    />
+            <Card title="Shipment Overview" icon={ShieldCheck}>
+              <div className="rounded-[1.75rem] bg-neutral-950 p-5 text-white">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/70">
+                      <BadgeCheck className="h-3.5 w-3.5" />
+                      Eshipz Shipment
+                    </div>
+
+                    <h2 className="mt-4 break-words text-2xl font-semibold tracking-tight">
+                      {order.awb || "AWB Not Assigned"}
+                    </h2>
+
+                    <p className="mt-2 text-sm leading-6 text-white/60">
+                      {labelize(order.carrier)} • Shipment ID{" "}
+                      {order.shipmentId || "-"}
+                    </p>
                   </div>
-                </Card>
 
-                <Card title="Items" icon={Boxes}>
-                  {Array.isArray(order.items) && order.items.length ? (
-                    <div className="space-y-3">
-                      {order.items.map((item, index) => (
-                        <div
-                          key={`${getItemSku(item) || "item"}-${index}`}
-                          className="rounded-3xl bg-neutral-50 p-4 ring-1 ring-neutral-100"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="break-words text-sm font-semibold text-neutral-950">
-                                {getItemTitle(item, index)}
-                              </p>
-                              <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
-                                <span>SKU: {getItemSku(item) || "-"}</span>
-                                <span>•</span>
-                                <span>
-                                  HS Code:{" "}
-                                  {pick(item, ["hs_code", "hsCode"]) || "-"}
-                                </span>
-                              </div>
-                            </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusTone(
+                        order.status
+                      )}`}
+                    >
+                      {labelize(order.status)}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusTone(
+                        order.shipStatus
+                      )}`}
+                    >
+                      {labelize(order.shipStatus)}
+                    </span>
+                  </div>
+                </div>
+              </div>
 
-                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-neutral-700 shadow-sm">
-                              Qty {getItemQty(item)}
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <InfoRow label="Order Number" value={order.orderNumber} />
+                <InfoRow label="Order ID" value={order.orderId} />
+                <InfoRow label="Shipment ID" value={order.shipmentId} />
+                <InfoRow label="Carrier" value={labelize(order.carrier)} />
+                <InfoRow label="AWB" value={order.awb || "-"} />
+                <InfoRow label="Payment Mode" value={labelize(order.paymentMode)} />
+                <InfoRow
+                  label="Shipment Value"
+                  value={formatCurrency(order.shipmentValue, order.currency)}
+                />
+                <InfoRow
+                  label="COD Amount"
+                  value={formatCurrency(order.codAmount, order.currency)}
+                />
+                <InfoRow label="Created At" value={formatDateTime(order.createdAt)} />
+                <InfoRow label="Updated At" value={formatDateTime(order.updatedAt)} />
+              </div>
+            </Card>
+
+            <Card title="Receiver Details" icon={User}>
+              <div className="grid gap-3 md:grid-cols-2">
+                <MiniInfo icon={User} title="Name" value={receiverName || "-"} />
+                <MiniInfo
+                  icon={Phone}
+                  title="Phone"
+                  value={getPhone(order?.receiver) || "-"}
+                />
+                <MiniInfo
+                  icon={Mail}
+                  title="Email"
+                  value={getEmail(order?.receiver) || "-"}
+                />
+                <MiniInfo
+                  icon={MapPin}
+                  title="Address"
+                  value={receiverAddress}
+                  wide
+                />
+              </div>
+            </Card>
+
+            <Card title="Sender / Pickup Details" icon={Building2}>
+              <div className="grid gap-3 md:grid-cols-2">
+                <MiniInfo icon={User} title="Name" value={senderName || "-"} />
+                <MiniInfo
+                  icon={Phone}
+                  title="Phone"
+                  value={getPhone(order?.sender) || "-"}
+                />
+                <MiniInfo
+                  icon={Mail}
+                  title="Email"
+                  value={getEmail(order?.sender) || "-"}
+                />
+                <MiniInfo
+                  icon={MapPin}
+                  title="Address"
+                  value={senderAddress}
+                  wide
+                />
+              </div>
+            </Card>
+
+            <Card title="Items" icon={Boxes}>
+              {Array.isArray(order.items) && order.items.length ? (
+                <div className="space-y-3">
+                  {order.items.map((item, index) => (
+                    <div
+                      key={`${getItemSku(item) || "item"}-${index}`}
+                      className="rounded-3xl bg-neutral-50 p-4 ring-1 ring-neutral-100"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-semibold text-neutral-950">
+                            {getItemTitle(item, index)}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
+                            <span>SKU: {getItemSku(item) || "-"}</span>
+                            <span>•</span>
+                            <span>
+                              HS Code: {pick(item, ["hs_code", "hsCode"]) || "-"}
                             </span>
                           </div>
-
-                          <div className="mt-4 grid gap-3 md:grid-cols-3">
-                            <InfoMini
-                              label="Value"
-                              value={formatCurrency(
-                                getItemAmount(item),
-                                getItemCurrency(item, order.currency)
-                              )}
-                            />
-                            <InfoMini
-                              label="Weight"
-                              value={getWeightText(item)}
-                            />
-                            <InfoMini
-                              label="Dimensions"
-                              value={getDimensionText(item)}
-                            />
-                          </div>
                         </div>
-                      ))}
+
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-neutral-700 shadow-sm">
+                          Qty {getItemQty(item)}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <InfoMini
+                          icon={IndianRupee}
+                          label="Value"
+                          value={formatCurrency(
+                            getItemAmount(item),
+                            getItemCurrency(item, order.currency)
+                          )}
+                        />
+                        <InfoMini icon={Weight} label="Weight" value={getWeightText(item)} />
+                        <InfoMini
+                          icon={Ruler}
+                          label="Dimensions"
+                          value={getDimensionText(item)}
+                        />
+                      </div>
                     </div>
-                  ) : (
-                    <EmptyBlock text="No item data available." />
-                  )}
-                </Card>
+                  ))}
+                </div>
+              ) : (
+                <EmptyBlock text="No item data available." />
+              )}
+            </Card>
 
-                <Card title="Parcels" icon={Package}>
-                  {Array.isArray(order.parcels) && order.parcels.length ? (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {order.parcels.map((parcel, index) => (
-                        <div
-                          key={index}
-                          className="rounded-3xl bg-neutral-50 p-4 ring-1 ring-neutral-100"
-                        >
-                          <p className="text-sm font-semibold text-neutral-950">
-                            Parcel {index + 1}
-                          </p>
-
-                          <div className="mt-4 grid gap-3">
-                            <InfoMini
-                              label="Quantity"
-                              value={
-                                Number(
-                                  pick(parcel, ["quantity", "qty", "count"]) ||
-                                    0
-                                ) || 0
-                              }
-                            />
-                            <InfoMini
-                              label="Weight"
-                              value={getWeightText(parcel)}
-                            />
-                            <InfoMini
-                              label="Dimensions"
-                              value={getDimensionText(parcel)}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyBlock text="No parcel data available." />
-                  )}
-                </Card>
-              </section>
-
-              <aside className="space-y-5">
-                <Card title="Receiver" icon={User}>
-                  <div className="space-y-3">
-                    <MiniInfo
-                      icon={User}
-                      title={receiverName || "Customer"}
-                      subtitle={[getPhone(order?.receiver), getEmail(order?.receiver)]
-                        .filter(Boolean)
-                        .join(" • ")}
-                    />
-                    <MiniInfo
-                      icon={MapPin}
-                      title="Address"
-                      subtitle={receiverAddress}
-                    />
-                  </div>
-                </Card>
-
-                <Card title="Sender" icon={Truck}>
-                  <div className="space-y-3">
-                    <MiniInfo
-                      icon={User}
-                      title={senderName || "Sender"}
-                      subtitle={[getPhone(order?.sender), getEmail(order?.sender)]
-                        .filter(Boolean)
-                        .join(" • ")}
-                    />
-                    <MiniInfo
-                      icon={MapPin}
-                      title="Address"
-                      subtitle={senderAddress}
-                    />
-                  </div>
-                </Card>
-
-                <Card
-                  title="Raw Response"
-                  icon={FileJson}
-                  action={
-                    <button
-                      type="button"
-                      onClick={copyRaw}
-                      className="inline-flex items-center gap-2 rounded-xl bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-200"
+            <Card title="Parcels" icon={Package}>
+              {Array.isArray(order.parcels) && order.parcels.length ? (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {order.parcels.map((parcel, index) => (
+                    <div
+                      key={index}
+                      className="rounded-3xl bg-neutral-50 p-4 ring-1 ring-neutral-100"
                     >
-                      <Copy className="h-3.5 w-3.5" />
-                      Copy
-                    </button>
-                  }
-                >
-                  <pre className="max-h-[560px] overflow-auto rounded-3xl bg-neutral-950 p-4 text-xs leading-6 text-neutral-100">
-                    {rawJson}
-                  </pre>
-                </Card>
-              </aside>
-            </div>
-          </>
+                      <p className="text-sm font-semibold text-neutral-950">
+                        Parcel {index + 1}
+                      </p>
+
+                      <div className="mt-4 grid gap-3">
+                        <InfoMini
+                          icon={Boxes}
+                          label="Quantity"
+                          value={
+                            Number(
+                              pick(parcel, ["quantity", "qty", "count"]) || 0
+                            ) || 0
+                          }
+                        />
+                        <InfoMini
+                          icon={Weight}
+                          label="Weight"
+                          value={getWeightText(parcel)}
+                        />
+                        <InfoMini
+                          icon={Ruler}
+                          label="Dimensions"
+                          value={getDimensionText(parcel)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyBlock text="No parcel data available." />
+              )}
+            </Card>
+
+            <Card title="Timeline Snapshot" icon={CalendarClock}>
+              <div className="grid gap-3 md:grid-cols-2">
+                <InfoRow label="Created At" value={formatDateTime(order.createdAt)} />
+                <InfoRow label="Updated At" value={formatDateTime(order.updatedAt)} />
+                <InfoRow label="Order Status" value={labelize(order.status)} />
+                <InfoRow label="Ship Status" value={labelize(order.shipStatus)} />
+              </div>
+            </Card>
+          </section>
         )}
       </div>
     </main>
   );
 }
 
-function Card({ title, icon: Icon, children, action }) {
+function Card({ title, icon: Icon, children }) {
   return (
     <section className="rounded-[2rem] bg-white p-5 shadow-sm md:p-6">
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="rounded-2xl bg-neutral-100 p-2">
-            <Icon className="h-4 w-4 text-neutral-700" />
-          </div>
-          <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
-            {title}
-          </h2>
+      <div className="mb-5 flex items-center gap-2">
+        <div className="rounded-2xl bg-neutral-100 p-2">
+          <Icon className="h-4 w-4 text-neutral-700" />
         </div>
-
-        {action || null}
+        <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
+          {title}
+        </h2>
       </div>
 
       {children}
@@ -537,8 +711,8 @@ function StatCard({ icon: Icon, label, value }) {
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">
             {label}
           </p>
-          <p className="mt-2 break-all text-lg font-semibold text-neutral-950">
-            {value}
+          <p className="mt-2 break-words text-lg font-semibold text-neutral-950">
+            {value || "-"}
           </p>
         </div>
         <div className="rounded-2xl bg-neutral-100 p-3">
@@ -553,38 +727,43 @@ function InfoRow({ label, value }) {
   return (
     <div className="flex items-start justify-between gap-4 rounded-2xl bg-neutral-50 px-4 py-3 ring-1 ring-neutral-100">
       <span className="text-sm text-neutral-500">{label}</span>
-      <span className="break-all text-right text-sm font-semibold text-neutral-950">
+      <span className="break-words text-right text-sm font-semibold text-neutral-950">
         {value || "-"}
       </span>
     </div>
   );
 }
 
-function InfoMini({ label, value }) {
+function InfoMini({ icon: Icon, label, value }) {
   return (
     <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-400">
+      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-400">
+        {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
         {label}
-      </p>
-      <p className="mt-1 break-all text-sm font-semibold text-neutral-900">
+      </div>
+      <p className="mt-1 break-words text-sm font-semibold text-neutral-900">
         {value || "-"}
       </p>
     </div>
   );
 }
 
-function MiniInfo({ icon: Icon, title, subtitle }) {
+function MiniInfo({ icon: Icon, title, value, wide = false }) {
   return (
-    <div className="flex items-start gap-3 rounded-3xl bg-neutral-50 p-4 ring-1 ring-neutral-100">
+    <div
+      className={`flex items-start gap-3 rounded-3xl bg-neutral-50 p-4 ring-1 ring-neutral-100 ${
+        wide ? "md:col-span-2" : ""
+      }`}
+    >
       <div className="rounded-2xl bg-white p-2 shadow-sm">
         <Icon className="h-4 w-4 text-neutral-700" />
       </div>
       <div className="min-w-0">
-        <p className="break-words text-sm font-semibold text-neutral-950">
-          {title || "-"}
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">
+          {title}
         </p>
-        <p className="mt-1 break-words text-xs leading-5 text-neutral-500">
-          {subtitle || "-"}
+        <p className="mt-1 break-words text-sm font-semibold leading-6 text-neutral-950">
+          {value || "-"}
         </p>
       </div>
     </div>

@@ -210,7 +210,7 @@ export default function BlueDartExternalOrdersPage() {
 
   return (
     <main className="min-h-screen bg-[#f7f7f7] p-4 text-neutral-950 md:p-6">
-      <div className="mx-auto w-full max-w-[1600px] space-y-5">
+      <div className="w-full space-y-5">
         <section className="overflow-hidden rounded-[2rem] bg-white shadow-sm">
           <div className="relative p-5 md:p-7">
             <div className="absolute right-0 top-0 h-32 w-32 rounded-bl-[4rem] bg-neutral-100/80" />
@@ -262,7 +262,7 @@ export default function BlueDartExternalOrdersPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard
             icon={Package}
             label="Visible Orders"
@@ -372,7 +372,7 @@ export default function BlueDartExternalOrdersPage() {
                 Orders List
               </h2>
               <p className="mt-1 text-sm text-neutral-500">
-                External Eshipz order data with quick route to detail page.
+                Table-style rows designed to fit within the available screen.
               </p>
             </div>
 
@@ -387,62 +387,61 @@ export default function BlueDartExternalOrdersPage() {
             <TableLoading />
           ) : filteredOrders?.length ? (
             <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-neutral-50/80">
-                    <tr className="text-left text-xs uppercase tracking-[0.14em] text-neutral-400">
-                      <th className="px-6 py-4 font-semibold">Order</th>
-                      <th className="px-6 py-4 font-semibold">Receiver</th>
-                      <th className="px-6 py-4 font-semibold">Status</th>
-                      <th className="px-6 py-4 font-semibold">AWB / Shipment</th>
-                      <th className="px-6 py-4 font-semibold">Payment</th>
-                      <th className="px-6 py-4 font-semibold">Value</th>
-                      <th className="px-6 py-4 font-semibold">Items</th>
-                      <th className="px-6 py-4 text-right font-semibold">
-                        Action
-                      </th>
-                    </tr>
-                  </thead>
+              <div className="px-4 pb-4 md:px-5">
+                <div className="hidden rounded-2xl bg-neutral-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-400 xl:grid xl:grid-cols-[1.05fr_1.25fr_0.95fr_1fr_0.75fr_0.8fr_0.45fr_0.7fr] xl:gap-3">
+                  <div>Order</div>
+                  <div>Receiver</div>
+                  <div>Status</div>
+                  <div>AWB / Shipment</div>
+                  <div>Payment</div>
+                  <div>Value</div>
+                  <div>Items</div>
+                  <div className="text-right">Action</div>
+                </div>
 
-                  <tbody className="divide-y divide-neutral-100">
-                    {filteredOrders.map((order, index) => {
-                      const receiverName = getReceiverName(order?.receiver);
-                      const receiverMeta = getReceiverMeta(order?.receiver);
-                      const detailId = getDetailId(order);
+                <div className="mt-3 space-y-2">
+                  {filteredOrders.map((order, index) => {
+                    const receiverName = getReceiverName(order?.receiver);
+                    const receiverMeta = getReceiverMeta(order?.receiver);
+                    const detailId = getDetailId(order);
+                    const itemsCount = Array.isArray(order?.items)
+                      ? order.items.length
+                      : 0;
 
-                      return (
-                        <tr
-                          key={`${order?.id || "order"}-${
-                            order?.orderId || index
-                          }`}
-                          className="align-top transition hover:bg-neutral-50/60"
-                        >
-                          <td className="px-6 py-4">
-                            <div className="min-w-[180px] space-y-1">
-                              <p className="text-sm font-semibold text-neutral-950">
-                                {order?.orderNumber || order?.orderId || "-"}
-                              </p>
-                              <p className="flex items-center gap-1.5 text-xs text-neutral-500">
-                                <Hash className="h-3.5 w-3.5" />
+                    return (
+                      <div
+                        key={`${order?.id || "order"}-${
+                          order?.orderId || index
+                        }`}
+                        className="rounded-2xl bg-white px-4 py-4 ring-1 ring-neutral-100 transition hover:bg-neutral-50/80"
+                      >
+                        <div className="grid gap-4 xl:grid-cols-[1.05fr_1.25fr_0.95fr_1fr_0.75fr_0.8fr_0.45fr_0.7fr] xl:items-center xl:gap-3">
+                          <Cell label="Order">
+                            <p className="truncate text-sm font-semibold text-neutral-950">
+                              {order?.orderNumber || order?.orderId || "-"}
+                            </p>
+                            <p className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
+                              <Hash className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">
                                 {order?.id || order?.orderId || "-"}
-                              </p>
-                            </div>
-                          </td>
+                              </span>
+                            </p>
+                          </Cell>
 
-                          <td className="px-6 py-4">
-                            <div className="min-w-[210px] space-y-1">
-                              <p className="text-sm font-semibold text-neutral-900">
-                                {receiverName || "-"}
-                              </p>
-                              <p className="flex items-center gap-1.5 text-xs text-neutral-500">
-                                <MapPin className="h-3.5 w-3.5" />
+                          <Cell label="Receiver">
+                            <p className="truncate text-sm font-semibold text-neutral-900">
+                              {receiverName || "-"}
+                            </p>
+                            <p className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
+                              <MapPin className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">
                                 {receiverMeta || "-"}
-                              </p>
-                            </div>
-                          </td>
+                              </span>
+                            </p>
+                          </Cell>
 
-                          <td className="px-6 py-4">
-                            <div className="flex min-w-[150px] flex-col gap-2">
+                          <Cell label="Status">
+                            <div className="flex flex-wrap gap-2">
                               <span
                                 className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${getStatusTone(
                                   order?.status
@@ -461,58 +460,54 @@ export default function BlueDartExternalOrdersPage() {
                                 </span>
                               ) : null}
                             </div>
-                          </td>
+                          </Cell>
 
-                          <td className="px-6 py-4">
-                            <div className="min-w-[170px] space-y-1">
-                              <p className="text-sm font-semibold text-neutral-800">
-                                {order?.awbNumber || order?.awb || "-"}
-                              </p>
-                              <p className="text-xs text-neutral-500">
-                                Shipment: {order?.shipmentId || "-"}
-                              </p>
-                            </div>
-                          </td>
+                          <Cell label="AWB / Shipment">
+                            <p className="truncate text-sm font-semibold text-neutral-900">
+                              {order?.awbNumber || order?.awb || "-"}
+                            </p>
+                            <p className="mt-1 truncate text-xs text-neutral-500">
+                              Shipment: {order?.shipmentId || "-"}
+                            </p>
+                          </Cell>
 
-                          <td className="px-6 py-4">
-                            <span className="inline-flex rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-700">
+                          <Cell label="Payment">
+                            <span className="inline-flex w-fit rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-700">
                               {labelize(order?.paymentMode || "-")}
                             </span>
-                          </td>
+                          </Cell>
 
-                          <td className="px-6 py-4">
-                            <div className="min-w-[120px] space-y-1">
-                              <p className="text-sm font-semibold text-neutral-900">
+                          <Cell label="Value">
+                            <p className="truncate text-sm font-semibold text-neutral-950">
+                              {formatCurrency(
+                                order?.shipmentValue,
+                                order?.currency || "INR"
+                              )}
+                            </p>
+                            {Number(order?.codAmount || 0) > 0 ? (
+                              <p className="mt-1 truncate text-xs text-neutral-500">
+                                COD:{" "}
                                 {formatCurrency(
-                                  order?.shipmentValue,
+                                  order?.codAmount,
                                   order?.currency || "INR"
                                 )}
                               </p>
-                              {Number(order?.codAmount || 0) > 0 ? (
-                                <p className="text-xs text-neutral-500">
-                                  COD:{" "}
-                                  {formatCurrency(
-                                    order?.codAmount,
-                                    order?.currency || "INR"
-                                  )}
-                                </p>
-                              ) : null}
-                            </div>
-                          </td>
+                            ) : null}
+                          </Cell>
 
-                          <td className="px-6 py-4 text-sm font-medium text-neutral-700">
-                            {Array.isArray(order?.items)
-                              ? order.items.length
-                              : 0}
-                          </td>
+                          <Cell label="Items">
+                            <p className="text-sm font-semibold text-neutral-900">
+                              {itemsCount}
+                            </p>
+                          </Cell>
 
-                          <td className="px-6 py-4 text-right">
+                          <Cell label="Action" align="right">
                             {detailId ? (
                               <Link
                                 href={`/bluedart/external-orders/${encodeURIComponent(
                                   detailId
                                 )}`}
-                                className="inline-flex items-center gap-2 rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 sm:w-auto"
                               >
                                 <FileSearch className="h-4 w-4" />
                                 View
@@ -520,12 +515,12 @@ export default function BlueDartExternalOrdersPage() {
                             ) : (
                               <span className="text-sm text-neutral-400">-</span>
                             )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          </Cell>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 px-5 py-4 md:px-6">
@@ -557,7 +552,8 @@ export default function BlueDartExternalOrdersPage() {
                     type="button"
                     onClick={() => setPage((p) => p + 1)}
                     disabled={
-                      externalOrdersLoading || (externalOrders || []).length < perPage
+                      externalOrdersLoading ||
+                      (externalOrders || []).length < perPage
                     }
                     className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -598,13 +594,29 @@ function MetricCard({ icon: Icon, label, value, hint }) {
   );
 }
 
+function Cell({ label, children, align = "left" }) {
+  return (
+    <div
+      className={`min-w-0 ${
+        align === "right" ? "xl:text-right" : "text-left"
+      }`}
+    >
+      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-400 xl:hidden">
+        {label}
+      </p>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
 function TableLoading() {
   return (
-    <div className="space-y-3 px-6 py-8">
+    <div className="space-y-2 px-5 pb-5">
+      <div className="hidden h-11 animate-pulse rounded-2xl bg-neutral-100 xl:block" />
       {[1, 2, 3, 4, 5].map((item) => (
         <div
           key={item}
-          className="h-16 animate-pulse rounded-2xl bg-neutral-100"
+          className="h-24 animate-pulse rounded-2xl bg-neutral-100"
         />
       ))}
     </div>

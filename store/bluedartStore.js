@@ -9,7 +9,6 @@ const API =
     "").trim();
 
 const apiBase = API ? API.replace(/\/+$/, "") : "";
-
 const BASE_ROUTE = "/api/bluedart";
 
 const safe = (v) => (v == null ? "" : String(v));
@@ -69,6 +68,17 @@ const request = async (path, options = {}, params = null) => {
   return data;
 };
 
+const pick = (obj = {}, keys = []) => {
+  for (const key of keys) {
+    const value = obj?.[key];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return "";
+};
+
+const firstArray = (...items) =>
+  items.find((item) => Array.isArray(item) && item.length) || [];
+
 const defaultAddress = {
   fullName: "",
   phone: "",
@@ -99,128 +109,174 @@ const defaultPagination = {
 };
 
 const normalizeTrackingEvent = (ev = {}) => ({
-  eventCode: ev?.eventCode || "",
-  eventName: ev?.eventName || "",
-  eventDescription: ev?.eventDescription || "",
-  eventLocation: ev?.eventLocation || "",
-  eventTime: ev?.eventTime || null,
-  raw: ev?.raw || null,
+  eventCode: ev?.eventCode || ev?.status || ev?.scan_status || "",
+  eventName: ev?.eventName || ev?.activity || ev?.event || "",
+  eventDescription:
+    ev?.eventDescription || ev?.description || ev?.scan_description || "",
+  eventLocation: ev?.eventLocation || ev?.location || ev?.scan_location || "",
+  eventTime: ev?.eventTime || ev?.date || ev?.time || ev?.scan_time || null,
+  raw: ev?.raw || ev,
 });
 
-const normalizeShipment = (s = {}) => ({
-  _id: s?._id || "",
+const normalizeShipment = (s = {}) => {
+  const tracking = s?.tracking || s?.rawTrackingResponse?.tracking || {};
 
-  provider: s?.provider || "eshipz",
-  partner: s?.partner || "eshipz",
+  return {
+    _id: s?._id || "",
 
-  carrierName: s?.carrierName || "BlueDart",
-  carrierSlug: s?.carrierSlug || "bluedart",
+    provider: s?.provider || "eshipz",
+    partner: s?.partner || "eshipz",
 
-  orderNumber: s?.orderNumber || "",
-  orderId: s?.orderId || null,
-  shipmentType: s?.shipmentType || "",
+    carrierName: s?.carrierName || tracking?.carrier || "BlueDart",
+    carrierSlug: s?.carrierSlug || tracking?.carrierSlug || "bluedart",
 
-  referenceNumber: s?.referenceNumber || "",
+    orderNumber: s?.orderNumber || "",
+    orderId: s?.orderId || null,
+    shipmentType: s?.shipmentType || "",
 
-  awbNumber: s?.awbNumber || s?.awb || "",
-  awb: s?.awb || s?.awbNumber || "",
+    referenceNumber: s?.referenceNumber || tracking?.referenceNumber || "",
 
-  shipmentIdExternal: s?.shipmentIdExternal || s?.shipmentId || "",
-  shipmentId: s?.shipmentId || s?.shipmentIdExternal || "",
+    awbNumber: s?.awbNumber || s?.awb || tracking?.awbNumber || "",
+    awb: s?.awb || s?.awbNumber || tracking?.awbNumber || "",
 
-  externalOrderId: s?.externalOrderId || "",
-  eshipzOrderId: s?.eshipzOrderId || s?.externalOrderId || "",
+    shipmentIdExternal:
+      s?.shipmentIdExternal || s?.shipmentId || tracking?.shipmentId || "",
+    shipmentId:
+      s?.shipmentId || s?.shipmentIdExternal || tracking?.shipmentId || "",
 
-  trackingUrl: s?.trackingUrl || "",
-  labelUrl: s?.labelUrl || "",
-  manifestUrl: s?.manifestUrl || "",
-  invoiceUrl: s?.invoiceUrl || "",
+    externalOrderId: s?.externalOrderId || "",
+    eshipzOrderId: s?.eshipzOrderId || s?.externalOrderId || "",
 
-  status: s?.status || "",
-  rawStatus: s?.rawStatus || "",
-  statusCode: s?.statusCode || "",
+    trackingUrl:
+      s?.trackingUrl ||
+      s?.trackingURL ||
+      s?.tracking_url ||
+      s?.rawTrackingResponse?.trackingUrl ||
+      "",
+    labelUrl: s?.labelUrl || "",
+    manifestUrl: s?.manifestUrl || "",
+    invoiceUrl: s?.invoiceUrl || "",
 
-  paymentMode: s?.paymentMode || "",
-  serviceType: s?.serviceType || "",
+    status: s?.status || tracking?.status || "",
+    rawStatus: s?.rawStatus || tracking?.status || "",
+    statusCode: s?.statusCode || "",
 
-  declaredValue: Number(s?.declaredValue ?? 0) || 0,
-  currency: s?.currency || "INR",
+    paymentMode: s?.paymentMode || "",
+    serviceType: s?.serviceType || "",
 
-  weight: Number(s?.weight ?? 0) || 0,
-  pieces: Number(s?.pieces ?? 1) || 1,
+    declaredValue: Number(s?.declaredValue ?? 0) || 0,
+    currency: s?.currency || "INR",
 
-  dimensions: {
-    length: Number(s?.dimensions?.length ?? 0) || 0,
-    breadth: Number(s?.dimensions?.breadth ?? 0) || 0,
-    height: Number(s?.dimensions?.height ?? 0) || 0,
-  },
+    weight: Number(s?.weight ?? 0) || 0,
+    pieces: Number(s?.pieces ?? 1) || 1,
 
-  codAmount: Number(s?.codAmount ?? 0) || 0,
+    dimensions: {
+      length: Number(s?.dimensions?.length ?? 0) || 0,
+      breadth: Number(s?.dimensions?.breadth ?? 0) || 0,
+      height: Number(s?.dimensions?.height ?? 0) || 0,
+    },
 
-  latestTrackingRemark: s?.latestTrackingRemark || "",
-  latestTrackingLocation: s?.latestTrackingLocation || "",
+    codAmount: Number(s?.codAmount ?? 0) || 0,
 
-  trackingEvents: Array.isArray(s?.trackingEvents)
-    ? s.trackingEvents.map(normalizeTrackingEvent)
-    : [],
+    latestTrackingRemark:
+      s?.latestTrackingRemark || tracking?.description || "",
+    latestTrackingLocation:
+      s?.latestTrackingLocation || tracking?.location || "",
 
-  expectedDelivery: s?.expectedDelivery || null,
+    trackingEvents: Array.isArray(s?.trackingEvents)
+      ? s.trackingEvents.map(normalizeTrackingEvent)
+      : Array.isArray(tracking?.events)
+      ? tracking.events.map(normalizeTrackingEvent)
+      : [],
 
-  bookingRequestedAt: s?.bookingRequestedAt || null,
-  bookedAt: s?.bookedAt || null,
-  pickupScheduledAt: s?.pickupScheduledAt || null,
-  pickedUpAt: s?.pickedUpAt || null,
-  shippedAt: s?.shippedAt || null,
-  outForDeliveryAt: s?.outForDeliveryAt || null,
-  deliveredAt: s?.deliveredAt || null,
-  rtoAt: s?.rtoAt || null,
-  failedAt: s?.failedAt || null,
+    expectedDelivery: s?.expectedDelivery || tracking?.edd || null,
 
-  lastSyncedAt: s?.lastSyncedAt || null,
-  lastTrackAt: s?.lastTrackAt || null,
-  lastWebhookAt: s?.lastWebhookAt || null,
+    bookingRequestedAt: s?.bookingRequestedAt || null,
+    bookedAt: s?.bookedAt || null,
+    pickupScheduledAt: s?.pickupScheduledAt || null,
+    pickedUpAt: s?.pickedUpAt || null,
+    shippedAt: s?.shippedAt || null,
+    outForDeliveryAt: s?.outForDeliveryAt || null,
+    deliveredAt: s?.deliveredAt || tracking?.deliveredAt || null,
+    rtoAt: s?.rtoAt || null,
+    failedAt: s?.failedAt || null,
 
-  syncError: s?.syncError || "",
-  syncPending: Boolean(s?.syncPending),
+    lastSyncedAt: s?.lastSyncedAt || null,
+    lastTrackAt: s?.lastTrackAt || tracking?.statusDate || null,
+    lastWebhookAt: s?.lastWebhookAt || null,
 
-  isCancelled: Boolean(s?.isCancelled),
-  cancelledAt: s?.cancelledAt || null,
+    syncError: s?.syncError || "",
+    syncPending: Boolean(s?.syncPending),
 
-  notes: s?.notes || "",
+    isCancelled: Boolean(s?.isCancelled),
+    cancelledAt: s?.cancelledAt || null,
 
-  recipient: s?.recipient || { ...defaultAddress },
-  sender: s?.sender || { ...defaultAddress },
+    notes: s?.notes || "",
 
-  externalMeta: s?.externalMeta || null,
+    recipient: s?.recipient || { ...defaultAddress },
+    sender: s?.sender || { ...defaultAddress },
 
-  rawCreateRequest: s?.rawCreateRequest || null,
-  rawCreateResponse: s?.rawCreateResponse || null,
-  rawTrackingResponse: s?.rawTrackingResponse || null,
-  rawWebhookPayload: s?.rawWebhookPayload || null,
+    externalMeta: s?.externalMeta || null,
 
-  createdAt: s?.createdAt || null,
-  updatedAt: s?.updatedAt || null,
-});
+    rawCreateRequest: s?.rawCreateRequest || null,
+    rawCreateResponse: s?.rawCreateResponse || null,
+    rawTrackingResponse: s?.rawTrackingResponse || null,
+    rawWebhookPayload: s?.rawWebhookPayload || null,
 
-const normalizeExternalOrder = (o = {}) => ({
-  id: o?.id || o?.order_id || o?._id || "",
-  orderId: o?.order_id || o?.id || "",
-  orderNumber: o?.order_number || o?.orderNumber || "",
-  awbNumber: o?.awb_number || o?.awb || "",
-  awb: o?.awb || o?.awb_number || "",
-  shipmentId: o?.shipment_id || o?.shipmentId || "",
-  status: o?.order_status || o?.status || "",
-  shipStatus: o?.ship_status || o?.shipment_status || "",
-  paymentMode: o?.payment_mode || "",
-  shipmentValue: Number(o?.shipment_value ?? 0) || 0,
-  codAmount: Number(o?.cod_amount ?? 0) || 0,
-  currency: o?.order_currency || "INR",
-  receiver: o?.receiver_address || null,
-  sender: o?.sender_address || null,
-  items: Array.isArray(o?.items) ? o.items : [],
-  parcels: Array.isArray(o?.parcels) ? o.parcels : [],
-  raw: o,
-});
+    createdAt: s?.createdAt || null,
+    updatedAt: s?.updatedAt || null,
+  };
+};
+
+const normalizeExternalOrder = (input = {}) => {
+  const o =
+    input?.orders?.[0] ||
+    input?.order?.orders?.[0] ||
+    input?.data?.orders?.[0] ||
+    input?.result?.orders?.[0] ||
+    input;
+
+  const receiver = o?.receiver_address || o?.receiver || null;
+  const sender = o?.shipper_address || o?.sender_address || o?.sender || null;
+
+  const parcels = Array.isArray(o?.parcels) ? o.parcels : [];
+  const firstParcel = parcels?.[0] || {};
+
+  return {
+    id: o?._id || o?.id || o?.order_id || "",
+    orderId: o?.order_id || o?.id || o?._id || "",
+    orderNumber:
+      o?.order_number || o?.orderNumber || o?.order_id || o?.entity_id || "",
+    storeName: o?.store_name || "",
+    awbNumber:
+      o?.awb_number || o?.awb || firstParcel?.awb || o?.waybill || "",
+    awb: o?.awb || o?.awb_number || firstParcel?.awb || "",
+    shipmentId:
+      o?.shipment_id || o?.shipmentId || o?.entity_id || o?.trip_id || "",
+    status: o?.order_status || o?.status || "",
+    shipStatus:
+      o?.ship_status ||
+      o?.shipment_status ||
+      o?.fulfilment_status ||
+      o?.status ||
+      "",
+    paymentMode:
+      o?.payment_mode || o?.paymentMode || (o?.is_cod ? "cod" : "prepaid"),
+    shipmentValue: Number(o?.shipment_value ?? o?.shipmentValue ?? 0) || 0,
+    codAmount: Number(o?.cod_amount ?? o?.codAmount ?? 0) || 0,
+    currency: o?.order_currency || o?.currency || "INR",
+    receiver,
+    sender,
+    items: Array.isArray(o?.items) ? o.items : [],
+    parcels,
+    invoices: Array.isArray(o?.gst_invoices) ? o.gst_invoices : [],
+    createdAt: o?.order_created_on || o?.created_at || "",
+    updatedAt: o?.order_updated_on || o?.updated_at || "",
+    isShipped: Boolean(o?.is_shipped),
+    isCancelled: Boolean(o?.is_cancelled),
+    raw: o,
+  };
+};
 
 const normalizeEddPrediction = (input = null) => {
   const p = Array.isArray(input) ? input[0] || {} : input || {};
@@ -460,13 +516,20 @@ export const useBlueDartStore = create((set, get) => ({
           method: "POST",
         });
 
-        const shipment = normalizeShipment(data?.shipment || {});
+        const shipment = normalizeShipment(
+          data?.shipment || data?.updatedShipment || {}
+        );
 
         set((state) => ({
-          shipment,
-          orderShipments: replaceById(state.orderShipments, shipment),
-          shipments: replaceById(state.shipments, shipment),
+          shipment: shipment?._id ? shipment : state.shipment,
+          orderShipments: shipment?._id
+            ? replaceById(state.orderShipments, shipment)
+            : state.orderShipments,
+          shipments: shipment?._id
+            ? replaceById(state.shipments, shipment)
+            : state.shipments,
           lastUpdatedOrder: data?.order || null,
+          externalResponse: data?.externalResponse || data?.tracking || null,
           successMessage: data?.message || "Shipment tracked successfully",
         }));
 
@@ -475,6 +538,8 @@ export const useBlueDartStore = create((set, get) => ({
         return {
           success: true,
           shipment,
+          tracking: data?.tracking || null,
+          trackingUrl: data?.trackingUrl || shipment?.trackingUrl || "",
           order: data?.order || null,
           data,
         };
@@ -516,11 +581,15 @@ export const useBlueDartStore = create((set, get) => ({
       return await withLoader(set, "externalOrdersLoading", async () => {
         const data = await request(`${BASE_ROUTE}/orders-api`, {}, params);
 
+        const rows = firstArray(
+          data?.orders,
+          data?.order?.orders,
+          data?.externalResponse?.orders
+        );
+
         set({
-          externalOrders: Array.isArray(data?.orders)
-            ? data.orders.map(normalizeExternalOrder)
-            : [],
-          externalResponse: data?.externalResponse || null,
+          externalOrders: rows.map(normalizeExternalOrder),
+          externalResponse: data?.externalResponse || data?.order || null,
           successMessage: data?.message || "",
         });
 
@@ -540,13 +609,22 @@ export const useBlueDartStore = create((set, get) => ({
           `${BASE_ROUTE}/orders-api/${encodeURIComponent(salesChannelOrderId)}`
         );
 
+        const orderSource =
+          data?.order?.orders?.[0] ||
+          data?.externalResponse?.orders?.[0] ||
+          data?.order ||
+          data?.externalResponse ||
+          {};
+
+        const externalOrder = normalizeExternalOrder(orderSource);
+
         set({
-          externalOrder: normalizeExternalOrder(data?.order || {}),
-          externalResponse: data?.externalResponse || null,
+          externalOrder,
+          externalResponse: data?.externalResponse || data?.order || null,
           successMessage: data?.message || "",
         });
 
-        return { success: true, data };
+        return { success: true, order: externalOrder, data };
       });
     } catch (err) {
       set({ error: err.message, errorData: err.data || null });
