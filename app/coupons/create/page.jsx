@@ -12,6 +12,7 @@ import {
   Sparkles,
   TicketPercent,
   Trash2,
+  ShoppingBag,
 } from "lucide-react";
 
 import { useCouponStore } from "@/store/couponStore";
@@ -30,6 +31,11 @@ const initialForm = {
   discountValue: "",
   minPurchase: 0,
   maxDiscount: 0,
+  quantityRule: {
+  enabled: false,
+  minItems: 0,
+  countMode: "total_quantity",
+},
 
   cartRules: [],
   discountTarget: "cart",
@@ -115,6 +121,35 @@ export default function CreateCouponPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
     clearStatus();
   };
+
+  const updateQuantityRule = (key, value) => {
+  setForm((prev) => ({
+    ...prev,
+    quantityRule: {
+      ...prev.quantityRule,
+      [key]: value,
+    },
+  }));
+
+  clearStatus();
+};
+
+const applyAovPreset = (minItems = 2, discountValue = 200) => {
+  setForm((prev) => ({
+    ...prev,
+    autoApply: true,
+    discountType: "flat",
+    discountValue,
+    discountTarget: "cart",
+    quantityRule: {
+      enabled: true,
+      minItems,
+      countMode: "total_quantity",
+    },
+  }));
+
+  clearStatus();
+};
 
   const handleChange = (e) => {
     const { name, type, value, checked } = e.target;
@@ -260,6 +295,14 @@ export default function CreateCouponPage() {
       discountValue: Number(form.discountValue || 0),
       minPurchase: Number(form.minPurchase || 0),
       maxDiscount: Number(form.maxDiscount || 0),
+
+      quantityRule: {
+  enabled:
+    Boolean(form.quantityRule?.enabled) &&
+    Number(form.quantityRule?.minItems || 0) > 0,
+  minItems: Number(form.quantityRule?.minItems || 0),
+  countMode: form.quantityRule?.countMode || "total_quantity",
+},
 
       usageLimit: Number(form.usageLimit || 0),
       usageLimitPerCustomer: Number(form.usageLimitPerCustomer || 0),
@@ -588,6 +631,106 @@ export default function CreateCouponPage() {
               </div>
             </div>
           </section>
+
+          <section className="rounded-3xl bg-white p-5 shadow-[0_12px_35px_rgba(0,0,0,0.035)] ring-1 ring-gray-100 sm:p-6">
+  <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+      <h2 className="text-lg font-semibold text-gray-950">
+        AOV Quantity Rule
+      </h2>
+      <p className="text-sm text-gray-500">
+        Use this for offers like Buy 2 get ₹200 off or Buy 3 get ₹300 off.
+      </p>
+    </div>
+
+    <div className="flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => applyAovPreset(2, 200)}
+        className="rounded-2xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
+      >
+        Buy 2 ₹200 Off
+      </button>
+
+      <button
+        type="button"
+        onClick={() => applyAovPreset(3, 300)}
+        className="rounded-2xl bg-gray-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-black"
+      >
+        Buy 3 ₹300 Off
+      </button>
+    </div>
+  </div>
+
+  <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+    <label className="flex items-center gap-3 rounded-3xl bg-gray-50 p-4 ring-1 ring-gray-100">
+      <input
+        type="checkbox"
+        checked={form.quantityRule.enabled}
+        onChange={(e) => updateQuantityRule("enabled", e.target.checked)}
+        className="h-5 w-5 accent-gray-950"
+      />
+      <span>
+        <span className="block text-sm font-semibold text-gray-900">
+          Enable quantity rule
+        </span>
+        <span className="block text-xs text-gray-500">
+          Coupon applies only after minimum items.
+        </span>
+      </span>
+    </label>
+
+    <div>
+      <label className={labelClass}>Minimum Items</label>
+      <input
+        type="number"
+        min="0"
+        value={form.quantityRule.minItems}
+        onChange={(e) => updateQuantityRule("minItems", e.target.value)}
+        placeholder="2"
+        className={inputClass}
+      />
+      <p className={helpClass}>Example: 2 for Buy 2 offer.</p>
+    </div>
+
+    <div>
+      <label className={labelClass}>Count Mode</label>
+      <select
+        value={form.quantityRule.countMode}
+        onChange={(e) => updateQuantityRule("countMode", e.target.value)}
+        className={inputClass}
+      >
+        <option value="total_quantity">Total Quantity</option>
+        <option value="unique_items">Unique Items</option>
+      </select>
+      <p className={helpClass}>
+        Total quantity counts same product qty also.
+      </p>
+    </div>
+  </div>
+
+  {form.quantityRule.enabled && Number(form.quantityRule.minItems || 0) > 0 ? (
+    <div className="mt-4 rounded-3xl bg-gray-50 p-4 ring-1 ring-gray-100">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gray-950 text-white">
+          <ShoppingBag size={18} />
+        </div>
+
+        <div>
+          <p className="text-sm font-semibold text-gray-950">
+            Buy {form.quantityRule.minItems}+ items and get{" "}
+            {form.discountType === "percentage"
+              ? `${form.discountValue || 0}% off`
+              : `₹${form.discountValue || 0} off`}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-gray-500">
+            Keep discount type as Flat Amount for AOV offers like ₹200/₹300 off.
+          </p>
+        </div>
+      </div>
+    </div>
+  ) : null}
+</section>
 
           <section className="rounded-3xl bg-white p-5 shadow-[0_12px_35px_rgba(0,0,0,0.035)] ring-1 ring-gray-100 sm:p-6">
             <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

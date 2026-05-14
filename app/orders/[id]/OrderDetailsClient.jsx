@@ -27,6 +27,7 @@ import OrderFulfillmentTimeline from "@/components/orders/OrderFulfillmentTimeli
 import OrderCancellationDetails from "@/components/orders/OrderCancellationDetails";
 import OrderConfirmationDetails from "@/components/orders/OrderConfirmationDetails";
 import OrderSourceAttributionCard from "@/components/orders/OrderSourceAttributionCard";
+import OrderCouponDetails from "@/components/orders/OrderCouponDetails";
 const API = process.env.NEXT_PUBLIC_API_URL;
 const STORE_URL = "https://www.mirayfashions.com";
 
@@ -439,6 +440,8 @@ export default function OrderDetailsClient({ id }) {
               </div>
             </div>
           </Card>
+
+          <OrderCouponDetails order={order} />
 
           <Card>
             <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">

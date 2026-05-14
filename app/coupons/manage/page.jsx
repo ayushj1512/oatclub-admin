@@ -13,6 +13,7 @@ import {
   PlusCircle,
   RefreshCcw,
   Search,
+  ShoppingBag,
   Sparkles,
   Target,
   TicketPercent,
@@ -27,8 +28,6 @@ const ruleLabels = {
   secondary_required: "Secondary",
   category_required: "Category",
   collection_required: "Collection",
-
-  // old fallback
   none: "Basic",
   primary_secondary: "Primary + Secondary",
   category_collection: "Category / Collection",
@@ -45,7 +44,6 @@ const targetLabels = {
 
 export default function ManageCouponsPage() {
   const router = useRouter();
-
   const { coupons, loading, fetchCoupons, deleteCoupon } = useCouponStore();
 
   const [deletingId, setDeletingId] = useState(null);
@@ -56,6 +54,7 @@ export default function ManageCouponsPage() {
     type: "",
     isActive: "",
     autoApply: "",
+    quantityRule: "",
     ruleType: "",
     discountTarget: "",
   });
@@ -65,6 +64,20 @@ export default function ManageCouponsPage() {
   }, [fetchCoupons]);
 
   const now = useMemo(() => new Date(), []);
+
+  const hasQuantityRule = (coupon) =>
+    Boolean(
+      coupon?.quantityRule?.enabled && Number(coupon?.quantityRule?.minItems) > 0
+    );
+
+  const getQuantityLabel = (coupon) => {
+    if (!hasQuantityRule(coupon)) return null;
+
+    const rule = coupon.quantityRule;
+    return `${rule.minItems}+ ${
+      rule.countMode === "unique_items" ? "unique items" : "qty"
+    }`;
+  };
 
   const getRules = (coupon) => {
     if (Array.isArray(coupon?.cartRules) && coupon.cartRules.length) {
@@ -78,18 +91,22 @@ export default function ManageCouponsPage() {
   };
 
   const getRuleLabel = (coupon) => {
-    const rules = getRules(coupon);
+    if (hasQuantityRule(coupon)) {
+      return `Buy ${coupon.quantityRule.minItems}+ Items`;
+    }
 
+    const rules = getRules(coupon);
     if (!rules.length) return "Basic";
 
-    const labels = rules
+    return rules
       .map((rule) => ruleLabels[rule.ruleType] || "Rule")
-      .filter(Boolean);
-
-    return labels.join(" + ");
+      .filter(Boolean)
+      .join(" + ");
   };
 
   const getRuleIcon = (coupon) => {
+    if (hasQuantityRule(coupon)) return ShoppingBag;
+
     const rules = getRules(coupon);
     const types = rules.map((rule) => rule.ruleType);
 
@@ -114,6 +131,7 @@ export default function ManageCouponsPage() {
       const rules = getRules(coupon);
       const ruleTypes = rules.map((rule) => rule.ruleType);
       const discountTarget = getDiscountTarget(coupon);
+      const quantityEnabled = hasQuantityRule(coupon);
 
       if (q) {
         const haystack = [
@@ -123,6 +141,8 @@ export default function ManageCouponsPage() {
           coupon.type,
           coupon.visibility,
           discountTarget,
+          getQuantityLabel(coupon),
+          quantityEnabled ? "aov quantity buy items" : "",
           ...ruleTypes,
           getRuleLabel(coupon),
         ]
@@ -133,32 +153,33 @@ export default function ManageCouponsPage() {
         if (!haystack.includes(q)) return false;
       }
 
-      if (filters.visibility && coupon.visibility !== filters.visibility) {
-        return false;
-      }
-
-      if (filters.type && coupon.type !== filters.type) {
-        return false;
-      }
+      if (filters.visibility && coupon.visibility !== filters.visibility) return false;
+      if (filters.type && coupon.type !== filters.type) return false;
 
       if (filters.isActive !== "") {
-        const wantActive = filters.isActive === "true";
-        if (Boolean(coupon.isActive) !== wantActive) return false;
+        if (Boolean(coupon.isActive) !== (filters.isActive === "true")) return false;
       }
 
       if (filters.autoApply !== "") {
-        const wantAuto = filters.autoApply === "true";
-        if (Boolean(coupon.autoApply) !== wantAuto) return false;
+        if (Boolean(coupon.autoApply) !== (filters.autoApply === "true")) return false;
+      }
+
+      if (filters.quantityRule !== "") {
+        if (quantityEnabled !== (filters.quantityRule === "true")) return false;
       }
 
       if (filters.ruleType) {
-        if (filters.ruleType === "basic" && rules.length) return false;
+        if (filters.ruleType === "basic" && (rules.length || quantityEnabled)) return false;
+
         if (
           filters.ruleType !== "basic" &&
+          filters.ruleType !== "quantity" &&
           !ruleTypes.includes(filters.ruleType)
         ) {
           return false;
         }
+
+        if (filters.ruleType === "quantity" && !quantityEnabled) return false;
       }
 
       if (filters.discountTarget && discountTarget !== filters.discountTarget) {
@@ -176,6 +197,7 @@ export default function ManageCouponsPage() {
       type: "",
       isActive: "",
       autoApply: "",
+      quantityRule: "",
       ruleType: "",
       discountTarget: "",
     });
@@ -193,27 +215,10 @@ export default function ManageCouponsPage() {
   const getStatus = (coupon) => {
     const expiry = new Date(coupon.validTill);
 
-    if (!coupon.isActive) {
-      return {
-        label: "Inactive",
-        tone: "red",
-        icon: XCircle,
-      };
-    }
+    if (!coupon.isActive) return { label: "Inactive", tone: "red", icon: XCircle };
+    if (expiry < now) return { label: "Expired", tone: "amber", icon: AlertTriangle };
 
-    if (expiry < now) {
-      return {
-        label: "Expired",
-        tone: "amber",
-        icon: AlertTriangle,
-      };
-    }
-
-    return {
-      label: "Active",
-      tone: "green",
-      icon: CheckCircle,
-    };
+    return { label: "Active", tone: "green", icon: CheckCircle };
   };
 
   const handleDelete = async (id) => {
@@ -239,6 +244,7 @@ export default function ManageCouponsPage() {
       purple: "bg-purple-50 text-purple-700",
       red: "bg-red-50 text-red-700",
       slate: "bg-slate-100 text-slate-700",
+      black: "bg-gray-950 text-white",
     };
 
     return (
@@ -270,7 +276,7 @@ export default function ManageCouponsPage() {
                   Manage Coupons
                 </h1>
                 <p className="mt-1 text-sm leading-6 text-gray-500">
-                  View, filter, edit and delete all coupon rules.
+                  View, filter, edit and delete all coupon rules including AOV offers.
                 </p>
               </div>
             </div>
@@ -296,7 +302,7 @@ export default function ManageCouponsPage() {
         </div>
 
         <div className="mt-5 rounded-3xl bg-white p-4 shadow-[0_12px_35px_rgba(0,0,0,0.035)] ring-1 ring-gray-100">
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.4fr_repeat(6,1fr)_auto]">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.4fr_repeat(7,1fr)_auto]">
             <div className="relative">
               <Search
                 size={17}
@@ -305,26 +311,18 @@ export default function ManageCouponsPage() {
               <input
                 value={filters.search}
                 onChange={(e) => updateFilter("search", e.target.value)}
-                placeholder="Search code, rule, target..."
+                placeholder="Search code, rule, AOV..."
                 className="w-full rounded-2xl bg-gray-50 py-2.5 pl-10 pr-3 text-sm text-gray-700 outline-none ring-1 ring-gray-100 transition placeholder:text-gray-400 focus:bg-white focus:ring-gray-300"
               />
             </div>
 
-            <select
-              className={selectClass}
-              value={filters.visibility}
-              onChange={(e) => updateFilter("visibility", e.target.value)}
-            >
+            <select className={selectClass} value={filters.visibility} onChange={(e) => updateFilter("visibility", e.target.value)}>
               <option value="">All Visibility</option>
               <option value="public">Public</option>
               <option value="private">Private</option>
             </select>
 
-            <select
-              className={selectClass}
-              value={filters.type}
-              onChange={(e) => updateFilter("type", e.target.value)}
-            >
+            <select className={selectClass} value={filters.type} onChange={(e) => updateFilter("type", e.target.value)}>
               <option value="">All Types</option>
               <option value="general">General</option>
               <option value="influencer">Influencer</option>
@@ -332,44 +330,35 @@ export default function ManageCouponsPage() {
               <option value="company">Company</option>
             </select>
 
-            <select
-              className={selectClass}
-              value={filters.isActive}
-              onChange={(e) => updateFilter("isActive", e.target.value)}
-            >
+            <select className={selectClass} value={filters.isActive} onChange={(e) => updateFilter("isActive", e.target.value)}>
               <option value="">All Status</option>
               <option value="true">Active</option>
               <option value="false">Inactive</option>
             </select>
 
-            <select
-              className={selectClass}
-              value={filters.autoApply}
-              onChange={(e) => updateFilter("autoApply", e.target.value)}
-            >
+            <select className={selectClass} value={filters.autoApply} onChange={(e) => updateFilter("autoApply", e.target.value)}>
               <option value="">All Apply</option>
               <option value="true">Auto</option>
               <option value="false">Manual</option>
             </select>
 
-            <select
-              className={selectClass}
-              value={filters.ruleType}
-              onChange={(e) => updateFilter("ruleType", e.target.value)}
-            >
+            <select className={selectClass} value={filters.quantityRule} onChange={(e) => updateFilter("quantityRule", e.target.value)}>
+              <option value="">All AOV</option>
+              <option value="true">AOV Rule</option>
+              <option value="false">Non AOV</option>
+            </select>
+
+            <select className={selectClass} value={filters.ruleType} onChange={(e) => updateFilter("ruleType", e.target.value)}>
               <option value="">All Rules</option>
               <option value="basic">Basic</option>
+              <option value="quantity">AOV Quantity</option>
               <option value="primary_required">Primary Required</option>
               <option value="secondary_required">Secondary Required</option>
               <option value="category_required">Category Required</option>
               <option value="collection_required">Collection Required</option>
             </select>
 
-            <select
-              className={selectClass}
-              value={filters.discountTarget}
-              onChange={(e) => updateFilter("discountTarget", e.target.value)}
-            >
+            <select className={selectClass} value={filters.discountTarget} onChange={(e) => updateFilter("discountTarget", e.target.value)}>
               <option value="">All Targets</option>
               <option value="cart">Cart</option>
               <option value="primary_products">Primary Products</option>
@@ -388,15 +377,8 @@ export default function ManageCouponsPage() {
           </div>
 
           <p className="mt-3 text-sm text-gray-500">
-            Showing{" "}
-            <span className="font-semibold text-gray-950">
-              {filteredCoupons.length}
-            </span>{" "}
-            of{" "}
-            <span className="font-semibold text-gray-950">
-              {coupons.length}
-            </span>{" "}
-            coupons
+            Showing <span className="font-semibold text-gray-950">{filteredCoupons.length}</span> of{" "}
+            <span className="font-semibold text-gray-950">{coupons.length}</span> coupons
           </p>
         </div>
 
@@ -412,7 +394,7 @@ export default function ManageCouponsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1240px] text-sm">
+              <table className="w-full min-w-[1360px] text-sm">
                 <thead>
                   <tr className="bg-gray-50/70 text-left text-xs uppercase tracking-wide text-gray-400">
                     <th className="px-4 py-4 font-medium">No.</th>
@@ -425,9 +407,7 @@ export default function ManageCouponsPage() {
                     <th className="px-4 py-4 font-medium">Usage</th>
                     <th className="px-4 py-4 font-medium">Valid Till</th>
                     <th className="px-4 py-4 font-medium">Status</th>
-                    <th className="px-4 py-4 text-right font-medium">
-                      Actions
-                    </th>
+                    <th className="px-4 py-4 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
 
@@ -438,24 +418,14 @@ export default function ManageCouponsPage() {
                     const RuleIcon = getRuleIcon(coupon);
                     const rules = getRules(coupon);
                     const discountTarget = getDiscountTarget(coupon);
+                    const quantityEnabled = hasQuantityRule(coupon);
 
-                    const targeted = Boolean(
-                      coupon.targetEmail || coupon.targetPhone
-                    );
-
-                    const hasCategory =
-                      Array.isArray(coupon.categories) &&
-                      coupon.categories.length > 0;
-
-                    const hasCollection =
-                      Array.isArray(coupon.collections) &&
-                      coupon.collections.length > 0;
+                    const targeted = Boolean(coupon.targetEmail || coupon.targetPhone);
+                    const hasCategory = Array.isArray(coupon.categories) && coupon.categories.length > 0;
+                    const hasCollection = Array.isArray(coupon.collections) && coupon.collections.length > 0;
 
                     return (
-                      <tr
-                        key={coupon._id}
-                        className="transition hover:bg-gray-50/70"
-                      >
+                      <tr key={coupon._id} className="transition hover:bg-gray-50/70">
                         <td className="px-4 py-4">
                           <span className="font-semibold text-gray-950">
                             #{coupon.couponNumber || "---"}
@@ -463,9 +433,7 @@ export default function ManageCouponsPage() {
                         </td>
 
                         <td className="px-4 py-4">
-                          <div className="font-semibold text-gray-950">
-                            {coupon.code}
-                          </div>
+                          <div className="font-semibold text-gray-950">{coupon.code}</div>
                           <div className="mt-0.5 max-w-[220px] truncate text-xs text-gray-400">
                             {coupon.description || "No description"}
                           </div>
@@ -479,7 +447,11 @@ export default function ManageCouponsPage() {
                             </span>
                           </div>
                           <div className="mt-1 text-xs text-gray-400">
-                            {rules.length ? `${rules.length} rule(s)` : "No rule"}
+                            {quantityEnabled
+                              ? getQuantityLabel(coupon)
+                              : rules.length
+                                ? `${rules.length} rule(s)`
+                                : "No rule"}
                           </div>
                         </td>
 
@@ -510,13 +482,16 @@ export default function ManageCouponsPage() {
                               </Badge>
                             )}
 
+                            {quantityEnabled && (
+                              <Badge tone="black">
+                                <ShoppingBag size={12} className="mr-1" />
+                                AOV
+                              </Badge>
+                            )}
+
                             {targeted && <Badge tone="amber">Targeted</Badge>}
-                            {hasCategory && (
-                              <Badge tone="green">Category</Badge>
-                            )}
-                            {hasCollection && (
-                              <Badge tone="green">Collection</Badge>
-                            )}
+                            {hasCategory && <Badge tone="green">Category</Badge>}
+                            {hasCollection && <Badge tone="green">Collection</Badge>}
                           </div>
                         </td>
 
@@ -536,9 +511,7 @@ export default function ManageCouponsPage() {
 
                         <td className="px-4 py-4 text-gray-700">
                           {coupon.usedCount || 0}
-                          {coupon.usageLimit > 0
-                            ? ` / ${coupon.usageLimit}`
-                            : " / ∞"}
+                          {coupon.usageLimit > 0 ? ` / ${coupon.usageLimit}` : " / ∞"}
                         </td>
 
                         <td className="px-4 py-4 text-gray-500">
@@ -557,9 +530,7 @@ export default function ManageCouponsPage() {
                         <td className="px-4 py-4">
                           <div className="flex justify-end gap-2">
                             <button
-                              onClick={() =>
-                                router.push(`/coupons/edit/${coupon._id}`)
-                              }
+                              onClick={() => router.push(`/coupons/edit/${coupon._id}`)}
                               className="rounded-2xl bg-gray-100 p-2.5 text-gray-700 transition hover:bg-gray-200"
                               title="Edit coupon"
                             >
@@ -573,10 +544,7 @@ export default function ManageCouponsPage() {
                               title="Delete coupon"
                             >
                               {deletingId === coupon._id ? (
-                                <RefreshCcw
-                                  size={16}
-                                  className="animate-spin"
-                                />
+                                <RefreshCcw size={16} className="animate-spin" />
                               ) : (
                                 <Trash2 size={16} />
                               )}

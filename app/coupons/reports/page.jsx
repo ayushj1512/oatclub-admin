@@ -10,8 +10,8 @@ import {
   Lock,
   RefreshCcw,
   Search,
+  ShoppingBag,
   Sparkles,
-  Target,
   TicketPercent,
   TrendingUp,
   XCircle,
@@ -57,6 +57,7 @@ export default function CouponReportsPage() {
     ruleType: "",
     discountTarget: "",
     autoApply: "",
+    quantityRule: "",
   });
 
   useEffect(() => {
@@ -64,6 +65,21 @@ export default function CouponReportsPage() {
   }, [fetchCoupons]);
 
   const now = useMemo(() => new Date(), []);
+
+  const hasQuantityRule = (coupon) =>
+    Boolean(
+      coupon?.quantityRule?.enabled &&
+        Number(coupon?.quantityRule?.minItems || 0) > 0
+    );
+
+  const getQuantityLabel = (coupon) => {
+    if (!hasQuantityRule(coupon)) return "";
+
+    const rule = coupon.quantityRule;
+    return `Buy ${rule.minItems}+ ${
+      rule.countMode === "unique_items" ? "unique items" : "qty"
+    }`;
+  };
 
   const getRules = (coupon) => {
     if (Array.isArray(coupon?.cartRules) && coupon.cartRules.length) {
@@ -74,11 +90,17 @@ export default function CouponReportsPage() {
     if (!old?.enabled || old?.ruleType === "none") return [];
 
     if (old.ruleType === "primary_secondary") {
-      return [{ ruleType: "primary_required" }, { ruleType: "secondary_required" }];
+      return [
+        { ruleType: "primary_required" },
+        { ruleType: "secondary_required" },
+      ];
     }
 
     if (old.ruleType === "category_collection") {
-      return [{ ruleType: "category_required" }, { ruleType: "collection_required" }];
+      return [
+        { ruleType: "category_required" },
+        { ruleType: "collection_required" },
+      ];
     }
 
     return [];
@@ -88,13 +110,16 @@ export default function CouponReportsPage() {
     coupon.discountTarget || coupon?.cartRule?.discountTarget || "cart";
 
   const getRuleLabel = (coupon) => {
+    if (hasQuantityRule(coupon)) return getQuantityLabel(coupon);
+
     const rules = getRules(coupon);
     if (!rules.length) return "Basic";
 
-    return rules
-      .map((r) => ruleLabels[r.ruleType] || "Rule")
-      .join(" + ");
+    return rules.map((r) => ruleLabels[r.ruleType] || "Rule").join(" + ");
   };
+
+  const getRuleIcon = (coupon) =>
+    hasQuantityRule(coupon) ? ShoppingBag : Layers3;
 
   const getStatus = (coupon) => {
     if (!coupon.isActive) return "Inactive";
@@ -109,6 +134,7 @@ export default function CouponReportsPage() {
       const rules = getRules(coupon);
       const ruleTypes = rules.map((r) => r.ruleType);
       const target = getTarget(coupon);
+      const quantityEnabled = hasQuantityRule(coupon);
 
       if (q) {
         const text = [
@@ -116,6 +142,8 @@ export default function CouponReportsPage() {
           coupon.couponNumber,
           coupon.description,
           getRuleLabel(coupon),
+          getQuantityLabel(coupon),
+          quantityEnabled ? "aov quantity buy items" : "",
           target,
           ...ruleTypes,
         ]
@@ -127,13 +155,29 @@ export default function CouponReportsPage() {
       }
 
       if (filters.ruleType) {
-        if (filters.ruleType === "basic" && rules.length) return false;
-        if (filters.ruleType !== "basic" && !ruleTypes.includes(filters.ruleType)) {
+        if (filters.ruleType === "basic" && (rules.length || quantityEnabled)) {
+          return false;
+        }
+
+        if (filters.ruleType === "quantity" && !quantityEnabled) {
+          return false;
+        }
+
+        if (
+          !["basic", "quantity"].includes(filters.ruleType) &&
+          !ruleTypes.includes(filters.ruleType)
+        ) {
           return false;
         }
       }
 
-      if (filters.discountTarget && target !== filters.discountTarget) return false;
+      if (filters.quantityRule !== "") {
+        if (quantityEnabled !== (filters.quantityRule === "true")) return false;
+      }
+
+      if (filters.discountTarget && target !== filters.discountTarget) {
+        return false;
+      }
 
       if (filters.autoApply !== "") {
         if (Boolean(coupon.autoApply) !== (filters.autoApply === "true")) {
@@ -152,8 +196,12 @@ export default function CouponReportsPage() {
     const inactive = filteredCoupons.filter((c) => getStatus(c) === "Inactive").length;
     const auto = filteredCoupons.filter((c) => c.autoApply).length;
     const targeted = filteredCoupons.filter((c) => c.targetEmail || c.targetPhone).length;
+    const aov = filteredCoupons.filter(hasQuantityRule).length;
 
-    const used = filteredCoupons.reduce((sum, c) => sum + Number(c.usedCount || 0), 0);
+    const used = filteredCoupons.reduce(
+      (sum, c) => sum + Number(c.usedCount || 0),
+      0
+    );
 
     const limited = filteredCoupons.reduce((sum, c) => {
       const limit = Number(c.usageLimit || 0);
@@ -169,6 +217,7 @@ export default function CouponReportsPage() {
       inactive,
       auto,
       targeted,
+      aov,
       used,
       limited,
       avgUsage,
@@ -176,11 +225,12 @@ export default function CouponReportsPage() {
   }, [filteredCoupons]);
 
   const statusPie = useMemo(
-    () => [
-      { name: "Active", value: stats.active },
-      { name: "Expired", value: stats.expired },
-      { name: "Inactive", value: stats.inactive },
-    ].filter((x) => x.value > 0),
+    () =>
+      [
+        { name: "Active", value: stats.active },
+        { name: "Expired", value: stats.expired },
+        { name: "Inactive", value: stats.inactive },
+      ].filter((x) => x.value > 0),
     [stats]
   );
 
@@ -226,6 +276,7 @@ export default function CouponReportsPage() {
       ruleType: "",
       discountTarget: "",
       autoApply: "",
+      quantityRule: "",
     });
   };
 
@@ -244,7 +295,7 @@ export default function CouponReportsPage() {
                   Coupon Reports
                 </h1>
                 <p className="mt-1 text-sm text-gray-500">
-                  Usage, rule performance, target split and coupon health.
+                  Usage, AOV offers, rule performance, target split and coupon health.
                 </p>
               </div>
             </div>
@@ -260,7 +311,7 @@ export default function CouponReportsPage() {
         </div>
 
         <div className="mt-5 rounded-3xl bg-white p-4 shadow-[0_12px_35px_rgba(0,0,0,0.035)] ring-1 ring-gray-100">
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_repeat(3,1fr)_auto]">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_repeat(4,1fr)_auto]">
             <div className="relative">
               <Search
                 size={17}
@@ -271,7 +322,7 @@ export default function CouponReportsPage() {
                 onChange={(e) =>
                   setFilters((p) => ({ ...p, search: e.target.value }))
                 }
-                placeholder="Search coupon, rule, target..."
+                placeholder="Search coupon, rule, AOV..."
                 className="w-full rounded-2xl bg-gray-50 py-2.5 pl-10 pr-3 text-sm outline-none ring-1 ring-gray-100 focus:bg-white focus:ring-gray-300"
               />
             </div>
@@ -285,10 +336,23 @@ export default function CouponReportsPage() {
             >
               <option value="">All Rules</option>
               <option value="basic">Basic</option>
+              <option value="quantity">AOV Quantity</option>
               <option value="primary_required">Primary</option>
               <option value="secondary_required">Secondary</option>
               <option value="category_required">Category</option>
               <option value="collection_required">Collection</option>
+            </select>
+
+            <select
+              value={filters.quantityRule}
+              onChange={(e) =>
+                setFilters((p) => ({ ...p, quantityRule: e.target.value }))
+              }
+              className={selectClass}
+            >
+              <option value="">All AOV</option>
+              <option value="true">AOV Rule</option>
+              <option value="false">Non AOV</option>
             </select>
 
             <select
@@ -331,8 +395,8 @@ export default function CouponReportsPage() {
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total Coupons" value={stats.total} icon={TrendingUp} />
           <StatCard label="Total Redemptions" value={stats.used} icon={Crown} />
+          <StatCard label="AOV Coupons" value={stats.aov} icon={ShoppingBag} />
           <StatCard label="Auto Apply" value={stats.auto} icon={Sparkles} />
-          <StatCard label="Targeted" value={stats.targeted} icon={Lock} />
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -347,7 +411,7 @@ export default function CouponReportsPage() {
             <Donut data={statusPie} />
           </ChartCard>
 
-          <ChartCard title="Rule Distribution" subtitle="Rules used in coupons">
+          <ChartCard title="Rule Distribution" subtitle="Basic, AOV and cart rules">
             <Donut data={rulePie} />
           </ChartCard>
 
@@ -394,7 +458,7 @@ export default function CouponReportsPage() {
                 Detailed Coupon Values
               </h2>
               <p className="text-sm text-gray-500">
-                Codes, rules, targets, usage and status.
+                Codes, AOV rules, targets, usage and status.
               </p>
             </div>
 
@@ -409,7 +473,7 @@ export default function CouponReportsPage() {
             <EmptyState text="No coupons found." />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] text-sm">
+              <table className="w-full min-w-[1120px] text-sm">
                 <thead>
                   <tr className="bg-gray-50/70 text-left text-xs uppercase tracking-wide text-gray-400">
                     <th className="px-4 py-4 font-medium">Coupon</th>
@@ -428,6 +492,8 @@ export default function CouponReportsPage() {
                     const status = getStatus(coupon);
                     const target = getTarget(coupon);
                     const targeted = Boolean(coupon.targetEmail || coupon.targetPhone);
+                    const quantityEnabled = hasQuantityRule(coupon);
+                    const RuleIcon = getRuleIcon(coupon);
 
                     return (
                       <tr key={coupon._id} className="transition hover:bg-gray-50/70">
@@ -442,7 +508,7 @@ export default function CouponReportsPage() {
 
                         <td className="px-4 py-4 text-gray-700">
                           <div className="flex items-center gap-2">
-                            <Layers3 size={15} className="text-gray-400" />
+                            <RuleIcon size={15} className="text-gray-400" />
                             {getRuleLabel(coupon)}
                           </div>
                         </td>
@@ -469,6 +535,13 @@ export default function CouponReportsPage() {
                               <Badge>
                                 <Sparkles size={12} className="mr-1" />
                                 Auto
+                              </Badge>
+                            )}
+
+                            {quantityEnabled && (
+                              <Badge>
+                                <ShoppingBag size={12} className="mr-1" />
+                                AOV
                               </Badge>
                             )}
 

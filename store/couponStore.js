@@ -38,6 +38,19 @@ const normalizeCartRules = (rules = []) => {
     .filter((rule) => rule.ruleType);
 };
 
+const normalizeQuantityRule = (rule = {}) => {
+  const minItems = Math.max(0, Number(rule.minItems || 0));
+  const countMode = ["total_quantity", "unique_items"].includes(rule.countMode)
+    ? rule.countMode
+    : "total_quantity";
+
+  return {
+    enabled: Boolean(rule.enabled) && minItems > 0,
+    minItems,
+    countMode,
+  };
+};
+
 const normalizeCouponPayload = (payload = {}) => {
   const cleanPayload = {
     ...payload,
@@ -45,25 +58,23 @@ const normalizeCouponPayload = (payload = {}) => {
     code: payload.code ? String(payload.code).trim().toUpperCase() : payload.code,
 
     visibility: payload.visibility || "public",
-
     autoApply: Boolean(payload.autoApply),
 
     categories: Array.isArray(payload.categories) ? payload.categories : [],
-
     collections: Array.isArray(payload.collections) ? payload.collections : [],
+
+    quantityRule: normalizeQuantityRule(payload.quantityRule),
 
     cartRules: normalizeCartRules(payload.cartRules),
 
     discountTarget: payload.discountTarget || "cart",
-
     applyToAllEligibleItems: payload.applyToAllEligibleItems !== false,
 
     targetEmail: payload.targetEmail ? normEmail(payload.targetEmail) : null,
-
     targetPhone: payload.targetPhone ? normPhone(payload.targetPhone) : null,
   };
 
-  // ✅ Backward compatibility only
+  // old support
   if (payload.cartRule) {
     cleanPayload.cartRule = {
       enabled: Boolean(payload.cartRule.enabled),
@@ -100,11 +111,9 @@ export const useCouponStore = create((set, get) => ({
   success: null,
 
   /* ------------------------------------------------------------------
-  FETCH ALL COUPONS - ADMIN
-
-  Supported filters:
-  type, isActive, influencerId, visibility, autoApply,
-  ruleType, category, collection, discountTarget, search
+  FETCH ALL COUPONS
+  filters: type, isActive, influencerId, visibility, autoApply,
+  ruleType, category, collection, discountTarget, quantityRule, search
   ------------------------------------------------------------------- */
 
   fetchCoupons: async (filters = {}) => {
@@ -136,7 +145,7 @@ export const useCouponStore = create((set, get) => ({
   },
 
   /* ------------------------------------------------------------------
-  FETCH SINGLE COUPON - ADMIN/PUBLIC
+  FETCH SINGLE COUPON
   ------------------------------------------------------------------- */
 
   fetchCouponByIdOrCode: async (idOrCode) => {
@@ -166,7 +175,7 @@ export const useCouponStore = create((set, get) => ({
   },
 
   /* ------------------------------------------------------------------
-  CREATE COUPON - ADMIN
+  CREATE COUPON
   ------------------------------------------------------------------- */
 
   createCoupon: async (payload) => {
@@ -202,7 +211,7 @@ export const useCouponStore = create((set, get) => ({
   },
 
   /* ------------------------------------------------------------------
-  UPDATE COUPON - ADMIN
+  UPDATE COUPON
   ------------------------------------------------------------------- */
 
   updateCoupon: async (id, payload) => {
@@ -242,7 +251,7 @@ export const useCouponStore = create((set, get) => ({
   },
 
   /* ------------------------------------------------------------------
-  DELETE COUPON - ADMIN
+  DELETE COUPON
   ------------------------------------------------------------------- */
 
   deleteCoupon: async (id) => {
@@ -276,7 +285,7 @@ export const useCouponStore = create((set, get) => ({
   },
 
   /* ------------------------------------------------------------------
-  APPLY COUPON - CUSTOMER/CART
+  APPLY COUPON
   ------------------------------------------------------------------- */
 
   applyCoupon: async ({
@@ -323,7 +332,7 @@ export const useCouponStore = create((set, get) => ({
   },
 
   /* ------------------------------------------------------------------
-  AUTO APPLY BEST COUPON - CUSTOMER/CART
+  AUTO APPLY BEST COUPON
   ------------------------------------------------------------------- */
 
   autoApplyCoupon: async ({
@@ -350,9 +359,7 @@ export const useCouponStore = create((set, get) => ({
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to auto apply coupon");
-      }
+      if (!res.ok) throw new Error(data.message || "Failed to auto apply coupon");
 
       set({
         autoAppliedCoupon: data,

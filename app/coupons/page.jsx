@@ -14,6 +14,7 @@ import {
   FolderTree,
   Lock,
   Globe2,
+  ShoppingBag,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -28,6 +29,7 @@ export default function CouponDashboard() {
     type: "",
     autoApply: "",
     ruleType: "",
+    quantityRule: "",
   });
 
   useEffect(() => {
@@ -40,7 +42,7 @@ export default function CouponDashboard() {
     {
       id: "create",
       title: "Create Coupon",
-      desc: "Create manual, targeted, auto-apply, category or collection coupons.",
+      desc: "Create manual, auto-apply, quantity, category or collection coupons.",
       icon: PlusCircle,
       route: "/coupons/create",
     },
@@ -62,6 +64,15 @@ export default function CouponDashboard() {
 
   const filteredCoupons = useMemo(() => {
     return coupons.filter((coupon) => {
+      const hasQuantityRule = Boolean(
+        coupon?.quantityRule?.enabled && Number(coupon?.quantityRule?.minItems) > 0
+      );
+
+      const oldRule = coupon?.cartRule?.ruleType;
+      const newRuleTypes = Array.isArray(coupon?.cartRules)
+        ? coupon.cartRules.map((r) => r.ruleType)
+        : [];
+
       if (filters.visibility && coupon.visibility !== filters.visibility) return false;
       if (filters.type && coupon.type !== filters.type) return false;
 
@@ -69,7 +80,26 @@ export default function CouponDashboard() {
         if (Boolean(coupon.autoApply) !== (filters.autoApply === "true")) return false;
       }
 
-      if (filters.ruleType && coupon?.cartRule?.ruleType !== filters.ruleType) return false;
+      if (filters.quantityRule !== "") {
+        if (hasQuantityRule !== (filters.quantityRule === "true")) return false;
+      }
+
+      if (filters.ruleType) {
+        if (filters.ruleType === "none") {
+          if (
+            hasQuantityRule ||
+            (oldRule && oldRule !== "none") ||
+            newRuleTypes.length > 0
+          ) {
+            return false;
+          }
+        } else if (
+          oldRule !== filters.ruleType &&
+          !newRuleTypes.includes(filters.ruleType)
+        ) {
+          return false;
+        }
+      }
 
       return true;
     });
@@ -81,22 +111,38 @@ export default function CouponDashboard() {
     ).length;
 
     const expired = filteredCoupons.filter((c) => new Date(c.validTill) < now).length;
-
     const autoApply = filteredCoupons.filter((c) => c.autoApply).length;
 
-    const categoryCollection = filteredCoupons.filter(
-      (c) => c?.cartRule?.ruleType === "category_collection"
+    const quantityCoupons = filteredCoupons.filter(
+      (c) => c?.quantityRule?.enabled && Number(c?.quantityRule?.minItems) > 0
     ).length;
 
-    const primarySecondary = filteredCoupons.filter(
-      (c) => c?.cartRule?.ruleType === "primary_secondary"
-    ).length;
+    const categoryCollection = filteredCoupons.filter((c) => {
+      const rules = Array.isArray(c?.cartRules) ? c.cartRules : [];
+      return (
+        c?.cartRule?.ruleType === "category_collection" ||
+        rules.some((r) =>
+          ["category_required", "collection_required"].includes(r.ruleType)
+        )
+      );
+    }).length;
+
+    const primarySecondary = filteredCoupons.filter((c) => {
+      const rules = Array.isArray(c?.cartRules) ? c.cartRules : [];
+      return (
+        c?.cartRule?.ruleType === "primary_secondary" ||
+        rules.some((r) =>
+          ["primary_required", "secondary_required"].includes(r.ruleType)
+        )
+      );
+    }).length;
 
     return {
       total: filteredCoupons.length,
       active,
       expired,
       autoApply,
+      quantityCoupons,
       categoryCollection,
       primarySecondary,
     };
@@ -114,6 +160,7 @@ export default function CouponDashboard() {
       type: "",
       autoApply: "",
       ruleType: "",
+      quantityRule: "",
     });
   };
 
@@ -126,6 +173,7 @@ export default function CouponDashboard() {
       amber: "bg-amber-50 text-amber-700",
       purple: "bg-purple-50 text-purple-700",
       red: "bg-red-50 text-red-700",
+      black: "bg-gray-950 text-white",
     };
 
     return (
@@ -163,13 +211,38 @@ export default function CouponDashboard() {
   };
 
   const getRuleLabel = (coupon) => {
-    const rule = coupon?.cartRule?.ruleType;
+    const quantityRule = coupon?.quantityRule;
+    if (quantityRule?.enabled && Number(quantityRule?.minItems) > 0) {
+      return `Buy ${quantityRule.minItems}+ Items`;
+    }
 
-    if (!coupon?.cartRule?.enabled || rule === "none") return "Basic";
-    if (rule === "primary_secondary") return "Primary + Secondary";
-    if (rule === "category_collection") return "Category / Collection";
+    const rules = Array.isArray(coupon?.cartRules) ? coupon.cartRules : [];
+    const ruleTypes = rules.map((r) => r.ruleType);
 
-    return "Rule";
+    if (
+      coupon?.cartRule?.ruleType === "primary_secondary" ||
+      ruleTypes.some((r) => ["primary_required", "secondary_required"].includes(r))
+    ) {
+      return "Primary + Secondary";
+    }
+
+    if (
+      coupon?.cartRule?.ruleType === "category_collection" ||
+      ruleTypes.some((r) => ["category_required", "collection_required"].includes(r))
+    ) {
+      return "Category / Collection";
+    }
+
+    return "Basic";
+  };
+
+  const getQuantityLabel = (coupon) => {
+    const rule = coupon?.quantityRule;
+    if (!rule?.enabled || !Number(rule?.minItems)) return "-";
+
+    return `${rule.minItems}+ ${
+      rule.countMode === "unique_items" ? "unique items" : "qty"
+    }`;
   };
 
   return (
@@ -188,8 +261,8 @@ export default function CouponDashboard() {
                   Coupons Dashboard
                 </h1>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
-                  Track coupon health, auto-apply rules, category/collection offers and
-                  recent coupon activity.
+                  Track coupon health, auto-apply rules, AOV quantity offers,
+                  category coupons and recent coupon activity.
                 </p>
               </div>
             </div>
@@ -207,7 +280,7 @@ export default function CouponDashboard() {
         {/* FILTERS */}
         <div className="mt-5 rounded-3xl bg-white p-4 shadow-[0_12px_35px_rgba(0,0,0,0.035)] ring-1 ring-gray-100">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
               <select
                 className="rounded-2xl bg-gray-50 px-3 py-2.5 text-sm text-gray-700 outline-none ring-1 ring-gray-100 transition focus:bg-white focus:ring-gray-300"
                 value={filters.visibility}
@@ -248,6 +321,21 @@ export default function CouponDashboard() {
 
               <select
                 className="rounded-2xl bg-gray-50 px-3 py-2.5 text-sm text-gray-700 outline-none ring-1 ring-gray-100 transition focus:bg-white focus:ring-gray-300"
+                value={filters.quantityRule}
+                onChange={(e) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    quantityRule: e.target.value,
+                  }))
+                }
+              >
+                <option value="">All Quantity Rules</option>
+                <option value="true">Quantity / AOV</option>
+                <option value="false">Non Quantity</option>
+              </select>
+
+              <select
+                className="rounded-2xl bg-gray-50 px-3 py-2.5 text-sm text-gray-700 outline-none ring-1 ring-gray-100 transition focus:bg-white focus:ring-gray-300"
                 value={filters.ruleType}
                 onChange={(e) =>
                   setFilters((prev) => ({ ...prev, ruleType: e.target.value }))
@@ -255,8 +343,12 @@ export default function CouponDashboard() {
               >
                 <option value="">All Rules</option>
                 <option value="none">Basic</option>
-                <option value="primary_secondary">Primary + Secondary</option>
-                <option value="category_collection">Category / Collection</option>
+                <option value="primary_required">Primary Required</option>
+                <option value="secondary_required">Secondary Required</option>
+                <option value="category_required">Category Required</option>
+                <option value="collection_required">Collection Required</option>
+                <option value="primary_secondary">Old: Primary + Secondary</option>
+                <option value="category_collection">Old: Category / Collection</option>
               </select>
             </div>
 
@@ -280,13 +372,14 @@ export default function CouponDashboard() {
         </div>
 
         {/* STATS */}
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-7">
           <StatCard label="Total" value={stats.total} icon={TrendingUp} />
           <StatCard label="Active" value={stats.active} icon={CheckCircle} />
           <StatCard label="Expired" value={stats.expired} icon={AlertTriangle} />
           <StatCard label="Auto Apply" value={stats.autoApply} icon={Sparkles} />
-          <StatCard label="Category Rules" value={stats.categoryCollection} icon={FolderTree} />
-          <StatCard label="Primary Rules" value={stats.primarySecondary} icon={Layers3} />
+          <StatCard label="AOV Rules" value={stats.quantityCoupons} icon={ShoppingBag} />
+          <StatCard label="Category" value={stats.categoryCollection} icon={FolderTree} />
+          <StatCard label="Primary" value={stats.primarySecondary} icon={Layers3} />
         </div>
 
         {/* QUICK ACTIONS */}
@@ -304,8 +397,12 @@ export default function CouponDashboard() {
                   <Icon size={21} />
                 </div>
 
-                <h2 className="text-base font-semibold text-gray-950">{card.title}</h2>
-                <p className="mt-1 text-sm leading-6 text-gray-500">{card.desc}</p>
+                <h2 className="text-base font-semibold text-gray-950">
+                  {card.title}
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-gray-500">
+                  {card.desc}
+                </p>
               </button>
             );
           })}
@@ -315,8 +412,12 @@ export default function CouponDashboard() {
         <div className="mt-5 rounded-3xl bg-white p-4 shadow-[0_12px_35px_rgba(0,0,0,0.035)] ring-1 ring-gray-100 sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-950">Recent Coupons</h2>
-              <p className="text-sm text-gray-500">Latest coupon rules created in admin.</p>
+              <h2 className="text-lg font-semibold text-gray-950">
+                Recent Coupons
+              </h2>
+              <p className="text-sm text-gray-500">
+                Latest coupon rules created in admin.
+              </p>
             </div>
 
             <button
@@ -328,17 +429,22 @@ export default function CouponDashboard() {
           </div>
 
           {loading ? (
-            <div className="py-10 text-center text-sm text-gray-500">Loading coupons…</div>
+            <div className="py-10 text-center text-sm text-gray-500">
+              Loading coupons…
+            </div>
           ) : recentCoupons.length === 0 ? (
-            <div className="py-10 text-center text-sm text-gray-500">No coupons found.</div>
+            <div className="py-10 text-center text-sm text-gray-500">
+              No coupons found.
+            </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[920px] text-sm">
+              <table className="w-full min-w-[1040px] text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-gray-400">
                     <th className="px-3 py-3 font-medium">No.</th>
                     <th className="px-3 py-3 font-medium">Coupon</th>
                     <th className="px-3 py-3 font-medium">Rule</th>
+                    <th className="px-3 py-3 font-medium">Min Qty</th>
                     <th className="px-3 py-3 font-medium">Badges</th>
                     <th className="px-3 py-3 font-medium">Discount</th>
                     <th className="px-3 py-3 font-medium">Usage</th>
@@ -350,9 +456,15 @@ export default function CouponDashboard() {
                   {recentCoupons.map((coupon) => {
                     const targeted = Boolean(coupon.targetEmail || coupon.targetPhone);
                     const expired = new Date(coupon.validTill) < now;
-                    const hasCategory = Array.isArray(coupon.categories) && coupon.categories.length > 0;
+                    const hasQuantityRule = Boolean(
+                      coupon?.quantityRule?.enabled &&
+                        Number(coupon?.quantityRule?.minItems) > 0
+                    );
+                    const hasCategory =
+                      Array.isArray(coupon.categories) && coupon.categories.length > 0;
                     const hasCollection =
-                      Array.isArray(coupon.collections) && coupon.collections.length > 0;
+                      Array.isArray(coupon.collections) &&
+                      coupon.collections.length > 0;
 
                     return (
                       <tr key={coupon._id} className="transition hover:bg-gray-50/70">
@@ -363,11 +475,21 @@ export default function CouponDashboard() {
                         </td>
 
                         <td className="px-3 py-4">
-                          <div className="font-semibold text-gray-950">{coupon.code}</div>
-                          <div className="text-xs capitalize text-gray-400">{coupon.type}</div>
+                          <div className="font-semibold text-gray-950">
+                            {coupon.code}
+                          </div>
+                          <div className="text-xs capitalize text-gray-400">
+                            {coupon.type}
+                          </div>
                         </td>
 
-                        <td className="px-3 py-4 text-gray-700">{getRuleLabel(coupon)}</td>
+                        <td className="px-3 py-4 text-gray-700">
+                          {getRuleLabel(coupon)}
+                        </td>
+
+                        <td className="px-3 py-4 text-gray-600">
+                          {getQuantityLabel(coupon)}
+                        </td>
 
                         <td className="px-3 py-4">
                           <div className="flex flex-wrap gap-1.5">
@@ -384,6 +506,7 @@ export default function CouponDashboard() {
                             )}
 
                             {coupon.autoApply && <Badge tone="purple">Auto</Badge>}
+                            {hasQuantityRule && <Badge tone="black">AOV</Badge>}
                             {targeted && <Badge tone="amber">Targeted</Badge>}
                             {hasCategory && <Badge tone="green">Category</Badge>}
                             {hasCollection && <Badge tone="green">Collection</Badge>}
