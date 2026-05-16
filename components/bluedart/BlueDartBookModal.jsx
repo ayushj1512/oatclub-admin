@@ -31,7 +31,7 @@ export default function BlueDartBookModal({
     weight: "0.5",
     length: "10",
     breadth: "10",
-    height: "10",
+    height: "5",
     pieces: "1",
     notes: "",
     serviceType: "",

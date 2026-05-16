@@ -11,6 +11,9 @@ import {
   ChevronRight,
   Truck,
   RadioTower,
+  CheckCheck,
+  Square,
+  SquareCheckBig,
 } from "lucide-react";
 
 import { useOrderStore } from "@/store/orderStore";
@@ -33,7 +36,6 @@ const BOOKED_STATUSES = new Set([
 ]);
 
 const PUSHED_STATUSES = new Set(["draft", "order_pushed", "processing"]);
-
 const LOCAL_PAGE_SIZE = 50;
 
 const normalizeOrderNumber = (value) => {
@@ -137,6 +139,7 @@ const StatCard = ({ icon: Icon, label, value, hint }) => (
       <div className="rounded-2xl bg-neutral-100 p-2.5 text-black">
         <Icon size={18} />
       </div>
+
       {hint ? (
         <span className="rounded-full bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-500 ring-1 ring-neutral-100">
           {hint}
@@ -156,11 +159,12 @@ export default function BlueDartPage() {
     fetchAllOrdersAllPages,
   } = useOrderStore();
 
-  const {
-    shipments,
-    listLoading: shipmentsLoading,
-    fetchShipments,
-  } = useBlueDartStore();
+const {
+  shipments,
+  listLoading: shipmentsLoading,
+  fetchShipments,
+  createShipmentFromOrder,
+} = useBlueDartStore();
 
   const [search, setSearch] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("all");
@@ -169,6 +173,9 @@ export default function BlueDartPage() {
   const [carrierFilter, setCarrierFilter] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
+
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [bulkBookingLoading, setBulkBookingLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -254,7 +261,9 @@ export default function BlueDartPage() {
 
     if (carrierFilter !== "all") {
       rows = rows.filter((order) => {
-        const shipment = shipmentMap.get(normalizeOrderNumber(order?.orderNumber));
+        const shipment = shipmentMap.get(
+          normalizeOrderNumber(order?.orderNumber)
+        );
         const carrier = safe(shipment?.carrierName || shipment?.courierName);
         return lower(carrier) === lower(carrierFilter);
       });
@@ -262,7 +271,9 @@ export default function BlueDartPage() {
 
     if (bookingFilter !== "all") {
       rows = rows.filter((order) => {
-        const shipment = shipmentMap.get(normalizeOrderNumber(order?.orderNumber));
+        const shipment = shipmentMap.get(
+          normalizeOrderNumber(order?.orderNumber)
+        );
         return getOrderBookingState(shipment) === bookingFilter;
       });
     }
@@ -296,6 +307,20 @@ export default function BlueDartPage() {
     return filteredOrders.slice(start, start + LOCAL_PAGE_SIZE);
   }, [filteredOrders, page]);
 
+  const selectableOrders = useMemo(() => {
+    return filteredOrders.filter((order) => {
+      const shipment = shipmentMap.get(normalizeOrderNumber(order?.orderNumber));
+      return getOrderBookingState(shipment) === "not_booked";
+    });
+  }, [filteredOrders, shipmentMap]);
+
+  const paginatedSelectableOrders = useMemo(() => {
+    return paginatedOrders.filter((order) => {
+      const shipment = shipmentMap.get(normalizeOrderNumber(order?.orderNumber));
+      return getOrderBookingState(shipment) === "not_booked";
+    });
+  }, [paginatedOrders, shipmentMap]);
+
   const stats = useMemo(() => {
     let booked = 0;
     let pushed = 0;
@@ -319,7 +344,104 @@ export default function BlueDartPage() {
     };
   }, [filteredOrders, shipmentMap, shipments]);
 
+  const selectedSet = useMemo(() => new Set(selectedOrders), [selectedOrders]);
+
+  const isSelected = useCallback(
+    (orderNumber) => selectedSet.has(normalizeOrderNumber(orderNumber)),
+    [selectedSet]
+  );
+
+  const toggleSelectOrder = useCallback((orderNumber) => {
+    const normalized = normalizeOrderNumber(orderNumber);
+    if (!normalized) return;
+
+    setSelectedOrders((prev) =>
+      prev.includes(normalized)
+        ? prev.filter((item) => item !== normalized)
+        : [...prev, normalized]
+    );
+  }, []);
+
+  const handleSelectAllPage = () => {
+    const pageOrderNumbers = paginatedSelectableOrders
+      .map((order) => normalizeOrderNumber(order?.orderNumber))
+      .filter(Boolean);
+
+    if (!pageOrderNumbers.length) return;
+
+    const allSelected = pageOrderNumbers.every((id) =>
+      selectedOrders.includes(id)
+    );
+
+    if (allSelected) {
+      setSelectedOrders((prev) =>
+        prev.filter((id) => !pageOrderNumbers.includes(id))
+      );
+    } else {
+      setSelectedOrders((prev) => [...new Set([...prev, ...pageOrderNumbers])]);
+    }
+  };
+
+  const handleSelectAllOrders = () => {
+    const allOrderNumbers = selectableOrders
+      .map((order) => normalizeOrderNumber(order?.orderNumber))
+      .filter(Boolean);
+
+    if (!allOrderNumbers.length) return;
+
+    const allSelected = allOrderNumbers.every((id) =>
+      selectedOrders.includes(id)
+    );
+
+    setSelectedOrders(allSelected ? [] : allOrderNumbers);
+  };
+
+  const handleBulkBooking = async (type = "selected") => {
+    try {
+      setBulkBookingLoading(true);
+
+      const ordersToBook =
+        type === "all"
+          ? selectableOrders
+          : filteredOrders.filter((order) =>
+              selectedOrders.includes(normalizeOrderNumber(order?.orderNumber))
+            );
+
+      if (!ordersToBook.length) {
+        alert("No orders selected for booking.");
+        return;
+      }
+
+      for (const order of ordersToBook) {
+        try {
+          await createShipmentFromOrder({
+  orderId: order?._id,
+    orderNumber: order?.orderNumber,
+
+});
+        } catch (err) {
+          console.error("Bulk booking failed for:", order?.orderNumber, err);
+        }
+      }
+
+      await loadData();
+      setSelectedOrders([]);
+
+      alert(`${ordersToBook.length} order(s) booking triggered.`);
+    } catch (error) {
+      console.error(error);
+      alert("Bulk booking failed.");
+    } finally {
+      setBulkBookingLoading(false);
+    }
+  };
+
   const loading = ordersLoading || shipmentsLoading || refreshing;
+  const actionLoading = loading || bulkBookingLoading;
+
+  const selectedOnPageCount = paginatedSelectableOrders.filter((order) =>
+    selectedOrders.includes(normalizeOrderNumber(order?.orderNumber))
+  ).length;
 
   return (
     <main className="min-h-screen space-y-6 bg-[#f6f6f6] p-4 sm:p-6">
@@ -347,9 +469,9 @@ export default function BlueDartPage() {
 
               <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-500">
                 Confirmed orders yahan se Eshipz partner ke through book honge.
-                BlueDart sirf carrier/courier hai, backend order model me provider{" "}
-                <span className="font-semibold text-black">eshipz</span> save
-                hoga.
+                BlueDart sirf carrier/courier hai, backend order model me
+                provider <span className="font-semibold text-black">eshipz</span>{" "}
+                save hoga.
               </p>
             </div>
           </div>
@@ -357,7 +479,7 @@ export default function BlueDartPage() {
           <button
             type="button"
             onClick={loadData}
-            disabled={loading}
+            disabled={actionLoading}
             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
@@ -466,11 +588,79 @@ export default function BlueDartPage() {
         </div>
       </section>
 
+      <section className="rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-neutral-100">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-black">
+              Bulk Booking Controls
+            </h2>
+
+            <p className="mt-1 text-sm text-neutral-500">
+              {selectedOrders.length} selected • {selectableOrders.length} not
+              booked orders available.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSelectAllPage}
+              disabled={!paginatedSelectableOrders.length || actionLoading}
+              className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {selectedOnPageCount === paginatedSelectableOrders.length &&
+              paginatedSelectableOrders.length ? (
+                <SquareCheckBig size={16} />
+              ) : (
+                <Square size={16} />
+              )}
+              Select Page
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSelectAllOrders}
+              disabled={!selectableOrders.length || actionLoading}
+              className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <SquareCheckBig size={16} />
+              Select All
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleBulkBooking("selected")}
+              disabled={!selectedOrders.length || actionLoading}
+              className="inline-flex items-center gap-2 rounded-2xl bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <CheckCheck size={16} />
+              {bulkBookingLoading ? "Booking..." : "Book Selected"} (
+              {selectedOrders.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleBulkBooking("all")}
+              disabled={!selectableOrders.length || actionLoading}
+              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <PackageCheck size={16} />
+              Book All ({selectableOrders.length})
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section className="overflow-hidden rounded-[2rem] bg-white p-2 shadow-sm ring-1 ring-neutral-100">
         <BlueDartBookingTable
           orders={paginatedOrders}
           shipments={shipments}
-          loading={loading}
+          loading={actionLoading}
+          selectedOrders={selectedOrders}
+          onToggleSelect={toggleSelectOrder}
+          isSelected={isSelected}
+          getOrderBookingState={getOrderBookingState}
+          normalizeOrderNumber={normalizeOrderNumber}
         />
       </section>
 
@@ -492,7 +682,7 @@ export default function BlueDartPage() {
             <button
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
+              disabled={page <= 1 || actionLoading}
               className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ChevronLeft size={16} />
@@ -506,7 +696,7 @@ export default function BlueDartPage() {
             <button
               type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || loading}
+              disabled={page >= totalPages || actionLoading}
               className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next

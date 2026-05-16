@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, PackagePlus } from "lucide-react";
+import { Eye, PackagePlus, Square, SquareCheckBig } from "lucide-react";
 import BlueDartShipmentBadge from "@/components/bluedart/BlueDartShipmentBadge";
 
 const safe = (v) => (v == null ? "" : String(v));
@@ -13,14 +13,23 @@ const money = (n) =>
 const ACTIVE_BOOKED_STATUSES = new Set([
   "order_pushed",
   "created",
+  "booked",
   "pickup_pending",
+  "pickup_scheduled",
   "picked",
+  "shipped",
   "in_transit",
   "out_for_delivery",
   "delivered",
 ]);
 
-export default function BlueDartOrderRow({ order, shipment, onBook }) {
+export default function BlueDartOrderRow({
+  order,
+  shipment,
+  onBook,
+  selected = false,
+  onToggleSelect,
+}) {
   const shipping = order?.shippingAddressSnapshot || {};
 
   const shipmentStatus = lower(shipment?.status);
@@ -28,9 +37,7 @@ export default function BlueDartOrderRow({ order, shipment, onBook }) {
   const hasAwb = Boolean(safe(shipment?.awbNumber).trim());
 
   const booked =
-    hasShipmentId ||
-    hasAwb ||
-    ACTIVE_BOOKED_STATUSES.has(shipmentStatus);
+    hasShipmentId || hasAwb || ACTIVE_BOOKED_STATUSES.has(shipmentStatus);
 
   const badgeStatus = booked
     ? shipmentStatus || (hasAwb ? "created" : "order_pushed")
@@ -38,6 +45,21 @@ export default function BlueDartOrderRow({ order, shipment, onBook }) {
 
   return (
     <tr className="border-b border-neutral-100 last:border-b-0">
+      <td className="px-4 py-4 align-middle">
+        {!booked ? (
+          <button
+            type="button"
+            onClick={() => onToggleSelect?.(order)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-50 text-black ring-1 ring-neutral-200 transition hover:bg-neutral-100"
+            aria-label={selected ? "Unselect order" : "Select order"}
+          >
+            {selected ? <SquareCheckBig size={18} /> : <Square size={18} />}
+          </button>
+        ) : (
+          <span className="text-xs text-neutral-400">—</span>
+        )}
+      </td>
+
       <td className="px-4 py-4">
         <div className="font-semibold text-neutral-900">
           {safe(order?.orderNumber)}

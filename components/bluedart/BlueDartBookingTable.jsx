@@ -22,18 +22,22 @@ const getShipmentScore = (shipment = {}) => {
   if (
     [
       "created",
+      "booked",
       "pickup_pending",
+      "pickup_scheduled",
       "picked",
+      "shipped",
       "in_transit",
       "out_for_delivery",
       "delivered",
       "order_pushed",
+      "processing",
     ].includes(status)
   ) {
     score += 50;
   }
 
-  if (["cancelled", "failed"].includes(status)) {
+  if (["cancelled", "failed", "rto"].includes(status)) {
     score -= 100;
   }
 
@@ -47,6 +51,10 @@ export default function BlueDartBookingTable({
   orders = [],
   shipments = [],
   loading = false,
+
+  selectedOrders = [],
+  onToggleSelect,
+  isSelected,
 }) {
   const [selectedOrder, setSelectedOrder] = useState(null);
 
@@ -79,7 +87,9 @@ export default function BlueDartBookingTable({
     return (orders || []).filter((order) => {
       const isConfirmed = Boolean(order?.isConfirmed);
       const status = safe(order?.fulfillmentStatus);
-      const blocked = ["cancelled", "delivered", "failed", "rto"].includes(status);
+      const blocked = ["cancelled", "delivered", "failed", "rto"].includes(
+        status
+      );
 
       return isConfirmed && !blocked;
     });
@@ -101,6 +111,7 @@ export default function BlueDartBookingTable({
           <table className="min-w-full">
             <thead className="bg-neutral-50">
               <tr className="text-left text-sm text-neutral-600">
+                <th className="px-4 py-3 font-semibold">Select</th>
                 <th className="px-4 py-3 font-semibold">Order</th>
                 <th className="px-4 py-3 font-semibold">Customer</th>
                 <th className="px-4 py-3 font-semibold">Location</th>
@@ -116,7 +127,7 @@ export default function BlueDartBookingTable({
               {loading ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 py-14 text-center text-sm text-neutral-500"
                   >
                     Loading orders...
@@ -125,21 +136,29 @@ export default function BlueDartBookingTable({
               ) : eligibleOrders.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 py-14 text-center text-sm text-neutral-500"
                   >
                     No eligible orders found for BlueDart booking.
                   </td>
                 </tr>
               ) : (
-                eligibleOrders.map((order) => (
-                  <BlueDartOrderRow
-                    key={order?._id || order?.orderNumber}
-                    order={order}
-                    shipment={shipmentMap.get(order?.orderNumber) || null}
-                    onBook={setSelectedOrder}
-                  />
-                ))
+                eligibleOrders.map((order) => {
+                  const shipment = shipmentMap.get(order?.orderNumber) || null;
+
+                  return (
+                    <BlueDartOrderRow
+                      key={order?._id || order?.orderNumber}
+                      order={order}
+                      shipment={shipment}
+                      onBook={setSelectedOrder}
+                      selected={isSelected?.(order?.orderNumber)}
+                      onToggleSelect={() =>
+                        onToggleSelect?.(order?.orderNumber)
+                      }
+                    />
+                  );
+                })
               )}
             </tbody>
           </table>

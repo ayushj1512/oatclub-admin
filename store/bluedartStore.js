@@ -304,6 +304,21 @@ const normalizeEddPrediction = (input = null) => {
   };
 };
 
+const normalizeServiceability = (input = {}) => {
+  const courier = input?.courier || null;
+
+  return {
+    serviceable: Boolean(input?.serviceable),
+    blueDartAvailable: Boolean(input?.blueDartAvailable),
+    courier,
+    couriers: Array.isArray(input?.couriers) ? input.couriers : [],
+    request: input?.request || null,
+    order: input?.order || null,
+    externalResponse: input?.externalResponse || null,
+    raw: input,
+  };
+};
+
 const upsertById = (list = [], item = null) => {
   if (!item?._id) return list;
   return [item, ...list.filter((x) => x._id !== item._id)];
@@ -331,6 +346,7 @@ export const useBlueDartStore = create((set, get) => ({
   externalOrders: [],
   externalOrder: null,
   eddPrediction: null,
+  serviceability: null,
   externalResponse: null,
 
   lastUpdatedOrder: null,
@@ -343,6 +359,7 @@ export const useBlueDartStore = create((set, get) => ({
   externalOrdersLoading: false,
   externalOrderLoading: false,
   eddLoading: false,
+  serviceabilityLoading: false,
 
   error: "",
   errorData: null,
@@ -378,6 +395,7 @@ export const useBlueDartStore = create((set, get) => ({
       error: "",
       errorData: null,
       successMessage: "",
+      serviceability: null,
     }),
 
   fetchShipments: async (override = {}) => {
@@ -655,4 +673,40 @@ export const useBlueDartStore = create((set, get) => ({
       return { success: false, error: err.message, errorData: err.data || null };
     }
   },
+
+  checkServiceability: async (payload = {}) => {
+  try {
+    return await withLoader(set, "serviceabilityLoading", async () => {
+      const data = await request(`${BASE_ROUTE}/serviceability`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      const serviceability = normalizeServiceability(data);
+
+      set({
+        serviceability,
+        externalResponse: data?.externalResponse || null,
+        successMessage: data?.message || "",
+      });
+
+      if (serviceability.serviceable || serviceability.blueDartAvailable) {
+        toast.success("BlueDart service is available");
+      } else {
+        toast.error("BlueDart service not available");
+      }
+
+      return {
+        success: true,
+        serviceability,
+        data,
+      };
+    });
+  } catch (err) {
+    set({ error: err.message, errorData: err.data || null });
+    toast.error(err.message);
+    return { success: false, error: err.message, errorData: err.data || null };
+  }
+},
+
 }));

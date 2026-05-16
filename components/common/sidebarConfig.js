@@ -273,14 +273,21 @@ export const sidebarMenus = {
     { label: "Not Deliverables", href: "/shiprocket/not-deliverables" },
   ],
 
-  bluedart: [
-    { label: "BlueDart Dashboard", href: "/bluedart" },
-    { label: "Create Shipment", href: "/bluedart/create" },
-    { label: "All Shipments", href: "/bluedart/shipments" },
-    { label: "External Orders", href: "/bluedart/external-orders" },
-    { label: "EDD Prediction", href: "/bluedart/edd" },
-    { label: "Analytics", href: "/bluedart/analytics" },
-  ],
+ bluedart: [
+  { label: "BlueDart Dashboard", href: "/bluedart" },
+
+  { label: "Create Shipment", href: "/bluedart/create" },
+
+  { label: "Service Check", href: "/bluedart/service-check" },
+
+  { label: "All Shipments", href: "/bluedart/shipments" },
+
+  { label: "External Orders", href: "/bluedart/external-orders" },
+
+  { label: "EDD Prediction", href: "/bluedart/edd" },
+
+  { label: "Analytics", href: "/bluedart/analytics" },
+],
 
   reports: [
     { label: "Reports Home", href: "/reports" },
