@@ -98,18 +98,18 @@ const matchesSearch = (order, query) => {
 const hasShipmentIdentity = (shipment = {}) =>
   Boolean(
     safe(shipment?.awbNumber).trim() ||
-      safe(shipment?.awb).trim() ||
-      safe(shipment?.shipmentId).trim() ||
-      safe(shipment?.shipmentIdExternal).trim() ||
-      safe(shipment?.externalOrderId).trim() ||
-      safe(shipment?.eshipzOrderId).trim() ||
-      safe(shipment?.labelUrl).trim() ||
-      safe(shipment?.trackingUrl).trim() ||
-      safe(shipment?.eshipz?.awb).trim() ||
-      safe(shipment?.eshipz?.shipmentId).trim() ||
-      safe(shipment?.eshipz?.orderId).trim() ||
-      safe(shipment?.eshipz?.labelUrl).trim() ||
-      safe(shipment?.eshipz?.trackingUrl).trim()
+    safe(shipment?.awb).trim() ||
+    safe(shipment?.shipmentId).trim() ||
+    safe(shipment?.shipmentIdExternal).trim() ||
+    safe(shipment?.externalOrderId).trim() ||
+    safe(shipment?.eshipzOrderId).trim() ||
+    safe(shipment?.labelUrl).trim() ||
+    safe(shipment?.trackingUrl).trim() ||
+    safe(shipment?.eshipz?.awb).trim() ||
+    safe(shipment?.eshipz?.shipmentId).trim() ||
+    safe(shipment?.eshipz?.orderId).trim() ||
+    safe(shipment?.eshipz?.labelUrl).trim() ||
+    safe(shipment?.eshipz?.trackingUrl).trim()
   );
 
 const getOrderBookingState = (shipment) => {
@@ -183,17 +183,17 @@ export default function BlueDartPage() {
     fetchAllOrdersAllPages,
   } = useOrderStore();
 
-const {
-  shipments,
-  listLoading: shipmentsLoading,
-  fetchShipments,
-  createShipmentFromOrder,
-} = useBlueDartStore();
+  const {
+    shipments,
+    listLoading: shipmentsLoading,
+    fetchShipments,
+    createShipmentFromOrder,
+  } = useBlueDartStore();
 
   const [search, setSearch] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [bookingFilter, setBookingFilter] = useState("all");
-const [fulfillmentFilter, setFulfillmentFilter] = useState("packed");
+  const [fulfillmentFilter, setFulfillmentFilter] = useState("packed");
   const [carrierFilter, setCarrierFilter] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -428,8 +428,8 @@ const [fulfillmentFilter, setFulfillmentFilter] = useState("packed");
         type === "all"
           ? selectableOrders
           : filteredOrders.filter((order) =>
-              selectedOrders.includes(normalizeOrderNumber(order?.orderNumber))
-            );
+            selectedOrders.includes(normalizeOrderNumber(order?.orderNumber))
+          );
 
       if (!ordersToBook.length) {
         alert("No orders selected for booking.");
@@ -439,10 +439,10 @@ const [fulfillmentFilter, setFulfillmentFilter] = useState("packed");
       for (const order of ordersToBook) {
         try {
           await createShipmentFromOrder({
-  orderId: order?._id,
-    orderNumber: order?.orderNumber,
+            orderId: order?._id,
+            orderNumber: order?.orderNumber,
 
-});
+          });
         } catch (err) {
           console.error("Bulk booking failed for:", order?.orderNumber, err);
         }
@@ -512,7 +512,7 @@ const [fulfillmentFilter, setFulfillmentFilter] = useState("packed");
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={Package}
           label="Matching Orders"
@@ -522,12 +522,7 @@ const [fulfillmentFilter, setFulfillmentFilter] = useState("packed");
         <StatCard icon={CheckCircle2} label="Booked" value={stats.booked} />
         <StatCard icon={Truck} label="Pushed" value={stats.pushed} />
         <StatCard icon={Clock3} label="Not Booked" value={stats.notBooked} />
-        <StatCard
-          icon={RadioTower}
-          label="Local Shipments"
-          value={stats.localShipments}
-          hint="eshipz"
-        />
+      
       </section>
 
       <section className="rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-neutral-100">
@@ -633,7 +628,7 @@ const [fulfillmentFilter, setFulfillmentFilter] = useState("packed");
               className="inline-flex items-center gap-2 rounded-2xl bg-neutral-100 px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {selectedOnPageCount === paginatedSelectableOrders.length &&
-              paginatedSelectableOrders.length ? (
+                paginatedSelectableOrders.length ? (
                 <SquareCheckBig size={16} />
               ) : (
                 <Square size={16} />
