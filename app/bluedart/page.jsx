@@ -193,7 +193,7 @@ const {
   const [search, setSearch] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [bookingFilter, setBookingFilter] = useState("all");
-  const [fulfillmentFilter, setFulfillmentFilter] = useState("all");
+const [fulfillmentFilter, setFulfillmentFilter] = useState("packed");
   const [carrierFilter, setCarrierFilter] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
