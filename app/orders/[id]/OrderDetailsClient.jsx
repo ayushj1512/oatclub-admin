@@ -28,6 +28,7 @@ import OrderCancellationDetails from "@/components/orders/OrderCancellationDetai
 import OrderConfirmationDetails from "@/components/orders/OrderConfirmationDetails";
 import OrderSourceAttributionCard from "@/components/orders/OrderSourceAttributionCard";
 import OrderCouponDetails from "@/components/orders/OrderCouponDetails";
+import OrderPaymentDetails from "@/components/orders/OrderPaymentDetails";
 const API = process.env.NEXT_PUBLIC_API_URL;
 const STORE_URL = "https://www.mirayfashions.com";
 
@@ -411,35 +412,7 @@ export default function OrderDetailsClient({ id }) {
 
           <OrderCancellationDetails order={order} />
 
-          <Card>
-            <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
-              <BadgeIndianRupee size={18} /> Payment Summary
-            </h2>
-
-            <div className="grid gap-3 text-sm text-gray-700 sm:grid-cols-2">
-              <p className="flex justify-between">
-                <span>Subtotal</span>
-                <span className="font-semibold">₹{order.subtotal}</span>
-              </p>
-              <p className="flex justify-between">
-                <span>Discount</span>
-                <span className="font-semibold">₹{order.discount}</span>
-              </p>
-              <p className="flex justify-between">
-                <span>Shipping Fee</span>
-                <span className="font-semibold">₹{order.shippingFee}</span>
-              </p>
-              <p className="flex justify-between">
-                <span>Tax</span>
-                <span className="font-semibold">₹{order.tax}</span>
-              </p>
-
-              <div className="flex justify-between border-t border-gray-100 pt-4 text-base font-bold text-gray-900 sm:col-span-2">
-                <span>Final Payable</span>
-                <span>₹{order.finalPayable}</span>
-              </div>
-            </div>
-          </Card>
+       <OrderPaymentDetails order={order} />  
 
           <OrderCouponDetails order={order} />
 

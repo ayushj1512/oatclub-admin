@@ -24,7 +24,6 @@ const safe = (v) => (v == null ? "" : String(v));
 const lower = (v) => safe(v).toLowerCase().trim();
 
 const BOOKED_STATUSES = new Set([
-  "created",
   "booked",
   "pickup_pending",
   "pickup_scheduled",
@@ -35,7 +34,13 @@ const BOOKED_STATUSES = new Set([
   "delivered",
 ]);
 
-const PUSHED_STATUSES = new Set(["draft", "order_pushed", "processing"]);
+const PUSHED_STATUSES = new Set([
+  "draft",
+  "created",
+  "order_pushed",
+  "processing",
+  "pending",
+]);
 const LOCAL_PAGE_SIZE = 50;
 
 const normalizeOrderNumber = (value) => {
@@ -95,8 +100,44 @@ const hasShipmentIdentity = (shipment = {}) =>
     safe(shipment?.awbNumber).trim() ||
       safe(shipment?.awb).trim() ||
       safe(shipment?.shipmentId).trim() ||
-      safe(shipment?.shipmentIdExternal).trim()
+      safe(shipment?.shipmentIdExternal).trim() ||
+      safe(shipment?.externalOrderId).trim() ||
+      safe(shipment?.eshipzOrderId).trim() ||
+      safe(shipment?.labelUrl).trim() ||
+      safe(shipment?.trackingUrl).trim() ||
+      safe(shipment?.eshipz?.awb).trim() ||
+      safe(shipment?.eshipz?.shipmentId).trim() ||
+      safe(shipment?.eshipz?.orderId).trim() ||
+      safe(shipment?.eshipz?.labelUrl).trim() ||
+      safe(shipment?.eshipz?.trackingUrl).trim()
   );
+
+const getOrderBookingState = (shipment) => {
+  if (!shipment?._id) return "not_booked";
+
+  const status = lower(shipment?.status);
+  const rawStatus = lower(shipment?.rawStatus);
+  const statusCode = safe(shipment?.statusCode).trim();
+  const metaCode = safe(shipment?.rawCreateResponse?.meta?.code).trim();
+
+  const isError =
+    rawStatus === "error" ||
+    status === "failed" ||
+    statusCode === "400" ||
+    statusCode === "422" ||
+    statusCode === "500" ||
+    metaCode === "400" ||
+    metaCode === "422" ||
+    metaCode === "500";
+
+  if (isError) return "not_booked";
+
+  if (hasShipmentIdentity(shipment)) return "booked";
+
+  if (PUSHED_STATUSES.has(status)) return "order_pushed";
+
+  return "not_booked";
+};
 
 const getShipmentPriorityScore = (shipment = {}) => {
   const status = lower(shipment?.status);
@@ -116,23 +157,6 @@ const getShipmentPriorityScore = (shipment = {}) => {
 
   return score + updatedAt / 1e13 + createdAt / 1e13;
 };
-
-const getOrderBookingState = (shipment) => {
-  if (!shipment?._id) return "not_booked";
-
-  const status = lower(shipment?.status);
-
-  if (hasShipmentIdentity(shipment) || BOOKED_STATUSES.has(status)) {
-    return "booked";
-  }
-
-  if (PUSHED_STATUSES.has(status)) {
-    return "order_pushed";
-  }
-
-  return "not_booked";
-};
-
 const StatCard = ({ icon: Icon, label, value, hint }) => (
   <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-neutral-100">
     <div className="mb-4 flex items-center justify-between gap-3">

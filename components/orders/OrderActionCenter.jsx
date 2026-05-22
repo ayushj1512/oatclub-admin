@@ -1,26 +1,43 @@
 "use client";
 
 import { toast } from "react-hot-toast";
-import { Mail, Send, PackageCheck, Truck, Copy, Loader2 } from "lucide-react";
+import {
+  Mail,
+  Send,
+  PackageCheck,
+  Truck,
+  Copy,
+  Loader2,
+  MessageCircle,
+} from "lucide-react";
+
 import { useEmailStore } from "@/store/emailStore";
 import { useOrderStore } from "@/store/orderStore";
 import { useXpressbeesStore } from "@/store/xpressbeesStore";
 import { useBlueDartStore } from "@/store/bluedartStore";
+import { useOrderReviewStore } from "@/store/order.review.store";
 
-const ActionCard = ({ title, desc, icon: Icon, onClick, loading, disabled }) => (
+const ActionCard = ({
+  title,
+  desc,
+  icon: Icon,
+  onClick,
+  loading,
+  disabled,
+}) => (
   <button
     onClick={onClick}
     disabled={disabled || loading}
-    className="w-full text-left rounded-2xl border border-gray-100 bg-white/90 backdrop-blur shadow-sm p-4 hover:bg-gray-50 transition disabled:opacity-50"
+    className="w-full rounded-2xl border border-gray-100 bg-white/90 p-4 text-left shadow-sm backdrop-blur transition hover:bg-gray-50 disabled:opacity-50"
   >
     <div className="flex items-start gap-3">
-      <div className="h-10 w-10 rounded-xl border border-gray-100 flex items-center justify-center">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-100">
         <Icon size={18} className="text-gray-700" />
       </div>
 
       <div className="flex-1">
-        <p className="font-semibold text-gray-900 text-sm">{title}</p>
-        <p className="text-xs text-gray-500 mt-1">{desc}</p>
+        <p className="text-sm font-semibold text-gray-900">{title}</p>
+        <p className="mt-1 text-xs text-gray-500">{desc}</p>
       </div>
 
       {loading ? (
@@ -42,6 +59,9 @@ export default function OrderActionCenter({
 }) {
   const orderId = order?._id;
 
+  const { loading: reviewWhatsappLoading, sendReviewWhatsapp } =
+    useOrderReviewStore();
+
   const { busy, busyKey, sendConfirmationEmail, sendTrackingEmail } =
     useEmailStore();
 
@@ -49,13 +69,17 @@ export default function OrderActionCenter({
 
   const { loading: xbLoading, createShipment } = useXpressbeesStore();
 
-  const {
-    creating: eshipzLoading,
-    createShipmentFromOrder,
-  } = useBlueDartStore();
+  const { creating: eshipzLoading, createShipmentFromOrder } =
+    useBlueDartStore();
 
   const isConfirmed = !!order?.isConfirmed;
-  const actionLocked = busy || orderLoading || xbLoading || eshipzLoading;
+
+  const actionLocked =
+    busy ||
+    orderLoading ||
+    xbLoading ||
+    eshipzLoading ||
+    reviewWhatsappLoading;
 
   const finalTrackingId = String(trackingId || "").trim();
   const finalCourierName = String(courierName || "").trim();
@@ -124,9 +148,44 @@ export default function OrderActionCenter({
     }
   };
 
+  const handleSendReviewWhatsapp = async () => {
+    if (!orderId || actionLocked) return;
+
+    const orderNumber = String(order?.orderNumber || "").trim();
+
+    if (!orderNumber) {
+      return toast.error("Order number missing.");
+    }
+
+    try {
+      const res = await sendReviewWhatsapp(orderNumber, {
+        force: true,
+      });
+
+      if (res?.skipped) {
+        toast(res?.message || "Review WhatsApp skipped", {
+          icon: "ℹ️",
+        });
+      } else {
+        toast.success(res?.message || "Review WhatsApp sent ✅");
+      }
+
+      onRefresh?.();
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.message ||
+          e?.message ||
+          "Failed to send review WhatsApp"
+      );
+    }
+  };
+
   const handleBookShiprocket = async () => {
     if (!orderId || actionLocked) return;
-    if (!isConfirmed) return toast.error("Only confirmed orders will be booked ✅");
+
+    if (!isConfirmed) {
+      return toast.error("Only confirmed orders will be booked ✅");
+    }
 
     if (hasShiprocket) {
       return toast("Already booked with Shiprocket. Skipped ✅", {
@@ -138,7 +197,9 @@ export default function OrderActionCenter({
       const res = await bookShiprocketIfMissing(orderId);
 
       if (res?.skipped) {
-        toast(res?.message || "Already booked. Skipped ✅", { icon: "ℹ️" });
+        toast(res?.message || "Already booked. Skipped ✅", {
+          icon: "ℹ️",
+        });
       } else {
         toast.success(res?.message || "Shiprocket booked ✅");
       }
@@ -151,7 +212,10 @@ export default function OrderActionCenter({
 
   const handleBookXpressbees = async () => {
     if (!orderId || actionLocked) return;
-    if (!isConfirmed) return toast.error("Only confirmed orders will be booked ✅");
+
+    if (!isConfirmed) {
+      return toast.error("Only confirmed orders will be booked ✅");
+    }
 
     if (hasXpressbees) {
       return toast("Already booked with XpressBees. Skipped ✅", {
@@ -160,7 +224,9 @@ export default function OrderActionCenter({
     }
 
     try {
-      toast.loading("Creating XpressBees booking…", { id: "xb-book" });
+      toast.loading("Creating XpressBees booking…", {
+        id: "xb-book",
+      });
 
       const res = await createShipment({
         orderId,
@@ -182,50 +248,53 @@ export default function OrderActionCenter({
   };
 
   const handleBookEshipzBlueDart = async () => {
-  if (!orderId || actionLocked) return;
-  if (!isConfirmed) return toast.error("Only confirmed orders will be booked ✅");
+    if (!orderId || actionLocked) return;
 
-  if (hasEshipzBlueDart) {
-    return toast("Already booked through Eshipz BlueDart. Skipped ✅", {
-      icon: "ℹ️",
-    });
-  }
+    if (!isConfirmed) {
+      return toast.error("Only confirmed orders will be booked ✅");
+    }
 
-  const orderNumber = String(order?.orderNumber || "").trim();
+    if (hasEshipzBlueDart) {
+      return toast("Already booked through Eshipz BlueDart. Skipped ✅", {
+        icon: "ℹ️",
+      });
+    }
 
-  if (!orderNumber) {
-    return toast.error("Order number missing. Please refresh and try again.");
-  }
+    const orderNumber = String(order?.orderNumber || "").trim();
 
-  try {
-    toast.loading("Booking through Eshipz BlueDart…", {
-      id: "eshipz-bluedart-book",
-    });
+    if (!orderNumber) {
+      return toast.error("Order number missing. Please refresh and try again.");
+    }
 
-    const res = await createShipmentFromOrder({
-      orderNumber,
-      carrierSlug: "bluedart",
-      carrierName: "BlueDart",
-      provider: "eshipz",
-      force: true,
-      confirmIfCOD: true,
-    });
+    try {
+      toast.loading("Booking through Eshipz BlueDart…", {
+        id: "eshipz-bluedart-book",
+      });
 
-    toast.success(res?.message || "Eshipz BlueDart booking created ✅", {
-      id: "eshipz-bluedart-book",
-    });
+      const res = await createShipmentFromOrder({
+        orderNumber,
+        carrierSlug: "bluedart",
+        carrierName: "BlueDart",
+        provider: "eshipz",
+        force: true,
+        confirmIfCOD: true,
+      });
 
-    onRefresh?.();
-  } catch (e) {
-    toast.error(e?.message || "Eshipz BlueDart booking failed", {
-      id: "eshipz-bluedart-book",
-    });
-  }
-};
+      toast.success(res?.message || "Eshipz BlueDart booking created ✅", {
+        id: "eshipz-bluedart-book",
+      });
+
+      onRefresh?.();
+    } catch (e) {
+      toast.error(e?.message || "Eshipz BlueDart booking failed", {
+        id: "eshipz-bluedart-book",
+      });
+    }
+  };
 
   return (
-    <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-5">
-      <div className="flex items-center justify-between gap-3 mb-4">
+    <div className="rounded-2xl border border-gray-100 bg-white/90 p-5 shadow-sm backdrop-blur">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold">Action Center</h2>
 
         {actionLocked ? (
@@ -236,13 +305,26 @@ export default function OrderActionCenter({
         ) : null}
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <ActionCard
           title="Send Confirmation Email"
           desc="Resend order confirmation to customer."
           icon={Mail}
           onClick={handleSendConfirmation}
           loading={busyKey === "send-confirmation-email"}
+          disabled={!orderId || actionLocked}
+        />
+
+        <ActionCard
+          title="Send Review WhatsApp"
+          desc={
+            order?.reviewRequest?.sent
+              ? "Already sent. Force resend for testing."
+              : "Send review request WhatsApp to customer."
+          }
+          icon={MessageCircle}
+          onClick={handleSendReviewWhatsapp}
+          loading={reviewWhatsappLoading}
           disabled={!orderId || actionLocked}
         />
 

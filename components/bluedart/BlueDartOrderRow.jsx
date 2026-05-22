@@ -11,8 +11,6 @@ const money = (n) =>
   Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-IN") : "0";
 
 const ACTIVE_BOOKED_STATUSES = new Set([
-  "order_pushed",
-  "created",
   "booked",
   "pickup_pending",
   "pickup_scheduled",
@@ -22,6 +20,8 @@ const ACTIVE_BOOKED_STATUSES = new Set([
   "out_for_delivery",
   "delivered",
 ]);
+
+const ERROR_CODES = new Set(["400", "401", "403", "404", "422", "500"]);
 
 export default function BlueDartOrderRow({
   order,
@@ -33,15 +33,39 @@ export default function BlueDartOrderRow({
   const shipping = order?.shippingAddressSnapshot || {};
 
   const shipmentStatus = lower(shipment?.status);
-  const hasShipmentId = Boolean(shipment?._id);
-  const hasAwb = Boolean(safe(shipment?.awbNumber).trim());
+  const rawStatus = lower(shipment?.rawStatus);
+  const statusCode = safe(shipment?.statusCode).trim();
+  const metaCode = safe(shipment?.rawCreateResponse?.meta?.code).trim();
+  const metaStatus = lower(shipment?.rawCreateResponse?.meta?.status);
+
+  const hasError =
+    rawStatus === "error" ||
+    metaStatus === "error" ||
+    ERROR_CODES.has(statusCode) ||
+    ERROR_CODES.has(metaCode);
+
+  const hasAwb =
+    Boolean(safe(shipment?.awbNumber).trim()) ||
+    Boolean(safe(shipment?.awb).trim()) ||
+    Boolean(safe(shipment?.rawCreateResponse?.data?.tracking_numbers?.[0]).trim()) ||
+    Boolean(
+      safe(shipment?.rawCreateResponse?.data?.files?.label?.label_meta?.awb).trim()
+    );
+
+  const hasExternalBooking =
+    Boolean(safe(shipment?.shipmentIdExternal).trim()) ||
+    Boolean(safe(shipment?.externalOrderId).trim()) ||
+    Boolean(safe(shipment?.eshipzOrderId).trim());
 
   const booked =
-    hasShipmentId || hasAwb || ACTIVE_BOOKED_STATUSES.has(shipmentStatus);
+    !hasError &&
+    (hasAwb || hasExternalBooking || ACTIVE_BOOKED_STATUSES.has(shipmentStatus));
 
-  const badgeStatus = booked
-    ? shipmentStatus || (hasAwb ? "created" : "order_pushed")
-    : "not_booked";
+  const badgeStatus = hasError
+    ? "not_booked"
+    : booked
+    ? shipmentStatus || "booked"
+    : shipmentStatus || "not_booked";
 
   return (
     <tr className="border-b border-neutral-100 last:border-b-0">

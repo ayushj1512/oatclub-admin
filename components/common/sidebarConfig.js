@@ -68,11 +68,15 @@ export const sidebarMenus = {
   },
 ],
 
-  reviews: [
-    { label: "Reviews Dashboard", href: "/reviews" },
-    { label: "Manage Reviews", href: "/reviews/manage" },
-    { label: "Add Review", href: "/reviews/add" },
-  ],
+reviews: [
+  { label: "Reviews Dashboard", href: "/reviews" },
+  { label: "Manage Reviews", href: "/reviews/manage" },
+  { label: "Add Review", href: "/reviews/add" },
+  { label: "Pending Reviews", href: "/reviews/pending" },
+  { label: "Approved Reviews", href: "/reviews/approved" },
+  { label: "Rejected Reviews", href: "/reviews/rejected" },
+  { label: "Order Reviews", href: "/reviews/order" },
+],
 
   accounts: [
     { label: "Accounts Dashboard", href: "/accounts" },
@@ -338,14 +342,17 @@ export const sidebarMenus = {
     { label: "Change Password", href: "/account/password" },
     { label: "Logout", href: "/logout" },
   ],
+superadmin: [
+  { label: "Vault", href: "/superadmin" },
+  { label: "Manage Users", href: "/superadmin/manage" },
+  { label: "Add User", href: "/superadmin/add" },
 
-  superadmin: [
-    { label: "Vault", href: "/superadmin" },
-    { label: "Manage Users", href: "/superadmin/manage" },
-    { label: "Add User", href: "/superadmin/add" },
-    { label: "Activity", href: "/superadmin/activity" },
-    { label: "Meta XML Sync", href: "/superadmin/xml-sync" },
-  ],
+  // ✅ New session control page
+  { label: "Manage Sessions", href: "/superadmin/manage-session" },
+
+  { label: "Activity", href: "/superadmin/activity" },
+  { label: "Meta XML Sync", href: "/superadmin/xml-sync" },
+],
 
   collaboration: [
     { label: "Influencer Program", href: "/influencer-collaboration-program" },

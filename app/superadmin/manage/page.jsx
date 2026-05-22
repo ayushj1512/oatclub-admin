@@ -31,7 +31,7 @@ import {
   Wand2,
 } from "lucide-react";
 
-import { useAdminPanelStore } from "@/store/adminPanelUSer.store";
+import { useAdminUsersVerifyStore } from "@/store/adminUsersStore";
 import { ROLE_DEFAULT_PERMS, ALL_PERMISSIONS } from "@/config/loginConfig";
 
 const SESSION_KEY = "miray_superadmin_unlocked";
@@ -83,33 +83,30 @@ export default function SuperAdminManageUsers() {
   const router = useRouter();
 
   // store
-  const users = useAdminPanelStore((s) => s.users);
-  const total = useAdminPanelStore((s) => s.total);
-  const page = useAdminPanelStore((s) => s.page);
-  const limit = useAdminPanelStore((s) => s.limit);
-  const totalPages = useAdminPanelStore((s) => s.totalPages);
-  const filters = useAdminPanelStore((s) => s.filters);
-  const loading = useAdminPanelStore((s) => s.loading);
-  const error = useAdminPanelStore((s) => s.error);
 
-  const setFilters = useAdminPanelStore((s) => s.setFilters);
-  const setPage = useAdminPanelStore((s) => s.setPage);
-  const setLimit = useAdminPanelStore((s) => s.setLimit);
-  const clearError = useAdminPanelStore((s) => s.clearError);
+  const loading = useAdminUsersVerifyStore((s) => s.loading);
+  const error = useAdminUsersVerifyStore((s) => s.error);
+  const users = useAdminUsersVerifyStore((s) => s.users);
 
-  const fetchUsers = useAdminPanelStore((s) => s.fetchUsers);
-  const updateUser = useAdminPanelStore((s) => s.updateUser);
-  const updateRoleAndPermissions = useAdminPanelStore((s) => s.updateRoleAndPermissions);
-  const changePassword = useAdminPanelStore((s) => s.changePassword);
-  const unlockUser = useAdminPanelStore((s) => s.unlockUser);
-  const deleteUser = useAdminPanelStore((s) => s.deleteUser);
+  const clearError = useAdminUsersVerifyStore((s) => s.clearError);
+
+  const fetchUsers = useAdminUsersVerifyStore((s) => s.fetchUsers);
+  const updateUser = useAdminUsersVerifyStore((s) => s.updateUser);
+  const updateRoleAndPermissions = useAdminUsersVerifyStore((s) => s.updateRoleAndPermissions);
+  const changePassword = useAdminUsersVerifyStore((s) => s.changePassword);
+  const unlockUser = useAdminUsersVerifyStore((s) => s.unlockUser);
+  const deleteUser = useAdminUsersVerifyStore((s) => s.deleteUser);
 
   const [ready, setReady] = useState(false);
+  const [page, setPage] = useState(1);
+const [limit] = useState(20);
+
+
 
   // local filter inputs
-  const [q, setQ] = useState(filters.search || "");
-  const [role, setRole] = useState(filters.role || "");
-  const [isActive, setIsActive] = useState(filters.isActive ?? "");
+ const [q, setQ] = useState("");
+const [role, setRole] = useState("");
+const [isActive, setIsActive] = useState("");
 
   // activity + toast
   const [activity, setActivity] = useState([]);
@@ -122,34 +119,31 @@ export default function SuperAdminManageUsers() {
     setReady(true);
 
     setActivity(safeJsonParse(localStorage.getItem(ACTIVITY_KEY) || "[]", []));
-    setLimit(20);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
-    fetchUsers().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, page, limit, filters.search, filters.role, filters.isActive]);
+  if (!ready) return;
+  fetchUsers().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [ready]);
 
   useEffect(() => {
     if (error) setToast({ type: "error", msg: error });
   }, [error]);
 
   const applyFilters = () => {
-    clearError?.();
-    setFilters({ search: q, role, isActive });
-    setPage(1);
-  };
+  clearError?.();
+  setPage(1);
+};
 
   const resetFilters = () => {
-    clearError?.();
-    setQ("");
-    setRole("");
-    setIsActive("");
-    setFilters({ search: "", role: "", isActive: "" });
-    setPage(1);
-  };
+  clearError?.();
+  setQ("");
+  setRole("");
+  setIsActive("");
+  setPage(1);
+};
 
   // ✅ permissions editor (role-aware)
   const editPermissions = async (u) => {
@@ -252,6 +246,36 @@ export default function SuperAdminManageUsers() {
     }
   };
 
+  const filteredUsers = useMemo(() => {
+  return (users || []).filter((user) => {
+    const term = q.toLowerCase().trim();
+
+    const matchesSearch =
+      !term ||
+      user.username?.toLowerCase().includes(term) ||
+      user.email?.toLowerCase().includes(term) ||
+      user.fullName?.toLowerCase().includes(term) ||
+      user.phone?.toLowerCase().includes(term);
+
+    const matchesRole = !role || user.role === role;
+
+    const matchesStatus =
+      isActive === "" || String(Boolean(user.isActive)) === isActive;
+
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+}, [users, q, role, isActive]);
+
+  const total = filteredUsers.length;
+
+const pages = Math.max(1, Math.ceil(total / limit));
+
+const paginatedUsers = useMemo(() => {
+  const start = (page - 1) * limit;
+
+  return filteredUsers.slice(start, start + limit);
+}, [filteredUsers, page, limit]);
+
   const toggleActive = async (u) => {
     const id = u._id;
     if (!id) return;
@@ -337,7 +361,6 @@ export default function SuperAdminManageUsers() {
     }
   };
 
-  const pages = useMemo(() => Math.max(1, totalPages || 1), [totalPages]);
 
   if (!ready) return null;
 
@@ -518,11 +541,11 @@ export default function SuperAdminManageUsers() {
 
             {loading ? (
               <div className="p-5 text-gray-600">Loading...</div>
-            ) : users.length === 0 ? (
+            ) : paginatedUsers.length === 0 ? (
               <div className="p-5 text-gray-600">No users found.</div>
             ) : (
               <div className="divide-y divide-gray-100">
-                {users.map((u) => {
+         {paginatedUsers.map((u) => {
                   const roleDefaults = permsForRole(u.role);
                   const isUsingDefaults =
                     Array.isArray(u.permissions) &&
