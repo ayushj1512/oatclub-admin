@@ -42,7 +42,7 @@ export default function Header({ toggleSidebar }) {
         className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2"
       >
         <Image
-          src="https://res.cloudinary.com/djtva6hec/image/upload/v1767196261/miray/media/rwhqczcfjnmnvoytyrmh.png"
+          src="https://www.mirayfashions.com/_next/image?url=https%3A%2F%2Fres.cloudinary.com%2Fdjtva6hec%2Fimage%2Fupload%2Fv1764916639%2Fmiray%2Fmedia%2Fk0yvgu5m0ij1husm3ugh.png&w=256&q=75"
           alt="Logo"
           width={110}
           height={42}

@@ -11,12 +11,10 @@ export default function Sidebar({ isOpen }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
-  const toggleCollapse = () => setCollapsed(!collapsed);
+  const toggleCollapse = () => setCollapsed((prev) => !prev);
 
-  // Hide sidebar on homepage
   if (pathname === "/") return null;
 
-  // Prefix-based route match
   const matchedEntry = routeSidebarMap.find((entry) =>
     pathname.startsWith(entry.prefix)
   );
@@ -26,37 +24,34 @@ export default function Sidebar({ isOpen }) {
 
   return (
     <aside
-      className={`bg-white border-r border-gray-200 h-screen fixed lg:static top-0 left-0 z-40 transform ${
+      className={`fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#800020]/10 bg-white shadow-[8px_0_30px_rgba(128,0,32,0.04)] transition-all duration-300 ease-in-out lg:static lg:translate-x-0 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
-      } lg:translate-x-0 transition-all duration-300 ease-in-out ${
-        collapsed ? "w-20" : "w-64"
-      } flex flex-col shadow-sm`}
+      } ${collapsed ? "w-20" : "w-64"}`}
     >
-      {/* Header */}
       <div
-        className={`flex items-center justify-between h-16 border-b border-gray-200 px-4 ${
-          collapsed ? "justify-center" : ""
+        className={`flex h-16 items-center border-b border-[#800020]/10 px-4 ${
+          collapsed ? "justify-center" : "justify-between"
         }`}
       >
         {!collapsed && (
-          <Link href="/" className="font-bold text-lg text-blue-600 hover:opacity-80 transition">
+          <Link
+            href="/"
+            className="text-lg font-bold tracking-tight text-[#800020] transition hover:opacity-80"
+          >
             Miray Admin
           </Link>
         )}
 
         <button
+          type="button"
           onClick={toggleCollapse}
-          className="p-1.5 rounded-md hover:bg-gray-100 transition"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-[#800020]/5 hover:text-[#800020]"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? (
-            <ChevronRight size={20} className="text-gray-600" />
-          ) : (
-            <ChevronLeft size={20} className="text-gray-600" />
-          )}
+          {collapsed ? <ChevronRight size={19} /> : <ChevronLeft size={19} />}
         </button>
       </div>
 
-      {/* Dynamic Menu */}
       <nav className="flex-1 overflow-y-auto py-4">
         <ul className="space-y-1 px-3">
           {currentMenu.map(({ label, href }, i) => {
@@ -64,16 +59,20 @@ export default function Sidebar({ isOpen }) {
               pathname === href || pathname.startsWith(href + "/");
 
             return (
-              <li key={i}>
+              <li key={`${href}-${i}`}>
                 <Link
                   href={href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                  title={collapsed ? label : undefined}
+                  className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                     isActive
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-700 hover:bg-gray-100"
-                  }`}
+                      ? "bg-[#800020]/8 text-[#800020] shadow-[0_8px_22px_rgba(128,0,32,0.08)]"
+                      : "text-gray-700 hover:bg-[#800020]/5 hover:text-[#800020]"
+                  } ${collapsed ? "justify-center" : ""}`}
                 >
-                  {!collapsed && <span>{label}</span>}
+                  {!collapsed && <span className="truncate">{label}</span>}
+                  {collapsed && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+                  )}
                 </Link>
               </li>
             );

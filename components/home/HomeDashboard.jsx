@@ -115,13 +115,13 @@ export default function HomeDashboard() {
   }, [allowedDomains]);
 
   return (
-    <div className="min-h-screen bg-gray-50 px-3 py-6 sm:px-6 sm:py-8 md:px-8">
+    <div className="min-h-screen bg-[#fcfafb] px-3 py-6 sm:px-6 sm:py-8 md:px-8">
       <div className="mb-6">
         <LiveClock />
       </div>
 
       {sortedDomains.length === 0 ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-600">
+        <div className="rounded-2xl border border-[#800020]/10 bg-white p-6 text-center text-gray-600 shadow-sm">
           You don’t have access to any modules yet.
         </div>
       ) : (
@@ -146,20 +146,20 @@ export default function HomeDashboard() {
                   className={[
                     "group relative flex min-h-[150px] flex-col items-center justify-center overflow-hidden rounded-2xl px-3 py-5 shadow-sm transition-all duration-300 sm:min-h-[170px] sm:px-4 sm:py-6",
                     featured
-                      ? "border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 via-white to-pink-50 ring-1 ring-fuchsia-100 hover:-translate-y-1.5 hover:shadow-[0_16px_40px_rgba(217,70,239,0.18)]"
-                      : "border border-gray-200 bg-white hover:-translate-y-1 hover:shadow-md",
+                      ? "border border-[#800020]/15 bg-gradient-to-br from-[#fff7f8] via-white to-[#fff1f3] ring-1 ring-[#800020]/10 hover:-translate-y-1.5 hover:shadow-[0_16px_40px_rgba(128,0,32,0.16)]"
+                      : "border border-gray-200 bg-white hover:-translate-y-1 hover:border-[#800020]/20 hover:shadow-[0_14px_32px_rgba(128,0,32,0.08)]",
                   ].join(" ")}
                 >
                   {featured && (
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(217,70,239,0.16),_transparent_45%)]" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(128,0,32,0.12),_transparent_45%)]" />
                   )}
 
                   <div
                     className={[
                       "relative rounded-xl p-3 text-white shadow-md transition-transform group-hover:scale-110 sm:p-4",
                       featured
-                        ? "bg-gradient-to-br from-fuchsia-600 via-pink-500 to-rose-500 shadow-[0_12px_24px_rgba(217,70,239,0.28)]"
-                        : "bg-gradient-to-br from-blue-600 to-blue-500",
+                        ? "bg-gradient-to-br from-[#800020] via-[#9b1c3d] to-[#b03052] shadow-[0_12px_24px_rgba(128,0,32,0.22)]"
+                        : "bg-gradient-to-br from-[#800020] to-[#a00032]",
                     ].join(" ")}
                   >
                     <Icon size={24} className="sm:hidden" />
@@ -170,8 +170,8 @@ export default function HomeDashboard() {
                     className={[
                       "relative mt-3 text-center font-semibold sm:mt-4",
                       featured
-                        ? "text-base text-fuchsia-700 sm:text-xl"
-                        : "text-sm text-gray-900 group-hover:text-blue-700 sm:text-lg",
+                        ? "text-base text-[#800020] sm:text-xl"
+                        : "text-sm text-gray-900 group-hover:text-[#800020] sm:text-lg",
                     ].join(" ")}
                   >
                     {name}
@@ -182,7 +182,7 @@ export default function HomeDashboard() {
                       className={[
                         "relative mt-1 text-center text-[11px]",
                         featured
-                          ? "max-w-[220px] text-fuchsia-700/80"
+                          ? "max-w-[220px] text-[#800020]/75"
                           : "text-gray-500",
                       ].join(" ")}
                     >

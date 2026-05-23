@@ -79,15 +79,15 @@ export default function LiveClock() {
     useMemo(() => formatParts(now), [now]);
 
   return (
-    <section className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
+    <section className="w-full rounded-2xl border border-[#800020]/10 bg-white px-4 py-4 shadow-sm">
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22 }}
-        className="mx-auto w-full max-w-sm rounded-2xl border border-gray-100 bg-gradient-to-b from-white to-gray-50/70 p-4"
+        className="mx-auto w-full max-w-sm rounded-2xl border border-[#800020]/10 bg-gradient-to-b from-white via-white to-[#fff7f8] p-4 shadow-[0_16px_40px_rgba(128,0,32,0.06)]"
       >
         <div className="flex items-center justify-between">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-600">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#800020]/8 px-2.5 py-1 text-[11px] font-medium text-[#800020]">
             <Clock3 size={13} />
             <span>IST</span>
           </div>
@@ -95,7 +95,8 @@ export default function LiveClock() {
           <button
             type="button"
             onClick={pickQuote}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#800020]/10 bg-white text-gray-500 transition-all hover:border-[#800020]/20 hover:bg-[#800020]/5 hover:text-[#800020]"
+            aria-label="Refresh quote"
           >
             <RefreshCw size={13} />
           </button>
@@ -103,11 +104,11 @@ export default function LiveClock() {
 
         <div className="mt-4 flex items-end justify-center gap-1 text-[30px] font-semibold leading-none tracking-tight text-gray-950 sm:text-[32px]">
           <span>{hour}</span>
-          <span className="text-blue-600">:</span>
+          <span className="text-[#800020]">:</span>
           <span>{minute}</span>
-          <span className="text-blue-600">:</span>
+          <span className="text-[#800020]">:</span>
 
-          <span className="relative inline-flex w-[2ch] justify-center text-blue-600">
+          <span className="relative inline-flex w-[2ch] justify-center text-[#800020]">
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.span
                 key={second}
@@ -121,13 +122,13 @@ export default function LiveClock() {
             </AnimatePresence>
           </span>
 
-          <span className="ml-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+          <span className="ml-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#800020]">
             {dayPeriod}
           </span>
         </div>
 
         <div className="mt-2 text-center">
-          <p className="text-[12px] font-medium text-gray-700">
+          <p className="text-[12px] font-medium text-gray-800">
             Good {greeting}
           </p>
           <p className="mt-0.5 text-[11px] text-gray-500">
@@ -135,7 +136,7 @@ export default function LiveClock() {
           </p>
         </div>
 
-        <div className="mt-4 border-t border-gray-200/80 pt-3">
+        <div className="mt-4 border-t border-[#800020]/10 pt-3">
           <AnimatePresence mode="wait" initial={false}>
             <motion.p
               key={quote}

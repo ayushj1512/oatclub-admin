@@ -3,21 +3,20 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import useLoginStore from "@/store/useLoginStore";
-import { Loader2, Save, KeyRound } from "lucide-react";
+import { Loader2, Save, KeyRound, UserRound } from "lucide-react";
 
 export default function ProfilePage() {
-  const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+  const BASE_URL =
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
-  const { admin, token, logout } = useLoginStore();
+  const { admin, token } = useLoginStore();
 
-  const [loading, setLoading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [changingPass, setChangingPass] = useState(false);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // ✅ Profile form state
   const [form, setForm] = useState({
     username: "",
     role: "",
@@ -27,17 +26,14 @@ export default function ProfilePage() {
     profileImage: "",
   });
 
-  // ✅ Password form state
   const [passForm, setPassForm] = useState({
     newPassword: "",
     confirmPassword: "",
   });
 
-  // ✅ Load profile (from store / API fallback)
   useEffect(() => {
     if (!admin?._id) return;
 
-    // Pre-fill from store (fast)
     setForm({
       username: admin.username || "",
       role: admin.role || "",
@@ -70,7 +66,6 @@ export default function ProfilePage() {
     }));
   };
 
-  // ✅ Update personal info (NOT permissions)
   const handleSaveProfile = async () => {
     if (!admin?._id) return;
 
@@ -79,7 +74,6 @@ export default function ProfilePage() {
       setError("");
       setSuccess("");
 
-      // ✅ only fields allowed
       const payload = {
         fullName: form.fullName,
         email: form.email,
@@ -93,19 +87,18 @@ export default function ProfilePage() {
         { headers: headers() }
       );
 
-      setSuccess(data.message || "Profile updated");
-
-      // ✅ Update store admin (optional: keep UI in sync)
-      // You can add updateAdmin() in login store if you want
-      // For now: refresh page state only
+      setSuccess(data.message || "Profile updated successfully");
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || "Failed to update profile");
+      setError(
+        err?.response?.data?.message ||
+          err.message ||
+          "Failed to update profile"
+      );
     } finally {
       setSavingProfile(false);
     }
   };
 
-  // ✅ Change password
   const handleChangePassword = async () => {
     if (!admin?._id) return;
 
@@ -129,10 +122,13 @@ export default function ProfilePage() {
       );
 
       setSuccess(data.message || "Password updated successfully");
-
       setPassForm({ newPassword: "", confirmPassword: "" });
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || "Failed to update password");
+      setError(
+        err?.response?.data?.message ||
+          err.message ||
+          "Failed to update password"
+      );
     } finally {
       setChangingPass(false);
     }
@@ -140,159 +136,214 @@ export default function ProfilePage() {
 
   if (!admin?._id) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-700">
-        <p>Please login again.</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#fcfafb] px-4 text-gray-700">
+        <div className="rounded-2xl border border-[#800020]/10 bg-white px-6 py-5 text-sm shadow-sm">
+          Please login again.
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">My Profile</h1>
-
-        {/* Alerts */}
-        {error && (
-          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-            {success}
-          </div>
-        )}
-
-        {/* ============================= */}
-        {/* ✅ PROFILE DETAILS */}
-        {/* ============================= */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-          {/* Username (read-only) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-            <input
-              name="username"
-              value={form.username}
-              disabled
-              className="w-full border border-gray-200 bg-gray-100 rounded-lg px-3 py-2 text-gray-700"
-            />
-          </div>
-
-          {/* Role (read-only) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <input
-              name="role"
-              value={form.role}
-              disabled
-              className="w-full border border-gray-200 bg-gray-100 rounded-lg px-3 py-2 text-gray-700"
-            />
-          </div>
-
-          {/* Full Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-            <input
-              name="fullName"
-              value={form.fullName}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none"
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              name="email"
-              type="email"
-              value={form.email}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none"
-            />
-          </div>
-
-          {/* Phone */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-            <input
-              name="phone"
-              value={form.phone}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none"
-            />
-          </div>
-
-          {/* Profile Image */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Profile Image URL</label>
-            <input
-              name="profileImage"
-              value={form.profileImage}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none"
-              placeholder="https://..."
-            />
-          </div>
-        </div>
-
-        {/* Save Profile Button */}
-        <div className="mt-6">
-          <button
-            onClick={handleSaveProfile}
-            disabled={savingProfile}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-5 py-2 rounded-lg font-semibold flex items-center gap-2"
-          >
-            {savingProfile ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-            {savingProfile ? "Saving..." : "Save Profile"}
-          </button>
-        </div>
-
-        {/* ============================= */}
-        {/* ✅ CHANGE PASSWORD */}
-        {/* ============================= */}
-        <div className="mt-10 border-t pt-8">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Change Password</h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-              <input
-                name="newPassword"
-                type="password"
-                value={passForm.newPassword}
-                onChange={handlePassChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none"
-                placeholder="••••••••"
-              />
+    <div className="min-h-screen bg-[#fcfafb] p-4 sm:p-6">
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-5 rounded-2xl border border-[#800020]/10 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#800020] text-white shadow-[0_12px_24px_rgba(128,0,32,0.18)]">
+              <UserRound size={21} />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-              <input
-                name="confirmPassword"
-                type="password"
-                value={passForm.confirmPassword}
-                onChange={handlePassChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none"
-                placeholder="••••••••"
-              />
+              <h1 className="text-xl font-bold tracking-tight text-gray-950 sm:text-2xl">
+                My Profile
+              </h1>
+              <p className="mt-0.5 text-sm text-gray-500">
+                Manage your admin details and password.
+              </p>
             </div>
           </div>
-
-          <button
-            onClick={handleChangePassword}
-            disabled={changingPass}
-            className="mt-5 bg-gray-900 hover:bg-black disabled:opacity-60 text-white px-5 py-2 rounded-lg font-semibold flex items-center gap-2"
-          >
-            {changingPass ? <Loader2 className="animate-spin" size={18} /> : <KeyRound size={18} />}
-            {changingPass ? "Updating..." : "Update Password"}
-          </button>
         </div>
 
-      
+        {(error || success) && (
+          <div
+            className={`mb-5 rounded-2xl border p-3 text-sm ${
+              error
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {error || success}
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-[#800020]/10 bg-white p-5 shadow-[0_16px_40px_rgba(128,0,32,0.05)] sm:p-7">
+          <h2 className="mb-5 text-base font-semibold text-gray-950">
+            Profile Details
+          </h2>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <Field label="Username">
+              <input
+                name="username"
+                value={form.username}
+                disabled
+                className="input-disabled"
+              />
+            </Field>
+
+            <Field label="Role">
+              <input
+                name="role"
+                value={form.role}
+                disabled
+                className="input-disabled capitalize"
+              />
+            </Field>
+
+            <Field label="Full Name">
+              <input
+                name="fullName"
+                value={form.fullName}
+                onChange={handleChange}
+                className="input-main"
+                placeholder="Enter full name"
+              />
+            </Field>
+
+            <Field label="Email">
+              <input
+                name="email"
+                type="email"
+                value={form.email}
+                onChange={handleChange}
+                className="input-main"
+                placeholder="Enter email"
+              />
+            </Field>
+
+            <Field label="Phone">
+              <input
+                name="phone"
+                value={form.phone}
+                onChange={handleChange}
+                className="input-main"
+                placeholder="Enter phone number"
+              />
+            </Field>
+
+            <Field label="Profile Image URL">
+              <input
+                name="profileImage"
+                value={form.profileImage}
+                onChange={handleChange}
+                className="input-main"
+                placeholder="https://..."
+              />
+            </Field>
+          </div>
+
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={handleSaveProfile}
+              disabled={savingProfile}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#800020] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(128,0,32,0.18)] transition hover:bg-[#6f001c] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {savingProfile ? (
+                <Loader2 className="animate-spin" size={17} />
+              ) : (
+                <Save size={17} />
+              )}
+              {savingProfile ? "Saving..." : "Save Profile"}
+            </button>
+          </div>
+
+          <div className="mt-9 border-t border-[#800020]/10 pt-7">
+            <h2 className="mb-5 text-base font-semibold text-gray-950">
+              Change Password
+            </h2>
+
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <Field label="New Password">
+                <input
+                  name="newPassword"
+                  type="password"
+                  value={passForm.newPassword}
+                  onChange={handlePassChange}
+                  className="input-main"
+                  placeholder="••••••••"
+                />
+              </Field>
+
+              <Field label="Confirm Password">
+                <input
+                  name="confirmPassword"
+                  type="password"
+                  value={passForm.confirmPassword}
+                  onChange={handlePassChange}
+                  className="input-main"
+                  placeholder="••••••••"
+                />
+              </Field>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleChangePassword}
+              disabled={changingPass}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#800020] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {changingPass ? (
+                <Loader2 className="animate-spin" size={17} />
+              ) : (
+                <KeyRound size={17} />
+              )}
+              {changingPass ? "Updating..." : "Update Password"}
+            </button>
+          </div>
+        </div>
       </div>
+
+      <style jsx>{`
+        .input-main {
+          width: 100%;
+          border-radius: 0.75rem;
+          border: 1px solid rgba(128, 0, 32, 0.14);
+          background: white;
+          padding: 0.625rem 0.75rem;
+          font-size: 0.875rem;
+          color: #111827;
+          outline: none;
+          transition: all 180ms ease;
+        }
+
+        .input-main:focus {
+          border-color: rgba(128, 0, 32, 0.45);
+          box-shadow: 0 0 0 3px rgba(128, 0, 32, 0.08);
+        }
+
+        .input-disabled {
+          width: 100%;
+          border-radius: 0.75rem;
+          border: 1px solid rgba(128, 0, 32, 0.08);
+          background: #fafafa;
+          padding: 0.625rem 0.75rem;
+          font-size: 0.875rem;
+          color: #6b7280;
+          outline: none;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-sm font-medium text-gray-700">
+        {label}
+      </label>
+      {children}
     </div>
   );
 }
