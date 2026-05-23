@@ -93,11 +93,11 @@ export const useOrderStore = create((set, get) => ({
   ordersMeta: null,
   customerSupportOrderDetails: {},
   duplicateAlerts: [],
-duplicateLoading: false,
-confirmationDetails: null,
-confirmationDetailsLoading: false,
-orderDashboard: null,
-orderDashboardLoading: false,
+  duplicateLoading: false,
+  confirmationDetails: null,
+  confirmationDetailsLoading: false,
+  orderDashboard: null,
+  orderDashboardLoading: false,
 
   _start: () => set({ loading: true, error: null }),
   _success: () => set({ loading: false }),
@@ -251,63 +251,79 @@ orderDashboardLoading: false,
   },
 
   fetchOrdersDashboard: async () => {
-  set({
-    orderDashboardLoading: true,
-    error: null,
-  });
-
-  try {
-    const data = await get()._get(`/api/orders/dashboard`, { silent: true });
-
-    const dashboard = data?.data || data || null;
-
     set({
-      orderDashboard: dashboard,
-      orderDashboardLoading: false,
+      orderDashboardLoading: true,
       error: null,
     });
 
-    return dashboard;
-  } catch (error) {
-    set({
-      orderDashboard: null,
-      orderDashboardLoading: false,
-      error: error?.message || "Failed to fetch orders dashboard",
-    });
+    try {
+      const data = await get()._get(`/api/orders/dashboard`, { silent: true });
 
-    throw error;
-  }
-},
+      const dashboard = data?.data || data || null;
+
+      set({
+        orderDashboard: dashboard,
+        orderDashboardLoading: false,
+        error: null,
+      });
+
+      return dashboard;
+    } catch (error) {
+      set({
+        orderDashboard: null,
+        orderDashboardLoading: false,
+        error: error?.message || "Failed to fetch orders dashboard",
+      });
+
+      throw error;
+    }
+  },
 
   fetchAllOrders: async (filters = {}) => {
-  const f = { ...(filters || {}) };
+    const f = { ...(filters || {}) };
 
-  // ✅ Attribution filter aliases for admin UI
-  if (f.source && !f.attributionSource) {
-    f.attributionSource = f.source;
-    delete f.source;
-  }
+    // ✅ Attribution filter aliases for admin UI
+    if (f.source && !f.attributionSource) {
+      f.attributionSource = f.source;
+      delete f.source;
+    }
 
-  if (f.medium && !f.attributionMedium) {
-    f.attributionMedium = f.medium;
-    delete f.medium;
-  }
+    if (f.medium && !f.attributionMedium) {
+      f.attributionMedium = f.medium;
+      delete f.medium;
+    }
 
-  if (f.campaign && !f.attributionCampaign) {
-    f.attributionCampaign = f.campaign;
-    delete f.campaign;
-  }
+    if (f.campaign && !f.attributionCampaign) {
+      f.attributionCampaign = f.campaign;
+      delete f.campaign;
+    }
 
-  if (f.page == null) f.page = 1;
-  if (f.limit == null) f.limit = 200;
+    if (f.page == null) f.page = 1;
+    if (f.limit == null) f.limit = 200;
 
-  const qs = buildQueryString(f);
-  const data = await get()._get(`/api/orders${qs}`);
-  const { orders, meta } = normalizeOrdersPayload(data);
+    const qs = buildQueryString(f);
+    const data = await get()._get(`/api/orders${qs}`);
+    const { orders, meta } = normalizeOrdersPayload(data);
 
-  set({ orders, ordersMeta: meta || null });
-  return orders;
-},
+    set({ orders, ordersMeta: meta || null });
+    return orders;
+  },
+
+  // ✅ CONFIRMED ORDERS
+  fetchConfirmedOrders: async (filters = {}) => {
+    return get().fetchAllOrders({
+      ...(filters || {}),
+      confirmFilter: "confirmed",
+    });
+  },
+
+  // ✅ NOT CONFIRMED ORDERS
+  fetchNotConfirmedOrders: async (filters = {}) => {
+    return get().fetchAllOrders({
+      ...(filters || {}),
+      confirmFilter: "not_confirmed",
+    });
+  },
 
   fetchNextOrdersPage: async (filters = {}) => {
     const currMeta = get().ordersMeta;
@@ -462,7 +478,7 @@ orderDashboardLoading: false,
   },
 
 
-    updateOrderPaymentStatus: async (orderId, paymentStatus) => {
+  updateOrderPaymentStatus: async (orderId, paymentStatus) => {
     if (!orderId) return null;
 
     const status = String(paymentStatus || "").trim().toLowerCase();
@@ -547,71 +563,71 @@ orderDashboardLoading: false,
   },
 
   cancelOrder: async (orderId, reason = "") => {
-  if (!orderId) return null;
+    if (!orderId) return null;
 
-  const data = await get()._patch(`/api/orders/${orderId}/status`, {
-    fulfillmentStatus: "cancelled",
-    cancelledBy: "admin",
-    reason: String(reason || "").trim(),
-    adminRemarks: "cancelled_by_admin",
-  });
+    const data = await get()._patch(`/api/orders/${orderId}/status`, {
+      fulfillmentStatus: "cancelled",
+      cancelledBy: "admin",
+      reason: String(reason || "").trim(),
+      adminRemarks: "cancelled_by_admin",
+    });
 
-  const order = get()._normalizeOrder(data);
+    const order = get()._normalizeOrder(data);
 
-  if (order?._id) {
-    set({ order });
-    get()._syncOrderInList(order);
-    get()._syncCustomerSupportDetail(order);
-  }
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
 
-  return order;
-},
+    return order;
+  },
 
   confirmOrder: async (orderId) => {
-  if (!orderId) return null;
+    if (!orderId) return null;
 
-  const data = await get()._post(`/api/orders/${orderId}/confirm`, {
-    confirmedBy: "admin",
-  });
-
-  const order = get()._normalizeOrder(data);
-
-  if (order?._id) {
-    set({ order });
-    get()._syncOrderInList(order);
-    get()._syncCustomerSupportDetail(order);
-  }
-
-  return order;
-},
-
-fetchOrderConfirmationDetails: async (orderId) => {
-  if (!orderId) return null;
-
-  set({ confirmationDetailsLoading: true, error: null });
-
-  try {
-    const data = await get()._get(
-      `/api/orders/${orderId}/confirmation-details`,
-      { silent: true }
-    );
-
-    const details = data?.data || data || null;
-
-    set({
-      confirmationDetails: details,
-      confirmationDetailsLoading: false,
+    const data = await get()._post(`/api/orders/${orderId}/confirm`, {
+      confirmedBy: "admin",
     });
 
-    return details;
-  } catch (error) {
-    set({
-      confirmationDetailsLoading: false,
-      error: error?.message || "Failed to fetch confirmation details",
-    });
-    throw error;
-  }
-},
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return order;
+  },
+
+  fetchOrderConfirmationDetails: async (orderId) => {
+    if (!orderId) return null;
+
+    set({ confirmationDetailsLoading: true, error: null });
+
+    try {
+      const data = await get()._get(
+        `/api/orders/${orderId}/confirmation-details`,
+        { silent: true }
+      );
+
+      const details = data?.data || data || null;
+
+      set({
+        confirmationDetails: details,
+        confirmationDetailsLoading: false,
+      });
+
+      return details;
+    } catch (error) {
+      set({
+        confirmationDetailsLoading: false,
+        error: error?.message || "Failed to fetch confirmation details",
+      });
+      throw error;
+    }
+  },
 
   duplicateExchangeOrder: async (orderId, payload = {}) => {
     if (!orderId) return null;
@@ -690,46 +706,46 @@ fetchOrderConfirmationDetails: async (orderId) => {
 
 
   // ✅ NEW FUNCTION ONLY
-searchOrdersByLocation: async (params = {}) => {
-  get()._start();
+  searchOrdersByLocation: async (params = {}) => {
+    get()._start();
 
-  try {
-    const query = new URLSearchParams();
+    try {
+      const query = new URLSearchParams();
 
-    if (params.state) query.set("state", String(params.state).trim());
-    if (params.pincode) query.set("pincode", String(params.pincode).trim());
-    if (params.page != null) query.set("page", String(params.page));
-    if (params.limit != null) query.set("limit", String(params.limit));
+      if (params.state) query.set("state", String(params.state).trim());
+      if (params.pincode) query.set("pincode", String(params.pincode).trim());
+      if (params.page != null) query.set("page", String(params.page));
+      if (params.limit != null) query.set("limit", String(params.limit));
 
-    if (params.fulfillmentStatus) {
-      query.set("fulfillmentStatus", String(params.fulfillmentStatus).trim());
-    }
+      if (params.fulfillmentStatus) {
+        query.set("fulfillmentStatus", String(params.fulfillmentStatus).trim());
+      }
 
-    if (params.paymentMethod) {
-      query.set("paymentMethod", String(params.paymentMethod).trim());
-    }
+      if (params.paymentMethod) {
+        query.set("paymentMethod", String(params.paymentMethod).trim());
+      }
 
-    if (
-      params.isConfirmed !== undefined &&
-      params.isConfirmed !== null &&
-      params.isConfirmed !== ""
-    ) {
-      query.set("isConfirmed", String(params.isConfirmed));
-    }
+      if (
+        params.isConfirmed !== undefined &&
+        params.isConfirmed !== null &&
+        params.isConfirmed !== ""
+      ) {
+        query.set("isConfirmed", String(params.isConfirmed));
+      }
 
-    if (params.search) {
-      query.set("search", String(params.search).trim());
-    }
+      if (params.search) {
+        query.set("search", String(params.search).trim());
+      }
 
-    const data = await get()._get(
-      `/api/orders/location/search?${query.toString()}`,
-      { silent: true }
-    );
+      const data = await get()._get(
+        `/api/orders/location/search?${query.toString()}`,
+        { silent: true }
+      );
 
-    set({
-      orders: Array.isArray(data?.orders) ? data.orders : [],
-      ordersMeta: data?.pagination
-        ? {
+      set({
+        orders: Array.isArray(data?.orders) ? data.orders : [],
+        ordersMeta: data?.pagination
+          ? {
             page: Number(data.pagination.page || 1),
             limit: Number(data.pagination.limit || 100),
             totalCount: Number(data.pagination.total || 0),
@@ -737,7 +753,7 @@ searchOrdersByLocation: async (params = {}) => {
             hasMore: Boolean(data.pagination.hasNextPage),
             hasPrevPage: Boolean(data.pagination.hasPrevPage),
           }
-        : {
+          : {
             page: 1,
             limit: Number(params.limit || 100),
             totalCount: 0,
@@ -745,32 +761,32 @@ searchOrdersByLocation: async (params = {}) => {
             hasMore: false,
             hasPrevPage: false,
           },
-      loading: false,
-      error: null,
-    });
+        loading: false,
+        error: null,
+      });
 
+      return data;
+    } catch (error) {
+      console.error("searchOrdersByLocation error:", error);
+      get()._fail(error);
+      throw error;
+    }
+  },
+
+
+  /* ---------------- DUPLICATE ORDER ALERTS ---------------- */
+
+  // fetch only (no marking)
+  fetchDuplicateOrderAlerts: async () => {
+    const data = await get()._get(`/api/orders/duplicate-alerts`);
     return data;
-  } catch (error) {
-    console.error("searchOrdersByLocation error:", error);
-    get()._fail(error);
-    throw error;
-  }
-},
+  },
 
-
-/* ---------------- DUPLICATE ORDER ALERTS ---------------- */
-
-// fetch only (no marking)
-fetchDuplicateOrderAlerts: async () => {
-  const data = await get()._get(`/api/orders/duplicate-alerts`);
-  return data;
-},
-
-// detect + mark in adminRemarks
-markDuplicateOrderAlerts: async () => {
-  const data = await get()._post(`/api/orders/duplicate-alerts/mark`, {});
-  return data;
-},
+  // detect + mark in adminRemarks
+  markDuplicateOrderAlerts: async () => {
+    const data = await get()._post(`/api/orders/duplicate-alerts/mark`, {});
+    return data;
+  },
 
   clearOrder: () => set({ order: null }),
   clearProductOrderCount: () => set({ productOrderCount: null }),
@@ -796,9 +812,9 @@ markDuplicateOrderAlerts: async () => {
       ordersMeta: null,
       customerSupportOrderDetails: {},
       confirmationDetails: null,
-confirmationDetailsLoading: false,
-    // ✅ dashboard
-    orderDashboard: null,
-    orderDashboardLoading: false,
+      confirmationDetailsLoading: false,
+      // ✅ dashboard
+      orderDashboard: null,
+      orderDashboardLoading: false,
     }),
 }));

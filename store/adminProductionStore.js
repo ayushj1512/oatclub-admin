@@ -134,6 +134,7 @@ const DEFAULT_JOB_SUMMARY = {
   totalReservations: 0,
   totalOrderedQty: 0,
   totalReservedQty: 0,
+  totalShippedQty: 0,
   totalReservedGroups: 0,
   totalUnreservedGroups: 0,
 };
@@ -418,82 +419,83 @@ if (toNum(merged.limit, 0) <= 0) merged.limit = state.filters.limit || 100;
      FETCH PRODUCTION JOBS
   ========================================================= */
   fetchProductionJobs: async (params = {}) => {
-    try {
-      set({ loadingProductionJobs: true, error: null });
+  try {
+    set({ loadingProductionJobs: true, error: null });
 
-      const state = get();
-      const merged = { ...state.productionJobFilters, ...params };
+    const state = get();
+    const merged = { ...state.productionJobFilters, ...params };
 
-      if (merged.page == null || toNum(merged.page) <= 0) merged.page = 1;
-      if (merged.limit == null || toNum(merged.limit) <= 0) merged.limit = 50;
+    if (merged.page == null || toNum(merged.page) <= 0) merged.page = 1;
+    if (merged.limit == null || toNum(merged.limit) <= 0) merged.limit = 50;
 
-      const query = buildQueryString({
-        q: merged.q,
-        from: merged.from,
-        to: merged.to,
-        sort: merged.sort,
-        page: merged.page,
-        limit: merged.limit,
-        all: merged.all,
-      });
+    const query = buildQueryString({
+      q: merged.q,
+      from: merged.from,
+      to: merged.to,
+      sort: merged.sort,
+      page: merged.page,
+      limit: merged.limit,
+      all: merged.all,
+    });
 
-      const res = await fetch(`${API}/production/jobs?${query}`, {
-        credentials: "include",
-      });
+    const res = await fetch(`${API}/production/jobs?${query}`, {
+      credentials: "include",
+    });
 
-      const data = await parseJson(res);
+    const data = await parseJson(res);
 
-      set({
-        productionJobs: Array.isArray(data?.rows) ? data.rows : [],
-        productionJobSummary: {
-          totalSkus: toNum(data?.summary?.totalSkus),
-          totalQtyToProduce: toNum(data?.summary?.totalQtyToProduce),
-          totalOrdersCovered: toNum(data?.summary?.totalOrdersCovered),
-          totalReservations: toNum(data?.summary?.totalReservations),
-          totalOrderedQty: toNum(data?.summary?.totalOrderedQty),
-          totalReservedQty: toNum(data?.summary?.totalReservedQty),
-          totalReservedGroups: toNum(data?.summary?.totalReservedGroups),
-          totalUnreservedGroups: toNum(data?.summary?.totalUnreservedGroups),
-        },
-        productionJobPagination: {
-          total: toNum(data?.pagination?.total),
-          page: toNum(data?.pagination?.page, 1),
-          limit: toNum(data?.pagination?.limit, 50),
-          pages: toNum(data?.pagination?.pages, 1),
-          hasMore: Boolean(data?.pagination?.hasMore),
-        },
-        productionJobFilters: {
-          ...state.productionJobFilters,
-          ...merged,
-          q: safeStr(merged.q),
-          from: safeStr(merged.from),
-          to: safeStr(merged.to),
-          sort: safeStr(merged.sort) || "qty_desc",
-          page: toNum(data?.pagination?.page, toNum(merged.page, 1)),
-          limit: toNum(data?.pagination?.limit, toNum(merged.limit, 50)),
-          all: Boolean(merged.all),
-        },
-      });
+    set({
+      productionJobs: Array.isArray(data?.rows) ? data.rows : [],
+      productionJobSummary: {
+        totalSkus: toNum(data?.summary?.totalSkus),
+        totalQtyToProduce: toNum(data?.summary?.totalQtyToProduce),
+        totalOrdersCovered: toNum(data?.summary?.totalOrdersCovered),
+        totalReservations: toNum(data?.summary?.totalReservations),
+        totalOrderedQty: toNum(data?.summary?.totalOrderedQty),
+        totalReservedQty: toNum(data?.summary?.totalReservedQty),
+        totalShippedQty: toNum(data?.summary?.totalShippedQty),
+        totalReservedGroups: toNum(data?.summary?.totalReservedGroups),
+        totalUnreservedGroups: toNum(data?.summary?.totalUnreservedGroups),
+      },
+      productionJobPagination: {
+        total: toNum(data?.pagination?.total),
+        page: toNum(data?.pagination?.page, 1),
+        limit: toNum(data?.pagination?.limit, 50),
+        pages: toNum(data?.pagination?.pages, 1),
+        hasMore: Boolean(data?.pagination?.hasMore),
+      },
+      productionJobFilters: {
+        ...state.productionJobFilters,
+        ...merged,
+        q: safeStr(merged.q),
+        from: safeStr(merged.from),
+        to: safeStr(merged.to),
+        sort: safeStr(merged.sort) || "qty_desc",
+        page: toNum(data?.pagination?.page, toNum(merged.page, 1)),
+        limit: toNum(data?.pagination?.limit, toNum(merged.limit, 50)),
+        all: Boolean(merged.all),
+      },
+    });
 
-      return data;
-    } catch (e) {
-      console.error("❌ fetchProductionJobs error:", e);
-      set({
-        error: e.message,
-        productionJobs: [],
-        productionJobSummary: { ...DEFAULT_JOB_SUMMARY },
-        productionJobPagination: { ...DEFAULT_JOB_PAGINATION },
-      });
-      toast.error(e.message);
-      return {
-        rows: [],
-        summary: { ...DEFAULT_JOB_SUMMARY },
-        pagination: { ...DEFAULT_JOB_PAGINATION },
-      };
-    } finally {
-      set({ loadingProductionJobs: false });
-    }
-  },
+    return data;
+  } catch (e) {
+    console.error("❌ fetchProductionJobs error:", e);
+    set({
+      error: e.message,
+      productionJobs: [],
+      productionJobSummary: { ...DEFAULT_JOB_SUMMARY },
+      productionJobPagination: { ...DEFAULT_JOB_PAGINATION },
+    });
+    toast.error(e.message);
+    return {
+      rows: [],
+      summary: { ...DEFAULT_JOB_SUMMARY },
+      pagination: { ...DEFAULT_JOB_PAGINATION },
+    };
+  } finally {
+    set({ loadingProductionJobs: false });
+  }
+},
 
   /* =========================================================
      EXPORT PRODUCTION JOBS EXCEL
@@ -722,83 +724,97 @@ if (toNum(merged.limit, 0) <= 0) merged.limit = state.filters.limit || 100;
   /* =========================================================
      FETCH PROCESSING ORDER PRODUCTS
   ========================================================= */
-  fetchProcessingOrderProducts: async (params = {}) => {
-    try {
-      set({ loadingProductionJobs: true, error: null });
+fetchProcessingOrderProducts: async (params = {}) => {
+  try {
+    set({ loadingProductionJobs: true, error: null });
 
-      const state = get();
-      const merged = { ...state.productionJobFilters, ...params };
+    const state = get();
+    const merged = { ...state.productionJobFilters, ...params };
 
-      if (merged.page == null || toNum(merged.page) <= 0) merged.page = 1;
-      if (merged.limit == null || toNum(merged.limit) <= 0) merged.limit = 50;
+    if (merged.page == null || toNum(merged.page) <= 0) merged.page = 1;
+    if (merged.limit == null || toNum(merged.limit) <= 0) merged.limit = 50;
 
-      const query = buildQueryString({
-        q: merged.q,
-        from: merged.from,
-        to: merged.to,
-        sort: merged.sort,
-        page: merged.page,
-        limit: merged.limit,
-        all: merged.all,
-      });
+    const query = buildQueryString({
+      q: merged.q,
+      from: merged.from,
+      to: merged.to,
+      sort: merged.sort,
+      page: merged.page,
+      limit: merged.limit,
+      all: merged.all,
+    });
 
-      const res = await fetch(`${API}/production/processing-products?${query}`, {
-        credentials: "include",
-      });
+    const res = await fetch(`${API}/production/processing-products?${query}`, {
+      credentials: "include",
+    });
 
-      const data = await parseJson(res);
+    const data = await parseJson(res);
 
-      set({
-        productionJobs: Array.isArray(data?.rows) ? data.rows : [],
-        productionJobSummary: {
-          totalSkus: toNum(data?.summary?.totalSkus),
-          totalQtyToProduce: toNum(data?.summary?.totalQtyToProduce),
-          totalOrdersCovered: toNum(data?.summary?.totalOrdersCovered),
-          totalReservations: toNum(data?.summary?.totalReservations, 0),
-          totalOrderedQty: toNum(data?.summary?.totalOrderedQty),
-          totalReservedQty: toNum(data?.summary?.totalReservedQty),
-          totalReservedGroups: toNum(data?.summary?.totalReservedGroups),
-          totalUnreservedGroups: toNum(data?.summary?.totalUnreservedGroups),
-        },
-        productionJobPagination: {
-          total: toNum(data?.pagination?.total),
-          page: toNum(data?.pagination?.page, 1),
-          limit: toNum(data?.pagination?.limit, 50),
-          pages: toNum(data?.pagination?.pages, 1),
-          hasMore: Boolean(data?.pagination?.hasMore),
-        },
-        productionJobFilters: {
-          ...state.productionJobFilters,
-          ...merged,
-          q: safeStr(merged.q),
-          from: safeStr(merged.from),
-          to: safeStr(merged.to),
-          sort: safeStr(merged.sort) || "qty_desc",
-          page: toNum(data?.pagination?.page, toNum(merged.page, 1)),
-          limit: toNum(data?.pagination?.limit, toNum(merged.limit, 50)),
-          all: Boolean(merged.all),
-        },
-      });
+    set({
+      productionJobs: Array.isArray(data?.rows) ? data.rows : [],
 
-      return data;
-    } catch (e) {
-      console.error("❌ fetchProcessingOrderProducts error:", e);
-      set({
-        error: e.message,
-        productionJobs: [],
-        productionJobSummary: { ...DEFAULT_JOB_SUMMARY },
-        productionJobPagination: { ...DEFAULT_JOB_PAGINATION },
-      });
-      toast.error(e.message);
-      return {
-        rows: [],
-        summary: { ...DEFAULT_JOB_SUMMARY },
-        pagination: { ...DEFAULT_JOB_PAGINATION },
-      };
-    } finally {
-      set({ loadingProductionJobs: false });
-    }
-  },
+      productionJobSummary: {
+        totalSkus: toNum(data?.summary?.totalSkus),
+        totalQtyToProduce: toNum(data?.summary?.totalQtyToProduce),
+        totalOrdersCovered: toNum(data?.summary?.totalOrdersCovered),
+
+        totalReservations: toNum(data?.summary?.totalReservations, 0),
+
+        totalOrderedQty: toNum(data?.summary?.totalOrderedQty),
+        totalReservedQty: toNum(data?.summary?.totalReservedQty),
+        totalShippedQty: toNum(data?.summary?.totalShippedQty),
+
+        totalReservedGroups: toNum(data?.summary?.totalReservedGroups),
+        totalUnreservedGroups: toNum(data?.summary?.totalUnreservedGroups),
+      },
+
+      productionJobPagination: {
+        total: toNum(data?.pagination?.total),
+        page: toNum(data?.pagination?.page, 1),
+        limit: toNum(data?.pagination?.limit, 50),
+        pages: toNum(data?.pagination?.pages, 1),
+        hasMore: Boolean(data?.pagination?.hasMore),
+      },
+
+      productionJobFilters: {
+        ...state.productionJobFilters,
+        ...merged,
+
+        q: safeStr(merged.q),
+        from: safeStr(merged.from),
+        to: safeStr(merged.to),
+
+        sort: safeStr(merged.sort) || "qty_desc",
+
+        page: toNum(data?.pagination?.page, toNum(merged.page, 1)),
+        limit: toNum(data?.pagination?.limit, toNum(merged.limit, 50)),
+
+        all: Boolean(merged.all),
+      },
+    });
+
+    return data;
+  } catch (e) {
+    console.error("❌ fetchProcessingOrderProducts error:", e);
+
+    set({
+      error: e.message,
+      productionJobs: [],
+      productionJobSummary: { ...DEFAULT_JOB_SUMMARY },
+      productionJobPagination: { ...DEFAULT_JOB_PAGINATION },
+    });
+
+    toast.error(e.message);
+
+    return {
+      rows: [],
+      summary: { ...DEFAULT_JOB_SUMMARY },
+      pagination: { ...DEFAULT_JOB_PAGINATION },
+    };
+  } finally {
+    set({ loadingProductionJobs: false });
+  }
+},
 
   /* =========================================================
      REFRESH HELPERS

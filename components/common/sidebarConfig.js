@@ -157,36 +157,56 @@ reviews: [
     { label: "Media Library", href: "/media" },
   ],
 
-  orders: [
-    { label: "Orders Dashboard", href: "/orders" },
-    { label: "All Orders", href: "/orders/all" },
-    { label: "Order Search", href: "/orders/search" },
-    {
-      label: "Product → Order Search",
-      href: "/orders/search-order-by-name-or-code",
-    },
-    { label: "Order Search by Location", href: "/orders/getOrderbyLocation" },
-    { label: "Duplicate Orders", href: "/orders/duplicate-orders" },
-    { label: "Refund Escalation", href: "/orders/refund-escalation" },
-    { label: "Order Analytics", href: "/orders/report" },
-    { label: "Processing", href: "/orders/processing" },
-    { label: "Packed", href: "/orders/packed" },
-    { label: "Shipped", href: "/orders/shipped" },
-    { label: "Out for Delivery", href: "/orders/out-for-delivery" },
-    { label: "Delivered", href: "/orders/delivered" },
-    { label: "Failed", href: "/orders/failed" },
-    { label: "Cancelled", href: "/orders/cancelled" },
-    { label: "Refunded", href: "/orders/refunded" },
-    { label: "Return Requested", href: "/orders/return_requested" },
-    { label: "Returned", href: "/orders/returned" },
-    { label: "Exchange Requested", href: "/orders/exchange_requested" },
-    { label: "Exchanged", href: "/orders/exchanged" },
-    { label: "Pickup Initiated", href: "/orders/pickup_initiated" },
-    { label: "RTO / NDR", href: "/orders/rto" },
-    { label: "Order Remark", href: "/orders/remark" },
-    { label: "Invoice", href: "/orders/invoices" },
-    { label: "RMA Requests", href: "/orders/rma" },
-  ],
+orders: [
+  { label: "Orders Dashboard", href: "/orders" },
+  { label: "All Orders", href: "/orders/all" },
+
+  // ✅ confirmation
+  
+
+  { label: "Order Search", href: "/orders/search" },
+
+  {
+    label: "Product → Order Search",
+    href: "/orders/search-order-by-name-or-code",
+  },
+
+  {
+    label: "Order Search by Location",
+    href: "/orders/getOrderbyLocation",
+  },
+  { label: "Confirmed Orders", href: "/orders/confirmed-orders" },
+  { label: "Unconfirmed Orders", href: "/orders/unconfirmed-orders" },
+
+  { label: "Duplicate Orders", href: "/orders/duplicate-orders" },
+  { label: "Refund Escalation", href: "/orders/refund-escalation" },
+  { label: "Order Analytics", href: "/orders/report" },
+
+  // ✅ fulfillment
+  { label: "Processing", href: "/orders/processing" },
+  { label: "Packed", href: "/orders/packed" },
+  { label: "Shipped", href: "/orders/shipped" },
+  { label: "Out for Delivery", href: "/orders/out-for-delivery" },
+  { label: "Delivered", href: "/orders/delivered" },
+
+  // ✅ reverse flow
+  { label: "Return Requested", href: "/orders/return_requested" },
+  { label: "Returned", href: "/orders/returned" },
+  { label: "Exchange Requested", href: "/orders/exchange_requested" },
+  { label: "Exchanged", href: "/orders/exchanged" },
+  { label: "Pickup Initiated", href: "/orders/pickup_initiated" },
+
+  // ✅ failure states
+  { label: "Failed", href: "/orders/failed" },
+  { label: "Cancelled", href: "/orders/cancelled" },
+  { label: "Refunded", href: "/orders/refunded" },
+  { label: "RTO / NDR", href: "/orders/rto" },
+
+  // ✅ misc
+  { label: "Order Remark", href: "/orders/remark" },
+  { label: "Invoice", href: "/orders/invoices" },
+  { label: "RMA Requests", href: "/orders/rma" },
+],
 
   rma: [
     { label: "RMA Requests", href: "/rma" },

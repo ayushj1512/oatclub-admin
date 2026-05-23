@@ -358,7 +358,7 @@ export default function AllProductionJobPage() {
             limit: currentLimit,
             all: false,
           });
-        } catch {}
+        } catch { }
 
         if (!cancelled && reqId === countReqRef.current) {
           setLoadingOverallCount(false);
@@ -415,7 +415,7 @@ export default function AllProductionJobPage() {
           limit: currentLimit,
           all: false,
         });
-      } catch {}
+      } catch { }
 
       setDownloadingExcel(false);
     }
@@ -477,30 +477,40 @@ export default function AllProductionJobPage() {
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard
             title="Unique Product Codes"
             value={loadingOverallCount ? "..." : overallUniqueProductCodes}
             icon={Hash}
             hint="All pages"
           />
+
           <StatCard
-            title="Total Qty"
+            title="Ordered Qty"
+            value={num(productionJobSummary?.totalOrderedQty)}
+            icon={Boxes}
+            hint="Original demand"
+          />
+
+          <StatCard
+            title="Reserved Qty"
+            value={num(productionJobSummary?.totalReservedQty)}
+            icon={Boxes}
+            hint="Already reserved"
+          />
+
+          <StatCard
+            title="To Produce"
             value={num(productionJobSummary?.totalQtyToProduce)}
             icon={Boxes}
-            hint="Units to produce"
+            hint="Final net qty"
           />
+
           <StatCard
             title="Orders Covered"
             value={num(productionJobSummary?.totalOrdersCovered)}
             icon={ShoppingBag}
             hint="Unique processing orders"
-          />
-          <StatCard
-            title="Line Groups"
-            value={num(rows.length)}
-            icon={Package2}
-            hint="Grouped product rows"
           />
         </div>
 
