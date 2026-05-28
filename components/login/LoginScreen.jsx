@@ -49,16 +49,13 @@ export default function LoginScreen() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#fcfafb] px-4 py-8 text-gray-900">
-      <div className="pointer-events-none absolute left-[-120px] top-[-120px] h-80 w-80 rounded-full bg-[#800020]/10 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-[-140px] right-[-120px] h-96 w-96 rounded-full bg-[#800020]/12 blur-3xl" />
-
-      <div className="relative w-full max-w-md rounded-3xl border border-[#800020]/10 bg-white/95 p-7 shadow-[0_24px_70px_rgba(128,0,32,0.12)] backdrop-blur sm:p-9">
+    <div className="flex min-h-screen items-center justify-center bg-[#fafafa] px-4 py-8 text-gray-900">
+      <div className="w-full max-w-[460px] rounded-[32px] border border-gray-100 bg-white p-7 shadow-[0_24px_70px_rgba(0,0,0,0.08)] sm:p-9">
         <div className="mb-8 text-center">
           <div className="mb-5 flex justify-center">
-            <div className="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-[#800020]/10">
+            <div className="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-gray-100">
               <Image
-                src="https://res.cloudinary.com/djtva6hec/image/upload/v1767196261/miray/media/rwhqczcfjnmnvoytyrmh.png"
+                src="https://www.mirayfashions.com/_next/image?url=https%3A%2F%2Fres.cloudinary.com%2Fdjtva6hec%2Fimage%2Fupload%2Fv1764916639%2Fmiray%2Fmedia%2Fk0yvgu5m0ij1husm3ugh.png&w=256&q=75"
                 alt="Miray Logo"
                 width={160}
                 height={70}
@@ -68,10 +65,13 @@ export default function LoginScreen() {
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight text-gray-950">
+          <h1 className="text-[28px] font-bold tracking-tight text-gray-950">
             Welcome Back
           </h1>
-          <p className="mt-1 text-sm text-gray-500">Miray Admin Login Portal</p>
+
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            Login to continue to your Miray admin dashboard
+          </p>
         </div>
 
         {error && (
@@ -82,13 +82,13 @@ export default function LoginScreen() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label className="mb-2 block text-sm font-medium text-gray-700">
               Username
             </label>
 
             <div className="relative">
               <User
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
                 size={18}
               />
 
@@ -97,7 +97,7 @@ export default function LoginScreen() {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-xl border border-[#800020]/15 bg-white py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-[#800020]/45 focus:ring-4 focus:ring-[#800020]/8"
+                className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#800020]/40 focus:ring-4 focus:ring-[#800020]/5"
                 placeholder="Enter your username"
                 autoComplete="username"
               />
@@ -105,13 +105,13 @@ export default function LoginScreen() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label className="mb-2 block text-sm font-medium text-gray-700">
               Password
             </label>
 
             <div className="relative">
               <Lock
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
                 size={18}
               />
 
@@ -120,7 +120,7 @@ export default function LoginScreen() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-[#800020]/15 bg-white py-2.5 pl-10 pr-11 text-sm outline-none transition focus:border-[#800020]/45 focus:ring-4 focus:ring-[#800020]/8"
+                className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-12 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#800020]/40 focus:ring-4 focus:ring-[#800020]/5"
                 placeholder="Enter your password"
                 autoComplete="current-password"
               />
@@ -128,7 +128,7 @@ export default function LoginScreen() {
               <button
                 type="button"
                 onClick={() => setShowPass((s) => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 transition hover:text-[#800020]"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 transition hover:text-[#800020]"
                 aria-label={showPass ? "Hide password" : "Show password"}
               >
                 {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -139,13 +139,14 @@ export default function LoginScreen() {
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#800020] py-2.5 text-sm font-semibold text-white shadow-[0_14px_28px_rgba(128,0,32,0.2)] transition hover:bg-[#6f001c] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#800020] py-3 text-sm font-semibold text-white shadow-[0_14px_28px_rgba(128,0,32,0.18)] transition hover:bg-[#6f001c] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? (
               <Loader2 className="animate-spin" size={18} />
             ) : (
               <LogIn size={18} />
             )}
+
             {loading ? "Logging in..." : "Login"}
           </button>
         </form>
