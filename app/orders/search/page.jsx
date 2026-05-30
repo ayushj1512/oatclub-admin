@@ -23,6 +23,8 @@ import {
   Hash,
   FileText,
 } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 
 import { useOrderStore } from "@/store/orderStore";
 import { useShiprocketStore } from "@/store/ShipRocketStore";
@@ -540,6 +542,20 @@ export default function OrderSearchPage() {
                   {normalized || "—"}
                 </span>
               </div>
+
+              {order?._id ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <Link
+                    href={`/orders/${order._id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+                  >
+                    Open Order Details
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                </div>
+              ) : null}
             </div>
           </div>
 

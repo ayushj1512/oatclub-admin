@@ -13,7 +13,7 @@ import AddressSection from "@/components/customer/AddressSection";
 import OrderSection from "@/components/customer/OrderSection";
 import SupportTicketSection from "@/components/customer/SupportTicketSection";
 import CustomerAnalyticsSection from "@/components/customer/CustomerAnalyticsSection";
-
+import CustomerCreditsSection from "@/components/customer/CustomerCreditsSection";
 import { useCustomerStore } from "@/store/customerStore";
 
 const safe = (v) => String(v ?? "").trim();
@@ -137,6 +137,7 @@ export default function CustomerDetailPage() {
       {/* Top sections */}
       <CustomerSection customerId={routeId} />
       <CustomerAnalyticsSection customer={customer} />
+      <CustomerCreditsSection customerId={customerMongoId} customer={customer} />
 
       {/* ✅ NEW: Banking / UPI Refund Details */}
       <Card>

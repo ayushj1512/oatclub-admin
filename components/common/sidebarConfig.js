@@ -253,15 +253,17 @@ orders: [
   { label: "Retention Analytics", href: "/customers/analytics/retention" },
   { label: "Analytics Reports", href: "/customers/analytics/reports" },
 
+  { label: "Customer Credits", href: "/customers/credits" },
+
   { label: "Banking / Refund Details", href: "/customers/bankingDetails" },
   { label: "Customer / Address", href: "/customers/address" },
+  { label: "Customer Carts", href: "/customers/carts" },
   { label: "Cart Adds", href: "/customers/cart-adds" },
   { label: "Abandoned Carts", href: "/customers/abandoned-carts" },
   { label: "Wishlist", href: "/customers/wishlist" },
   { label: "Tickets & Support", href: "/customers/support" },
   { label: "Newsletter Subscribers", href: "/customers/newsletter" },
 ],
-
   customer_support: [
     { label: "Support Dashboard", href: "/customer-support" },
     { label: "Search", href: "/customer-support/search" },

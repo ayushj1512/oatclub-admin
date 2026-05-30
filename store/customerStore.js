@@ -30,6 +30,22 @@ export const useCustomerStore = create((set, get) => ({
   cartAddsTotal: 0,
   loadingCartAdds: false,
 
+  creditLogs: [],
+  creditLogsTotal: 0,
+  creditLogsPage: 1,
+  creditLogsPages: 1,
+  creditLogsLimit: 20,
+  allCreditLogs: [],
+  allCreditLogsTotal: 0,
+  allCreditLogsPage: 1,
+  allCreditLogsPages: 1,
+  allCreditLogsLimit: 20,
+  loadingAllCreditLogs: false,
+
+  loadingCreditLogs: false,
+  creditSaving: false,
+  creditError: "",
+
   loadingList: false,
   loadingSingle: false,
   saving: false,
@@ -41,8 +57,7 @@ export const useCustomerStore = create((set, get) => ({
 
   /* ---------------- HELPERS ---------------- */
   setError: (msg = "") => set({ error: msg }),
-  clearError: () => set({ error: "", payoutError: "" }),
-
+  clearError: () => set({ error: "", payoutError: "", creditError: "" }),
   clearAddresses: () => set({ addresses: [], addressesTotal: 0 }),
 
   clearCustomer: () =>
@@ -50,7 +65,13 @@ export const useCustomerStore = create((set, get) => ({
       customer: null,
       cartAdds: [],
       cartAddsTotal: 0,
+      creditLogs: [],
+      creditLogsTotal: 0,
+      creditLogsPage: 1,
+      creditLogsPages: 1,
       payoutError: "",
+      creditError: "",
+      creditLogsLimit: 20,
     }),
 
   buildUrl: (path, params = {}) => {
@@ -378,6 +399,170 @@ export const useCustomerStore = create((set, get) => ({
       return { success: false, error: msg };
     } finally {
       set({ payoutSaving: false });
+    }
+  },
+
+  /* ----------------------------------------------------
+   CUSTOMER CREDITS / WALLET
+---------------------------------------------------- */
+
+  fetchCustomerCreditLogs: async (id, params = {}) => {
+    if (!API || !id) return [];
+
+    set({ loadingCreditLogs: true, creditError: "" });
+
+    try {
+      const url = get().buildUrl(`/api/customers/${id}/credits/logs`, params);
+
+      const res = await fetch(url, { cache: "no-store" });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to load credit logs");
+      }
+
+      set({
+        creditLogs: data?.items || [],
+        creditLogsTotal: data?.total || 0,
+        creditLogsPage: data?.page || 1,
+        creditLogsPages: data?.pages || 1,
+        creditLogsLimit: data?.limit || params?.limit || 20,
+      });
+
+      return data;
+    } catch (err) {
+      const msg = err?.message || "Failed to load credit logs";
+      set({ creditError: msg });
+      return { success: false, error: msg };
+    } finally {
+      set({ loadingCreditLogs: false });
+    }
+  },
+
+  fetchAllCustomerCreditLogs: async (params = {}) => {
+    if (!API) return [];
+
+    set({ loadingAllCreditLogs: true, creditError: "" });
+
+    try {
+      const url = get().buildUrl("/api/customers/credits/logs", params);
+
+      const res = await fetch(url, { cache: "no-store" });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to load all credit logs");
+      }
+
+      set({
+        allCreditLogs: data?.items || [],
+        allCreditLogsTotal: data?.total || 0,
+        allCreditLogsPage: data?.page || 1,
+        allCreditLogsPages: data?.pages || 1,
+        allCreditLogsLimit: data?.limit || params?.limit || 20,
+      });
+
+      return data;
+    } catch (err) {
+      const msg = err?.message || "Failed to load all credit logs";
+      set({ creditError: msg });
+      return { success: false, error: msg };
+    } finally {
+      set({ loadingAllCreditLogs: false });
+    }
+  },
+
+  addCustomerCredit: async (id, payload) => {
+    if (!API || !id) return { success: false, error: "Missing customer id" };
+
+    set({ creditSaving: true, creditError: "" });
+
+    try {
+      const res = await fetch(`${API}/api/customers/${id}/credits/add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Credit add failed");
+      }
+
+      const updated = data?.customer || null;
+
+      if (updated?._id) {
+        const cartAdds = Array.isArray(updated?.cartAdds)
+          ? updated.cartAdds
+          : get().cartAdds || [];
+
+        set({
+          customer: updated,
+          cartAdds,
+          cartAddsTotal: cartAdds.length,
+          creditLogs: updated?.credits?.logs || [],
+          creditLogsTotal: updated?.credits?.logs?.length || 0,
+          creditLogsPage: 1,
+          creditLogsPages: 1,
+        });
+
+        get().updateCustomerInList(updated);
+      }
+
+      return { success: true, customer: updated, credits: data?.credits };
+    } catch (err) {
+      const msg = err?.message || "Failed to add customer credit";
+      set({ creditError: msg });
+      return { success: false, error: msg };
+    } finally {
+      set({ creditSaving: false });
+    }
+  },
+
+  debitCustomerCredit: async (id, payload) => {
+    if (!API || !id) return { success: false, error: "Missing customer id" };
+
+    set({ creditSaving: true, creditError: "" });
+
+    try {
+      const res = await fetch(`${API}/api/customers/${id}/credits/debit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Credit debit failed");
+      }
+
+      const updated = data?.customer || null;
+
+      if (updated?._id) {
+        const cartAdds = Array.isArray(updated?.cartAdds)
+          ? updated.cartAdds
+          : get().cartAdds || [];
+
+        set({
+          customer: updated,
+          cartAdds,
+          cartAddsTotal: cartAdds.length,
+          creditLogs: updated?.credits?.logs || [],
+          creditLogsTotal: updated?.credits?.logs?.length || 0,
+        });
+
+        get().updateCustomerInList(updated);
+      }
+
+      return { success: true, customer: updated, credits: data?.credits };
+    } catch (err) {
+      const msg = err?.message || "Failed to debit customer credit";
+      set({ creditError: msg });
+      return { success: false, error: msg };
+    } finally {
+      set({ creditSaving: false });
     }
   },
 

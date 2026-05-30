@@ -24,6 +24,11 @@ const normalizePriority = (v) => {
   return ["normal", "medium", "high"].includes(p) ? p : "";
 };
 
+const normalizePaymentMethod = (v) => {
+  const pm = String(v ?? "").trim().toLowerCase();
+  return ["cod", "razorpay", "wallet", "exchange"].includes(pm) ? pm : "";
+};
+
 const buildQueryString = (filters = {}) => {
   const params = new URLSearchParams();
 
@@ -50,6 +55,11 @@ const buildQueryString = (filters = {}) => {
     if (k === "page" || k === "limit") {
       const n = parseInt(s, 10);
       if (Number.isFinite(n)) params.set(k, String(n));
+      return;
+    }
+    if (k === "paymentMethod") {
+      const pm = normalizePaymentMethod(s);
+      if (pm) params.set("paymentMethod", pm);
       return;
     }
 
@@ -205,8 +215,37 @@ export const useOrderStore = create((set, get) => ({
 
   createOrder: async (payload) => {
     const p = { ...(payload || {}) };
+
     if (p.priority != null) {
       p.priority = normalizePriority(p.priority) || "normal";
+    }
+
+    if (p.paymentMethod != null) {
+      p.paymentMethod = normalizePaymentMethod(p.paymentMethod) || "cod";
+    }
+
+    // ✅ wallet / customer credit support
+    const walletAmount = Number(
+      p.walletAmount ??
+      p.walletCredit?.amount ??
+      p.paymentBreakdown?.walletAmount ??
+      0
+    );
+
+    if (walletAmount > 0 || p.useWallet === true || p.paymentMethod === "wallet") {
+      p.useWallet = true;
+      p.walletAmount = Math.max(0, walletAmount);
+
+      p.walletCredit = {
+        ...(p.walletCredit || {}),
+        used: true,
+        amount: Math.max(0, walletAmount),
+      };
+
+      p.paymentBreakdown = {
+        ...(p.paymentBreakdown || {}),
+        walletAmount: Math.max(0, walletAmount),
+      };
     }
 
     const data = await get()._post(`/api/orders`, p);
@@ -488,6 +527,8 @@ export const useOrderStore = create((set, get) => ({
       "paid",
       "failed",
       "refunded",
+      "partially_refunded",
+
       "refund_pending",
       "not_applicable",
     ];
@@ -771,6 +812,25 @@ export const useOrderStore = create((set, get) => ({
       get()._fail(error);
       throw error;
     }
+  },
+
+  getWalletSummary: (order = null) => {
+    const o = order || get().order || {};
+
+    return {
+      used: Boolean(o?.walletCredit?.used || o?.analytics?.creditsUsed),
+      amount: Number(
+        o?.walletCredit?.amount ||
+        o?.paymentBreakdown?.walletAmount ||
+        0
+      ),
+      transactionId: o?.walletCredit?.transactionId || "",
+      debitedAt: o?.walletCredit?.debitedAt || null,
+      balanceAfterDebit: Number(o?.walletCredit?.balanceAfterDebit || 0),
+      remainingPayable: Number(o?.finalPayable || 0),
+      paymentMethod: o?.paymentMethod || "",
+      paymentStatus: o?.paymentStatus || "",
+    };
   },
 
 
