@@ -186,20 +186,6 @@ export default function BlueDartCreatePage() {
               </p>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field
-                label="Order Number"
-                value={form.orderNumber}
-                onChange={(v) => handleChange("orderNumber", v)}
-                  placeholder="OATCLUB-000123 or 123"
-              <Field
-                label="Service Type"
-                value={form.serviceType}
-                onChange={(v) => handleChange("serviceType", v)}
-                placeholder="Auto by payment / eTailPrePaidAir"
-                icon={RadioTower}
-              />
-            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <Field
