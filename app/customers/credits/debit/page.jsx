@@ -256,7 +256,7 @@ export default function DebitCustomerCreditPage() {
               label="Order Number"
               value={form.orderNumber}
               onChange={(v) => updateField("orderNumber", v)}
-              placeholder="MIRAY-000123"
+              placeholder="OATCLUB-000123"
             />
           </div>
 

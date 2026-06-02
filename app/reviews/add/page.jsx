@@ -313,7 +313,7 @@ export default function AddReviewPage() {
                 <input
                   value={orderNumber}
                   onChange={(e) => setOrderNumber(e.target.value)}
-                  placeholder="MIRAY-000123"
+                  placeholder="OATCLUB-000123"
                   className="w-full rounded-2xl border border-gray-200 px-3 py-3 outline-none focus:ring-2 focus:ring-blue-100"
                 />
 

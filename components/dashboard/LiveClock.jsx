@@ -1,17 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Clock3, RefreshCw } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { Clock3 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 const TIMEZONE = "Asia/Kolkata";
-
-const QUOTES = [
-  "Small progress every day beats big plans someday.",
-  "Discipline turns goals into results.",
-  "Win the day. Repeat.",
-  "Action creates clarity.",
-];
 
 function formatParts(date) {
   const parts = new Intl.DateTimeFormat("en-IN", {
@@ -54,24 +47,9 @@ function formatParts(date) {
 
 export default function LiveClock() {
   const [now, setNow] = useState(new Date());
-  const [quote, setQuote] = useState(QUOTES[0]);
-  const lastIndex = useRef(-1);
-
-  const pickQuote = () => {
-    let i = Math.floor(Math.random() * QUOTES.length);
-    if (i === lastIndex.current) i = (i + 1) % QUOTES.length;
-    lastIndex.current = i;
-    setQuote(QUOTES[i]);
-  };
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    pickQuote();
-    const timer = setInterval(pickQuote, 10000);
     return () => clearInterval(timer);
   }, []);
 
@@ -79,78 +57,44 @@ export default function LiveClock() {
     useMemo(() => formatParts(now), [now]);
 
   return (
-    <section className="w-full rounded-2xl border border-[#800020]/10 bg-white px-4 py-4 shadow-sm">
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22 }}
-        className="mx-auto w-full max-w-sm rounded-2xl border border-[#800020]/10 bg-gradient-to-b from-white via-white to-[#fff7f8] p-4 shadow-[0_16px_40px_rgba(128,0,32,0.06)]"
-      >
-        <div className="flex items-center justify-between">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#800020]/8 px-2.5 py-1 text-[11px] font-medium text-[#800020]">
-            <Clock3 size={13} />
-            <span>IST</span>
-          </div>
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22 }}
+      className="flex items-center gap-3  bg-white px-4 py-3 ]"
+    >
+      <span className="inline-flex h-10 w-10 items-center justify-center bg-zinc-50 text-zinc-700">
+        <Clock3 size={17} />
+      </span>
 
-          <button
-            type="button"
-            onClick={pickQuote}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#800020]/10 bg-white text-gray-500 transition-all hover:border-[#800020]/20 hover:bg-[#800020]/5 hover:text-[#800020]"
-            aria-label="Refresh quote"
-          >
-            <RefreshCw size={13} />
-          </button>
-        </div>
-
-        <div className="mt-4 flex items-end justify-center gap-1 text-[30px] font-semibold leading-none tracking-tight text-gray-950 sm:text-[32px]">
-          <span>{hour}</span>
-          <span className="text-[#800020]">:</span>
-          <span>{minute}</span>
-          <span className="text-[#800020]">:</span>
-
-          <span className="relative inline-flex w-[2ch] justify-center text-[#800020]">
+      <div className="min-w-0">
+        <div className="flex items-end gap-1.5 font-semibold leading-none tracking-tight text-zinc-950">
+          <span className="text-[26px]">{hour}</span>
+          <span className="pb-0.5 text-zinc-400">:</span>
+          <span className="text-[26px]">{minute}</span>
+          <span className="pb-0.5 text-zinc-400">:</span>
+          <span className="relative inline-flex w-[2ch] justify-center text-[22px] text-zinc-500">
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.span
                 key={second}
-                initial={{ opacity: 0, y: 5 }}
+                initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -5 }}
+                exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.15 }}
               >
                 {second}
               </motion.span>
             </AnimatePresence>
           </span>
-
-          <span className="ml-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#800020]">
+          <span className="pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
             {dayPeriod}
           </span>
         </div>
 
-        <div className="mt-2 text-center">
-          <p className="text-[12px] font-medium text-gray-800">
-            Good {greeting}
-          </p>
-          <p className="mt-0.5 text-[11px] text-gray-500">
-            {day}, {fullDate}
-          </p>
-        </div>
-
-        <div className="mt-4 border-t border-[#800020]/10 pt-3">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.p
-              key={quote}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18 }}
-              className="text-center text-[11px] leading-relaxed text-gray-500"
-            >
-              “{quote}”
-            </motion.p>
-          </AnimatePresence>
-        </div>
-      </motion.div>
-    </section>
+        <p className="mt-1 text-[11px] font-medium text-zinc-500">
+          Good {greeting} / {day}, {fullDate} / IST
+        </p>
+      </div>
+    </motion.div>
   );
 }

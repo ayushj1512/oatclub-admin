@@ -294,11 +294,17 @@ export default function InvoiceTemplate({ data }) {
       {/* ================= SIGNATURE ================= */}
       <div className=" flex justify-end">
         <div className="text-center text-[11px] leading-tight">
-          <img
-            src="https://res.cloudinary.com/djtva6hec/image/upload/v1767081191/miray/media/bjyys289bzzwlesw3938.png"
-            alt="Authorized Signature"
-            className="h-20 mx-auto mb-[2px] object-contain"
-          />
+          {seller.signature ? (
+            <img
+              src={seller.signature}
+              alt="Authorized Signature"
+              className="h-20 mx-auto mb-[2px] object-contain"
+            />
+          ) : (
+            <div className="mx-auto mb-2 inline-flex h-20 w-48 items-center justify-center rounded-2xl bg-oat-bg text-[10px] uppercase tracking-[0.15em] text-oat-text ring-1 ring-zinc-100">
+              OATCLUB Authorized Signatory
+            </div>
+          )}
           <p className="font-semibold">Authorized Signatory</p>
         </div>
       </div>

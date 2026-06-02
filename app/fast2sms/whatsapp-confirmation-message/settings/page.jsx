@@ -74,7 +74,7 @@ export default function WhatsappConfirmationSettingsPage() {
   const templatePreview = useMemo(
     () => ({
       header: "{{1}}",
-      body: "Hi {{1}}, your Miray order {{2}} has been placed successfully. Confirm or cancel here: {{3}}",
+      body: "Hi {{1}}, your OATCLUB order {{2}} has been placed successfully. Confirm or cancel here: {{3}}",
     }),
     []
   );

@@ -10,12 +10,12 @@
    SELLER (BUSINESS DETAILS)
 ------------------------------------------------------------ */
 export const SELLER = {
-  name: "Miray Fashions",
-  brand: "Miray",
+  name: "OATCLUB",
+  brand: "OATCLUB",
 
   // Assets
-  logo: "https://res.cloudinary.com/djtva6hec/image/upload/v1767036287/miray/media/qopxsngt9pusq1bohaif.png",
-  signature: "https://res.cloudinary.com/djtva6hec/image/upload/v1767032209/miray/media/say6eugu7grxc0tomvf0.png", // optional
+  logo: "",
+  signature: "",
 
   // Address & Contact
   address:
@@ -26,8 +26,8 @@ export const SELLER = {
   pincode: "110019",
 
   phone: "(+91) 7303491206",
-  email: "support@mirayfashions.com",
-  website: "https://mirayfashions.com",
+  email: "support@oatclub.com",
+  website: "https://oatclub.com",
 
   // ✅ TAX IDENTIFIERS
   gstin: "07ACCFM1594P1ZO",

@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OATCLUB — Black & White Clothing</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Inter", "sans-serif"],
+            display: ["Space Grotesk", "sans-serif"],
+          },
+          colors: {
+            ink: {
+              black: "#050505",
+              white: "#FFFFFF",
+              soft: "#F6F6F6",
+              line: "#E9E9E9",
+              muted: "#737373",
+              dark: "#171717",
+            },
+          },
+        },
+      },
+    };
+  </script>
+</head>
+
+<body class="bg-white text-ink-black font-sans antialiased">
+
+  <!-- TOP BAR -->
+  <div class="bg-black text-white text-center text-[11px] sm:text-xs py-2 tracking-wide">
+    NEW DROP LIVE · FREE SHIPPING ABOVE ₹999
+  </div>
+
+  <!-- HEADER -->
+  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-ink-line">
+    <div class="px-4 sm:px-6 lg:px-12 py-4 flex items-center justify-between gap-4">
+
+      <a href="#" class="font-display text-2xl sm:text-3xl font-black tracking-[-0.08em]">
+        OATCLUB
+      </a>
+
+      <!-- DESKTOP NAV -->
+      <nav class="hidden lg:flex items-center gap-8 text-sm font-semibold text-ink-muted">
+
+        <div class="relative group">
+          <button class="hover:text-black transition">Shop</button>
+
+          <!-- DROPDOWN -->
+          <div class="invisible opacity-0 pointer-events-none group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto transition absolute top-8 left-1/2 -translate-x-1/2 w-[760px] bg-white rounded-[28px] shadow-[0_30px_90px_rgba(0,0,0,0.14)] p-6 border border-ink-line">
+            <div class="grid grid-cols-4 gap-5">
+
+              <div>
+                <h4 class="text-black font-bold mb-4">Shop</h4>
+                <div class="flex flex-col gap-3">
+                  <a href="#">New Arrivals</a>
+                  <a href="#">Oversized Tees</a>
+                  <a href="#">Boxy Fit</a>
+                  <a href="#">Bottoms</a>
+                  <a href="#">Layers</a>
+                </div>
+              </div>
+
+              <div>
+                <h4 class="text-black font-bold mb-4">Collections</h4>
+                <div class="flex flex-col gap-3">
+                  <a href="#">Black Edit</a>
+                  <a href="#">White Basics</a>
+                  <a href="#">Monochrome</a>
+                  <a href="#">Essentials</a>
+                </div>
+              </div>
+
+              <a href="#" class="group/card bg-ink-soft rounded-3xl overflow-hidden">
+                <img src="https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=900&auto=format&fit=crop" class="h-56 object-cover grayscale group-hover/card:scale-105 transition duration-500" />
+                <div class="p-4">
+                  <p class="text-black font-bold">New Drop</p>
+                  <p class="text-xs text-ink-muted mt-1">Monochrome fits</p>
+                </div>
+              </a>
+
+              <a href="#" class="group/card bg-ink-soft rounded-3xl overflow-hidden">
+                <img src="https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?q=80&w=900&auto=format&fit=crop" class="h-56 object-cover grayscale group-hover/card:scale-105 transition duration-500" />
+                <div class="p-4">
+                  <p class="text-black font-bold">Best Sellers</p>
+                  <p class="text-xs text-ink-muted mt-1">Most loved basics</p>
+                </div>
+              </a>
+
+            </div>
+          </div>
+        </div>
+
+        <a href="#" class="hover:text-black transition">New Arrivals</a>
+        <a href="#" class="hover:text-black transition">Best Sellers</a>
+        <a href="#" class="hover:text-black transition">Lookbook</a>
+        <a href="#" class="hover:text-black transition">Journal</a>
+      </nav>
+
+      <div class="flex items-center gap-4 text-sm font-bold">
+        <button class="hidden sm:block">Search</button>
+        <button class="hidden sm:block">Account</button>
+        <button>Cart <span class="text-ink-muted">(2)</span></button>
+        <button class="lg:hidden text-2xl leading-none">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MOBILE MENU STRIP -->
+  <div class="lg:hidden px-4 py-3 overflow-x-auto border-b border-ink-line">
+    <div class="flex gap-3 text-xs font-bold whitespace-nowrap">
+      <a class="bg-black text-white rounded-full px-4 py-2">New Drop</a>
+      <a class="bg-ink-soft rounded-full px-4 py-2">T-Shirts</a>
+      <a class="bg-ink-soft rounded-full px-4 py-2">Oversized</a>
+      <a class="bg-ink-soft rounded-full px-4 py-2">Bottoms</a>
+      <a class="bg-ink-soft rounded-full px-4 py-2">Lookbook</a>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <section class="px-4 sm:px-6 lg:px-12 py-5 lg:py-10">
+    <div class="grid lg:grid-cols-[1.08fr_0.92fr] gap-4 lg:gap-5">
+
+      <div class="bg-ink-soft rounded-[28px] sm:rounded-[36px] lg:rounded-[48px] p-7 sm:p-10 lg:p-16 min-h-[560px] flex flex-col justify-center">
+        <p class="text-xs uppercase tracking-[0.28em] font-black mb-5">
+          Monochrome Essentials
+        </p>
+
+        <h1 class="font-display text-[18vw] sm:text-7xl lg:text-8xl xl:text-[122px] leading-[0.82] tracking-[-0.085em] font-black mb-7">
+          BLACK.<br />WHITE.<br />OAT.
+        </h1>
+
+        <p class="text-ink-muted text-base sm:text-lg leading-8 max-w-xl mb-8">
+          Clean everyday clothing in a sharp black and white language.
+          Minimal silhouettes, premium basics and effortless street-ready fits.
+        </p>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+          <a href="#" class="text-center rounded-full bg-black text-white px-8 py-4 text-sm font-bold hover:-translate-y-1 transition">
+            Shop New Drop
+          </a>
+          <a href="#" class="text-center rounded-full bg-white px-8 py-4 text-sm font-bold border border-ink-line hover:-translate-y-1 transition">
+            View Lookbook
+          </a>
+        </div>
+      </div>
+
+      <div class="relative rounded-[28px] sm:rounded-[36px] lg:rounded-[48px] overflow-hidden min-h-[560px] bg-black">
+        <img
+          src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=1400&auto=format&fit=crop"
+          class="h-full w-full object-cover grayscale"
+        />
+
+        <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
+
+        <div class="absolute left-5 right-5 bottom-5 bg-white/90 backdrop-blur-xl rounded-3xl p-5">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="font-black">Drop 01 — Monochrome</p>
+              <p class="text-sm text-ink-muted mt-1">Oversized tees, layers and clean basics.</p>
+            </div>
+            <span class="hidden sm:block font-black">→</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- CATEGORY CHIPS -->
+  <section class="px-4 sm:px-6 lg:px-12 py-5">
+    <div class="flex gap-3 overflow-x-auto pb-2">
+      <a class="shrink-0 bg-black text-white rounded-full px-5 py-3 text-xs sm:text-sm font-bold">All</a>
+      <a class="shrink-0 bg-ink-soft rounded-full px-5 py-3 text-xs sm:text-sm font-bold">Oversized Tees</a>
+      <a class="shrink-0 bg-ink-soft rounded-full px-5 py-3 text-xs sm:text-sm font-bold">Boxy Fit</a>
+      <a class="shrink-0 bg-ink-soft rounded-full px-5 py-3 text-xs sm:text-sm font-bold">Bottoms</a>
+      <a class="shrink-0 bg-ink-soft rounded-full px-5 py-3 text-xs sm:text-sm font-bold">Layers</a>
+      <a class="shrink-0 bg-ink-soft rounded-full px-5 py-3 text-xs sm:text-sm font-bold">Co-ords</a>
+    </div>
+  </section>
+
+  <!-- SHOP BY CATEGORY -->
+  <section class="px-4 sm:px-6 lg:px-12 py-16 lg:py-24">
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5 mb-8 lg:mb-10">
+      <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl tracking-[-0.06em] font-black">
+        Shop by category
+      </h2>
+      <p class="text-ink-muted max-w-md leading-7">
+        Minimal wardrobe blocks made for clean rotation and everyday styling.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+      <a href="#" class="group bg-ink-soft rounded-[24px] sm:rounded-[32px] overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=900&auto=format&fit=crop" class="h-[250px] sm:h-[380px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+        <div class="p-4 sm:p-5 flex justify-between gap-2">
+          <span class="font-black text-sm sm:text-base">Oversized</span>
+          <span>→</span>
+        </div>
+      </a>
+
+      <a href="#" class="group bg-ink-soft rounded-[24px] sm:rounded-[32px] overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?q=80&w=900&auto=format&fit=crop" class="h-[250px] sm:h-[380px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+        <div class="p-4 sm:p-5 flex justify-between gap-2">
+          <span class="font-black text-sm sm:text-base">T-Shirts</span>
+          <span>→</span>
+        </div>
+      </a>
+
+      <a href="#" class="group bg-ink-soft rounded-[24px] sm:rounded-[32px] overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1496747611176-843222e1e57c?q=80&w=900&auto=format&fit=crop" class="h-[250px] sm:h-[380px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+        <div class="p-4 sm:p-5 flex justify-between gap-2">
+          <span class="font-black text-sm sm:text-base">Bottoms</span>
+          <span>→</span>
+        </div>
+      </a>
+
+      <a href="#" class="group bg-ink-soft rounded-[24px] sm:rounded-[32px] overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1523398002811-999ca8dec234?q=80&w=900&auto=format&fit=crop" class="h-[250px] sm:h-[380px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+        <div class="p-4 sm:p-5 flex justify-between gap-2">
+          <span class="font-black text-sm sm:text-base">Layers</span>
+          <span>→</span>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <!-- MINIMAL POSTERS -->
+  <section class="px-4 sm:px-6 lg:px-12 py-6">
+    <div class="grid lg:grid-cols-3 gap-4">
+
+      <div class="bg-black text-white rounded-[30px] sm:rounded-[40px] p-7 sm:p-9 min-h-[300px] flex flex-col justify-between">
+        <p class="text-xs uppercase tracking-[0.25em] font-black text-white/50">Poster 01</p>
+        <div>
+          <h3 class="font-display text-5xl sm:text-6xl tracking-[-0.08em] font-black mb-4">
+            NO COLOR. ONLY FIT.
+          </h3>
+          <a href="#" class="text-sm font-bold underline">Shop black edit</a>
+        </div>
+      </div>
+
+      <div class="relative rounded-[30px] sm:rounded-[40px] overflow-hidden min-h-[300px]">
+        <img src="https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1200&auto=format&fit=crop" class="h-full object-cover grayscale" />
+        <div class="absolute inset-0 bg-black/35"></div>
+        <div class="absolute bottom-7 left-7 text-white">
+          <p class="text-xs uppercase tracking-[0.25em] font-black mb-3">Lookbook</p>
+          <h3 class="font-display text-5xl tracking-[-0.07em] font-black">Clean layers.</h3>
+        </div>
+      </div>
+
+      <div class="bg-ink-soft rounded-[30px] sm:rounded-[40px] p-7 sm:p-9 min-h-[300px] flex flex-col justify-between">
+        <p class="text-xs uppercase tracking-[0.25em] font-black text-ink-muted">Poster 03</p>
+        <div>
+          <h3 class="font-display text-5xl sm:text-6xl tracking-[-0.08em] font-black mb-4">
+            WHITE BASICS, DONE RIGHT.
+          </h3>
+          <p class="text-ink-muted leading-7">Premium essentials with structure, softness and clean finishing.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- BEST SELLERS -->
+  <section class="px-4 sm:px-6 lg:px-12 py-16 lg:py-24">
+    <div class="flex items-end justify-between gap-5 mb-8 lg:mb-10">
+      <div>
+        <p class="text-xs uppercase tracking-[0.25em] font-black text-ink-muted mb-3">Best Sellers</p>
+        <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl tracking-[-0.06em] font-black">
+          Everyday icons
+        </h2>
+      </div>
+      <a href="#" class="hidden sm:inline-flex rounded-full px-6 py-3 text-sm font-bold bg-black text-white">
+        View all
+      </a>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+
+      <!-- PRODUCT CARD -->
+      <a href="#" class="group">
+        <div class="relative bg-ink-soft rounded-[24px] sm:rounded-[30px] overflow-hidden mb-4">
+          <span class="absolute top-3 left-3 bg-white rounded-full px-3 py-1 text-[10px] sm:text-xs font-black z-10">NEW</span>
+          <button class="absolute top-3 right-3 z-10 bg-white rounded-full w-9 h-9 text-sm">♡</button>
+
+          <img src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?q=80&w=900&auto=format&fit=crop" class="h-[270px] sm:h-[420px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+
+          <button class="hidden sm:block absolute left-4 right-4 bottom-4 bg-black text-white rounded-full py-3 text-sm font-bold opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition">
+            Quick Add
+          </button>
+        </div>
+
+        <div class="flex justify-between gap-3">
+          <div>
+            <h3 class="font-black text-sm sm:text-base">Oat Heavy Tee</h3>
+            <p class="text-xs sm:text-sm text-ink-muted mt-1">White</p>
+          </div>
+          <p class="font-black text-sm sm:text-base">₹899</p>
+        </div>
+      </a>
+
+      <a href="#" class="group">
+        <div class="relative bg-ink-soft rounded-[24px] sm:rounded-[30px] overflow-hidden mb-4">
+          <span class="absolute top-3 left-3 bg-white rounded-full px-3 py-1 text-[10px] sm:text-xs font-black z-10">BEST</span>
+          <button class="absolute top-3 right-3 z-10 bg-white rounded-full w-9 h-9 text-sm">♡</button>
+          <img src="https://images.unsplash.com/photo-1576566588028-4147f3842f27?q=80&w=900&auto=format&fit=crop" class="h-[270px] sm:h-[420px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+          <button class="hidden sm:block absolute left-4 right-4 bottom-4 bg-black text-white rounded-full py-3 text-sm font-bold opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition">Quick Add</button>
+        </div>
+        <div class="flex justify-between gap-3">
+          <div>
+            <h3 class="font-black text-sm sm:text-base">Boxy Fit Tee</h3>
+            <p class="text-xs sm:text-sm text-ink-muted mt-1">Black</p>
+          </div>
+          <p class="font-black text-sm sm:text-base">₹999</p>
+        </div>
+      </a>
+
+      <a href="#" class="group">
+        <div class="relative bg-ink-soft rounded-[24px] sm:rounded-[30px] overflow-hidden mb-4">
+          <button class="absolute top-3 right-3 z-10 bg-white rounded-full w-9 h-9 text-sm">♡</button>
+          <img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=900&auto=format&fit=crop" class="h-[270px] sm:h-[420px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+          <button class="hidden sm:block absolute left-4 right-4 bottom-4 bg-black text-white rounded-full py-3 text-sm font-bold opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition">Quick Add</button>
+        </div>
+        <div class="flex justify-between gap-3">
+          <div>
+            <h3 class="font-black text-sm sm:text-base">Relaxed Shorts</h3>
+            <p class="text-xs sm:text-sm text-ink-muted mt-1">Black</p>
+          </div>
+          <p class="font-black text-sm sm:text-base">₹1,199</p>
+        </div>
+      </a>
+
+      <a href="#" class="group">
+        <div class="relative bg-ink-soft rounded-[24px] sm:rounded-[30px] overflow-hidden mb-4">
+          <span class="absolute top-3 left-3 bg-white rounded-full px-3 py-1 text-[10px] sm:text-xs font-black z-10">LIMITED</span>
+          <button class="absolute top-3 right-3 z-10 bg-white rounded-full w-9 h-9 text-sm">♡</button>
+          <img src="https://images.unsplash.com/photo-1554568218-0f1715e72254?q=80&w=900&auto=format&fit=crop" class="h-[270px] sm:h-[420px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+          <button class="hidden sm:block absolute left-4 right-4 bottom-4 bg-black text-white rounded-full py-3 text-sm font-bold opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition">Quick Add</button>
+        </div>
+        <div class="flex justify-between gap-3">
+          <div>
+            <h3 class="font-black text-sm sm:text-base">Daily Overshirt</h3>
+            <p class="text-xs sm:text-sm text-ink-muted mt-1">White</p>
+          </div>
+          <p class="font-black text-sm sm:text-base">₹1,699</p>
+        </div>
+      </a>
+
+    </div>
+  </section>
+
+  <!-- FEATURED PRODUCT -->
+  <section class="px-4 sm:px-6 lg:px-12 py-10 lg:py-20">
+    <div class="grid lg:grid-cols-2 bg-black text-white rounded-[34px] lg:rounded-[48px] overflow-hidden">
+      <div class="min-h-[460px] lg:min-h-[680px]">
+        <img src="https://images.unsplash.com/photo-1554412933-514a83d2f3c8?q=80&w=1200&auto=format&fit=crop" class="h-full object-cover grayscale" />
+      </div>
+
+      <div class="p-7 sm:p-10 lg:p-16 flex flex-col justify-center">
+        <p class="text-white/50 text-xs uppercase tracking-[0.25em] font-black mb-5">
+          Featured Product
+        </p>
+
+        <h2 class="font-display text-5xl lg:text-7xl tracking-[-0.075em] font-black mb-6">
+          The Black Heavy Tee
+        </h2>
+
+        <p class="text-white/65 leading-8 mb-8 max-w-xl">
+          A structured heavyweight tee with a clean boxy shape, dropped shoulder
+          and premium monochrome finish.
+        </p>
+
+        <div class="flex flex-wrap gap-3 mb-8">
+          <span class="bg-white/10 rounded-full px-4 py-2 text-sm">240 GSM</span>
+          <span class="bg-white/10 rounded-full px-4 py-2 text-sm">Boxy Fit</span>
+          <span class="bg-white/10 rounded-full px-4 py-2 text-sm">Unisex</span>
+          <span class="bg-white/10 rounded-full px-4 py-2 text-sm">Black / White</span>
+        </div>
+
+        <div class="flex items-center gap-4 mb-8">
+          <p class="text-3xl font-black">₹999</p>
+          <p class="text-white/35 line-through">₹1,499</p>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button class="rounded-full bg-white text-black px-8 py-4 text-sm font-black">
+            Add to Cart
+          </button>
+          <button class="rounded-full bg-white/10 px-8 py-4 text-sm font-black">
+            View Details
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HORIZONTAL PRODUCT ROW -->
+  <section class="px-4 sm:px-6 lg:px-12 py-16 lg:py-24 bg-ink-soft">
+    <div class="flex items-end justify-between mb-8">
+      <div>
+        <p class="text-xs uppercase tracking-[0.25em] font-black text-ink-muted mb-3">Fresh Arrivals</p>
+        <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl tracking-[-0.06em] font-black">
+          New in rotation
+        </h2>
+      </div>
+    </div>
+
+    <div class="flex gap-4 lg:gap-5 overflow-x-auto pb-3">
+      <div class="min-w-[250px] sm:min-w-[330px] bg-white rounded-[28px] p-3">
+        <img src="https://images.unsplash.com/photo-1520975954732-35dd22299614?q=80&w=800&auto=format&fit=crop" class="h-[360px] rounded-[22px] object-cover grayscale" />
+        <div class="p-3 flex justify-between">
+          <div>
+            <p class="font-black">White Core Tee</p>
+            <p class="text-sm text-ink-muted">White</p>
+          </div>
+          <p class="font-black">₹899</p>
+        </div>
+      </div>
+
+      <div class="min-w-[250px] sm:min-w-[330px] bg-white rounded-[28px] p-3">
+        <img src="https://images.unsplash.com/photo-1506629905607-d9a297d799ea?q=80&w=800&auto=format&fit=crop" class="h-[360px] rounded-[22px] object-cover grayscale" />
+        <div class="p-3 flex justify-between">
+          <div>
+            <p class="font-black">Black Layer Shirt</p>
+            <p class="text-sm text-ink-muted">Black</p>
+          </div>
+          <p class="font-black">₹1,499</p>
+        </div>
+      </div>
+
+      <div class="min-w-[250px] sm:min-w-[330px] bg-white rounded-[28px] p-3">
+        <img src="https://images.unsplash.com/photo-1496747611176-843222e1e57c?q=80&w=800&auto=format&fit=crop" class="h-[360px] rounded-[22px] object-cover grayscale" />
+        <div class="p-3 flex justify-between">
+          <div>
+            <p class="font-black">Wide Leg Pants</p>
+            <p class="text-sm text-ink-muted">Black</p>
+          </div>
+          <p class="font-black">₹1,799</p>
+        </div>
+      </div>
+
+      <div class="min-w-[250px] sm:min-w-[330px] bg-white rounded-[28px] p-3">
+        <img src="https://images.unsplash.com/photo-1551232864-3f0890e580d9?q=80&w=800&auto=format&fit=crop" class="h-[360px] rounded-[22px] object-cover grayscale" />
+        <div class="p-3 flex justify-between">
+          <div>
+            <p class="font-black">Minimal Hoodie</p>
+            <p class="text-sm text-ink-muted">Off White</p>
+          </div>
+          <p class="font-black">₹1,999</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FULL WIDTH POSTER -->
+  <section class="px-4 sm:px-6 lg:px-12 py-16 lg:py-24">
+    <div class="relative rounded-[34px] lg:rounded-[48px] overflow-hidden min-h-[620px] flex items-end">
+      <img src="https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1600&auto=format&fit=crop" class="absolute inset-0 h-full w-full object-cover grayscale" />
+      <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent"></div>
+
+      <div class="relative z-10 p-7 sm:p-10 lg:p-16 text-white max-w-2xl">
+        <p class="text-xs uppercase tracking-[0.25em] font-black mb-5">
+          Lookbook
+        </p>
+        <h2 class="font-display text-5xl sm:text-6xl lg:text-7xl tracking-[-0.075em] font-black mb-6">
+          The monochrome uniform.
+        </h2>
+        <p class="text-white/75 leading-8 mb-8">
+          Black and white everyday fits built around structure, comfort and clean visual balance.
+        </p>
+        <a href="#" class="inline-flex rounded-full bg-white text-black px-8 py-4 text-sm font-black">
+          View Lookbook
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- REVIEWS -->
+  <section class="px-4 sm:px-6 lg:px-12 py-16 lg:py-24">
+    <div class="text-center max-w-2xl mx-auto mb-10">
+      <p class="text-xs uppercase tracking-[0.25em] font-black text-ink-muted mb-3">
+        Reviews
+      </p>
+      <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl tracking-[-0.06em] font-black">
+        Loved for the fit
+      </h2>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-4">
+      <div class="bg-ink-soft rounded-[28px] p-7">
+        <p class="text-xl leading-8 mb-8">“The black tee looks premium and the fit is exactly oversized without looking messy.”</p>
+        <p class="font-black">Aarav M.</p>
+        <p class="text-sm text-ink-muted mt-1">Verified buyer</p>
+      </div>
+
+      <div class="bg-ink-soft rounded-[28px] p-7">
+        <p class="text-xl leading-8 mb-8">“Very clean brand feel. The black and white concept looks expensive.”</p>
+        <p class="font-black">Riya S.</p>
+        <p class="text-sm text-ink-muted mt-1">Verified buyer</p>
+      </div>
+
+      <div class="bg-ink-soft rounded-[28px] p-7">
+        <p class="text-xl leading-8 mb-8">“Minimal, premium and easy to style. Packaging and fabric both felt great.”</p>
+        <p class="font-black">Kabir A.</p>
+        <p class="text-sm text-ink-muted mt-1">Verified buyer</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOGS -->
+  <section class="px-4 sm:px-6 lg:px-12 py-16 lg:py-24 bg-black text-white">
+    <div class="flex items-end justify-between mb-10">
+      <div>
+        <p class="text-xs uppercase tracking-[0.25em] font-black text-white/45 mb-3">Journal</p>
+        <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl tracking-[-0.06em] font-black">
+          Style notes
+        </h2>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-5">
+      <a href="#" class="group">
+        <div class="rounded-[28px] overflow-hidden mb-5 bg-white/10">
+          <img src="https://images.unsplash.com/photo-1495385794356-15371f348c31?q=80&w=1000&auto=format&fit=crop" class="h-[320px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+        </div>
+        <p class="text-sm text-white/45 mb-2">Wardrobe · 4 min read</p>
+        <h3 class="font-display text-3xl font-black tracking-[-0.055em]">How to build a black and white wardrobe</h3>
+      </a>
+
+      <a href="#" class="group">
+        <div class="rounded-[28px] overflow-hidden mb-5 bg-white/10">
+          <img src="https://images.unsplash.com/photo-1445205170230-053b83016050?q=80&w=1000&auto=format&fit=crop" class="h-[320px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+        </div>
+        <p class="text-sm text-white/45 mb-2">Fit Guide · 3 min read</p>
+        <h3 class="font-display text-3xl font-black tracking-[-0.055em]">Oversized vs boxy fit explained</h3>
+      </a>
+
+      <a href="#" class="group">
+        <div class="rounded-[28px] overflow-hidden mb-5 bg-white/10">
+          <img src="https://images.unsplash.com/photo-1485968579580-b6d095142e6e?q=80&w=1000&auto=format&fit=crop" class="h-[320px] object-cover grayscale group-hover:scale-105 transition duration-500" />
+        </div>
+        <p class="text-sm text-white/45 mb-2">Care · 5 min read</p>
+        <h3 class="font-display text-3xl font-black tracking-[-0.055em]">How to keep black tees rich and clean</h3>
+      </a>
+    </div>
+  </section>
+
+  <!-- NEWSLETTER -->
+  <section class="px-4 sm:px-6 lg:px-12 py-16 lg:py-24">
+    <div class="bg-ink-soft rounded-[34px] lg:rounded-[48px] p-7 sm:p-10 lg:p-16 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
+      <div>
+        <p class="text-xs uppercase tracking-[0.25em] font-black text-ink-muted mb-4">
+          Join the club
+        </p>
+        <h2 class="font-display text-4xl sm:text-5xl tracking-[-0.06em] font-black">
+          Early access to every drop.
+        </h2>
+      </div>
+
+      <form class="flex flex-col sm:flex-row gap-3 w-full lg:max-w-xl">
+        <input
+          type="email"
+          placeholder="Enter your email"
+          class="w-full rounded-full bg-white px-6 py-4 outline-none border border-ink-line placeholder:text-ink-muted"
+        />
+        <button class="rounded-full bg-black text-white px-8 py-4 text-sm font-black whitespace-nowrap">
+          Subscribe
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="bg-black text-white px-4 sm:px-6 lg:px-12 pt-16 pb-8">
+    <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-10 mb-16">
+      <div class="lg:col-span-2">
+        <h3 class="font-display text-5xl font-black tracking-[-0.085em] mb-5">
+          OATCLUB
+        </h3>
+        <p class="text-white/50 leading-7 max-w-sm">
+          Black and white essentials for clean everyday dressing.
+        </p>
+      </div>
+
+      <div>
+        <h4 class="font-black mb-5">Shop</h4>
+        <div class="flex flex-col gap-3 text-white/50">
+          <a href="#">New Arrivals</a>
+          <a href="#">Best Sellers</a>
+          <a href="#">T-Shirts</a>
+          <a href="#">Bottoms</a>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-black mb-5">Support</h4>
+        <div class="flex flex-col gap-3 text-white/50">
+          <a href="#">Contact</a>
+          <a href="#">Shipping</a>
+          <a href="#">Returns</a>
+          <a href="#">Size Guide</a>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-black mb-5">Social</h4>
+        <div class="flex flex-col gap-3 text-white/50">
+          <a href="#">Instagram</a>
+          <a href="#">Pinterest</a>
+          <a href="#">YouTube</a>
+          <a href="#">LinkedIn</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="border-t border-white/10 pt-7 flex flex-col sm:flex-row justify-between gap-4 text-sm text-white/40">
+      <p>© 2026 OATCLUB. All rights reserved.</p>
+      <p>Privacy Policy · Terms · Refund Policy</p>
+    </div>
+  </footer>
+
+</body>
+</html>

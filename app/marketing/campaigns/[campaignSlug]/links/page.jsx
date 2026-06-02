@@ -23,7 +23,7 @@ const API_ORIGIN = API_URL.endsWith("/api")
   ? API_URL.replace(/\/api$/, "")
   : API_URL;
 
-const DEFAULT_DESTINATION_URL = "https://www.mirayfashions.com/";
+const DEFAULT_DESTINATION_URL = "https://www.oatclub.com/";
 
 const formatDateTime = (value) => {
   if (!value) return "—";
@@ -304,7 +304,7 @@ export default function CampaignLinksPage() {
                   onChange={(e) =>
                     updateForm("destinationUrl", e.target.value)
                   }
-                  placeholder="https://www.mirayfashions.com/products/..."
+                  placeholder="https://www.oatclub.com/products/..."
                   className="mt-2 w-full rounded-xl bg-white px-3 py-2.5 text-sm text-black outline-none ring-1 ring-gray-100 transition placeholder:text-gray-400 focus:ring-black/10"
                 />
 

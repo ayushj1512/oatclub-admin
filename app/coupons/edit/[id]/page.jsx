@@ -714,7 +714,7 @@ const applyAovPreset = (minItems = 2, discountValue = 200) => {
                   name="code"
                   value={form.code || ""}
                   onChange={handleChange}
-                  placeholder="MIRAY50"
+                  placeholder="OATCLUB50"
                   className={inputClass}
                   required
                 />

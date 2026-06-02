@@ -277,7 +277,7 @@ export default function ReelsManagePage() {
         <MediaPickerModal
           open={openMedia}
           onClose={() => setOpenMedia(false)}
-          folder="miray/reels"
+          folder="oatclub/reels"
           onSelect={onSelectMedia}
         />
 

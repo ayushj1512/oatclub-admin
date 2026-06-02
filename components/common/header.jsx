@@ -3,8 +3,10 @@
 import { Menu, LogOut, User, UserCircle } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import useLoginStore from "../../store/useLoginStore";
+
+const OATCLUB_LOGO_URL =
+  "https://res.cloudinary.com/dpsvrt4sd/image/upload/v1780338447/qavpt44lsxsy3wrvuwi8.png";
 
 export default function Header({ toggleSidebar }) {
   const router = useRouter();
@@ -25,32 +27,29 @@ export default function Header({ toggleSidebar }) {
   }, []);
 
   return (
-    <header className="relative flex items-center justify-between bg-white border-b border-gray-200 px-4 md:px-6 py-3 sticky top-0 z-40 shadow-sm">
+    <header className="relative flex items-center justify-between bg-oat-bg border-b border-oat-latte-light px-4 md:px-6 py-4 sticky top-0 z-40 shadow-[0_12px_40px_rgba(9,9,11,0.07)]">
       {/* Left Section (Menu) */}
       <div className="flex items-center gap-3">
         <button
           onClick={toggleSidebar}
-          className="lg:hidden p-2 rounded-md hover:bg-gray-100 transition"
+          className="lg:hidden p-2 rounded-2xl hover:bg-oat-latte-soft transition text-oat-deep-umber"
         >
           <Menu size={22} />
         </button>
       </div>
 
-      {/* ✅ CENTER LOGO + TITLE */}
       <button
         onClick={() => router.push("/")}
-        className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2"
+        className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
       >
-        <Image
-          src="https://www.mirayfashions.com/_next/image?url=https%3A%2F%2Fres.cloudinary.com%2Fdjtva6hec%2Fimage%2Fupload%2Fv1764916639%2Fmiray%2Fmedia%2Fk0yvgu5m0ij1husm3ugh.png&w=256&q=75"
-          alt="Logo"
-          width={110}
-          height={42}
-          priority
-          style={{ width: "110px", height: "auto" }} // ✅ keep ratio
+        <img
+          src={OATCLUB_LOGO_URL}
+          alt="OATCLUB"
+          className="h-8 w-auto object-contain sm:h-9"
         />
-
-        
+        <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-oat-deep-umber-85">
+          own all trends.
+        </span>
       </button>
 
       {/* Right Section (Profile dropdown) */}

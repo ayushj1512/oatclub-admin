@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowUpRight,
   Palette,
   Calculator,
   Boxes,
@@ -31,7 +32,7 @@ import {
   CreditCard,
   MessageCircle,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
 import useLoginStore from "@/store/useLoginStore";
 import {
@@ -81,16 +82,23 @@ const DOMAIN_LIST = [
 
 const CARD_HINTS = {
   design_lab: "Creative apparel design workspace",
-  refunds: "Manage Razorpay refunds & manual refund proofs",
-  fast2sms: "View WhatsApp confirmation logs & message status",
-  rma: "View Return / Exchange requests",
+  refunds: "Manage Razorpay refunds and manual refund proofs",
+  fast2sms: "View WhatsApp confirmation logs and message status",
+  rma: "View return and exchange requests",
   collaboration: "Track ongoing influencer collaborations",
-  footwear: "Manage footwear catalog & variants",
-  shiprocket: "Manage Shiprocket sync, labels & tracking",
-  bluedart: "Manage Blue Dart shipments, labels & tracking",
-  reviews: "Moderate product reviews & ratings",
-  fabrics: "Manage fabric records & mappings",
+  footwear: "Manage footwear catalog and variants",
+  shiprocket: "Manage Shiprocket sync, labels and tracking",
+  bluedart: "Manage Blue Dart shipments, labels and tracking",
+  reviews: "Moderate product reviews and ratings",
+  fabrics: "Manage fabric records and mappings",
 };
+
+const FOCUS_QUOTES = [
+  "Move the cleanest work first, then let the dashboard catch up.",
+  "Small operational wins compound into a calmer brand.",
+  "Ship with clarity. Review with patience. Repeat.",
+  "The best admin day is quiet, focused, and already moving.",
+];
 
 const isFeaturedCard = (id) => id === "design_lab";
 
@@ -114,91 +122,146 @@ export default function HomeDashboard() {
     return [...allowedDomains].sort((a, b) => a.name.localeCompare(b.name));
   }, [allowedDomains]);
 
+  const focusQuote = useMemo(() => {
+    const dayIndex = new Date().getDate() % FOCUS_QUOTES.length;
+    return FOCUS_QUOTES[dayIndex];
+  }, []);
+
+  const adminName =
+    admin?.fullName || admin?.name || admin?.username || "OATCLUB team";
+
   return (
-    <div className="min-h-screen bg-[#fcfafb] px-3 py-6 sm:px-6 sm:py-8 md:px-8">
-      <div className="mb-6">
-        <LiveClock />
-      </div>
+    <div className="min-h-screen bg-oat-bg px-3 py-5 sm:px-6 sm:py-7 md:px-8">
+      <section className="mb-6 overflow-hidden rounded-[30px] border border-zinc-100 bg-white px-5 py-6 shadow-[0_24px_70px_rgba(9,9,11,0.035)] sm:px-7 sm:py-8">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-3xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-zinc-100 bg-zinc-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+                OATCLUB Admin
+              </span>
+              <span className="rounded-full bg-zinc-950 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
+                {role}
+              </span>
+            </div>
+
+            <h1 className="mt-5 max-w-3xl text-4xl font-black leading-[1.04] tracking-tight text-oat-text sm:text-5xl lg:text-6xl">
+              Welcome back, {adminName}.
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-600 sm:text-base">
+              OATCLUB admin control room for orders, drops, operations, customers,
+              and growth. Everything stays quiet, scannable, and ready for action.
+            </p>
+          </div>
+
+          <LiveClock />
+        </div>
+
+        <div className="mt-7 grid gap-3 border-t border-zinc-100 pt-5 md:grid-cols-[1.2fr_0.8fr_0.8fr]">
+          <div className="rounded-2xl bg-zinc-50 px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              Today&apos;s focus
+            </p>
+            <p className="mt-2 text-sm font-medium leading-6 text-zinc-800">
+              {focusQuote}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-100 bg-white px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              Modules
+            </p>
+            <p className="mt-2 text-3xl font-black text-zinc-950">
+              {sortedDomains.length}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-100 bg-white px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              Workspace
+            </p>
+            <p className="mt-2 text-3xl font-black text-zinc-950">Live</p>
+          </div>
+        </div>
+      </section>
 
       {sortedDomains.length === 0 ? (
-        <div className="rounded-2xl border border-[#800020]/10 bg-white p-6 text-center text-gray-600 shadow-sm">
-          You don’t have access to any modules yet.
+        <div className="rounded-[28px] border border-zinc-100 bg-white p-6 text-center text-gray-600 shadow-sm">
+          You do not have access to any modules yet.
         </div>
       ) : (
-        <motion.div
-          layout
-          className="grid grid-cols-2 gap-3 sm:gap-6 sm:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
-        >
-          <AnimatePresence initial={false}>
-            {sortedDomains.map(({ id, name, icon: Icon, route }) => {
-              const featured = isFeaturedCard(id);
+        <section>
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-zinc-950">
+                OATCLUB workspaces
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Choose where you want to work.
+              </p>
+            </div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+              {sortedDomains.length} available
+            </p>
+          </div>
 
-              return (
-                <motion.button
-                  key={id}
-                  layout
-                  type="button"
-                  onClick={() => router.push(route)}
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                  className={[
-                    "group relative flex min-h-[150px] flex-col items-center justify-center overflow-hidden rounded-2xl px-3 py-5 shadow-sm transition-all duration-300 sm:min-h-[170px] sm:px-4 sm:py-6",
-                    featured
-                      ? "border border-[#800020]/15 bg-gradient-to-br from-[#fff7f8] via-white to-[#fff1f3] ring-1 ring-[#800020]/10 hover:-translate-y-1.5 hover:shadow-[0_16px_40px_rgba(128,0,32,0.16)]"
-                      : "border border-gray-200 bg-white hover:-translate-y-1 hover:border-[#800020]/20 hover:shadow-[0_14px_32px_rgba(128,0,32,0.08)]",
-                  ].join(" ")}
-                >
-                  {featured && (
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(128,0,32,0.12),_transparent_45%)]" />
-                  )}
+          <motion.div
+            layout
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+          >
+            <AnimatePresence initial={false}>
+              {sortedDomains.map(({ id, name, icon: Icon, route }, index) => {
+                const featured = isFeaturedCard(id);
 
-                  <div
+                return (
+                  <motion.button
+                    key={id}
+                    layout
+                    type="button"
+                    onClick={() => router.push(route)}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 36 }}
                     className={[
-                      "relative rounded-xl p-3 text-white shadow-md transition-transform group-hover:scale-110 sm:p-4",
+                      "group flex min-h-[116px] items-start gap-4 rounded-3xl border bg-white p-4 text-left transition-all duration-300",
                       featured
-                        ? "bg-gradient-to-br from-[#800020] via-[#9b1c3d] to-[#b03052] shadow-[0_12px_24px_rgba(128,0,32,0.22)]"
-                        : "bg-gradient-to-br from-[#800020] to-[#a00032]",
+                        ? "border-zinc-200 shadow-[0_16px_44px_rgba(9,9,11,0.055)] hover:-translate-y-1"
+                        : "border-zinc-100 shadow-sm hover:-translate-y-1 hover:border-zinc-200 hover:shadow-[0_12px_30px_rgba(9,9,11,0.04)]",
                     ].join(" ")}
                   >
-                    <Icon size={24} className="sm:hidden" />
-                    <Icon size={30} className="hidden sm:block" />
-                  </div>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-sm">
+                      <Icon size={20} />
+                    </span>
 
-                  <h2
-                    className={[
-                      "relative mt-3 text-center font-semibold sm:mt-4",
-                      featured
-                        ? "text-base text-[#800020] sm:text-xl"
-                        : "text-sm text-gray-900 group-hover:text-[#800020] sm:text-lg",
-                    ].join(" ")}
-                  >
-                    {name}
-                  </h2>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        {featured && (
+                          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-700">
+                            Featured
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="mt-1 text-sm font-bold leading-snug text-zinc-950 sm:text-base">
+                        {name}
+                      </h3>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">
+                        {CARD_HINTS[id] || "Open this workspace."}
+                      </p>
+                    </div>
 
-                  {CARD_HINTS[id] && (
-                    <p
-                      className={[
-                        "relative mt-1 text-center text-[11px]",
-                        featured
-                          ? "max-w-[220px] text-[#800020]/75"
-                          : "text-gray-500",
-                      ].join(" ")}
-                    >
-                      {CARD_HINTS[id]}
-                    </p>
-                  )}
-                </motion.button>
-              );
-            })}
-          </AnimatePresence>
-        </motion.div>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-50 text-zinc-400 transition group-hover:bg-zinc-950 group-hover:text-white">
+                      <ArrowUpRight size={15} />
+                    </span>
+                  </motion.button>
+                );
+              })}
+            </AnimatePresence>
+          </motion.div>
+        </section>
       )}
-
-      <div className="mt-8 text-center text-xs font-medium text-gray-400">
-        Powered by Razorpay
-      </div>
     </div>
   );
 }

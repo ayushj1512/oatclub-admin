@@ -1,48 +1,110 @@
 @import "tailwindcss";
 
-/* =========================================================
-   🎨 MIRAY ADMIN — BURGUNDY GLOBAL THEME
-========================================================= */
-
 :root {
-  /* Core */
-  --background: #fcfafb;
-  --foreground: #111111;
-
-  /* Brand */
-  --primary: #800020;
-  --primary-dark: #69001a;
-  --primary-light: #fff4f6;
-  --primary-border: rgba(128, 0, 32, 0.12);
-
-  /* UI */
-  --card: #ffffff;
-  --muted: #6b7280;
-  --soft-bg: #faf7f8;
-
-  /* Typography */
-  --font-poppins: "Poppins", sans-serif;
-
-  /* Shadows */
-  --shadow-soft: 0 10px 30px rgba(128, 0, 32, 0.05);
-  --shadow-medium: 0 16px 40px rgba(128, 0, 32, 0.08);
-
-  /* Radius */
-  --radius-lg: 16px;
-  --radius-xl: 22px;
+  --oat-espresso: #0A0A0A;
+  --oat-oat-latte: #E4E4E7;
+  --oat-cream: #FAFAFA;
+  --oat-almond: #FFFFFF;
+  --oat-cream-soft: #FAFAFA;
+  --oat-cream-light: #FFFFFF;
+  --oat-dusty-rose: #71717A;
+  --oat-sage: #A1A1AA;
+  --oat-soil-maroon: #18181B;
+  --oat-bordeaux: #27272A;
+  --oat-terracotta: #52525B;
+  --oat-deep-umber: #3F3F46;
+  --oat-linen: #F4F4F5;
+  --oat-bg: #FAFAFA;
+  --oat-text: #09090B;
+  --oat-muted: rgba(9, 9, 11, 0.58);
+  --oat-border: rgba(9, 9, 11, 0.08);
+  --oat-shadow: 0 18px 50px rgba(9, 9, 11, 0.04);
+  --font-sans: "Poppins", sans-serif;
+  --font-heading: "Poppins", sans-serif;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-
-  --font-sans: var(--font-poppins);
-  --font-mono: var(--font-poppins);
+  --color-background: var(--oat-bg);
+  --color-foreground: var(--oat-text);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-sans);
 }
 
-/* =========================================================
-   ☀️ FORCE LIGHT MODE
-========================================================= */
+.bg-oat-bg {
+  background-color: var(--oat-bg);
+}
+
+.text-oat-text {
+  color: var(--oat-text);
+}
+
+.bg-oat-cream {
+  background-color: var(--oat-cream);
+}
+
+.bg-oat-latte {
+  background-color: var(--oat-oat-latte);
+}
+
+.bg-oat-almond {
+  background-color: var(--oat-almond);
+}
+
+.bg-oat-linen {
+  background-color: var(--oat-linen);
+}
+
+.bg-oat-cream-soft {
+  background-color: var(--oat-cream-soft);
+}
+
+.bg-oat-cream-light {
+  background-color: var(--oat-cream-light);
+}
+
+.bg-oat-latte-soft {
+  background-color: rgba(9, 9, 11, 0.035);
+}
+
+.border-oat-latte-light {
+  border-color: rgba(9, 9, 11, 0.08);
+}
+
+.text-oat-deep-umber {
+  color: var(--oat-deep-umber);
+}
+
+.text-oat-deep-umber-85 {
+  color: rgba(9, 9, 11, 0.85);
+}
+
+.text-oat-deep-umber-80 {
+  color: rgba(9, 9, 11, 0.8);
+}
+
+.text-oat-deep-umber-70 {
+  color: rgba(9, 9, 11, 0.7);
+}
+
+.text-oat-dusty-rose {
+  color: var(--oat-dusty-rose);
+}
+
+.bg-oat-espresso {
+  background-color: var(--oat-espresso);
+}
+
+.text-oat-espresso {
+  color: var(--oat-espresso);
+}
+
+.bg-oat-soil-maroon {
+  background-color: var(--oat-soil-maroon);
+}
+
+.hover-bg-oat-espresso-soft:hover {
+  background-color: rgba(9, 9, 11, 0.04);
+}
 
 html,
 body {
@@ -50,57 +112,50 @@ body {
   scroll-behavior: smooth;
 }
 
-/* =========================================================
-   🌍 GLOBAL BODY
-========================================================= */
-
 body {
-  background: var(--background) !important;
-  color: var(--foreground) !important;
-  font-family: var(--font-poppins);
+  background: var(--oat-bg) !important;
+  color: var(--oat-text) !important;
+  font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
-/* =========================================================
-   ✨ SELECTION
-========================================================= */
-
-::selection {
-  background: rgba(128, 0, 32, 0.12);
-  color: #800020;
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
 }
 
-/* =========================================================
-   🔥 SCROLLBAR
-========================================================= */
+::selection {
+  background: rgba(9, 9, 11, 0.1);
+  color: var(--oat-espresso);
+}
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f6f6f6;
+  background: #fafafa;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(128, 0, 32, 0.22);
+  background: rgba(9, 9, 11, 0.14);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(128, 0, 32, 0.4);
+  background: rgba(9, 9, 11, 0.22);
 }
 
-/* =========================================================
-   🧩 COMMON COMPONENTS
-========================================================= */
-
 .card {
-  @apply rounded-2xl border bg-white;
-  border-color: var(--primary-border);
-  box-shadow: var(--shadow-soft);
+  @apply rounded-3xl border bg-white/90;
+  border-color: var(--oat-border);
+  box-shadow: var(--oat-shadow);
 }
 
 .card-hover {
@@ -109,106 +164,90 @@ body {
 
 .card-hover:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-medium);
+  box-shadow: 0 24px 60px rgba(9, 9, 11, 0.055);
 }
 
 .section-title {
-  @apply text-xl font-semibold tracking-tight text-gray-950;
+  @apply text-2xl font-semibold tracking-tight text-[#09090B];
 }
 
 .subtle-text {
-  color: var(--muted);
+  color: var(--oat-muted);
 }
 
-/* =========================================================
-   🔘 BUTTONS
-========================================================= */
-
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200;
-  background: var(--primary);
-  box-shadow: 0 12px 24px rgba(128, 0, 32, 0.16);
+  @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200;
+  background: var(--oat-espresso);
+  box-shadow: 0 14px 36px rgba(9, 9, 11, 0.1);
 }
 
 .btn-primary:hover {
-  background: var(--primary-dark);
+  background: var(--oat-soil-maroon);
   transform: translateY(-1px);
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl border bg-white px-5 py-2.5 text-sm font-medium transition-all duration-200;
-  border-color: var(--primary-border);
-  color: var(--foreground);
+  @apply inline-flex items-center justify-center gap-2 rounded-2xl border bg-white px-5 py-2.5 text-sm font-medium transition-all duration-200;
+  border-color: var(--oat-border);
+  color: var(--oat-espresso);
 }
 
 .btn-secondary:hover {
-  background: var(--primary-light);
-  border-color: rgba(128, 0, 32, 0.22);
-  color: var(--primary);
+  background: rgba(9, 9, 11, 0.035);
+  border-color: rgba(9, 9, 11, 0.12);
+  color: var(--oat-espresso);
 }
 
 .btn-ghost {
-  @apply inline-flex items-center justify-center rounded-xl transition-all duration-200;
+  @apply inline-flex items-center justify-center rounded-2xl transition-all duration-200;
 }
 
 .btn-ghost:hover {
-  background: rgba(128, 0, 32, 0.05);
-  color: var(--primary);
+  background: rgba(9, 9, 11, 0.035);
+  color: var(--oat-espresso);
 }
 
-/* =========================================================
-   📝 INPUTS
-========================================================= */
-
 .input {
-  @apply w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none transition-all duration-200;
-  border-color: rgba(128, 0, 32, 0.14);
+  @apply w-full rounded-2xl border bg-white px-3 py-3 text-sm outline-none transition-all duration-200;
+  border-color: var(--oat-border);
 }
 
 .input:focus {
-  border-color: rgba(128, 0, 32, 0.42);
-  box-shadow: 0 0 0 4px rgba(128, 0, 32, 0.08);
+  border-color: rgba(9, 9, 11, 0.2);
+  box-shadow: 0 0 0 4px rgba(9, 9, 11, 0.05);
 }
 
 .input-disabled {
-  @apply w-full rounded-xl border bg-gray-50 px-3 py-2.5 text-sm text-gray-500 outline-none;
-  border-color: rgba(128, 0, 32, 0.08);
+  @apply w-full rounded-2xl border bg-[#FAFAFA] px-3 py-3 text-sm text-[#71717A] outline-none;
+  border-color: rgba(9, 9, 11, 0.06);
 }
 
-/* =========================================================
-   🏷️ BADGES
-========================================================= */
-
 .badge-primary {
-  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium;
-  background: rgba(128, 0, 32, 0.08);
-  color: var(--primary);
+  @apply inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold;
+  background: rgba(9, 9, 11, 0.05);
+  color: var(--oat-espresso);
 }
 
 .badge-success {
-  @apply inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700;
+  @apply inline-flex items-center gap-1 rounded-full bg-[#F4F4F5] px-3 py-1.5 text-xs font-semibold text-[#18181B];
 }
 
 .badge-warning {
-  @apply inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700;
+  @apply inline-flex items-center gap-1 rounded-full bg-[#FAFAFA] px-3 py-1.5 text-xs font-semibold text-[#3F3F46];
 }
 
 .badge-danger {
-  @apply inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700;
+  @apply inline-flex items-center gap-1 rounded-full bg-[#E4E4E7] px-3 py-1.5 text-xs font-semibold text-[#09090B];
 }
 
-/* =========================================================
-   📊 TABLES
-========================================================= */
-
 .table-container {
-  @apply overflow-hidden rounded-2xl border bg-white;
-  border-color: var(--primary-border);
-  box-shadow: var(--shadow-soft);
+  @apply overflow-hidden rounded-3xl border bg-white/90;
+  border-color: var(--oat-border);
+  box-shadow: var(--oat-shadow);
 }
 
 .table-head {
-  background: rgba(128, 0, 32, 0.03);
+  background: rgba(9, 9, 11, 0.03);
 }
 
 .table-row {
@@ -216,12 +255,8 @@ body {
 }
 
 .table-row:hover {
-  background: rgba(128, 0, 32, 0.025);
+  background: rgba(9, 9, 11, 0.025);
 }
-
-/* =========================================================
-   ✨ ANIMATIONS
-========================================================= */
 
 @keyframes floaty {
   0%, 100% {

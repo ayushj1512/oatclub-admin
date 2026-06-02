@@ -65,7 +65,7 @@ const sourceMeta = {
   },
 
   marketing: {
-    label: "Miray Campaign",
+    label: "OATCLUB Campaign",
     emoji: "📣",
     icon: FaBullhorn,
     cls: "bg-purple-50 text-purple-700 ring-purple-100",

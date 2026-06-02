@@ -506,7 +506,7 @@ export default function OrderSearchPage() {
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && search()}
-                    placeholder="MIRAY-000123"
+                    placeholder="OATCLUB-000123"
                     className="w-full bg-white px-3 py-3 text-sm outline-none ring-1 ring-zinc-200/70 focus:ring-zinc-400"
                   />
 

@@ -9,7 +9,7 @@ import useLoginStore from "../../store/useLoginStore";
 import LoginScreen from "../login/LoginScreen";
 
 // Sidebar visible only on these routes
-const sidebarRoutes = ["/", "/", "/orders", "/inventory", "/customers"];
+const sidebarRoutes = ["/", "/dashboard", "/orders", "/inventory", "/customers"];
 
 export default function LayoutWrapper({ children }) {
   const pathname = usePathname();
@@ -22,14 +22,14 @@ export default function LayoutWrapper({ children }) {
   // 🔐 Block everything until logged in
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-oat-bg px-4">
         <LoginScreen />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden">
+    <div className="flex h-screen w-screen overflow-hidden bg-oat-bg">
       {/* Sidebar (visible only on defined routes) */}
       {hasSidebar && <Sidebar isOpen={sidebarOpen} />}
 
@@ -37,7 +37,7 @@ export default function LayoutWrapper({ children }) {
       <div className="flex flex-col flex-1 h-full overflow-hidden">
         <Header toggleSidebar={toggleSidebar} />
 
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
+        <main className="flex-1 overflow-y-auto bg-oat-bg p-6">
           {children}
         </main>
 

@@ -187,7 +187,7 @@ const [videoUrl, setVideoUrl] = useState("");
       <MediaPickerModal
         open={openMedia}
         onClose={() => setOpenMedia(false)}
-        folder="miray/reels"
+        folder="oatclub/reels"
         onSelect={onSelectMedia}
       />
 
@@ -199,7 +199,7 @@ const [videoUrl, setVideoUrl] = useState("");
     <div>
       <h2 className="font-semibold text-gray-950">Reel Video</h2>
       <p className="text-xs text-gray-500 mt-1">
-        Select from Media Library (folder: <b>miray/reels</b>) or paste a video URL
+        Select from Media Library (folder: <b>oatclub/reels</b>) or paste a video URL
       </p>
     </div>
 
@@ -293,7 +293,7 @@ const [videoUrl, setVideoUrl] = useState("");
             <input
               value={form.hashtags}
               onChange={(e) => update("hashtags", e.target.value)}
-              placeholder="mirayfashions, western, ootd"
+              placeholder="oatclub, western, ootd"
               className="mt-1 w-full px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
             />
           </div>

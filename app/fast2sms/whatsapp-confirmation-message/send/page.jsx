@@ -44,7 +44,7 @@ export default function SendWhatsappConfirmationMessagePage() {
     const order = form.orderNumber || "ORDER-NUMBER";
     const link = form.actionLink || "CONFIRMATION-LINK";
 
-    return `Hi ${name}, your Miray order ${order} has been placed successfully. Confirm or cancel here: ${link}`;
+    return `Hi ${name}, your OATCLUB order ${order} has been placed successfully. Confirm or cancel here: ${link}`;
   }, [form.customerName, form.orderNumber, form.actionLink]);
 
   const updateForm = (key, value) => {
@@ -184,7 +184,7 @@ export default function SendWhatsappConfirmationMessagePage() {
                 <input
                   value={form.orderNumber}
                   onChange={(e) => updateForm("orderNumber", e.target.value)}
-                  placeholder="MIRAY-004312"
+                  placeholder="OATCLUB-004312"
                   className="h-11 w-full rounded-xl bg-gray-50 px-3 text-sm outline-none ring-1 ring-gray-100 transition focus:bg-white focus:ring-gray-300"
                 />
               </div>

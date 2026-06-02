@@ -100,7 +100,7 @@ export default function WishlistSection({ firebaseUID, customerId }) {
     return `/category/${category}/${productName}/${id}`;
   };
 
-  const buildCanonicalUrl = (href) => `https://mirayfashions.com${href}`;
+  const buildCanonicalUrl = (href) => `https://oatclub.com${href}`;
 
   return (
     <div className={card}>
@@ -108,7 +108,7 @@ export default function WishlistSection({ firebaseUID, customerId }) {
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
-            <Heart className="h-4 w-4 sm:h-5 sm:w-5 text-[#800020]" /> Wishlist
+            <Heart className="h-4 w-4 sm:h-5 sm:w-5 text-zinc-950" /> Wishlist
           </h2>
           <p className="text-[11px] text-gray-500 mt-1 break-all">
             Firebase UID: <span className="font-semibold">{firebaseUID || "—"}</span>
@@ -220,10 +220,10 @@ export default function WishlistSection({ firebaseUID, customerId }) {
                         href={canonical}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-[11px] text-gray-500 hover:text-gray-700"
-                        title="Open on mirayfashions.com"
+                        className="text-[11px] text-zinc-950 hover:text-zinc-700"
+                        title="Open on oatclub.com"
                       >
-                        mirayfashions.com
+                        oatclub.com
                       </a>
                     </div>
                   ) : (

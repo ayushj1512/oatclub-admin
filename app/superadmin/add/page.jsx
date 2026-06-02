@@ -312,7 +312,7 @@ const clearError = useAdminUsersVerifyStore((s) => s.clearError);
                     value={form.email}
                     onChange={(e) => setField("email", e.target.value)}
                     className="w-full rounded-2xl border border-gray-200 bg-white px-3 py-2 outline-none"
-                    placeholder="e.g. admin1@miray.com"
+                    placeholder="e.g. admin1@oatclub.com"
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}

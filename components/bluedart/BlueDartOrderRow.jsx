@@ -137,7 +137,7 @@ export default function BlueDartOrderRow({
             <button
               type="button"
               onClick={() => onBook?.(order)}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#800020] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800"
             >
               <PackagePlus size={16} />
               Book

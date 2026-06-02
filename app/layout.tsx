@@ -6,12 +6,14 @@ import { Toaster } from "react-hot-toast";
 
 const poppins = Poppins({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-sans",
 });
 
 export const metadata: Metadata = {
-  title: "Miray Fashions Admin",
-  description: "Miray Fashions Admin Dashboard",
+  title: "OATCLUB Admin",
+  description: "OATCLUB Admin Dashboard – own all trends.",
   icons: {
     icon: [
       { url: "/favicon.ico" },
@@ -27,8 +29,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={poppins.className} suppressHydrationWarning>
-      <body className="antialiased bg-gray-50 text-gray-900" suppressHydrationWarning>
+    <html lang="en" className={poppins.variable} suppressHydrationWarning>
+      <body className="antialiased bg-oat-bg text-oat-text" suppressHydrationWarning>
         <Toaster position="top-right" />
         <LayoutWrapper>{children}</LayoutWrapper>
       </body>

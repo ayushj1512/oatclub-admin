@@ -30,7 +30,7 @@ import OrderSourceAttributionCard from "@/components/orders/OrderSourceAttributi
 import OrderCouponDetails from "@/components/orders/OrderCouponDetails";
 import OrderPaymentDetails from "@/components/orders/OrderPaymentDetails";
 const API = process.env.NEXT_PUBLIC_API_URL;
-const STORE_URL = "https://www.mirayfashions.com";
+const STORE_URL = "https://www.oatclub.com";
 
 const FULFILLMENT_OPTIONS = [
   { value: "processing", label: "Processing" },

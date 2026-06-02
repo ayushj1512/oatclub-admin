@@ -663,7 +663,7 @@ export default function FailedOrdersPage() {
               <Search size={18} className="text-gray-400" />
               <input
                 type="text"
-                placeholder="Search MIRAY-000123 / name / email / phone / payment..."
+                placeholder="Search OATCLUB-000123 / name / email / phone / payment..."
                 className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}

@@ -191,11 +191,7 @@ export default function BlueDartCreatePage() {
                 label="Order Number"
                 value={form.orderNumber}
                 onChange={(v) => handleChange("orderNumber", v)}
-                placeholder="MIRAY-000123 or 123"
-                required
-                icon={Hash}
-              />
-
+                  placeholder="OATCLUB-000123 or 123"
               <Field
                 label="Service Type"
                 value={form.serviceType}

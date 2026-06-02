@@ -129,7 +129,7 @@ export default function RefundCreditsPage() {
             icon={ReceiptText}
             value={filters.orderNumber}
             onChange={(v) => updateFilter("orderNumber", v)}
-            placeholder="Order number e.g. MIRAY-000123"
+            placeholder="Order number e.g. OATCLUB-000123"
           />
 
           <button onClick={applyFilters} className="btn-primary">

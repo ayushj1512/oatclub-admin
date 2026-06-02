@@ -136,8 +136,8 @@ export default function ProfilePage() {
 
   if (!admin?._id) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#fcfafb] px-4 text-gray-700">
-        <div className="rounded-2xl border border-[#800020]/10 bg-white px-6 py-5 text-sm shadow-sm">
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-gray-700">
+        <div className="rounded-2xl border border-zinc-100 bg-white px-6 py-5 text-sm shadow-sm">
           Please login again.
         </div>
       </div>
@@ -145,11 +145,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fcfafb] p-4 sm:p-6">
+    <div className="min-h-screen bg-zinc-50 p-4 sm:p-6">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-5 rounded-2xl border border-[#800020]/10 bg-white p-5 shadow-sm">
+        <div className="mb-5 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#800020] text-white shadow-[0_12px_24px_rgba(128,0,32,0.18)]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-[0_12px_24px_rgba(9,9,11,0.18)]">
               <UserRound size={21} />
             </div>
 
@@ -176,7 +176,7 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-[#800020]/10 bg-white p-5 shadow-[0_16px_40px_rgba(128,0,32,0.05)] sm:p-7">
+        <div className="rounded-2xl border border-zinc-100 bg-white p-5 shadow-[0_16px_40px_rgba(9,9,11,0.035)] sm:p-7">
           <h2 className="mb-5 text-base font-semibold text-gray-950">
             Profile Details
           </h2>
@@ -247,7 +247,7 @@ export default function ProfilePage() {
               type="button"
               onClick={handleSaveProfile}
               disabled={savingProfile}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#800020] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(128,0,32,0.18)] transition hover:bg-[#6f001c] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(9,9,11,0.18)] transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {savingProfile ? (
                 <Loader2 className="animate-spin" size={17} />
@@ -258,7 +258,7 @@ export default function ProfilePage() {
             </button>
           </div>
 
-          <div className="mt-9 border-t border-[#800020]/10 pt-7">
+          <div className="mt-9 border-t border-zinc-100 pt-7">
             <h2 className="mb-5 text-base font-semibold text-gray-950">
               Change Password
             </h2>
@@ -291,7 +291,7 @@ export default function ProfilePage() {
               type="button"
               onClick={handleChangePassword}
               disabled={changingPass}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#800020] disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {changingPass ? (
                 <Loader2 className="animate-spin" size={17} />
@@ -308,7 +308,7 @@ export default function ProfilePage() {
         .input-main {
           width: 100%;
           border-radius: 0.75rem;
-          border: 1px solid rgba(128, 0, 32, 0.14);
+          border: 1px solid rgba(9, 9, 11, 0.14);
           background: white;
           padding: 0.625rem 0.75rem;
           font-size: 0.875rem;
@@ -318,14 +318,14 @@ export default function ProfilePage() {
         }
 
         .input-main:focus {
-          border-color: rgba(128, 0, 32, 0.45);
-          box-shadow: 0 0 0 3px rgba(128, 0, 32, 0.08);
+          border-color: rgba(9, 9, 11, 0.42);
+          box-shadow: 0 0 0 3px rgba(9, 9, 11, 0.08);
         }
 
         .input-disabled {
           width: 100%;
           border-radius: 0.75rem;
-          border: 1px solid rgba(128, 0, 32, 0.08);
+          border: 1px solid rgba(9, 9, 11, 0.08);
           background: #fafafa;
           padding: 0.625rem 0.75rem;
           font-size: 0.875rem;

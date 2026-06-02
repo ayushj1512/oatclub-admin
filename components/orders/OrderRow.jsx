@@ -346,7 +346,7 @@ function OrderRow({ order, onUpdated }) {
 
                               {productCode ? (
                                 <div className="mt-1">
-                                  <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#800020]/8 text-[#800020] border border-[#800020]/15">
+                                  <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-50 text-zinc-700 border border-zinc-100">
                                     Code: {productCode}
                                   </span>
                                 </div>

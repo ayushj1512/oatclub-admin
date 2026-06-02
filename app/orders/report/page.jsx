@@ -192,7 +192,7 @@ export default function OrderReportPage() {
 
             <div style={styles.field}>
               <label style={styles.label}>Search</label>
-              <input placeholder="MIRAY / name / phone / email" value={filters.q} onChange={onChange("q")} style={styles.input} />
+              <input placeholder="OATCLUB / name / phone / email" value={filters.q} onChange={onChange("q")} style={styles.input} />
             </div>
 
             <div style={styles.field}>

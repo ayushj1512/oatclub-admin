@@ -233,7 +233,7 @@ export default function SuperAdminGate() {
               <Shield className="text-blue-700" size={20} />
             </div>
             <div>
-              <div className="text-sm text-gray-500">Miray Admin Vault</div>
+              <div className="text-sm text-gray-500">OATCLUB Admin Vault</div>
               <div className="text-xl font-semibold">/superadmin</div>
             </div>
           </div>

@@ -38,7 +38,7 @@ export default function MediaPage() {
   const [total, setTotal] = useState(0);
 
   const [files, setFiles] = useState([]); // [{ file, preview, kind, key }]
-  const [folder, setFolder] = useState("miray/media");
+  const [folder, setFolder] = useState("oatclub/media");
   const [type, setType] = useState(""); // "" | image | video | raw
 
   const [page, setPage] = useState(1);
@@ -329,10 +329,10 @@ export default function MediaPage() {
                 value={folder}
                 onChange={(e) => setFolder(e.target.value)}
                 className="w-full bg-gray-100 px-3 py-2 outline-none border border-gray-200"
-                placeholder="miray/media"
+                placeholder="oatclub/media"
               />
               <p className="text-[11px] text-gray-500 mt-1">
-                Example: <b>miray/products</b>, <b>miray/banners</b>, <b>miray/blogs</b>
+                Example: <b>oatclub/products</b>, <b>oatclub/banners</b>, <b>oatclub/blogs</b>
               </p>
             </div>
 

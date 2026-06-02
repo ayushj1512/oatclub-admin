@@ -323,9 +323,7 @@ export default function RazorpayRemittancePage() {
 
           <Input
             label="Receipt / Order No."
-            placeholder="MIRAY-000123"
-            value={localFilters.receipt}
-            onChange={(e) => onChange("receipt", e.target.value)}
+                placeholder="OATCLUB-000123"
           />
 
           <Input

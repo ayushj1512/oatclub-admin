@@ -92,8 +92,8 @@ export default function EmailMarketingClient() {
       {
         id: "welcome-01",
         name: "Welcome",
-        subject: "Welcome to Miray Fashions 💛",
-        html: `<h2>Welcome!</h2><p>Thanks for joining Miray Fashions.</p>`,
+        subject: "Welcome to OATCLUB 💛",
+        html: `<h2>Welcome!</h2><p>Thanks for joining OATCLUB.</p>`,
       },
       {
         id: "sale-01",
@@ -344,9 +344,9 @@ export default function EmailMarketingClient() {
   return (
     <div className="w-full max-w-7xl mx-auto p-6">
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
-        <h1 className="text-3xl font-bold text-blue-700">Email Marketing</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Import/export emails, choose a template, and send a campaign.
+        <h1 className="text-3xl font-bold text-zinc-950">Email Studio</h1>
+        <p className="text-sm text-zinc-600 mt-1">
+          Import, segment, preview, and send curated messages with OATCLUB tone.
         </p>
       </motion.div>
 

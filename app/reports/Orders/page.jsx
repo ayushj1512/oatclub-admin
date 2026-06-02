@@ -607,7 +607,7 @@ export default function OrdersReportPage() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search order number (e.g., MIRAY-000271)"
+                  placeholder="Search order number (e.g., OATCLUB-000271)"
                   className="rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-indigo-200"
                 />
               </div>
