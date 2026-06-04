@@ -15,6 +15,7 @@ import CrossSellSelector from "@/components/product/CrossSellSelector";
 import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
 import FabricAdd from "@/components/product/FabricAdd";
 import OriginalProductLinkField from "@/components/product/OriginalProductLinkField";
+import CopyContentPrompt from "@/components/product/CopyContentPrompt";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -48,44 +49,31 @@ const parseList = (v) => {
 };
 
 const parseSpecs = (v) => {
-  const out = [];
-  const push = (k, val) => {
-    const key = String(k ?? "").trim();
-    const value = String(val ?? "").trim();
-    if (!key) return;
-    out.push({ key, value });
-  };
-
-  if (typeof v === "string") {
-    const t = v.trim();
-    if (!t) return [];
-    try {
-      v = JSON.parse(t);
-    } catch {
-      const parts = t.includes("|") ? t.split("|") : t.split(",");
-      for (const p of parts) {
-        const s = String(p || "").trim();
-        if (!s) continue;
-        const sep = s.includes(":") ? ":" : s.includes("=") ? "=" : null;
-        if (!sep) continue;
-        const [k, ...rest] = s.split(sep);
-        push(k, rest.join(sep));
-      }
-      return out;
-    }
-  }
-
   if (Array.isArray(v)) {
-    v.forEach((row) => row && push(row.key, row.value));
-    return out;
+    return v
+      .map((r) => ({
+        key: String(r?.key || "").trim(),
+        value: String(r?.value || "").trim(),
+      }))
+      .filter((r) => r.key && r.value);
   }
 
-  if (v && typeof v === "object") {
-    Object.entries(v).forEach(([k, val]) => push(k, val));
-    return out;
-  }
+  const text = String(v || "").trim();
+  if (!text) return [];
 
-  return [];
+  return text
+    .split(/\n|,|\|/g)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const sep = line.includes(":") ? ":" : line.includes("=") ? "=" : "-";
+      const [key, ...rest] = line.split(sep);
+      return {
+        key: String(key || "").trim(),
+        value: rest.join(sep).trim(),
+      };
+    })
+    .filter((r) => r.key && r.value);
 };
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -233,6 +221,7 @@ function ColorsPicker({ valueText, onChangeText }) {
     </div>
   );
 }
+
 
 export default function AddProductPage() {
   const router = useRouter();
@@ -462,6 +451,8 @@ export default function AddProductPage() {
           </button>
         </div>
 
+        <CopyContentPrompt />
+
         {/* BASIC */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
           <h2 className="font-semibold">Basic Info</h2>
@@ -580,6 +571,8 @@ export default function AddProductPage() {
           }}
           onChange={(next) => setForm((p) => ({ ...p, ...next }))}
         />
+
+     
 
         {/* Attributes */}
         <AttributeSelector

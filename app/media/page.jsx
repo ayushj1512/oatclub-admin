@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Upload, Trash2, Copy, RefreshCw, X, Image as ImageIcon, Video } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Upload,
+  Trash2,
+  Copy,
+  RefreshCw,
+  X,
+  Image as ImageIcon,
+  Video,
+} from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
+const LIMIT = 48;
 
-function formatBytes(bytes = 0) {
+const formatBytes = (bytes = 0) => {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
   let i = 0;
@@ -14,100 +23,91 @@ function formatBytes(bytes = 0) {
     n /= 1024;
     i++;
   }
-  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
+  return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
+};
 
-function shortName(s = "") {
-  const t = String(s);
-  return t.length > 26 ? t.slice(0, 26) + "…" : t;
-}
+const shortName = (s = "") => {
+  const t = String(s || "");
+  return t.length > 26 ? `${t.slice(0, 26)}…` : t;
+};
 
-function isAcceptedFile(file) {
-  return (
-    file?.type?.startsWith("image/") ||
-    file?.type?.startsWith("video/") ||
-    file?.type === "" ||
-    file?.type === undefined
-  );
-}
+const isAcceptedFile = (file) =>
+  file?.type?.startsWith("image/") ||
+  file?.type?.startsWith("video/") ||
+  !file?.type;
+
+const mergeById = (prev = [], next = []) => {
+  const map = new Map();
+  [...prev, ...next].forEach((x) => x?._id && map.set(String(x._id), x));
+  return [...map.values()];
+};
 
 export default function MediaPage() {
-  const limit = 48;
-
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
-
-  const [files, setFiles] = useState([]); // [{ file, preview, kind, key }]
+  const [files, setFiles] = useState([]);
   const [folder, setFolder] = useState("oatclub/media");
-  const [type, setType] = useState(""); // "" | image | video | raw
+  const [type, setType] = useState("");
 
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  const [loading, setLoading] = useState(true); // initial load / refresh
-  const [loadingMore, setLoadingMore] = useState(false); // infinite append
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-
   const [dragOver, setDragOver] = useState(false);
-  const inputRef = useRef(null);
 
+  const inputRef = useRef(null);
   const sentinelRef = useRef(null);
   const ioRef = useRef(null);
 
-  const pages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total]);
+  const pages = useMemo(() => Math.max(1, Math.ceil(total / LIMIT)), [total]);
 
-  const fetchPage = useCallback(
-    async ({ nextPage, targetType, mode }) => {
-      // mode: "replace" | "append"
-      const isAppend = mode === "append";
-      isAppend ? setLoadingMore(true) : setLoading(true);
+  const fetchPage = useCallback(async ({ nextPage = 1, mode = "replace", targetType = type } = {}) => {
+    if (!API) return console.error("NEXT_PUBLIC_API_URL missing");
 
-      try {
-        const url = new URL(`${API}/api/media`);
-        url.searchParams.set("page", String(nextPage));
-        url.searchParams.set("limit", String(limit));
-        if (targetType) url.searchParams.set("type", targetType);
+    const append = mode === "append";
+    append ? setLoadingMore(true) : setLoading(true);
 
-        const r = await fetch(url.toString(), { cache: "no-store" });
-        const d = await r.json();
+    try {
+      const url = new URL(`${API}/api/media`);
+      url.searchParams.set("page", String(nextPage));
+      url.searchParams.set("limit", String(LIMIT));
+      if (targetType) url.searchParams.set("type", targetType);
 
-        const newItems = Array.isArray(d.items) ? d.items : [];
-        const newTotal = Number(d.total || 0);
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Media load failed");
 
-        setTotal(newTotal);
-        setPage(nextPage);
+      const nextItems = Array.isArray(data.items) ? data.items : [];
+      const newTotal = Number(data.total || 0);
 
-        setItems((prev) => (isAppend ? [...prev, ...newItems] : newItems));
+      setTotal(newTotal);
+      setPage(nextPage);
 
-        // hasMore: either API signals end (items < limit) OR total-based
-        const moreByItems = newItems.length === limit;
-        const loadedCount = (isAppend ? items.length : 0) + newItems.length; // best-effort
-        const moreByTotal = newTotal ? loadedCount < newTotal : moreByItems;
-
-        setHasMore(moreByTotal && moreByItems);
-      } catch (e) {
-        console.error("❌ Media load:", e);
-        if (!isAppend) {
-          setItems([]);
-          setTotal(0);
-        }
-        setHasMore(false);
-      } finally {
-        isAppend ? setLoadingMore(false) : setLoading(false);
+      setItems((prev) => {
+        const merged = append ? mergeById(prev, nextItems) : nextItems;
+        setHasMore(merged.length < newTotal && nextItems.length === LIMIT);
+        return merged;
+      });
+    } catch (err) {
+      console.error("❌ Media load:", err);
+      if (!append) {
+        setItems([]);
+        setTotal(0);
       }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [limit, type, items.length]
-  );
+      setHasMore(false);
+    } finally {
+      append ? setLoadingMore(false) : setLoading(false);
+    }
+  }, [type]);
 
-  const loadFirst = useCallback(
-    async (targetType = type) => {
-      setHasMore(true);
-      await fetchPage({ nextPage: 1, targetType, mode: "replace" });
-    },
-    [fetchPage, type]
-  );
+  const loadFirst = useCallback(async (targetType = type) => {
+    setPage(1);
+    setHasMore(true);
+    await fetchPage({ nextPage: 1, targetType, mode: "replace" });
+  }, [fetchPage, type]);
 
   const loadMore = useCallback(async () => {
     if (loading || loadingMore || !hasMore) return;
@@ -116,68 +116,49 @@ export default function MediaPage() {
 
   useEffect(() => {
     loadFirst(type);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type]);
+  }, [type, loadFirst]);
 
-  // Infinite scroll observer
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
 
-    if (ioRef.current) ioRef.current.disconnect();
+    ioRef.current?.disconnect();
 
     ioRef.current = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (first?.isIntersecting) loadMore();
-      },
-      { root: null, rootMargin: "800px 0px", threshold: 0 }
+      ([entry]) => entry?.isIntersecting && loadMore(),
+      { rootMargin: "800px 0px" }
     );
 
     ioRef.current.observe(el);
-
-    return () => {
-      ioRef.current?.disconnect();
-      ioRef.current = null;
-    };
+    return () => ioRef.current?.disconnect();
   }, [loadMore]);
 
-  // cleanup previews on unmount
   useEffect(() => {
     return () => {
       files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [files]);
 
   const addFiles = (incoming = []) => {
-    const list = Array.from(incoming || []).filter(isAcceptedFile);
+    const list = Array.from(incoming).filter(isAcceptedFile);
     if (!list.length) return;
 
     setFiles((prev) => {
-      const map = new Map();
-      prev.forEach((x) => map.set(x.key, x));
+      const map = new Map(prev.map((x) => [x.key, x]));
 
       list.forEach((file) => {
         const key = `${file.name}-${file.size}-${file.lastModified}`;
         if (map.has(key)) return;
 
-        const kind = file.type?.startsWith("video/") ? "video" : "image";
-        const preview = URL.createObjectURL(file);
-        map.set(key, { file, preview, kind, key });
+        map.set(key, {
+          key,
+          file,
+          preview: URL.createObjectURL(file),
+          kind: file.type?.startsWith("video/") ? "video" : "image",
+        });
       });
 
-      return Array.from(map.values());
-    });
-  };
-
-  const onPickFiles = (e) => addFiles(e.target.files);
-
-  const removePicked = (idx) => {
-    setFiles((prev) => {
-      const target = prev[idx];
-      if (target?.preview) URL.revokeObjectURL(target.preview);
-      return prev.filter((_, i) => i !== idx);
+      return [...map.values()];
     });
   };
 
@@ -188,27 +169,76 @@ export default function MediaPage() {
     });
   };
 
+  const removePicked = (idx) => {
+    setFiles((prev) => {
+      prev[idx]?.preview && URL.revokeObjectURL(prev[idx].preview);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
   const uploadBatch = async () => {
     if (!files.length) return alert("Select files first");
+
     setUploading(true);
+
     try {
       const fd = new FormData();
       files.forEach(({ file }) => fd.append("files", file));
-      fd.append("folder", folder);
+      fd.append("folder", folder || "oatclub/media");
 
-      const r = await fetch(`${API}/api/media/upload`, { method: "POST", body: fd });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.message || "Upload failed");
+      const res = await fetch(`${API}/api/media/upload`, {
+        method: "POST",
+        body: fd,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Upload failed");
 
       clearPicked();
       await loadFirst(type);
-
-      alert(`Uploaded ${d.media?.length || 0} file(s)!`);
-    } catch (e) {
-      console.error("❌ Upload:", e);
-      alert(e.message || "Upload failed");
+      alert(`Uploaded ${data.media?.length || 0} file(s)!`);
+    } catch (err) {
+      console.error("❌ Upload:", err);
+      alert(err.message || "Upload failed");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const syncMedia = async () => {
+    try {
+      const res = await fetch(`${API}/api/media/sync?max=100`, {
+        method: "POST",
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Sync failed");
+
+      await loadFirst(type);
+      alert("Media synced");
+    } catch (err) {
+      console.error("❌ Sync:", err);
+      alert(err.message || "Sync failed");
+    }
+  };
+
+  const deleteOne = async (id) => {
+    if (!id || !confirm("Delete this media permanently?")) return;
+
+    setDeletingId(id);
+
+    try {
+      const res = await fetch(`${API}/api/media/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Delete failed");
+
+      await loadFirst(type);
+    } catch (err) {
+      console.error("❌ Delete:", err);
+      alert(err.message || "Delete failed");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -225,69 +255,26 @@ export default function MediaPage() {
     }
   };
 
-  const deleteOne = async (id) => {
-    if (!confirm("Delete this media permanently?")) return;
-    setDeletingId(id);
-    try {
-      const r = await fetch(`${API}/api/media/${id}`, { method: "DELETE" });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.message || "Delete failed");
-      await loadFirst(type); // refresh list
-    } catch (e) {
-      console.error("❌ Delete:", e);
-      alert(e.message || "Delete failed");
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  // ✅ Drag & Drop
-  const onDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(true);
-  };
-  const onDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(true);
-  };
-  const onDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-  };
-  const onDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-    const dtFiles = e.dataTransfer?.files;
-    if (dtFiles?.length) addFiles(dtFiles);
-  };
-
-  // ✅ Paste support (Ctrl+V / Cmd+V)
   useEffect(() => {
     const onPaste = (e) => {
-      const clipboardItems = e.clipboardData?.items;
-      if (!clipboardItems?.length) return;
+      const pasted = [];
 
-      const pastedFiles = [];
-      for (const item of clipboardItems) {
-        if (item.kind === "file") {
-          const file = item.getAsFile();
-          if (file && isAcceptedFile(file)) {
-            const named =
-              file.name && file.name !== "image.png"
-                ? file
-                : new File([file], `pasted-${Date.now()}.png`, { type: file.type });
-            pastedFiles.push(named);
-          }
-        }
+      for (const item of e.clipboardData?.items || []) {
+        if (item.kind !== "file") continue;
+
+        const file = item.getAsFile();
+        if (!file || !isAcceptedFile(file)) continue;
+
+        pasted.push(
+          file.name && file.name !== "image.png"
+            ? file
+            : new File([file], `pasted-${Date.now()}.png`, { type: file.type })
+        );
       }
 
-      if (pastedFiles.length) {
+      if (pasted.length) {
         e.preventDefault();
-        addFiles(pastedFiles);
+        addFiles(pasted);
       }
     };
 
@@ -295,53 +282,65 @@ export default function MediaPage() {
     return () => window.removeEventListener("paste", onPaste);
   }, []);
 
-  const selectedCount = files.length;
-  const selectedImages = files.filter((f) => f.kind === "image");
-  const selectedVideos = files.filter((f) => f.kind === "video");
+  const selectedImages = files.filter((f) => f.kind === "image").length;
+  const selectedVideos = files.filter((f) => f.kind === "video").length;
 
   return (
-    <section className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
-        {/* Top bar */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+    <section className="min-h-screen bg-gray-50 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Media</h1>
             <p className="text-xs text-gray-500">
-              Drag & drop → preview → upload. ✅ You can also <b>paste images</b> (Ctrl+V / Cmd+V).
+              All Cloudinary folders are fetched. Folder is only used while uploading.
             </p>
           </div>
 
-          <button
-            onClick={() => loadFirst(type)}
-            className="inline-flex items-center gap-2 bg-black text-white px-4 py-2"
-          >
-            <RefreshCw size={18} />
-            Refresh
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={syncMedia}
+              className="inline-flex items-center gap-2 bg-white px-4 py-2 text-sm text-black border border-gray-200"
+            >
+              <RefreshCw size={16} />
+              Sync
+            </button>
+
+            <button
+              onClick={() => loadFirst(type)}
+              className="inline-flex items-center gap-2 bg-black px-4 py-2 text-sm text-white"
+            >
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+          </div>
         </div>
 
-        {/* Upload / Dropzone */}
-        <div className="bg-white border border-gray-200 p-4 space-y-4">
-          <div className="flex flex-col md:flex-row gap-3 md:items-end">
+        <div className="space-y-4 border border-gray-200 bg-white p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
-              <label className="text-sm font-semibold text-gray-800 block mb-2">Cloudinary folder</label>
+              <label className="mb-2 block text-sm font-semibold text-gray-800">
+                Upload folder
+              </label>
               <input
                 value={folder}
                 onChange={(e) => setFolder(e.target.value)}
-                className="w-full bg-gray-100 px-3 py-2 outline-none border border-gray-200"
+                className="w-full border border-gray-200 bg-gray-100 px-3 py-2 text-sm outline-none"
                 placeholder="oatclub/media"
               />
-              <p className="text-[11px] text-gray-500 mt-1">
-                Example: <b>oatclub/products</b>, <b>oatclub/banners</b>, <b>oatclub/blogs</b>
+              <p className="mt-1 text-[11px] text-gray-500">
+                Example: <b>oatclub/products</b>, <b>oatclub/banners</b>,{" "}
+                <b>oatclub/blogs</b>
               </p>
             </div>
 
             <div className="md:w-[180px]">
-              <label className="text-sm font-semibold text-gray-800 block mb-2">Filter</label>
+              <label className="mb-2 block text-sm font-semibold text-gray-800">
+                Type
+              </label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="w-full bg-gray-100 px-3 py-2 outline-none border border-gray-200"
+                className="w-full border border-gray-200 bg-gray-100 px-3 py-2 text-sm outline-none"
               >
                 <option value="">All</option>
                 <option value="image">Images</option>
@@ -350,23 +349,20 @@ export default function MediaPage() {
               </select>
             </div>
 
-            <div className="md:w-[260px] flex gap-2">
+            <div className="flex gap-2 md:w-[260px]">
               <button
                 onClick={() => inputRef.current?.click()}
-                className="flex-1 inline-flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 px-4 py-2 border border-gray-200"
+                className="flex-1 border border-gray-200 bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
               >
-                <Upload size={18} />
                 Choose
               </button>
 
               <button
                 onClick={uploadBatch}
-                disabled={uploading || !selectedCount}
-                className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-white ${
-                  uploading || !selectedCount ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
-                }`}
+                disabled={uploading || !files.length}
+                className="flex-1 bg-black px-4 py-2 text-sm text-white disabled:bg-gray-400"
               >
-                {uploading ? "Uploading..." : `Upload (${selectedCount})`}
+                {uploading ? "Uploading..." : `Upload (${files.length})`}
               </button>
 
               <input
@@ -374,88 +370,100 @@ export default function MediaPage() {
                 type="file"
                 multiple
                 accept="image/*,video/*"
-                onChange={onPickFiles}
+                onChange={(e) => addFiles(e.target.files)}
                 className="hidden"
               />
             </div>
           </div>
 
-          {/* Dropzone */}
           <div
-            onDragEnter={onDragEnter}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
-            className={`w-full border border-dashed p-6 cursor-pointer select-none ${
-              dragOver ? "bg-blue-50 border-blue-400" : "bg-gray-50 border-gray-300"
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              addFiles(e.dataTransfer?.files);
+            }}
+            className={`cursor-pointer border border-dashed p-6 ${
+              dragOver ? "border-black bg-gray-100" : "border-gray-300 bg-gray-50"
             }`}
           >
             <div className="flex items-center justify-center gap-3">
-              <div className="p-3 bg-white border border-gray-200">
+              <div className="border border-gray-200 bg-white p-3">
                 <Upload size={18} />
               </div>
-              <div className="text-left">
-                <div className="text-sm font-semibold text-gray-800">Drag & drop images/videos here</div>
-                <div className="text-xs text-gray-500">
-                  or click to choose — ✅ <b>or paste (Ctrl+V / Cmd+V)</b>
-                </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">
+                  Drag & drop images/videos here
+                </p>
+                <p className="text-xs text-gray-500">
+                  Click to choose or paste with Ctrl+V / Cmd+V
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Preview meta */}
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-700 flex items-center gap-3">
-              <span>
-                Selected: <b>{selectedCount}</b>
-              </span>
-              <span className="text-xs text-gray-500 flex items-center gap-1">
-                <ImageIcon size={14} /> {selectedImages.length}
-              </span>
-              <span className="text-xs text-gray-500 flex items-center gap-1">
-                <Video size={14} /> {selectedVideos.length}
-              </span>
-            </div>
+          {files.length > 0 && (
+            <>
+              <div className="flex items-center justify-between text-sm text-gray-700">
+                <div className="flex items-center gap-3">
+                  <span>
+                    Selected: <b>{files.length}</b>
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
+                    <ImageIcon size={14} /> {selectedImages}
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
+                    <Video size={14} /> {selectedVideos}
+                  </span>
+                </div>
 
-            {selectedCount > 0 && (
-              <button onClick={clearPicked} className="text-sm text-red-600 hover:underline">
-                Clear all
-              </button>
-            )}
-          </div>
+                <button onClick={clearPicked} className="text-sm text-red-600">
+                  Clear all
+                </button>
+              </div>
 
-          {/* Preview grid */}
-          {selectedCount > 0 && (
-            <div className="bg-gray-50 border border-gray-200 p-3">
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-8 gap-2">
+              <div className="grid grid-cols-3 gap-2 border border-gray-200 bg-gray-50 p-3 sm:grid-cols-4 md:grid-cols-8">
                 {files.slice(0, 16).map((f, idx) => (
-                  <div key={f.key} className="bg-white border border-gray-200 overflow-hidden">
-                    <div className="h-24 bg-gray-100 flex items-center justify-center">
+                  <div key={f.key} className="overflow-hidden border border-gray-200 bg-white">
+                    <div className="flex h-24 items-center justify-center bg-gray-100">
                       {f.kind === "video" ? (
                         <video
                           src={f.preview}
-                          className="w-full h-full object-contain bg-black"
+                          className="h-full w-full object-contain bg-black"
                           muted
                           playsInline
                           preload="metadata"
                         />
                       ) : (
-                        <img src={f.preview} className="w-full h-full object-contain" alt={f.file.name} />
+                        <img
+                          src={f.preview}
+                          className="h-full w-full object-contain"
+                          alt={f.file.name}
+                        />
                       )}
                     </div>
 
                     <div className="p-2">
-                      <div className="text-[11px] text-gray-800 truncate" title={f.file.name}>
+                      <p className="truncate text-[11px] text-gray-800">
                         {shortName(f.file.name)}
-                      </div>
-                      <div className="flex items-center justify-between mt-1">
-                        <div className="text-[10px] text-gray-500">{formatBytes(f.file.size)}</div>
-                        <button
-                          onClick={() => removePicked(idx)}
-                          className="p-1 bg-gray-100 hover:bg-gray-200"
-                          title="Remove"
-                        >
+                      </p>
+                      <div className="mt-1 flex items-center justify-between">
+                        <span className="text-[10px] text-gray-500">
+                          {formatBytes(f.file.size)}
+                        </span>
+                        <button onClick={() => removePicked(idx)} className="bg-gray-100 p-1">
                           <X size={14} />
                         </button>
                       </div>
@@ -463,42 +471,34 @@ export default function MediaPage() {
                   </div>
                 ))}
               </div>
-
-              {files.length > 16 && (
-                <div className="text-xs text-gray-500 mt-2">
-                  Showing preview of first <b>16</b>. Total selected: <b>{files.length}</b>
-                </div>
-              )}
-            </div>
+            </>
           )}
         </div>
 
-        {/* Info row */}
-        <div className="text-sm text-gray-600 flex items-center justify-between">
+        <div className="flex items-center justify-between text-sm text-gray-600">
           <span>
-            Total: <b>{total}</b>
-            <span className="text-xs text-gray-500"> (loaded: {items.length})</span>
+            Total: <b>{total}</b>{" "}
+            <span className="text-xs text-gray-500">(loaded: {items.length})</span>
           </span>
           <span className="text-xs text-gray-500">
             Page {page} / {pages}
           </span>
         </div>
 
-        {/* Library grid */}
         {loading ? (
           <div className="text-gray-600">Loading...</div>
         ) : items.length === 0 ? (
           <div className="text-gray-600">No media found.</div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6">
               {items.map((m) => (
-                <div key={m._id} className="bg-white border border-gray-200">
-                  <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
+                <div key={m._id} className="border border-gray-200 bg-white">
+                  <div className="flex h-40 w-full items-center justify-center bg-gray-100">
                     {m.resourceType === "video" ? (
                       <video
                         src={m.url}
-                        className="w-full h-full object-contain bg-black"
+                        className="h-full w-full object-contain bg-black"
                         muted
                         preload="metadata"
                         controls
@@ -507,18 +507,18 @@ export default function MediaPage() {
                       <img
                         src={m.url}
                         alt={m.originalName || "media"}
-                        className="w-full h-full object-contain"
+                        className="h-full w-full object-contain"
                         loading="lazy"
                       />
                     )}
                   </div>
 
                   <div className="p-2">
-                    <div className="text-[11px] text-gray-700" title={m.originalName || m.publicId}>
+                    <p className="truncate text-[11px] text-gray-700">
                       {shortName(m.originalName || m.publicId)}
-                    </div>
+                    </p>
 
-                    <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500">
+                    <div className="mt-1 flex justify-between text-[10px] text-gray-500">
                       <span className="uppercase">{m.resourceType}</span>
                       <span>{formatBytes(m.bytes)}</span>
                     </div>
@@ -526,20 +526,15 @@ export default function MediaPage() {
                     <div className="mt-2 flex gap-2">
                       <button
                         onClick={() => copyUrl(m.url)}
-                        className="flex-1 inline-flex items-center justify-center gap-1 bg-gray-100 hover:bg-gray-200 text-xs py-2"
-                        title="Copy URL"
+                        className="flex-1 bg-gray-100 py-2 text-xs hover:bg-gray-200"
                       >
-                        <Copy size={14} />
-                        Copy
+                        <Copy size={14} className="mx-auto" />
                       </button>
 
                       <button
                         onClick={() => deleteOne(m._id)}
                         disabled={deletingId === m._id}
-                        className={`inline-flex items-center justify-center px-3 py-2 text-white ${
-                          deletingId === m._id ? "bg-gray-400" : "bg-red-600 hover:bg-red-700"
-                        }`}
-                        title="Delete"
+                        className="bg-red-600 px-3 py-2 text-white disabled:bg-gray-400"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -549,26 +544,22 @@ export default function MediaPage() {
               ))}
             </div>
 
-            {/* Infinite footer */}
-            <div className="pt-4">
+            <div className="pt-4 text-center">
               {hasMore ? (
-                <div className="flex items-center justify-center gap-3 text-sm text-gray-600">
-                  {loadingMore ? (
-                    <span>Loading more...</span>
-                  ) : (
-                    <button
-                      onClick={loadMore}
-                      className="px-4 py-2 border bg-white hover:bg-gray-50 text-gray-700"
-                    >
-                      Load more
-                    </button>
-                  )}
-                </div>
+                loadingMore ? (
+                  <p className="text-sm text-gray-600">Loading more...</p>
+                ) : (
+                  <button
+                    onClick={loadMore}
+                    className="border bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Load more
+                  </button>
+                )
               ) : (
-                <div className="text-center text-sm text-gray-500">You’ve reached the end.</div>
+                <p className="text-sm text-gray-500">You’ve reached the end.</p>
               )}
 
-              {/* observer target */}
               <div ref={sentinelRef} className="h-1" />
             </div>
           </>

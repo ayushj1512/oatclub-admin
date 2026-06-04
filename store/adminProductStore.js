@@ -1910,6 +1910,65 @@ fetchProductTypeList: async ({
   }
 },
 
+/* ============================================================
+  PRODUCT MEDIA LIBRARY
+============================================================ */
+fetchProductMedia: async ({
+  page = 1,
+  limit = 50,
+  search = "",
+  source = "all",
+  type = "all",
+  role = "all",
+} = {}) => {
+  try {
+    set({ loading: true, error: null });
+
+    const query = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+
+    if (search) query.set("search", search);
+    if (source !== "all") query.set("source", source);
+    if (type !== "all") query.set("type", type);
+    if (role !== "all") query.set("role", role);
+
+    const res = await fetch(
+      `${API}/media/all?${query.toString()}`,
+      {
+        credentials: "include",
+        cache: "no-store",
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || "Failed to fetch media");
+    }
+
+    return {
+      media: data.media || [],
+      page: data.page || 1,
+      totalPages: data.totalPages || 1,
+      totalMedia: data.totalMedia || 0,
+      hasNextPage: data.hasNextPage || false,
+      hasPrevPage: data.hasPrevPage || false,
+    };
+  } catch (e) {
+    console.error(e);
+    toast.error(e.message);
+    return {
+      media: [],
+      page: 1,
+      totalPages: 1,
+      totalMedia: 0,
+    };
+  } finally {
+    set({ loading: false });
+  }
+},
 
 
 }));

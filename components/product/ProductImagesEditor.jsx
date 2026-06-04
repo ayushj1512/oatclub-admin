@@ -31,10 +31,10 @@ export default function ProductImagesEditor({
   folder = "miray/products",
   max = 12,
 }) {
-  const urls = useMemo(
-    () => (Array.isArray(value) ? value.filter(Boolean).map(String) : []),
-    [value]
-  );
+ const urls = useMemo(
+  () => (Array.isArray(value) ? value.map(normalizeUrl).filter(Boolean) : []),
+  [value]
+);
 
   const [thumbOpen, setThumbOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -157,7 +157,7 @@ export default function ProductImagesEditor({
     try {
       await navigator.clipboard.writeText(urls.join("\n"));
       flashBool(setCopiedAll);
-    } catch {}
+    } catch { }
   };
 
   const copyOne = async (url) => {
@@ -165,7 +165,7 @@ export default function ProductImagesEditor({
       await navigator.clipboard.writeText(url);
       setCopiedOne(url);
       setTimeout(() => setCopiedOne(""), 700);
-    } catch {}
+    } catch { }
   };
 
   /* ---------------- drag & drop reorder ---------------- */
@@ -467,7 +467,7 @@ export default function ProductImagesEditor({
                     await navigator.clipboard.writeText(lbUrl);
                     setCopiedOne(lbUrl);
                     setTimeout(() => setCopiedOne(""), 700);
-                  } catch {}
+                  } catch { }
                 }}
                 className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-3 py-2 text-xs font-extrabold text-white hover:bg-white/15"
                 title="Copy current URL"
@@ -556,14 +556,19 @@ function unique(arr) {
 }
 
 function normalizeUrl(raw) {
-  const s = String(raw || "")
+  let s = String(raw || "")
     .trim()
     .replace(/^"+|"+$/g, "")
     .replace(/^'+|'+$/g, "");
-  if (!s) return "";
+
   if (!/^https?:\/\//i.test(s)) return "";
+
+  const match = s.match(/\.(png|jpe?g|webp)/i);
+  if (match) s = s.slice(0, match.index + match[0].length);
+
   return s;
 }
+
 
 function extractFirstUrl(text) {
   const raw = String(text || "");

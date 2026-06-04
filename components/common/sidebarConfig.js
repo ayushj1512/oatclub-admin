@@ -107,10 +107,10 @@ reviews: [
   ],
 
   media: [
-    { label: "Media Library", href: "/media" },
-    { label: "Upload Media", href: "/media/upload" },
-    { label: "Folders", href: "/media/folders" },
-  ],
+  { label: "Media Library", href: "/media" },
+  { label: "Upload Media", href: "/media/upload" },
+  { label: "Outsourced Assets", href: "/media/outsourced-assets" },
+],
 
   reels: [
     { label: "Reels Dashboard", href: "/reels" },
