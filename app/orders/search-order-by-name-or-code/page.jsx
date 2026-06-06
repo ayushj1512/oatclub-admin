@@ -10,6 +10,7 @@ import {
   FileText,
   AlertCircle,
 } from "lucide-react";
+import { normalizeOrderNumberInput } from "@/utils/formatters";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -23,18 +24,7 @@ const normalizeProductCode = (value) => {
 };
 
 const normalizeOrderNumber = (value) => {
-  const raw = String(value || "").trim().toUpperCase();
-  if (!raw) return "";
-
-  if (raw.startsWith("MIRAY-")) {
-    const num = raw.replace("MIRAY-", "").replace(/\D/g, "");
-    return `MIRAY-${num.padStart(6, "0")}`;
-  }
-
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return raw;
-
-  return `MIRAY-${digits.padStart(6, "0")}`;
+  return normalizeOrderNumberInput(value);
 };
 
 const downloadCSV = (rows, filename = "product-order-search.csv") => {

@@ -154,9 +154,9 @@ export const useOrderInvoiceStore = create((set, get) => ({
 
   // Convenience helper for selected orders array / objects
   // accepts:
-  // ["MIRAY-001", "MIRAY-002"]
-  // [{ orderNumber: "MIRAY-001" }, { orderNumber: "MIRAY-002" }]
-  // [{ invoiceNumber: "MIRAY-001" }]
+  // ["000001", "000002"]
+  // [{ orderNumber: "000001" }, { orderNumber: "000002" }]
+  // [{ invoiceNumber: "000001" }]
   fetchInvoicesFromOrders: async (orders = []) => {
     const orderNumbers = uniqStrings(
       (Array.isArray(orders) ? orders : []).map(

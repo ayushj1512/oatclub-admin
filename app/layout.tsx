@@ -13,17 +13,20 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://oatclub.in"),
+  applicationName: "OATCLUB Admin Panel",
 
   title: {
-    default: "OATCLUB | Own All Trends",
-    template: "%s | OATCLUB",
+    default: "OATCLUB Admin Panel",
+    template: "%s | OATCLUB Admin Panel",
   },
 
   description:
-    "Shop premium fashion, co-ord sets, dresses, tops and trend-led styles at OATCLUB.",
+    "OATCLUB admin panel for managing orders, products, inventory, RMA, refunds, reports, and operations.",
 
   keywords: [
     "OATCLUB",
+    "OATCLUB Admin Panel",
+    "Admin Panel",
     "Women's Fashion",
     "Co-ord Sets",
     "Dresses",
@@ -35,20 +38,20 @@ export const metadata: Metadata = {
   ],
 
   openGraph: {
-    title: "OATCLUB | Own All Trends",
+    title: "OATCLUB Admin Panel",
     description:
-      "Shop premium fashion, co-ord sets, dresses, tops and trend-led styles at OATCLUB.",
+      "OATCLUB admin panel for managing orders, products, inventory, RMA, refunds, reports, and operations.",
     url: "https://oatclub.in",
-    siteName: "OATCLUB",
+    siteName: "OATCLUB Admin Panel",
     type: "website",
     locale: "en_US",
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "OATCLUB | Own All Trends",
+    title: "OATCLUB Admin Panel",
     description:
-      "Shop premium fashion, co-ord sets, dresses, tops and trend-led styles at OATCLUB.",
+      "OATCLUB admin panel for managing orders, products, inventory, RMA, refunds, reports, and operations.",
   },
 
   robots: {

@@ -19,9 +19,7 @@ import {
 
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { useOrderInvoiceStore } from "@/store/orderInvoiceStore";
-
-const PREFIX = "MIRAY-";
-const DIGITS = 6;
+import { normalizeOrderNumberInput } from "@/utils/formatters";
 
 const safe = (v) => String(v ?? "").trim();
 
@@ -213,15 +211,7 @@ const getInvoiceAddress = (item) => {
 };
 
 const normalizeOrderNumber = (value = "") => {
-  const raw = safe(value).toUpperCase();
-  if (!raw) return "";
-
-  if (/^MIRAY-\d{6}$/.test(raw)) return raw;
-
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return "";
-
-  return `${PREFIX}${digits.slice(-DIGITS).padStart(DIGITS, "0")}`;
+  return normalizeOrderNumberInput(value);
 };
 
 const tokenizeInput = (input = "") =>
@@ -625,9 +615,7 @@ export default function OrdersInvoicePage() {
               Invoice Panel
             </h1>
             <p className="mt-1 text-sm text-zinc-600">
-              Enter one or more order numbers. Raw values like{" "}
-              <span className="font-semibold">12</span> auto-convert to{" "}
-              <span className="font-semibold">MIRAY-000012</span>.
+              Enter one or more backend order numbers exactly as shown on orders.
             </p>
           </div>
 
@@ -676,9 +664,9 @@ export default function OrdersInvoicePage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={`Examples:
-1100
-MIRAY-000012
-123, 1201`}
+000110
+000012
+000123, 001201`}
               className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100"
             />
 

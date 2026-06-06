@@ -19,6 +19,7 @@ import {
   X,
   Save,
 } from "lucide-react";
+import { formatOrderNumber, normalizeOrderNumberInput } from "@/utils/formatters";
 
 /* ---------------- helpers ---------------- */
 const safe = (v) => String(v ?? "").trim();
@@ -40,28 +41,8 @@ const clip = async (text) => {
   }
 };
 
-// "23" -> "MIRAY-000023", "miray-23" -> "MIRAY-000023", "MIRAY-000271" stays
 const normalizeOrderNumber = (input) => {
-  const raw = safe(input);
-  if (!raw) return "";
-  const up = raw.toUpperCase();
-
-  // already normalized MIRAY-000123
-  const full = up.match(/^MIRAY-(\d{6})$/);
-  if (full) return `MIRAY-${full[1]}`;
-
-  // MIRAY-123
-  const m = up.match(/^MIRAY-(\d+)$/);
-  if (m) {
-    const n = m[1].replace(/\D/g, "");
-    if (!n) return "";
-    return `MIRAY-${n.slice(-6).padStart(6, "0")}`;
-  }
-
-  // any digits
-  const digits = up.replace(/[^\d]/g, "");
-  if (!digits) return "";
-  return `MIRAY-${digits.slice(-6).padStart(6, "0")}`;
+  return normalizeOrderNumberInput(input);
 };
 
 /* ---------------- portal modals ---------------- */
@@ -239,7 +220,7 @@ export default function CustomerTicketRow({
     if (!id) return;
 
     const next = normalizeOrderNumber(forceOrderNumber ?? orderInput);
-    if (!next) return toast.error("Enter order number like 23 or MIRAY-000023");
+    if (!next) return toast.error("Enter an order number like 000023");
 
     setSavingOrder(true);
     try {
@@ -328,7 +309,7 @@ export default function CustomerTicketRow({
           <div className="mt-1 text-[11px] text-gray-500">
             Order:{" "}
             <span className="font-semibold text-gray-700">
-              {serverOrder ? serverOrder : normalizedPreview ? normalizedPreview : "—"}
+              {formatOrderNumber(serverOrder || normalizedPreview)}
             </span>
           </div>
         </td>
@@ -424,14 +405,14 @@ export default function CustomerTicketRow({
                   {showOrderEditor ? (
                     <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
                       <p className="text-xs font-semibold text-gray-500">
-                        Add Order Number (23 → MIRAY-000023)
+                        Add Order Number
                       </p>
 
                       <div className="mt-2 flex items-center gap-2">
                         <input
                           value={orderInput}
                           onChange={(e) => setOrderInput(e.target.value)}
-                          placeholder="e.g. 23 or MIRAY-23"
+                          placeholder="e.g. 000023"
                           className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
                         />
                         <button
@@ -447,7 +428,7 @@ export default function CustomerTicketRow({
 
                       {normalizedPreview ? (
                         <p className="mt-2 text-[11px] text-gray-600">
-                          Normalized: <span className="font-semibold">{normalizedPreview}</span>
+                          Will save: <span className="font-semibold">{normalizedPreview}</span>
                         </p>
                       ) : null}
                     </div>

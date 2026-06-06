@@ -12,17 +12,10 @@ import {
   XCircle,
 } from "lucide-react";
 import { useBlueDartStore } from "@/store/bluedartStore";
+import { normalizeOrderNumberInput } from "@/utils/formatters";
 
 const normalizeMirayOrderNumber = (value = "") => {
-  const raw = String(value).trim().toUpperCase();
-
-  if (!raw) return "";
-
-  const digits = raw.replace(/\D/g, "");
-
-  if (!digits) return raw.startsWith("MIRAY-") ? raw : `MIRAY-${raw}`;
-
-  return `MIRAY-${digits.padStart(6, "0")}`;
+  return normalizeOrderNumberInput(value);
 };
 
 export default function BlueDartServiceCheckPage() {
@@ -132,7 +125,7 @@ export default function BlueDartServiceCheckPage() {
                   <Input
                     icon={<Hash size={16} />}
                     label="Order Number"
-                    placeholder="2142 or MIRAY-002142"
+                    placeholder="000214"
                     value={form.orderNumber}
                     onChange={(e) =>
                       updateField("orderNumber", e.target.value)
@@ -141,11 +134,11 @@ export default function BlueDartServiceCheckPage() {
 
                   <div className="rounded-2xl bg-neutral-50 px-4 py-3">
                     <p className="text-xs text-neutral-500">
-                      Normalized Order Number
+                      Order Number
                     </p>
 
                     <p className="mt-1 font-semibold">
-                      {normalizedOrderNumber || "MIRAY-000000"}
+                      {normalizedOrderNumber || "000000"}
                     </p>
                   </div>
                 </>

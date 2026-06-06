@@ -19,6 +19,7 @@ import toast from "react-hot-toast";
 
 import { useBlueDartStore } from "@/store/bluedartStore";
 import BlueDartShipmentBadge from "@/components/bluedart/BlueDartShipmentBadge";
+import { normalizeOrderNumberInput } from "@/utils/formatters";
 
 const initialForm = {
   orderNumber: "",
@@ -41,15 +42,7 @@ const safeNum = (v, fallback = 0) => {
 };
 
 const normalizeOrderNumber = (value) => {
-  const raw = safe(value).toUpperCase().trim();
-  if (!raw) return "";
-
-  if (raw.startsWith("MIRAY-")) return raw;
-
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return raw;
-
-  return `MIRAY-${digits.slice(-6).padStart(6, "0")}`;
+  return normalizeOrderNumberInput(value);
 };
 
 const getAwb = (shipment = {}) => safe(shipment?.awb || shipment?.awbNumber);
@@ -187,7 +180,16 @@ export default function BlueDartCreatePage() {
             </div>
 
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field
+                label="Order Number"
+                value={form.orderNumber}
+                onChange={(v) => handleChange("orderNumber", v)}
+                placeholder="000123"
+                icon={Hash}
+                required
+              />
+
               <Field
                 label="Carrier Name"
                 value={form.carrierName}

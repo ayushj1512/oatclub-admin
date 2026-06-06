@@ -92,29 +92,9 @@ const escapeCSV = (value) => {
   return `"${s.replace(/"/g, '""')}"`;
 };
 
-const normalizeOrderNumber = (value = "") => {
-  const raw = String(value || "").trim().toUpperCase();
-  if (!raw) return "";
+const normalizeOrderNumber = (value = "") => String(value ?? "").trim().replace(/\s+/g, "");
 
-  const digits = raw.replace(/\D/g, "");
-  if (digits) return `MIRAY-${digits.padStart(6, "0")}`;
-
-  return raw.replace(/\s+/g, "");
-};
-
-const normalizeSearchTerm = (value = "") => {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-
-  const upper = raw.toUpperCase();
-  const digits = raw.replace(/\D/g, "");
-
-  if (upper.startsWith("MIRAY") || /^\d+$/.test(raw) || digits.length) {
-    return normalizeOrderNumber(raw);
-  }
-
-  return raw;
-};
+const normalizeSearchTerm = (value = "") => String(value || "").trim();
 
 const getOrderDate = (order) => {
   const latestRma =
@@ -690,7 +670,7 @@ export default function RefundedOrdersPage() {
               <Search size={18} className="text-gray-400" />
               <input
                 type="text"
-                placeholder="Search MIRAY/order/name/email/phone/refund ref..."
+                placeholder="Search order/name/email/phone/refund ref..."
                 className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -848,3 +828,4 @@ export default function RefundedOrdersPage() {
     </section>
   );
 }
+

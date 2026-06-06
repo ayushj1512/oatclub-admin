@@ -24,7 +24,7 @@ const downloadSampleCsv = () => {
     [
       "EWB123456",
       "SHIP123456",
-      "MIRAY-000001",
+      "000001",
       "2026-03-20",
       "shipment",
       "2026-03-25",
@@ -33,7 +33,7 @@ const downloadSampleCsv = () => {
     [
       "EWB123457",
       "SHIP123457",
-      "MIRAY-000002",
+      "000002",
       "2026-03-21",
       "shipment",
       "2026-03-26",

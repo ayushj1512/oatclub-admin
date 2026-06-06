@@ -19,6 +19,7 @@ import {
 import { useOrderStore } from "@/store/orderStore";
 import { useBlueDartStore } from "@/store/bluedartStore";
 import BlueDartBookingTable from "@/components/bluedart/BlueDartBookingTable";
+import { normalizeOrderNumberInput } from "@/utils/formatters";
 
 const safe = (v) => (v == null ? "" : String(v));
 const lower = (v) => safe(v).toLowerCase().trim();
@@ -44,13 +45,7 @@ const PUSHED_STATUSES = new Set([
 const LOCAL_PAGE_SIZE = 50;
 
 const normalizeOrderNumber = (value) => {
-  const raw = safe(value).toUpperCase().trim();
-  if (!raw) return "";
-
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return raw;
-
-  return `MIRAY-${digits.slice(-6).padStart(6, "0")}`;
+  return normalizeOrderNumberInput(value);
 };
 
 const getSearchTokens = (value) => {
@@ -63,7 +58,6 @@ const getSearchTokens = (value) => {
   if (normalizedOrderNo) {
     set.add(lower(normalizedOrderNo));
     set.add(lower(normalizedOrderNo.replace("-", "")));
-    set.add(lower(normalizedOrderNo.replace("MIRAY-", "")));
   }
 
   return [...set].filter(Boolean);

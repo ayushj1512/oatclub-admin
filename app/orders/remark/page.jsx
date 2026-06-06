@@ -130,7 +130,7 @@ export default function OrderRemarkPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search: OATCLUB-000123 or 98765..."
+              placeholder="Search: 000123 or 98765..."
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 bg-white text-sm outline-none focus:ring-2 focus:ring-gray-200"
             />
           </div>

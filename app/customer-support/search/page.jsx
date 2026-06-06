@@ -5,28 +5,23 @@ import { useCustomerSupportLookupStore } from "@/store/customerSupportLookupStor
 import { useCustomerStore } from "@/store/customerStore";
 import { useOrderStore } from "@/store/orderStore";
 import { useCustomerTicketStore } from "@/store/customerTicketStore";
+import {
+  formatCurrency,
+  formatOrderNumber,
+  normalizeOrderNumberInput,
+} from "@/utils/formatters";
 
 /* ================= utils ================= */
 
-const normalizeOrderNumber = (raw, prefix = "MIRAY", pad = 6) => {
-  if (raw === null || raw === undefined) return "";
+const normalizeOrderNumber = (raw) => {
   if (Array.isArray(raw)) raw = raw?.[0]?.orderNumber ?? raw?.[0]?.number ?? "";
-  if (typeof raw === "object") raw = raw?.orderNumber ?? raw?.number ?? "";
-
-  const s = String(raw).trim();
-  if (!s) return "";
-
-  const digits = (s.match(/\d+/g) || []).join("");
-  if (!digits) return s.toUpperCase();
-
-  const num = String(parseInt(digits, 10));
-  return `${String(prefix).toUpperCase()}-${num.padStart(pad, "0")}`;
+  if (typeof raw === "object" && raw !== null) raw = raw?.orderNumber ?? raw?.number ?? "";
+  return normalizeOrderNumberInput(raw);
 };
 
 const money = (v) => {
   if (v === null || v === undefined || v === "") return "";
-  const n = Number(v);
-  return Number.isFinite(n) ? `₹ ${n.toLocaleString("en-IN")}` : String(v);
+  return formatCurrency(v);
 };
 
 const safe = (v, fallback = "—") =>
@@ -101,7 +96,7 @@ export default function CustomerSupportSearch() {
       phone: String(q.phone || "").trim(),
       name: String(q.name || "").trim(),
       email: String(q.email || "").trim().toLowerCase(),
-      orderNumber: q.orderNumber ? normalizeOrderNumber(q.orderNumber, "MIRAY", 6) : "",
+      orderNumber: q.orderNumber ? normalizeOrderNumber(q.orderNumber) : "",
       ticketStatus: String(q.ticketStatus || "").trim(),
     };
 
@@ -112,7 +107,7 @@ export default function CustomerSupportSearch() {
   /* ===== order detail helpers ===== */
 
   const orderNumberShown =
-    normalizeOrderNumber(order?.orderNumber, "MIRAY", 6) || order?._id || "Order";
+    formatOrderNumber(order?.orderNumber, order?._id || "Order");
 
   const shipping =
     order?.shippingAddressSnapshot ||
@@ -214,14 +209,11 @@ export default function CustomerSupportSearch() {
           <Input placeholder="Name" value={query.name} onChange={(v) => setQuery({ name: v })} />
 
           <Input
-            placeholder="Order No. (MIRAY-000031)"
+            placeholder="Order No. (000031)"
             value={query.orderNumber}
             onChange={(v) => {
               if (!v) return setQuery({ orderNumber: "" });
-              const hasDigit = /\d/.test(v);
-              setQuery({
-                orderNumber: hasDigit ? normalizeOrderNumber(v, "MIRAY", 6) : v.toUpperCase(),
-              });
+              setQuery({ orderNumber: normalizeOrderNumber(v) });
             }}
           />
 
@@ -369,7 +361,7 @@ export default function CustomerSupportSearch() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-sm font-medium">
-                          {normalizeOrderNumber(o?.orderNumber, "MIRAY", 6) || o?._id || "Order"}
+                          {formatOrderNumber(o?.orderNumber, o?._id || "Order")}
                         </div>
                         <div className="text-xs text-gray-500">
                           {o?.createdAt ? new Date(o.createdAt).toLocaleDateString() : ""}

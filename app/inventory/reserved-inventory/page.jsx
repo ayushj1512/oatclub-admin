@@ -259,7 +259,7 @@ export default function ReservedInventoryPage() {
             <input
               value={form.orderNumber || ""}
               onChange={(e) => setForm((s) => ({ ...s, orderNumber: e.target.value }))}
-              placeholder="orderNumber (MIRAY-000187)"
+              placeholder="orderNumber (000187)"
               className="h-10 px-3 rounded-xl bg-gray-100/70 ring-1 ring-black/10 outline-none md:col-span-2"
             />
 

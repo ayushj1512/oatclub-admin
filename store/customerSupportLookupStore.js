@@ -7,6 +7,7 @@ import { useCustomerStore } from "@/store/customerStore";
 import { useOrderStore } from "@/store/orderStore";
 import { useCustomerTicketStore } from "@/store/customerTicketStore";
 import { useAdminProductStore } from "@/store/adminProductStore";
+import { normalizeOrderNumberInput } from "@/utils/formatters";
 
 /* ---------------- helpers ---------------- */
 const getId = (x) => {
@@ -15,21 +16,6 @@ const getId = (x) => {
   if (typeof x === "object")
     return String(x._id || x.id || x.customerId || x.userId || x.productId || "");
   return "";
-};
-
-const normalizeOrderNumber = (raw, prefix = "MIRAY", pad = 6) => {
-  if (raw == null) return "";
-  if (Array.isArray(raw)) raw = raw?.[0]?.orderNumber ?? raw?.[0]?.number ?? "";
-  if (typeof raw === "object") raw = raw?.orderNumber ?? raw?.number ?? "";
-
-  const str = String(raw).trim();
-  if (!str) return "";
-
-  const digits = (str.match(/\d+/g) || []).join("");
-  if (!digits) return str.toUpperCase();
-
-  const num = String(parseInt(digits, 10));
-  return `${String(prefix).toUpperCase()}-${num.padStart(pad, "0")}`;
 };
 
 const cleanStr = (v) => String(v || "").trim();
@@ -281,7 +267,7 @@ export const useCustomerSupportLookupStore = create((set, get) => ({
 
       // 1) ORDER NUMBER PATH
       if (ordRaw) {
-        const ordNo = normalizeOrderNumber(ordRaw, "MIRAY", 6);
+        const ordNo = normalizeOrderNumberInput(ordRaw);
         set((s) => ({ query: { ...s.query, email: _email, orderNumber: ordNo } }));
 
         const ord = await orderStore.fetchOrderByNumber(ordNo);

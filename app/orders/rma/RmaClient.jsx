@@ -8,12 +8,14 @@ import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown"; // �
 import { useRmaStore } from "@/store/useRmaStore";
 import { useOrderStore } from "@/store/orderStore";
 import { useAdminProductStore } from "@/store/adminProductStore";
+import { formatCurrency, formatOrderNumber, formatRmaNumber } from "@/utils/formatters";
 
 /* ----------------------------
    Tiny helpers (safe)
 ---------------------------- */
 const toStr = (v) => (v == null ? "" : String(v));
 const norm = (v) => toStr(v).trim().toLowerCase();
+const pick = (...values) => values.find((value) => toStr(value).trim()) || "";
 const parseDate = (d) => {
   const dt = d ? new Date(d) : null;
   return dt && !Number.isNaN(dt.getTime()) ? dt : null;
@@ -146,13 +148,19 @@ export default function RmaClient() {
       .filter((rma) => {
         const linkedOrder = orderMap.get(String(rma?.orderId)) || null;
 
-        const orderNumber = toStr(linkedOrder?.orderNumber || rma?.orderNumber);
+        const orderNumber = pick(linkedOrder?.orderNumber, rma?.orderNumber);
         const rmaNumber = toStr(rma?.rmaNumber);
         const customerName = toStr(
           linkedOrder?.shippingAddressSnapshot?.fullName ||
             linkedOrder?.customerId?.name ||
             rma?.customer?.name
         );
+        const customerPhone = pick(
+          linkedOrder?.shippingAddressSnapshot?.phone,
+          linkedOrder?.customerId?.phone,
+          rma?.customer?.phone
+        );
+        const customerEmail = pick(linkedOrder?.customerId?.email, rma?.customer?.email);
 
         const createdAt = parseDate(rma?.createdAt);
 
@@ -161,7 +169,9 @@ export default function RmaClient() {
           !q ||
           norm(orderNumber).includes(q) ||
           norm(rmaNumber).includes(q) ||
-          norm(customerName).includes(q);
+          norm(customerName).includes(q) ||
+          norm(customerPhone).includes(q) ||
+          norm(customerEmail).includes(q);
 
         // ✅ status filter (RMA status)
         const st = norm(rma?.status);
@@ -248,7 +258,7 @@ export default function RmaClient() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Order #, RMA #, Customer..."
+              placeholder="Order #, RMA #, customer, phone, email..."
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
@@ -388,12 +398,24 @@ export default function RmaClient() {
               <tbody className="divide-y divide-gray-100">
                 {filteredRmas.map((rma, index) => {
                   const linkedOrder = orderMap.get(String(rma?.orderId)) || null;
+                  const orderNumber = formatOrderNumber(
+                    pick(linkedOrder?.orderNumber, rma?.orderNumber)
+                  );
+                  const rmaNumber = formatRmaNumber(rma?.rmaNumber);
 
                   const customerName =
                     linkedOrder?.shippingAddressSnapshot?.fullName ||
                     linkedOrder?.customerId?.name ||
                     rma?.customer?.name ||
                     "-";
+                  const customerPhone = pick(
+                    linkedOrder?.shippingAddressSnapshot?.phone,
+                    linkedOrder?.customerId?.phone,
+                    rma?.customer?.phone
+                  );
+                  const customerEmail = pick(linkedOrder?.customerId?.email, rma?.customer?.email);
+                  const reverseShipment = rma?.reverseShipment || {};
+                  const refund = rma?.refund || {};
 
                   const rowKey =
                     rma?.rmaNumber || rma?._id || `${rma?.orderId || "order"}-${index}`;
@@ -418,10 +440,10 @@ export default function RmaClient() {
                         </td>
 
                         <td className="p-4 font-medium text-gray-900">
-                          {linkedOrder?.orderNumber || rma?.orderNumber || "-"}
+                          {orderNumber}
                         </td>
 
-                        <td className="p-4 text-gray-700">{rma?.rmaNumber || "-"}</td>
+                        <td className="p-4 text-gray-700">{rmaNumber}</td>
 
                         <td className="p-4">
                           <span
@@ -470,7 +492,7 @@ export default function RmaClient() {
                                 <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
                                   <p className="text-gray-500">Order</p>
                                   <p className="mt-2 text-gray-900">
-                                    <b>Order #:</b> {linkedOrder?.orderNumber || "-"}
+                                    <b>Order #:</b> {orderNumber}
                                   </p>
                                   <p className="text-gray-700">
                                     <b>Fulfillment:</b> {linkedOrder?.fulfillmentStatus || "-"}
@@ -478,7 +500,7 @@ export default function RmaClient() {
                                   <p className="text-gray-900 mt-1">
                                     <b>Total:</b>{" "}
                                     {linkedOrder?.finalPayable != null
-                                      ? `₹${linkedOrder.finalPayable}`
+                                      ? formatCurrency(linkedOrder.finalPayable)
                                       : "-"}
                                   </p>
                                 </div>
@@ -508,8 +530,9 @@ export default function RmaClient() {
                                     {linkedOrder?.shippingAddressSnapshot?.fullName || "-"}
                                   </p>
                                   <p className="text-gray-700">
-                                    {linkedOrder?.shippingAddressSnapshot?.phone || "-"}
+                                    {customerPhone || "-"}
                                   </p>
+                                  <p className="text-gray-700">{customerEmail || "-"}</p>
                                   <p className="text-gray-700">
                                     {linkedOrder?.shippingAddressSnapshot?.line1 || "-"}
                                   </p>
@@ -524,6 +547,9 @@ export default function RmaClient() {
                                 <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
                                   <p className="text-gray-500">RMA</p>
                                   <p className="mt-2 text-gray-900">
+                                    <b>RMA #:</b> {rmaNumber}
+                                  </p>
+                                  <p className="mt-2 text-gray-900">
                                     <b>Reason:</b> {rma?.reason || "-"}
                                   </p>
                                   <p className="text-gray-700">
@@ -532,9 +558,38 @@ export default function RmaClient() {
 
                                   {rma?.fee?.amount > 0 && (
                                     <p className="mt-2 text-blue-700 font-medium">
-                                      Exchange Fee: ₹{rma.fee.amount} ({rma.fee.status})
+                                      Exchange Fee: {formatCurrency(rma.fee.amount)} ({rma.fee.status})
                                     </p>
                                   )}
+                                </div>
+                              </div>
+
+                              <div className="grid md:grid-cols-2 gap-4 text-xs">
+                                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
+                                  <p className="text-gray-500">Reverse Shipment</p>
+                                  <p className="mt-2 text-gray-900">
+                                    <b>Courier:</b> {reverseShipment?.courier || reverseShipment?.carrier || "-"}
+                                  </p>
+                                  <p className="text-gray-700">
+                                    <b>AWB:</b> {reverseShipment?.awb || reverseShipment?.awbCode || "-"}
+                                  </p>
+                                  <p className="text-gray-700">
+                                    <b>Status:</b> {reverseShipment?.status || "-"}
+                                  </p>
+                                </div>
+
+                                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
+                                  <p className="text-gray-500">Refund</p>
+                                  <p className="mt-2 text-gray-900">
+                                    <b>Amount:</b>{" "}
+                                    {refund?.amount != null ? formatCurrency(refund.amount) : "-"}
+                                  </p>
+                                  <p className="text-gray-700">
+                                    <b>Status:</b> {refund?.status || "-"}
+                                  </p>
+                                  <p className="text-gray-700">
+                                    <b>Reference:</b> {refund?.reference || refund?.refundId || "-"}
+                                  </p>
                                 </div>
                               </div>
 
@@ -578,7 +633,7 @@ export default function RmaClient() {
                                               </p>
                                             </div>
                                             <p className="text-gray-900 font-semibold">
-                                              ₹{it?.subtotal ?? it?.price ?? 0}
+                                              {formatCurrency(it?.subtotal ?? it?.price ?? 0)}
                                             </p>
                                           </div>
                                         );

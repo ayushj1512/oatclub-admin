@@ -17,7 +17,7 @@ import { useInventoryReservationStore } from "@/store/inventoryReservationStore"
  *
  * ✅ UPDATED SORT:
  * - Priority first: high > medium > normal
- * - Then orderNumber ASC for MIRAY-000000 format
+ * - Then orderNumber ASC using the trailing numeric sequence
  */
 
 const btnBase =
@@ -38,7 +38,7 @@ const priorityRank = (p) => {
   return 0; // normal / empty
 };
 
-// ✅ MIRAY-000484 -> 484
+// Numeric order numbers sort naturally; legacy prefixed values still use their trailing number.
 const orderNoValue = (orderNumber) => {
   const raw = String(orderNumber || "").trim();
   // safest: take last numeric group
@@ -128,7 +128,7 @@ export default function SyncInventoryButton({
       // IMPORTANT: read fresh queue from zustand state (not from stale render)
       const freshQueue = useAdminProductionStore.getState?.().queue || [];
 
-      // ✅ filter + sort (priority desc + MIRAY orderNumber asc)
+      // ✅ filter + sort (priority desc + numeric orderNumber asc)
       const processingConfirmed = (freshQueue || [])
         .filter(
           (o) =>

@@ -32,23 +32,14 @@ import { useCancelOrderFlow } from "@/hooks/useCancelOrderFlow";
 import CancelOrderModal from "@/components/orders/CancelOrderModal";
 import UniversalOrderPrintPanel from "@/components/invoice/UniversalOrderPrintPanel";
 import OrderSearchTrackingCard from "@/components/orders/OrderSearchTrackingCard";
+import { normalizeOrderNumberInput } from "@/utils/formatters";
 
 const IST = "Asia/Kolkata";
 const safe = (v) => (v == null ? "" : String(v));
-const pad6 = (n) => String(n).padStart(6, "0");
 const cn = (...a) => a.filter(Boolean).join(" ");
 
 const normalizeOrderNumber = (input) => {
-  const raw = safe(input).trim().toUpperCase();
-  if (!raw) return "";
-
-  const s = raw.replace(/\s+/g, "");
-  const digits = s.startsWith("MIRAY")
-    ? s.replace(/^MIRAY-?/, "").replace(/\D/g, "")
-    : s.replace(/\D/g, "");
-
-  if (!digits) return "";
-  return `MIRAY-${pad6(parseInt(digits, 10) || 0)}`;
+  return normalizeOrderNumberInput(input);
 };
 
 const money = (n) => {
@@ -481,7 +472,7 @@ export default function OrderSearchPage() {
                     Order Search
                   </div>
                   <div className="text-xs text-zinc-500">
-                    Paste MIRAY-000123 or just 123
+                    Paste an order number like 000123
                   </div>
                 </div>
 
@@ -506,7 +497,7 @@ export default function OrderSearchPage() {
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && search()}
-                    placeholder="OATCLUB-000123"
+                    placeholder="000123"
                     className="w-full bg-white px-3 py-3 text-sm outline-none ring-1 ring-zinc-200/70 focus:ring-zinc-400"
                   />
 
