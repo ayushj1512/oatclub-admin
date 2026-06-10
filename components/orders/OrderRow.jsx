@@ -15,7 +15,7 @@ import OrderPriorityDropdown from "@/components/orders/OrderPriorityDropdown";
 import OrderPaymentStatusDropdown from "@/components/orders/OrderPaymentStatusDropdown";
 import OrderRowActions from "@/components/orders/OrderRowActions";
 
-const BASE_URL = "https://mirayfashions.com";
+const BASE_URL = "https://oatclub.in";
 
 const safe = (v) => (v == null ? "" : String(v));
 
@@ -54,7 +54,7 @@ const paymentMethodMeta = (method) => {
     return {
       label: "Razorpay",
       icon: CreditCard,
-      className: "bg-blue-50 text-blue-700 border-blue-100",
+      className: "bg-gray-950 text-white border-gray-950",
     };
   }
 
@@ -62,14 +62,14 @@ const paymentMethodMeta = (method) => {
     return {
       label: "Exchange",
       icon: RefreshCw,
-      className: "bg-purple-50 text-purple-700 border-purple-100",
+      className: "bg-gray-100 text-gray-800 border-gray-200",
     };
   }
 
   return {
     label: "COD",
     icon: Banknote,
-    className: "bg-amber-50 text-amber-700 border-amber-100",
+    className: "bg-white text-gray-800 border-gray-200",
   };
 };
 
@@ -126,14 +126,14 @@ function OrderRow({ order, onUpdated }) {
 
   return (
     <>
-      <tr className="hover:bg-black/[0.03] transition">
-        <td className="py-4 px-5 font-semibold text-gray-900">
+      <tr className="border-b border-black/[0.06] bg-white transition hover:bg-gray-50/80">
+        <td className="px-5 py-4 font-semibold text-gray-900">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={toggleOpen}
               title="Expand"
-              className="p-1.5 rounded-lg hover:bg-black/[0.05] transition"
+              className="rounded-md border border-black/[0.06] bg-gray-50 p-1.5 text-gray-700 transition hover:bg-gray-100"
             >
               {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </button>
@@ -142,16 +142,16 @@ function OrderRow({ order, onUpdated }) {
               type="button"
               onClick={goToOrder}
               title="Open order"
-              className="text-left inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-black/[0.05] focus:outline-none focus:ring-2 focus:ring-black/10"
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-left transition hover:bg-black/[0.04] focus:outline-none focus:ring-2 focus:ring-black/10"
             >
-              <span className="underline underline-offset-2 decoration-black/30 hover:decoration-black">
+              <span className="font-mono text-sm tracking-wide text-gray-950 underline underline-offset-2 decoration-black/25 hover:decoration-black">
                 {order?.orderNumber || "-"}
               </span>
               <ExternalLink size={14} className="opacity-70" />
             </button>
           </div>
 
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 max-w-[280px] truncate text-xs text-gray-500">
             {firstTitle
               ? `${firstTitle}${items.length > 1 ? ` +${items.length - 1} more` : ""}`
               : "No items"}
@@ -159,11 +159,11 @@ function OrderRow({ order, onUpdated }) {
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {order?.isConfirmed ? (
-              <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-100">
-                Confirmed ✅
+              <span className="inline-flex rounded-md border border-gray-950 bg-gray-950 px-2 py-0.5 text-[11px] font-semibold text-white">
+                Confirmed
               </span>
             ) : (
-              <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-50 text-gray-700 border border-gray-200">
+              <span className="inline-flex rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
                 Not Confirmed
               </span>
             )}
@@ -176,7 +176,7 @@ function OrderRow({ order, onUpdated }) {
           </div>
         </td>
 
-        <td className="py-4 px-5">
+        <td className="px-5 py-4">
           <div className="font-medium text-gray-900">
             {order?.customerId?.name ||
               order?.customerName ||
@@ -197,7 +197,7 @@ function OrderRow({ order, onUpdated }) {
           </div>
         </td>
 
-        <td className="py-4 px-5">
+        <td className="px-5 py-4">
           <OrderPaymentStatusDropdown
             orderId={orderId}
             currentStatus={paymentStatus}
@@ -205,16 +205,16 @@ function OrderRow({ order, onUpdated }) {
           />
         </td>
 
-        <td className="py-4 px-5">
+        <td className="px-5 py-4">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${paymentMethod.className}`}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold ${paymentMethod.className}`}
           >
             <PaymentMethodIcon size={13} />
             {paymentMethod.label}
           </span>
         </td>
 
-        <td className="py-4 px-5">
+        <td className="px-5 py-4">
           <OrderStatusDropdown
             orderId={orderId}
             currentStatus={effectiveStatus}
@@ -223,18 +223,18 @@ function OrderRow({ order, onUpdated }) {
           />
         </td>
 
-        <td className="py-4 px-5 font-semibold text-gray-900">
+        <td className="px-5 py-4 font-mono text-sm font-semibold text-gray-950">
           ₹{money(order?.finalPayable)}
         </td>
 
-        <td className="py-4 px-5 text-gray-700">
+        <td className="px-5 py-4 text-gray-700">
           <div className="leading-tight">
             <div className="text-sm font-medium text-gray-900">{dt.time}</div>
             <div className="text-[11px] text-gray-500">{dt.date}</div>
           </div>
         </td>
 
-        <td className="py-4 px-5">
+        <td className="px-5 py-4">
           <div className="flex items-center justify-end gap-2">
             <OrderRowActions
               order={order}
@@ -259,9 +259,9 @@ function OrderRow({ order, onUpdated }) {
       </tr>
 
       {open ? (
-        <tr className="bg-black/[0.015]">
+        <tr className="border-b border-black/[0.06] bg-gray-50">
           <td colSpan={8} className="px-5 pb-4">
-            <div className="mt-3 bg-white rounded-2xl px-4 py-4 space-y-4">
+            <div className="mt-3 space-y-4 rounded-lg border border-black/[0.06] bg-white px-4 py-4 shadow-sm">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-900">
@@ -272,7 +272,7 @@ function OrderRow({ order, onUpdated }) {
                     type="button"
                     onClick={goToOrder}
                     title="Open order"
-                    className="text-xs font-semibold text-blue-600 hover:underline inline-flex items-center gap-1"
+                    className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] px-2.5 py-1 text-xs font-semibold text-gray-900 transition hover:bg-gray-50"
                   >
                     Open <ExternalLink size={14} />
                   </button>
@@ -308,14 +308,14 @@ function OrderRow({ order, onUpdated }) {
                       return (
                         <div
                           key={`${orderId}-item-${idx}`}
-                          className="py-3 flex items-center justify-between gap-3"
+                          className="flex items-center justify-between gap-3 py-3"
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <img
                               src={snap.thumbnail || "/placeholder.png"}
                               alt={snap.title || "Product"}
                               loading="lazy"
-                              className="w-10 h-10 rounded-xl object-cover border border-gray-100"
+                              className="h-10 w-10 rounded-lg border border-gray-100 object-cover"
                             />
 
                             <div className="min-w-0">
@@ -330,7 +330,7 @@ function OrderRow({ order, onUpdated }) {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     title="Open product"
-                                    className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                                    className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-gray-700 hover:text-gray-950"
                                   >
                                     Product <ExternalLink size={14} />
                                   </a>
@@ -346,7 +346,7 @@ function OrderRow({ order, onUpdated }) {
 
                               {productCode ? (
                                 <div className="mt-1">
-                                  <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-50 text-zinc-700 border border-zinc-100">
+                                  <span className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
                                     Code: {productCode}
                                   </span>
                                 </div>
@@ -370,19 +370,19 @@ function OrderRow({ order, onUpdated }) {
               </div>
 
               <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2 text-xs text-gray-700">
-                <span className="px-3 py-1 rounded-full bg-gray-100">
+                <span className="rounded-md bg-gray-100 px-3 py-1">
                   Subtotal: <b>₹{money(order?.subtotal)}</b>
                 </span>
-                <span className="px-3 py-1 rounded-full bg-gray-100">
+                <span className="rounded-md bg-gray-100 px-3 py-1">
                   Discount: <b>₹{money(order?.discount)}</b>
                 </span>
-                <span className="px-3 py-1 rounded-full bg-gray-100">
+                <span className="rounded-md bg-gray-100 px-3 py-1">
                   Shipping: <b>₹{money(order?.shippingFee)}</b>
                 </span>
-                <span className="px-3 py-1 rounded-full bg-gray-100">
+                <span className="rounded-md bg-gray-100 px-3 py-1">
                   Tax: <b>₹{money(order?.tax)}</b>
                 </span>
-                <span className="ml-auto px-4 py-1 rounded-full bg-black text-white font-semibold">
+                <span className="ml-auto rounded-md bg-black px-4 py-1 font-semibold text-white">
                   Final: ₹{money(order?.finalPayable)}
                 </span>
               </div>

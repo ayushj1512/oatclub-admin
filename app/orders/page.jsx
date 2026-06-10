@@ -34,7 +34,7 @@ const fmtDate = (v) => {
 
 function Card({ children, className = "" }) {
   return (
-    <div className={`rounded-[28px] bg-white shadow-sm ring-1 ring-black/[0.04] ${className}`}>
+    <div className={`rounded-lg border border-black/[0.06] bg-white shadow-sm ${className}`}>
       {children}
     </div>
   );
@@ -45,7 +45,7 @@ function Stat({ title, value, sub, icon: Icon, tone = "bg-gray-950", onClick }) 
     <button
       type="button"
       onClick={onClick}
-      className="group rounded-[26px] bg-white p-5 text-left shadow-sm ring-1 ring-black/[0.04] transition hover:-translate-y-0.5 hover:shadow-md"
+      className="group rounded-lg border border-black/[0.06] bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-black/[0.12] hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -54,7 +54,7 @@ function Stat({ title, value, sub, icon: Icon, tone = "bg-gray-950", onClick }) 
           {sub ? <p className="mt-2 text-xs leading-5 text-gray-500">{sub}</p> : null}
         </div>
 
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl text-white ${tone}`}>
+        <div className={`flex h-11 w-11 items-center justify-center rounded-lg text-white ${tone}`}>
           <Icon size={21} />
         </div>
       </div>
@@ -64,7 +64,7 @@ function Stat({ title, value, sub, icon: Icon, tone = "bg-gray-950", onClick }) 
 
 function MiniStat({ label, value, sub, dark }) {
   return (
-    <div className={`rounded-3xl p-5 ${dark ? "bg-gray-950 text-white" : "bg-gray-50"}`}>
+    <div className={`rounded-lg border border-black/[0.06] p-5 ${dark ? "bg-gray-950 text-white" : "bg-gray-50"}`}>
       <p className={`text-sm ${dark ? "text-white/60" : "text-gray-500"}`}>{label}</p>
       <p className={`mt-2 text-3xl font-semibold tracking-tight ${dark ? "text-white" : "text-gray-950"}`}>
         {value}
@@ -79,13 +79,13 @@ function PipelineItem({ label, value, icon: Icon, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex min-w-[150px] flex-1 items-center justify-between gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-left transition hover:bg-gray-100"
+      className="flex min-w-[150px] flex-1 items-center justify-between gap-3 rounded-lg border border-black/[0.04] bg-gray-50 px-4 py-3 text-left transition hover:bg-gray-100"
     >
       <div>
         <p className="text-xs font-medium text-gray-500">{label}</p>
         <p className="mt-1 text-xl font-semibold text-gray-950">{value}</p>
       </div>
-      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-gray-800 shadow-sm">
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-gray-800 shadow-sm">
         <Icon size={18} />
       </div>
     </button>
@@ -97,11 +97,11 @@ function ActionRow({ icon: Icon, title, sub, value, danger, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-left transition hover:bg-gray-50"
+      className="flex w-full items-center justify-between gap-4 rounded-lg px-4 py-3 text-left transition hover:bg-gray-50"
     >
       <div className="flex items-center gap-3">
         <div
-          className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
             danger ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-800"
           }`}
         >
@@ -114,7 +114,7 @@ function ActionRow({ icon: Icon, title, sub, value, danger, onClick }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
+        <span className="rounded-md bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
           {value}
         </span>
         <ArrowRight size={16} className="text-gray-400" />
@@ -163,7 +163,7 @@ function DonutChart({ data = [], centerTitle = "Total", centerValue = 0 }) {
 
       <div className="w-full space-y-2">
         {data.map((item) => (
-          <div key={item.label} className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3">
+          <div key={item.label} className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
               <span className="text-sm font-medium text-gray-700">{item.label}</span>
@@ -230,12 +230,12 @@ function DailyTrendChart({ data = [] }) {
                 <div className="flex h-[220px] items-end gap-1.5">
                   <div
                     title={`${orders} orders`}
-                    className="w-4 rounded-t-xl bg-gray-950 transition hover:opacity-80"
+                    className="w-4 rounded-t-md bg-gray-950 transition hover:opacity-80"
                     style={{ height: `${orderH}px` }}
                   />
                   <div
                     title={money(revenue)}
-                    className="w-4 rounded-t-xl bg-gray-300 transition hover:bg-gray-400"
+                    className="w-4 rounded-t-md bg-gray-300 transition hover:bg-gray-400"
                     style={{ height: `${revenueH}px` }}
                   />
                 </div>
@@ -245,7 +245,7 @@ function DailyTrendChart({ data = [] }) {
           })}
         </div>
       ) : (
-        <div className="rounded-3xl bg-gray-50 p-10 text-center text-sm text-gray-500">
+        <div className="rounded-lg bg-gray-50 p-10 text-center text-sm text-gray-500">
           Daily trend data not available yet.
         </div>
       )}
@@ -277,7 +277,7 @@ function SourcePerformance({ data = [] }) {
           ))}
         </div>
       ) : (
-        <div className="rounded-3xl bg-gray-50 p-10 text-center text-sm text-gray-500">
+        <div className="rounded-lg bg-gray-50 p-10 text-center text-sm text-gray-500">
           Source data not available yet.
         </div>
       )}
@@ -309,9 +309,9 @@ function HourlyHeatmap({ data = [] }) {
           const opacity = Math.max(0.08, x.orders / max);
 
           return (
-            <div key={x.hour} className="rounded-2xl bg-gray-50 p-3 text-center">
+            <div key={x.hour} className="rounded-lg bg-gray-50 p-3 text-center">
               <div
-                className="mx-auto mb-2 h-9 w-9 rounded-2xl bg-gray-950"
+                className="mx-auto mb-2 h-9 w-9 rounded-lg bg-gray-950"
                 style={{ opacity }}
                 title={`${x.orders} orders`}
               />
@@ -379,12 +379,12 @@ export default function OrdersDashboardPage() {
 
   if (orderDashboardLoading) {
     return (
-      <section className="min-h-screen bg-[#f7f7f8] px-4 py-6 md:px-6">
+      <section className="min-h-screen bg-[#f8f8f8] px-4 py-6 md:px-6">
         <div className="space-y-5">
-          <div className="h-44 animate-pulse rounded-[32px] bg-white shadow-sm ring-1 ring-black/[0.04]" />
+          <div className="h-44 animate-pulse rounded-lg bg-white shadow-sm ring-1 ring-black/[0.04]" />
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[1, 2, 3, 4].map((x) => (
-              <div key={x} className="h-36 animate-pulse rounded-[28px] bg-white shadow-sm ring-1 ring-black/[0.04]" />
+              <div key={x} className="h-36 animate-pulse rounded-lg bg-white shadow-sm ring-1 ring-black/[0.04]" />
             ))}
           </div>
         </div>
@@ -394,22 +394,20 @@ export default function OrdersDashboardPage() {
 
   if (error) {
     return (
-      <section className="min-h-screen bg-[#f7f7f8] p-6">
+      <section className="min-h-screen bg-[#f8f8f8] p-6">
         <Card className="p-6 text-sm text-red-600">{error}</Card>
       </section>
     );
   }
 
   return (
-    <section className="min-h-screen bg-[#f7f7f8] px-4 py-6 md:px-6">
+    <section className="min-h-screen bg-[#f8f8f8] px-4 py-6 md:px-6">
       <div className="space-y-5">
         <Card className="overflow-hidden">
           <div className="relative p-6 md:p-7">
-            <div className="absolute right-0 top-0 h-52 w-52 rounded-full bg-gray-100 blur-3xl" />
-
             <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700">
+                <div className="inline-flex items-center gap-2 rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700">
                   <Sparkles size={14} />
                   Orders Command Center
                 </div>
@@ -427,7 +425,7 @@ export default function OrdersDashboardPage() {
                 <button
                   type="button"
                   onClick={fetchOrdersDashboard}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-gray-800 shadow-sm ring-1 ring-black/[0.05] transition hover:bg-gray-50"
+                  className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-semibold text-gray-800 shadow-sm ring-1 ring-black/[0.05] transition hover:bg-gray-50"
                 >
                   <RefreshCcw size={17} />
                   Refresh
@@ -436,7 +434,7 @@ export default function OrdersDashboardPage() {
                 <button
                   type="button"
                   onClick={() => nav("/orders/all?confirmed=true")}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+                  className="inline-flex items-center gap-2 rounded-lg bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
                 >
                   View Orders
                   <ArrowRight size={17} />
@@ -487,7 +485,7 @@ export default function OrdersDashboardPage() {
             value={money(summary.totalRevenue)}
             sub="Total counted revenue"
             icon={CircleDollarSign}
-            tone="bg-emerald-600"
+            tone="bg-gray-800"
             onClick={() => nav("/orders/all?confirmed=true")}
           />
 
@@ -496,7 +494,7 @@ export default function OrdersDashboardPage() {
             value={num(actions.pendingConfirmation)}
             sub="Orders waiting for confirmation"
             icon={Clock3}
-            tone="bg-amber-500"
+            tone="bg-gray-700"
             onClick={() => nav("/orders/all")}
           />
 
@@ -505,7 +503,7 @@ export default function OrdersDashboardPage() {
             value={num(actions.refundPending)}
             sub="Needs refund action"
             icon={Wallet}
-            tone="bg-rose-600"
+            tone="bg-gray-950"
             onClick={() => nav("/refunds/eligible-orders")}
           />
         </div>
@@ -627,7 +625,7 @@ export default function OrdersDashboardPage() {
             value={`${num(summary.deliveryRate).toFixed(1)}%`}
             sub={`${num(pipeline.delivered)} delivered orders`}
             icon={CheckCircle2}
-            tone="bg-emerald-600"
+            tone="bg-gray-800"
             onClick={() => nav("/orders/all?confirmed=true&fulfillmentStatus=delivered")}
           />
           <Stat
@@ -651,7 +649,7 @@ export default function OrdersDashboardPage() {
             value={num(pipeline.inTransit)}
             sub="Picked + shipped + OFD"
             icon={Truck}
-            tone="bg-blue-600"
+            tone="bg-gray-700"
             onClick={() => nav("/orders/all?confirmed=true&fulfillmentStatus=picked,shipped,out_for_delivery")}
           />
         </div>

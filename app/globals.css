@@ -346,3 +346,82 @@ h6 {
 .animate-twinkle {
   animation: twinkle 2s ease-in-out infinite;
 }
+
+/* =========================================================
+   OATCLUB ORDERS MODULE
+========================================================= */
+
+.orders-module-surface {
+  min-height: 100%;
+  background: #f8f8f8;
+}
+
+.orders-module-surface section {
+  background: #f8f8f8 !important;
+}
+
+.orders-module-surface [class*="rounded-3xl"],
+.orders-module-surface [class*="rounded-2xl"],
+.orders-module-surface [class*="rounded-[28px]"],
+.orders-module-surface [class*="rounded-[24px]"] {
+  border-radius: 8px !important;
+}
+
+.orders-module-surface [class*="shadow-sm"],
+.orders-module-surface [class*="shadow-["] {
+  box-shadow: 0 12px 30px rgba(9, 9, 11, 0.035) !important;
+}
+
+.orders-module-surface table thead {
+  background: #f3f4f6 !important;
+}
+
+.orders-module-surface table th {
+  color: #52525b;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.orders-module-surface table tbody tr {
+  border-color: rgba(9, 9, 11, 0.06);
+}
+
+.orders-module-surface input,
+.orders-module-surface select,
+.orders-module-surface textarea {
+  border-radius: 8px !important;
+}
+
+.orders-module-surface [class*="bg-blue-"],
+.orders-module-surface [class*="bg-amber-"],
+.orders-module-surface [class*="bg-purple-"],
+.orders-module-surface [class*="bg-violet-"],
+.orders-module-surface [class*="bg-emerald-"],
+.orders-module-surface [class*="bg-green-"],
+.orders-module-surface [class*="bg-rose-"],
+.orders-module-surface [class*="bg-red-"] {
+  background-color: #f4f4f5 !important;
+}
+
+.orders-module-surface [class*="text-blue-"],
+.orders-module-surface [class*="text-amber-"],
+.orders-module-surface [class*="text-purple-"],
+.orders-module-surface [class*="text-violet-"],
+.orders-module-surface [class*="text-emerald-"],
+.orders-module-surface [class*="text-green-"],
+.orders-module-surface [class*="text-rose-"],
+.orders-module-surface [class*="text-red-"] {
+  color: #27272a !important;
+}
+
+.orders-module-surface [class*="border-blue-"],
+.orders-module-surface [class*="border-amber-"],
+.orders-module-surface [class*="border-purple-"],
+.orders-module-surface [class*="border-violet-"],
+.orders-module-surface [class*="border-emerald-"],
+.orders-module-surface [class*="border-green-"],
+.orders-module-surface [class*="border-rose-"],
+.orders-module-surface [class*="border-red-"] {
+  border-color: rgba(9, 9, 11, 0.1) !important;
+}
