@@ -6,17 +6,12 @@ export const DOMAIN_PERMISSIONS = {
   production: "manageProduction",
   accounts: "manageAccounts",
   products: "manageProducts",
-  footwear: "manageFootwear",
   orders: "manageOrders",
 
-  // ✅ Refunds
   refunds: "manageRefunds",
-
-  // ✅ NEW → Fast2SMS
   fast2sms: "manageFast2SMS",
-
   shiprocket: "manageOrders",
-  bluedart: "manageOrders",
+
   reviews: "manageReviews",
   rma: "manageRMA",
   media: "manageMedia",
@@ -24,17 +19,12 @@ export const DOMAIN_PERMISSIONS = {
   blogs: "manageBlogs",
   inventory: "manageInventory",
   fabrics: "manageFabrics",
-  operations: "manageOperations",
-  it: "manageIT",
   marketing: "manageMarketing",
   customers: "manageCustomers",
   support: "manageSupport",
-  sales: "manageSales",
-  analytics: "viewAnalytics",
   reports: "viewReports",
   tickets: "manageTickets",
   coupons: "manageCoupons",
-  wordpress: "manageWordpressOrders",
   collaboration: "manageInfluencerProgram",
   warehouse: "manageProduction",
 };
@@ -53,7 +43,7 @@ export const ROLE_DEFAULT_PERMS = {
     "manageOrders",
     "manageReviews",
     "manageRefunds",
-    "manageFast2SMS", // ✅ added
+    "manageFast2SMS",
   ],
 
   staff: [
@@ -61,16 +51,11 @@ export const ROLE_DEFAULT_PERMS = {
     "manageInventory",
     "manageFabrics",
     "manageReviews",
-    // ❌ no Fast2SMS (safe)
   ],
 
-  viewer: ["viewReports", "viewAnalytics"],
+  viewer: ["viewReports"],
 
-  influencer: [
-    "manageMedia",
-    "manageReels",
-    "manageInfluencerProgram",
-  ],
+  influencer: ["manageMedia", "manageReels", "manageInfluencerProgram"],
 
   warehouse: ["manageProduction", "manageOrders"],
 };

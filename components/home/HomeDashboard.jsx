@@ -7,12 +7,8 @@ import {
   Palette,
   Calculator,
   Boxes,
-  Truck,
-  Laptop,
   BarChart3,
   Users,
-  ShoppingCart,
-  LineChart,
   FileBarChart,
   Ticket,
   TicketPercent,
@@ -22,10 +18,8 @@ import {
   FileText,
   Headset,
   Clapperboard,
-  Globe,
   RotateCcw,
   Handshake,
-  Footprints,
   Star,
   Scissors,
   Sparkles,
@@ -48,12 +42,10 @@ const DOMAIN_LIST = [
   { id: "production", name: "Production / Tailoring", icon: Ticket, route: "/production" },
   { id: "accounts", name: "Accounts", icon: Calculator, route: "/accounts" },
   { id: "products", name: "Products", icon: Package, route: "/products" },
-  { id: "footwear", name: "Footwear", icon: Footprints, route: "/footwear" },
   { id: "orders", name: "Orders", icon: ClipboardList, route: "/orders" },
   { id: "refunds", name: "Refunds", icon: CreditCard, route: "/refunds" },
   { id: "fast2sms", name: "Fast2SMS", icon: MessageCircle, route: "/fast2sms" },
   { id: "shiprocket", name: "Shiprocket", icon: Package, route: "/shiprocket" },
-  { id: "bluedart", name: "Blue Dart", icon: Truck, route: "/bluedart" },
   { id: "reviews", name: "Reviews", icon: Star, route: "/reviews" },
   { id: "rma", name: "RMA Requests", icon: RotateCcw, route: "/rma" },
   { id: "media", name: "Media", icon: Images, route: "/media" },
@@ -61,17 +53,12 @@ const DOMAIN_LIST = [
   { id: "blogs", name: "Blogs", icon: FileText, route: "/blogs" },
   { id: "inventory", name: "Inventory", icon: Boxes, route: "/inventory" },
   { id: "fabrics", name: "Fabrics", icon: Scissors, route: "/fabrics" },
-  { id: "operations", name: "Operations", icon: Truck, route: "/operations" },
-  { id: "it", name: "IT & Systems", icon: Laptop, route: "/it" },
   { id: "marketing", name: "Marketing", icon: BarChart3, route: "/marketing" },
   { id: "customers", name: "Customers", icon: Users, route: "/customers/dashboard" },
   { id: "support", name: "Customer Support", icon: Headset, route: "/customer-support" },
-  { id: "sales", name: "Sales", icon: ShoppingCart, route: "/sales" },
-  { id: "analytics", name: "Data Analytics", icon: LineChart, route: "/analytics" },
   { id: "reports", name: "Reports", icon: FileBarChart, route: "/reports" },
   { id: "tickets", name: "Tickets / Issues", icon: Ticket, route: "/tickets" },
   { id: "coupons", name: "Coupons", icon: TicketPercent, route: "/coupons" },
-  { id: "wordpress", name: "WordPress Orders", icon: Globe, route: "/wordpress" },
   {
     id: "collaboration",
     name: "Influencer Collaborations",
@@ -86,9 +73,7 @@ const CARD_HINTS = {
   fast2sms: "View WhatsApp confirmation logs and message status",
   rma: "View return and exchange requests",
   collaboration: "Track ongoing influencer collaborations",
-  footwear: "Manage footwear catalog and variants",
   shiprocket: "Manage Shiprocket sync, labels and tracking",
-  bluedart: "Manage Blue Dart shipments, labels and tracking",
   reviews: "Moderate product reviews and ratings",
   fabrics: "Manage fabric records and mappings",
 };
@@ -139,6 +124,7 @@ export default function HomeDashboard() {
               <span className="rounded-full border border-zinc-100 bg-zinc-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
                 OATCLUB Admin
               </span>
+
               <span className="rounded-full bg-zinc-950 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
                 {role}
               </span>
@@ -147,9 +133,10 @@ export default function HomeDashboard() {
             <h1 className="mt-5 max-w-3xl text-4xl font-black leading-[1.04] tracking-tight text-oat-text sm:text-5xl lg:text-6xl">
               Welcome back, {adminName}.
             </h1>
+
             <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-600 sm:text-base">
-              OATCLUB admin control room for orders, drops, operations, customers,
-              and growth. Everything stays quiet, scannable, and ready for action.
+              OATCLUB admin control room for orders, drops, customers, and
+              growth. Everything stays quiet, scannable, and ready for action.
             </p>
           </div>
 
@@ -199,6 +186,7 @@ export default function HomeDashboard() {
                 Choose where you want to work.
               </p>
             </div>
+
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
               {sortedDomains.length} available
             </p>
@@ -238,15 +226,18 @@ export default function HomeDashboard() {
                         <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
                           {String(index + 1).padStart(2, "0")}
                         </span>
+
                         {featured && (
                           <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-700">
                             Featured
                           </span>
                         )}
                       </div>
+
                       <h3 className="mt-1 text-sm font-bold leading-snug text-zinc-950 sm:text-base">
                         {name}
                       </h3>
+
                       <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">
                         {CARD_HINTS[id] || "Open this workspace."}
                       </p>
