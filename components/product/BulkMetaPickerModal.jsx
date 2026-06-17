@@ -275,7 +275,7 @@ export default function BulkMetaPickerModal({
         <MediaPickerModal
           open={mediaOpen}
           onClose={() => setMediaOpen(false)}
-          folder="miray/products"
+          folder="oatclub/products"
           onSelect={(media) => {
             const url = media?.url;
             if (!url) return;
@@ -287,7 +287,7 @@ export default function BulkMetaPickerModal({
           open={mediaMultiOpen}
           onClose={() => setMediaMultiOpen(false)}
           multiple
-          folder="miray/products/gallery"
+          folder="oatclub/products/gallery"
           onSelect={(list) => {
             const urls = Array.isArray(list) ? list.map((x) => x.url) : [];
             setImages(urls.filter(Boolean));

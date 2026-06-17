@@ -466,7 +466,7 @@ export default function ProductSearchPage() {
                   // if thumb empty, keep first image as preview
                   if (!s(draftThumb).trim() && clean[0]) setDraftThumb(clean[0]);
                 }}
-                folder="miray/products"
+                folder="oatclub/products"
                 max={12}
               />
             </div>

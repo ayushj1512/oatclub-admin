@@ -5,30 +5,7 @@ const nextConfig: NextConfig = {
 
   images: {
     remotePatterns: [
-      /* ==============================
-         ✅ MIRAY WORDPRESS DOMAINS
-      ============================== */
 
-      {
-        protocol: "https",
-        hostname: "mirayfashions.com",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "www.mirayfashions.com",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "mirayfashions.in",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "www.mirayfashions.in",
-        pathname: "/**",
-      },
 
       /* ==============================
          ✅ GOOGLE AVATARS

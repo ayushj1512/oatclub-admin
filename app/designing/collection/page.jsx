@@ -453,7 +453,7 @@ export default function DesigningCollectionPage() {
       <MediaPickerModal
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        folder="miray/collections/home"
+        folder="oatclub/collections/home"
         onSelect={(media) => {
           // if editing -> set editImage, else set draftImage
           if (editingId) setEditImage(media);

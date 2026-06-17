@@ -28,7 +28,7 @@ import MediaPickerModal from "@/components/media/MediaPickerModal";
 export default function ProductImagesEditor({
   value = [],
   onChange,
-  folder = "miray/products",
+  folder = "oatclub/products",
   max = 12,
 }) {
  const urls = useMemo(

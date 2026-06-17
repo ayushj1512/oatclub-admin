@@ -101,7 +101,7 @@ const [image, setImage] = useState(null);
 <MediaPickerModal
   open={open}
   onClose={() => setOpen(false)}
-  folder="miray/products"
+  folder="oatclub/products"
   onSelect={(media) => setImage(media)}
 />
 
@@ -112,7 +112,7 @@ const [gallery, setGallery] = useState([]);
   open={open}
   onClose={() => setOpen(false)}
   multiple
-  folder="miray/products/gallery"
+  folder="oatclub/products/gallery"
   onSelect={(mediaList) => setGallery(mediaList)}
 />
 

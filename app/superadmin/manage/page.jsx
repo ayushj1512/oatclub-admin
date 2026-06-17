@@ -34,8 +34,8 @@ import {
 import { useAdminUsersVerifyStore } from "@/store/adminUsersStore";
 import { ROLE_DEFAULT_PERMS, ALL_PERMISSIONS } from "@/config/loginConfig";
 
-const SESSION_KEY = "miray_superadmin_unlocked";
-const ACTIVITY_KEY = "miray_superadmin_user_activity";
+const SESSION_KEY = "oatclub_superadmin_unlocked";
+const ACTIVITY_KEY = "oatclub_superadmin_user_activity";
 
 const cx = (...a) => a.filter(Boolean).join(" ");
 

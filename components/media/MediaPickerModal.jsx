@@ -10,7 +10,7 @@ export default function MediaPickerModal({
   onClose,
   onSelect,
   multiple = false,
-  folder = "miray/media",
+  folder = "oatclub/media",
 }) {
   const [tab, setTab] = useState("select");
 

@@ -590,7 +590,7 @@ export default function MarqueeAdminPage() {
       <MediaPickerModal
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        folder="miray/marquee"
+        folder="oatclub/marquee"
         onSelect={(m) => {
           setPickedMedia(m);
           setPickerOpen(false);
@@ -601,7 +601,7 @@ export default function MarqueeAdminPage() {
       <MediaPickerModal
         open={!!editMediaForId}
         onClose={() => setEditMediaForId(null)}
-        folder="miray/marquee"
+        folder="oatclub/marquee"
         onSelect={(m) => {
           const id = editMediaForId;
           setEditMediaForId(null);

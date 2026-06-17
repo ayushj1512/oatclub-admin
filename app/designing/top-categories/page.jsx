@@ -268,7 +268,7 @@ export default function TopCategoriesPage() {
       <MediaPickerModal
         open={openMedia}
         onClose={() => setOpenMedia(false)}
-        folder="miray/categories"
+        folder="oatclub/categories"
         onSelect={setMedia}
       />
 

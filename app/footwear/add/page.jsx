@@ -164,7 +164,7 @@ export default function AddFootwearPage() {
       <MediaPickerModal
         open={openMedia}
         onClose={() => setOpenMedia(false)}
-        folder="miray/products"
+        folder="oatclub/products"
         onSelect={(media) => {
           setImage(media)
           setOpenMedia(false)

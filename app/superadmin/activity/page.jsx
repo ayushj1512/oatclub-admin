@@ -25,9 +25,9 @@ import {
   ToggleRight,
 } from "lucide-react";
 
-const SESSION_KEY = "miray_superadmin_unlocked";
-const ACTIVITY_KEY = "miray_superadmin_user_activity";
-const PIN_ACTIVITY_KEY = "miray_superadmin_vault_activity";
+const SESSION_KEY = "oatclub_superadmin_unlocked";
+const ACTIVITY_KEY = "oatclub_superadmin_user_activity";
+const PIN_ACTIVITY_KEY = "oatclub_superadmin_vault_activity";
 
 const cx = (...a) => a.filter(Boolean).join(" ");
 

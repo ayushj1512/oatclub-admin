@@ -517,7 +517,7 @@ export default function AddFabricPage() {
       <MediaPickerModal
         open={mediaOpen}
         onClose={() => setMediaOpen(false)}
-        folder="miray/fabrics"
+        folder="oatclub/fabrics"
         onSelect={(media) => {
           setSelectedMedia(media);
           setMediaOpen(false);

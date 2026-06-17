@@ -429,7 +429,7 @@ export default function BannersManagerPage() {
       <MediaPickerModal
         open={openMediaModal}
         onClose={() => setOpenMediaModal(false)}
-        folder="miray/banners"
+        folder="oatclub/banners"
         onSelect={handleMediaSelect}
       />
 

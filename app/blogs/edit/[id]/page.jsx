@@ -566,7 +566,7 @@ export default function BlogEditPage() {
           <MediaPickerModal
             open={imagePickerOpen}
             onClose={() => setImagePickerOpen(false)}
-            folder="miray/blogs"
+            folder="oatclub/blogs"
             onSelect={(media) => {
               set("image", media.url);
               setImagePickerOpen(false);

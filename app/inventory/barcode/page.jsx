@@ -3,24 +3,43 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+
+const BARCODE_PREFIX = "OATCLUB";
 
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
+
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.message || data?.error || "Request failed");
+
+  if (!res.ok) {
+    throw new Error(data?.message || data?.error || "Request failed");
+  }
+
   return data;
 }
 
-// Extract size from your variant.attributes array, where { key: "size", value: "M" }
 function getVariantSize(variant) {
   const attrs = Array.isArray(variant?.attributes) ? variant.attributes : [];
-  const item = attrs.find((a) => String(a?.key || "").toLowerCase() === "size");
-  const size = item?.value ? String(item.value).toUpperCase() : "";
-  return size;
+  const item = attrs.find(
+    (a) => String(a?.key || "").toLowerCase() === "size"
+  );
+
+  return item?.value ? String(item.value).toUpperCase() : "";
+}
+
+function makeBarcodeText({ productId, size, price }) {
+  const pid = String(productId || "").trim();
+  const s = String(size || "").trim().toUpperCase();
+  const pr = String(price || "").trim();
+
+  if (!pid || !s || !pr) return "";
+
+  return `${BARCODE_PREFIX}-${pid}-${s}-${pr}`;
 }
 
 function Card({ title, right, children }) {
@@ -40,51 +59,49 @@ export default function InventoryBarcodePage() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
 
-  // Products
   const [products, setProducts] = useState([]);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
 
-  // Selected product + variant
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedVariantId, setSelectedVariantId] = useState("");
 
-  // Barcode inputs
   const [productId, setProductId] = useState("");
   const [size, setSize] = useState("M");
   const [price, setPrice] = useState("1299");
   const [saveToDb, setSaveToDb] = useState(true);
 
-  // ✅ FIX: Scan states were missing
-  const [scanText, setScanText] = useState("MIRAY-12134-M-1299");
+  const [scanText, setScanText] = useState("OATCLUB-12134-M-1299");
   const [createIfMissing, setCreateIfMissing] = useState(true);
 
-  // Saved created item response
   const [saved, setSaved] = useState(null);
 
-  // Bulk selection for printing
-  const [bulkSelected, setBulkSelected] = useState({}); // { productId: true }
+  const [bulkSelected, setBulkSelected] = useState({});
   const [bulkMode, setBulkMode] = useState(false);
 
   async function loadProducts({ search = "", page = 1 } = {}) {
     const url = new URL(`${API_URL}/api/products`);
     url.searchParams.set("page", String(page));
     url.searchParams.set("limit", "20");
+
     if (search) url.searchParams.set("search", search);
 
-    const data = await fetchJson(url.toString());
-    return data; // { total, page, pages, products }
+    return await fetchJson(url.toString());
   }
 
   useEffect(() => {
     let mounted = true;
+
     (async () => {
       try {
         setLoading(true);
         setErr("");
         setMsg("");
+
         const data = await loadProducts({ search: "", page: 1 });
+
         if (!mounted) return;
+
         setProducts(data.products || []);
         setPage(data.page || 1);
       } catch (e) {
@@ -93,31 +110,50 @@ export default function InventoryBarcodePage() {
         if (mounted) setLoading(false);
       }
     })();
-    return () => (mounted = false);
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const selectedProduct = useMemo(
-    () => products.find((p) => String(p._id) === String(selectedProductId)) || null,
-    [products, selectedProductId]
-  );
+  const selectedProduct = useMemo(() => {
+    return (
+      products.find((p) => String(p._id) === String(selectedProductId)) || null
+    );
+  }, [products, selectedProductId]);
 
   const selectedVariant = useMemo(() => {
     if (!selectedProduct) return null;
-    const variants = Array.isArray(selectedProduct.variants) ? selectedProduct.variants : [];
-    return variants.find((v) => String(v._id) === String(selectedVariantId)) || null;
+
+    const variants = Array.isArray(selectedProduct.variants)
+      ? selectedProduct.variants
+      : [];
+
+    return (
+      variants.find((v) => String(v._id) === String(selectedVariantId)) || null
+    );
   }, [selectedProduct, selectedVariantId]);
 
   useEffect(() => {
     setSaved(null);
     setMsg("");
+
     if (!selectedProduct) return;
 
     setProductId(String(selectedProduct._id));
 
-    const p = selectedProduct.price ?? selectedProduct.salePrice ?? selectedProduct.mrp ?? "";
+    const p =
+      selectedProduct.price ??
+      selectedProduct.salePrice ??
+      selectedProduct.mrp ??
+      "";
+
     setPrice(p ? String(p) : "");
 
-    const variants = Array.isArray(selectedProduct.variants) ? selectedProduct.variants : [];
+    const variants = Array.isArray(selectedProduct.variants)
+      ? selectedProduct.variants
+      : [];
+
     if (variants.length) {
       setSelectedVariantId(String(variants[0]._id));
     } else {
@@ -129,31 +165,34 @@ export default function InventoryBarcodePage() {
   useEffect(() => {
     setSaved(null);
     setMsg("");
-    if (!selectedProduct) return;
-    if (!selectedVariant) return;
+
+    if (!selectedProduct || !selectedVariant) return;
 
     const s = getVariantSize(selectedVariant);
     if (s) setSize(s);
 
-    const vp = selectedVariant.price ?? selectedVariant.salePrice ?? selectedVariant.mrp ?? null;
+    const vp =
+      selectedVariant.price ??
+      selectedVariant.salePrice ??
+      selectedVariant.mrp ??
+      null;
+
     if (vp != null && vp !== "") setPrice(String(vp));
   }, [selectedVariantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const barcodeText = useMemo(() => {
-    const pid = String(productId || "").trim();
-    const s = String(size || "").trim().toUpperCase();
-    const pr = String(price || "").trim();
-    if (!pid || !s || !pr) return "";
-    return `MIRAY-${pid}-${s}-${pr}`;
+    return makeBarcodeText({ productId, size, price });
   }, [productId, size, price]);
 
   const barcodePreviewUrl = useMemo(() => {
     if (!barcodeText) return "";
+
     const qs = new URLSearchParams({
       productId: String(productId).trim(),
       size: String(size).trim().toUpperCase(),
       price: String(price).trim(),
     });
+
     return `${BACKEND_URL}/api/barcodes/generate.png?${qs.toString()}`;
   }, [barcodeText, productId, size, price]);
 
@@ -162,7 +201,9 @@ export default function InventoryBarcodePage() {
       setLoading(true);
       setErr("");
       setMsg("");
+
       const data = await loadProducts({ search: q, page: 1 });
+
       setProducts(data.products || []);
       setPage(data.page || 1);
     } catch (e) {
@@ -176,7 +217,9 @@ export default function InventoryBarcodePage() {
     try {
       setLoading(true);
       setErr("");
+
       const data = await loadProducts({ search: q, page: page + 1 });
+
       setProducts(data.products || []);
       setPage(data.page || page + 1);
     } catch (e) {
@@ -188,10 +231,13 @@ export default function InventoryBarcodePage() {
 
   async function onPrevPage() {
     if (page <= 1) return;
+
     try {
       setLoading(true);
       setErr("");
+
       const data = await loadProducts({ search: q, page: page - 1 });
+
       setProducts(data.products || []);
       setPage(data.page || page - 1);
     } catch (e) {
@@ -207,10 +253,12 @@ export default function InventoryBarcodePage() {
       setMsg("");
       setSaved(null);
 
-      if (!barcodeText) throw new Error("Fill productId, size, price to generate barcode");
+      if (!barcodeText) {
+        throw new Error("Fill productId, size, price to generate barcode");
+      }
 
       if (!saveToDb) {
-        setMsg("✅ Preview ready (not saved).");
+        setMsg("Preview ready. Not saved.");
         return;
       }
 
@@ -219,7 +267,10 @@ export default function InventoryBarcodePage() {
         size: String(size).trim().toUpperCase(),
         price: Number(price),
       };
-      if (!Number.isFinite(payload.price)) throw new Error("Price must be a number");
+
+      if (!Number.isFinite(payload.price)) {
+        throw new Error("Price must be a number");
+      }
 
       const resp = await fetchJson(`${API_URL}/api/barcodes`, {
         method: "POST",
@@ -227,7 +278,7 @@ export default function InventoryBarcodePage() {
       });
 
       setSaved(resp.data);
-      setMsg("✅ Barcode saved to DB.");
+      setMsg("Barcode saved to DB.");
     } catch (e) {
       setErr(e.message);
     }
@@ -237,11 +288,13 @@ export default function InventoryBarcodePage() {
     try {
       setErr("");
       setMsg("");
+
       const resp = await fetchJson(`${API_URL}/api/barcodes/scan`, {
         method: "POST",
         body: JSON.stringify({ barcodeText: scanText, createIfMissing }),
       });
-      setMsg(resp.created ? "✅ Created from scan" : "✅ Found");
+
+      setMsg(resp.created ? "Created from scan" : "Found");
     } catch (e) {
       setErr(e.message);
     }
@@ -250,8 +303,10 @@ export default function InventoryBarcodePage() {
   function toggleBulk(id) {
     setBulkSelected((prev) => {
       const next = { ...prev };
+
       if (next[id]) delete next[id];
       else next[id] = true;
+
       return next;
     });
   }
@@ -273,23 +328,36 @@ export default function InventoryBarcodePage() {
         for (const v of variants) {
           const s = getVariantSize(v) || "M";
           const vp = v.price ?? v.salePrice ?? v.mrp ?? basePrice ?? "";
+
           if (!vp) continue;
 
-          const qs = new URLSearchParams({ productId: pid, size: s, price: String(vp) });
+          const qs = new URLSearchParams({
+            productId: pid,
+            size: s,
+            price: String(vp),
+          });
+
           labels.push({
             key: `${pid}-${v._id}`,
-            text: `MIRAY-${pid}-${s}-${vp}`,
+            text: makeBarcodeText({ productId: pid, size: s, price: vp }),
             url: `${BACKEND_URL}/api/barcodes/generate.png?${qs.toString()}`,
             title: p.title || p.name || pid,
           });
         }
       } else {
         if (!basePrice) continue;
+
         const s = "M";
-        const qs = new URLSearchParams({ productId: pid, size: s, price: String(basePrice) });
+
+        const qs = new URLSearchParams({
+          productId: pid,
+          size: s,
+          price: String(basePrice),
+        });
+
         labels.push({
           key: `${pid}`,
-          text: `MIRAY-${pid}-${s}-${basePrice}`,
+          text: makeBarcodeText({ productId: pid, size: s, price: basePrice }),
           url: `${BACKEND_URL}/api/barcodes/generate.png?${qs.toString()}`,
           title: p.title || p.name || pid,
         });
@@ -309,17 +377,27 @@ export default function InventoryBarcodePage() {
         <div>
           <div style={styles.h1}>Inventory → Barcode</div>
           <div style={styles.sub}>
-            Generate barcodes for products from <code style={styles.code}>/api/products</code>
+            Generate OATCLUB barcodes for products from{" "}
+            <code style={styles.code}>/api/products</code>
           </div>
         </div>
 
         <div style={styles.topActions}>
           <label style={styles.checkboxRow}>
-            <input type="checkbox" checked={bulkMode} onChange={(e) => setBulkMode(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={bulkMode}
+              onChange={(e) => setBulkMode(e.target.checked)}
+            />
             Bulk Mode
           </label>
+
           {bulkMode ? (
-            <button style={styles.btnPrimary} onClick={printBulk} disabled={bulkLabels.length === 0}>
+            <button
+              style={styles.btnPrimary}
+              onClick={printBulk}
+              disabled={bulkLabels.length === 0}
+            >
               Print Selected
             </button>
           ) : null}
@@ -327,7 +405,7 @@ export default function InventoryBarcodePage() {
       </div>
 
       {err ? <div style={styles.error}>⚠️ {err}</div> : null}
-      {msg ? <div style={styles.success}>✨ {msg}</div> : null}
+      {msg ? <div style={styles.success}>{msg}</div> : null}
 
       <Card
         title="Products"
@@ -339,9 +417,15 @@ export default function InventoryBarcodePage() {
               placeholder="Search products..."
               style={styles.input}
             />
-            <button style={styles.btn} onClick={onSearch}>Search</button>
-            <button style={styles.btn} onClick={onPrevPage} disabled={page <= 1}>Prev</button>
-            <button style={styles.btn} onClick={onNextPage}>Next</button>
+            <button style={styles.btn} onClick={onSearch}>
+              Search
+            </button>
+            <button style={styles.btn} onClick={onPrevPage} disabled={page <= 1}>
+              Prev
+            </button>
+            <button style={styles.btn} onClick={onNextPage}>
+              Next
+            </button>
           </div>
         }
       >
@@ -357,9 +441,17 @@ export default function InventoryBarcodePage() {
                 <th style={styles.th}>Pick</th>
               </tr>
             </thead>
+
             <tbody>
               {loading ? (
-                <tr><td colSpan={bulkMode ? 6 : 5} style={{ padding: 12, opacity: 0.7 }}>Loading…</td></tr>
+                <tr>
+                  <td
+                    colSpan={bulkMode ? 6 : 5}
+                    style={{ padding: 12, opacity: 0.7 }}
+                  >
+                    Loading…
+                  </td>
+                </tr>
               ) : (
                 products.map((p) => (
                   <tr key={p._id} style={styles.tr}>
@@ -372,13 +464,26 @@ export default function InventoryBarcodePage() {
                         />
                       </td>
                     ) : null}
+
                     <td style={styles.td}>
-                      <div style={{ fontWeight: 800 }}>{p.title || p.name || "-"}</div>
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>{String(p._id)}</div>
+                      <div style={{ fontWeight: 800 }}>
+                        {p.title || p.name || "-"}
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.7 }}>
+                        {String(p._id)}
+                      </div>
                     </td>
-                    <td style={styles.td}>{p.productType || (p.variants?.length ? "variable" : "simple")}</td>
-                    <td style={styles.td}>₹{p.price ?? p.salePrice ?? p.mrp ?? "-"}</td>
+
+                    <td style={styles.td}>
+                      {p.productType || (p.variants?.length ? "variable" : "simple")}
+                    </td>
+
+                    <td style={styles.td}>
+                      ₹{p.price ?? p.salePrice ?? p.mrp ?? "-"}
+                    </td>
+
                     <td style={styles.td}>{p.sku || "-"}</td>
+
                     <td style={styles.td}>
                       <button
                         style={styles.btnSmall}
@@ -394,8 +499,16 @@ export default function InventoryBarcodePage() {
                   </tr>
                 ))
               )}
+
               {!loading && products.length === 0 ? (
-                <tr><td colSpan={bulkMode ? 6 : 5} style={{ padding: 12, opacity: 0.7 }}>No products.</td></tr>
+                <tr>
+                  <td
+                    colSpan={bulkMode ? 6 : 5}
+                    style={{ padding: 12, opacity: 0.7 }}
+                  >
+                    No products.
+                  </td>
+                </tr>
               ) : null}
             </tbody>
           </table>
@@ -405,10 +518,16 @@ export default function InventoryBarcodePage() {
       {bulkMode ? (
         <Card
           title="Bulk Print Preview"
-          right={<span style={{ fontSize: 12, opacity: 0.7 }}>Selected: {bulkLabels.length} labels</span>}
+          right={
+            <span style={{ fontSize: 12, opacity: 0.7 }}>
+              Selected: {bulkLabels.length} labels
+            </span>
+          }
         >
           {bulkLabels.length === 0 ? (
-            <div style={styles.emptyBox}>Select some products to generate printable labels.</div>
+            <div style={styles.emptyBox}>
+              Select some products to generate printable labels.
+            </div>
           ) : (
             <div style={styles.bulkFlex}>
               {bulkLabels.map((x) => (
@@ -423,7 +542,10 @@ export default function InventoryBarcodePage() {
         </Card>
       ) : (
         <div style={styles.flex2}>
-          <Card title="Generate Barcode for Product" right="Saves to BarcodeItem collection (optional)">
+          <Card
+            title="Generate Barcode for Product"
+            right="Saves to BarcodeItem collection"
+          >
             <div style={styles.col}>
               <label style={styles.label}>
                 <span style={styles.labelTxt}>Selected Product</span>
@@ -441,7 +563,9 @@ export default function InventoryBarcodePage() {
                 </select>
               </label>
 
-              {selectedProduct && Array.isArray(selectedProduct.variants) && selectedProduct.variants.length > 0 ? (
+              {selectedProduct &&
+              Array.isArray(selectedProduct.variants) &&
+              selectedProduct.variants.length > 0 ? (
                 <label style={styles.label}>
                   <span style={styles.labelTxt}>Variant</span>
                   <select
@@ -451,7 +575,13 @@ export default function InventoryBarcodePage() {
                   >
                     {selectedProduct.variants.map((v) => {
                       const s = getVariantSize(v) || "M";
-                      const vp = v.price ?? v.salePrice ?? v.mrp ?? selectedProduct.price ?? "";
+                      const vp =
+                        v.price ??
+                        v.salePrice ??
+                        v.mrp ??
+                        selectedProduct.price ??
+                        "";
+
                       return (
                         <option key={v._id} value={v._id}>
                           {v.sku ? `${v.sku} — ` : ""}Size {s} — ₹{vp}
@@ -464,30 +594,52 @@ export default function InventoryBarcodePage() {
 
               <div style={styles.rowWrap}>
                 <label style={{ ...styles.label, minWidth: 220, flex: 1 }}>
-                  <span style={styles.labelTxt}>Product ID (encoded)</span>
-                  <input value={productId} onChange={(e) => setProductId(e.target.value)} style={styles.input} />
+                  <span style={styles.labelTxt}>Product ID</span>
+                  <input
+                    value={productId}
+                    onChange={(e) => setProductId(e.target.value)}
+                    style={styles.input}
+                  />
                 </label>
+
                 <label style={{ ...styles.label, minWidth: 140 }}>
                   <span style={styles.labelTxt}>Size</span>
-                  <input value={size} onChange={(e) => setSize(e.target.value.toUpperCase())} style={styles.input} />
+                  <input
+                    value={size}
+                    onChange={(e) => setSize(e.target.value.toUpperCase())}
+                    style={styles.input}
+                  />
                 </label>
+
                 <label style={{ ...styles.label, minWidth: 160 }}>
                   <span style={styles.labelTxt}>Price</span>
-                  <input value={price} onChange={(e) => setPrice(e.target.value)} style={styles.input} />
+                  <input
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    style={styles.input}
+                  />
                 </label>
               </div>
 
               <div style={styles.rowWrap}>
                 <label style={styles.checkboxRow}>
-                  <input type="checkbox" checked={saveToDb} onChange={(e) => setSaveToDb(e.target.checked)} />
+                  <input
+                    type="checkbox"
+                    checked={saveToDb}
+                    onChange={(e) => setSaveToDb(e.target.checked)}
+                  />
                   Save to DB
                 </label>
+
                 <button style={styles.btnPrimary} onClick={onSaveBarcode}>
                   {saveToDb ? "Generate & Save" : "Generate Preview"}
                 </button>
+
                 <button
                   style={styles.btn}
-                  onClick={() => barcodePreviewUrl && window.open(barcodePreviewUrl, "_blank")}
+                  onClick={() =>
+                    barcodePreviewUrl && window.open(barcodePreviewUrl, "_blank")
+                  }
                   disabled={!barcodePreviewUrl}
                 >
                   Open PNG
@@ -495,19 +647,28 @@ export default function InventoryBarcodePage() {
               </div>
 
               <div style={{ fontSize: 12, opacity: 0.75 }}>
-                Barcode text: <span style={styles.mono}>{barcodeText || "—"}</span>
+                Barcode text:{" "}
+                <span style={styles.mono}>{barcodeText || "—"}</span>
               </div>
 
               {barcodePreviewUrl ? (
-                <img src={barcodePreviewUrl} alt="preview" style={styles.previewImg} />
+                <img
+                  src={barcodePreviewUrl}
+                  alt="preview"
+                  style={styles.previewImg}
+                />
               ) : (
-                <div style={styles.emptyBox}>Select a product (and variant) to preview barcode.</div>
+                <div style={styles.emptyBox}>
+                  Select a product and variant to preview barcode.
+                </div>
               )}
 
               {saved ? (
                 <div style={styles.savedBox}>
                   <div style={{ fontWeight: 900 }}>Saved: {saved.barcode}</div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>ID: {saved._id}</div>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>
+                    ID: {saved._id}
+                  </div>
                   <img
                     src={`${BACKEND_URL}/api/barcodes/${saved._id}/barcode.png`}
                     alt="saved"
@@ -518,11 +679,15 @@ export default function InventoryBarcodePage() {
             </div>
           </Card>
 
-          <Card title="Quick Scan / Lookup" right="Paste scanned code like MIRAY-...">
+          <Card title="Quick Scan / Lookup" right="Paste scanned OATCLUB code">
             <div style={styles.col}>
               <label style={styles.label}>
                 <span style={styles.labelTxt}>Scanned Barcode Text</span>
-                <input value={scanText} onChange={(e) => setScanText(e.target.value)} style={styles.input} />
+                <input
+                  value={scanText}
+                  onChange={(e) => setScanText(e.target.value)}
+                  style={styles.input}
+                />
               </label>
 
               <div style={styles.rowWrap}>
@@ -534,6 +699,7 @@ export default function InventoryBarcodePage() {
                   />
                   Auto-create if missing
                 </label>
+
                 <button style={styles.btnPrimary} onClick={onScanLookup}>
                   Lookup
                 </button>
@@ -577,35 +743,125 @@ const styles = {
   sub: { fontSize: 13, opacity: 0.75 },
   code: { background: "#f3f3f3", padding: "2px 6px", borderRadius: 8 },
 
-  card: { background: "white", border: "1px solid #eee", borderRadius: 16, padding: 14, marginBottom: 12 },
-  cardHead: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 10 },
+  card: {
+    background: "white",
+    border: "1px solid #eee",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+  },
+  cardHead: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "center",
+    marginBottom: 10,
+  },
 
   rowWrap: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" },
   col: { display: "flex", flexDirection: "column", gap: 10 },
 
-  input: { padding: 10, borderRadius: 12, border: "1px solid #e5e5e5", outline: "none", minWidth: 220 },
-  btn: { padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd", background: "white", cursor: "pointer" },
-  btnPrimary: { padding: "10px 14px", borderRadius: 12, border: "1px solid #111", background: "#111", color: "white", cursor: "pointer" },
-  btnSmall: { padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "white", cursor: "pointer" },
+  input: {
+    padding: 10,
+    borderRadius: 12,
+    border: "1px solid #e5e5e5",
+    outline: "none",
+    minWidth: 220,
+  },
+  btn: {
+    padding: "10px 14px",
+    borderRadius: 12,
+    border: "1px solid #ddd",
+    background: "white",
+    cursor: "pointer",
+  },
+  btnPrimary: {
+    padding: "10px 14px",
+    borderRadius: 12,
+    border: "1px solid #111",
+    background: "#111",
+    color: "white",
+    cursor: "pointer",
+  },
+  btnSmall: {
+    padding: "8px 10px",
+    borderRadius: 10,
+    border: "1px solid #ddd",
+    background: "white",
+    cursor: "pointer",
+  },
 
-  error: { padding: 10, borderRadius: 12, border: "1px solid #ffd6d6", background: "#fff5f5", color: "#9b1c1c", marginBottom: 10 },
-  success: { padding: 10, borderRadius: 12, border: "1px solid #d1fae5", background: "#ecfdf5", color: "#065f46", marginBottom: 10 },
+  error: {
+    padding: 10,
+    borderRadius: 12,
+    border: "1px solid #ffd6d6",
+    background: "#fff5f5",
+    color: "#9b1c1c",
+    marginBottom: 10,
+  },
+  success: {
+    padding: 10,
+    borderRadius: 12,
+    border: "1px solid #d1fae5",
+    background: "#ecfdf5",
+    color: "#065f46",
+    marginBottom: 10,
+  },
 
   tableWrap: { overflowX: "auto", border: "1px solid #eee", borderRadius: 12 },
   table: { width: "100%", borderCollapse: "collapse", background: "white" },
-  th: { textAlign: "left", fontSize: 12, opacity: 0.7, padding: 10, borderBottom: "1px solid #eee", whiteSpace: "nowrap" },
+  th: {
+    textAlign: "left",
+    fontSize: 12,
+    opacity: 0.7,
+    padding: 10,
+    borderBottom: "1px solid #eee",
+    whiteSpace: "nowrap",
+  },
   tr: { borderBottom: "1px solid #f2f2f2" },
   td: { padding: 10, fontSize: 13, verticalAlign: "top" },
 
   flex2: { display: "flex", gap: 12, flexWrap: "wrap" },
 
-  checkboxRow: { display: "flex", gap: 8, alignItems: "center", fontSize: 13, opacity: 0.85 },
+  checkboxRow: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+    fontSize: 13,
+    opacity: 0.85,
+  },
 
-  mono: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12 },
-  previewImg: { width: "100%", border: "1px solid #eee", borderRadius: 12, padding: 10, background: "white" },
-  emptyBox: { padding: 12, borderRadius: 12, border: "1px dashed #ddd", opacity: 0.75 },
-  savedBox: { marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid #eee", background: "#fcfcfc" },
+  mono: {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontSize: 12,
+  },
+  previewImg: {
+    width: "100%",
+    border: "1px solid #eee",
+    borderRadius: 12,
+    padding: 10,
+    background: "white",
+  },
+  emptyBox: {
+    padding: 12,
+    borderRadius: 12,
+    border: "1px dashed #ddd",
+    opacity: 0.75,
+  },
+  savedBox: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 12,
+    border: "1px solid #eee",
+    background: "#fcfcfc",
+  },
 
   bulkFlex: { display: "flex", flexWrap: "wrap", gap: 10 },
-  bulkCard: { width: 260, border: "1px dashed #ddd", borderRadius: 12, padding: 10, background: "white" },
+  bulkCard: {
+    width: 260,
+    border: "1px dashed #ddd",
+    borderRadius: 12,
+    padding: 10,
+    background: "white",
+  },
 };

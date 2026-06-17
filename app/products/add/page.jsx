@@ -553,7 +553,7 @@ export default function AddProductPage() {
 
           <ProductImagesEditor
             value={form.images}
-            folder="miray/products"
+            folder="oatclub/products"
             onChange={(urls) => setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))}
           />
         </div>

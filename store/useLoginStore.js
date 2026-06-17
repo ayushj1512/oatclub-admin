@@ -46,7 +46,7 @@ const useLoginStore = create(
           localStorage.removeItem(TOKEN_KEY_LEGACY);
 
           // ✅ clear zustand persist session
-          localStorage.removeItem("miray-admin-session");
+          localStorage.removeItem("oatclub-admin-session");
         }
 
         set({
@@ -63,7 +63,7 @@ const useLoginStore = create(
         if (typeof window !== "undefined") {
           localStorage.removeItem(TOKEN_KEY_PRIMARY);
           localStorage.removeItem(TOKEN_KEY_LEGACY);
-          localStorage.removeItem("miray-admin-session");
+          localStorage.removeItem("oatclub-admin-session");
         }
 
         set({
@@ -183,7 +183,7 @@ const useLoginStore = create(
       },
     }),
     {
-      name: "miray-admin-session",
+      name: "oatclub-admin-session",
 
       storage: createJSONStorage(() => localStorage),
 

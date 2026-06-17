@@ -490,7 +490,7 @@ export default function AddFabricInventoryPage() {
       <MediaPickerModal
         open={mediaOpen}
         onClose={() => setMediaOpen(false)}
-        folder="miray/fabric-inventory"
+        folder="oatclub/fabric-inventory"
         onSelect={(media) => {
           handleChange("image", media);
           setMediaOpen(false);

@@ -14,27 +14,25 @@ export const SELLER = {
   brand: "OATCLUB",
 
   // Assets
-  logo: "",
-  signature: "",
+logo: "http://res.cloudinary.com/dpsvrt4sd/image/upload/v1781123546/odb5ckquouajjzfbxin0.webp",  signature: "",
 
   // Address & Contact
-  address:
-    "TA-97-A, Gali No.-2, Tuglakabad Extension, New Delhi - 110019",
+  address: "REGISTERED BUSINESS ADDRESS AS PER GST",
   city: "New Delhi",
   state: "Delhi",
   country: "India",
-  pincode: "110019",
+  pincode: "",
 
-  phone: "(+91) 7303491206",
-  email: "support@oatclub.com",
-  website: "https://oatclub.com",
+  phone: "(+91) 7217649990",
+  email: "hey@oatclub.in",
+  website: "https://www.oatclub.in/",
 
-  // ✅ TAX IDENTIFIERS
-  gstin: "07ACCFM1594P1ZO",
-  pan: "ACCFM1594P",
+  // TAX IDENTIFIERS
+  gstin: "07BAGPN9548F1ZC",
+  pan: "BAGPN9548F",
 
   // Tax & Currency
-  defaultGst: 5, // GST slab (5 / 12 / 18)
+  defaultGst: 5,
   currency: "INR",
 };
 
@@ -92,12 +90,12 @@ export const FORMATTERS = {
 export const GST_HELPERS = {
   getTaxableFromInclusive(price, gstRate) {
     if (!price || !gstRate) return Number(price || 0);
-    return +(price * 100 / (100 + gstRate)).toFixed(2);
+    return +((price * 100) / (100 + gstRate)).toFixed(2);
   },
 
   getGstFromInclusive(price, gstRate) {
     if (!price || !gstRate) return 0;
-    const taxable = price * 100 / (100 + gstRate);
+    const taxable = (price * 100) / (100 + gstRate);
     return +(price - taxable).toFixed(2);
   },
 };

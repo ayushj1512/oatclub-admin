@@ -75,8 +75,8 @@ export const toAbsoluteUrl = (url) => {
   if (!u) return "";
   if (u.startsWith("http://") || u.startsWith("https://")) return u;
   if (u.startsWith("//")) return `https:${u}`;
-  if (u.startsWith("/")) return `https://mirayfashions.in${u}`;
-  return `https://mirayfashions.in/${u}`;
+  if (u.startsWith("/")) return `https://oatclub.in${u}`;
+  return `https://oatclub.in/${u}`;
 };
 
 export const proxifyImage = (url) => {

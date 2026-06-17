@@ -514,7 +514,7 @@ export default function BulkProductSetupModal({
       <MediaPickerModal
         open={thumbOpen}
         onClose={() => setThumbOpen(false)}
-        folder="miray/products"
+        folder="oatclub/products"
         onSelect={(media) => {
           setThumbnail(media);
           setThumbOpen(false);
@@ -525,7 +525,7 @@ export default function BulkProductSetupModal({
         open={galleryOpen}
         onClose={() => setGalleryOpen(false)}
         multiple
-        folder="miray/products/gallery"
+        folder="oatclub/products/gallery"
         onSelect={(list) => {
           setGallery(list || []);
           setGalleryOpen(false);

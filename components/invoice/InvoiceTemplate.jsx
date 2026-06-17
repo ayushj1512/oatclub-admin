@@ -6,7 +6,7 @@ export default function InvoiceTemplate({ data }) {
   if (!data) return null;
 
   const {
-    seller,
+    seller = {},
     billing = {},
     shipping = {},
     courier = {},
@@ -18,7 +18,10 @@ export default function InvoiceTemplate({ data }) {
     payment = {},
   } = data;
 
-  /* ================= SAFE TAX CALC ================= */
+  const logo =
+    seller.logo ||
+    "http://res.cloudinary.com/dpsvrt4sd/image/upload/v1781123546/odb5ckquouajjzfbxin0.webp";
+
   const grandTotal =
     totals.grandTotal !== undefined
       ? Number(totals.grandTotal)
@@ -27,7 +30,6 @@ export default function InvoiceTemplate({ data }) {
   let taxableAmount = Number(totals.taxable || 0);
   let totalTax = Number(totals.tax || 0);
 
-  // 👉 If tax is 0, assume price is INCLUSIVE of 5% GST
   if (totalTax === 0 && grandTotal > 0) {
     taxableAmount = +(grandTotal / 1.05).toFixed(2);
     totalTax = +(grandTotal - taxableAmount).toFixed(2);
@@ -35,13 +37,11 @@ export default function InvoiceTemplate({ data }) {
 
   const orderDiscount = Number(totals.discount || 0);
 
-  // ✅ Payable: prefer backend finalPayable, else grandTotal - discount
   const payable =
     totals.finalPayable !== undefined
       ? Number(totals.finalPayable)
       : grandTotal - orderDiscount;
 
-  // ✅ for proportional discount split across items
   const baseTotal = items.reduce(
     (s, it) => s + Number(it.priceIncl || it.price || 0) * Number(it.qty || 0),
     0
@@ -56,147 +56,177 @@ export default function InvoiceTemplate({ data }) {
         "62105000"
     ).trim() || "62105000";
 
+  const getAddress = (addr = {}) => ({
+    fullName: addr.fullName || "-",
+    line1: addr.line1 || "-",
+    line2: addr.line2 || "",
+    city: addr.city || "-",
+    state: addr.state || "",
+    pincode: addr.pincode || "-",
+    phone: addr.phone || "",
+    email: addr.email || "",
+  });
+
+  const bill = getAddress(billing);
+  const ship = getAddress({
+    ...billing,
+    ...shipping,
+    fullName: shipping.fullName || billing.fullName,
+    line1: shipping.line1 || billing.line1,
+    line2: shipping.line2 || billing.line2,
+    city: shipping.city || billing.city,
+    state: shipping.state || billing.state,
+    pincode: shipping.pincode || billing.pincode,
+  });
+
   return (
     <div
       id="invoice-root"
-      className="p-10 text-sm bg-white text-black max-w-4xl mx-auto"
+      className="mx-auto bg-white text-black uppercase"
+      style={{
+        width: "210mm",
+        minHeight: "297mm",
+        padding: 26,
+        fontFamily: "Lato, Arial, sans-serif",
+      }}
     >
-      {/* ================= LETTERHEAD ================= */}
-      <div className="grid grid-cols-2 gap-6 items-start">
-        <div className="pr-4">
-          {seller?.logo && (
+      {/* HERO */}
+      <div
+        className="bg-black text-white"
+        style={{ margin: "-26px -26px 22px", padding: 20 }}
+      >
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center">
+          <div className="text-[10px] font-black text-zinc-300">
+            ORDER #{orderNumber || "-"}
+          </div>
+
+          <div className="text-center">
             <img
-              src={seller.logo}
-              alt={seller.name}
-              className="h-16 mb-2 object-contain"
+              src={logo}
+              alt={seller.name || "OATCLUB"}
+              className="mx-auto block w-[150px] object-contain"
             />
-          )}
-
-          <p className="font-semibold mb-1">Dispatch & Return Address</p>
-          <p className="font-bold">{seller.name}</p>
-          <p className="text-xs leading-snug">{seller.address}</p>
-
-          <div className="mt-2 space-y-[2px] text-xs">
-            <p>
-              <span className="font-semibold">GSTIN:</span> {seller.gstin}
-            </p>
-            <p>
-              <span className="font-semibold">PAN:</span> {seller.pan}
-            </p>
-          </div>
-
-          <div className="mt-2 text-xs space-y-[2px]">
-            <p>
-              <span className="font-semibold">Email:</span> {seller.email}
-            </p>
-            <p>
-              <span className="font-semibold">Phone:</span> {seller.phone}
-            </p>
-          </div>
-        </div>
-
-        <div className="text-right">
-          <div className=" p-3 rounded mb-3">
-            <p className="font-bold text-lg tracking-wide mb-1">TAX INVOICE</p>
-            <p className="text-xs">
-              Invoice No:{" "}
-              <span className="font-medium">{invoiceNumber || "-"}</span>
-            </p>
-            <p className="text-xs">Order No: #{orderNumber}</p>
-            <p className="text-xs">
-              Invoice Date: {FORMATTERS.date(orderDate)}
-            </p>
-          </div>
-
-          {(courier?.awb || courier?.name) && (
-            <div className=" p-3 rounded text-xs">
-              <p className="font-semibold mb-1">Courier Details</p>
-              {courier.name && (
-                <p>
-                  Courier: <span className="font-medium">{courier.name}</span>
-                </p>
-              )}
-              {courier.awb && (
-                <p className="mt-[2px]">
-                  AWB No: <span className="font-medium">{courier.awb}</span>
-                </p>
-              )}
+            <div className="mt-[5px] text-[9px] font-black tracking-[3px] text-zinc-300">
+              OWN ALL TREND
             </div>
-          )}
+          </div>
+
+          <div className="text-right text-[10px] font-black text-zinc-300">
+            {FORMATTERS.date(orderDate)}
+          </div>
+        </div>
+
+        <div className="my-[18px] h-px bg-zinc-700" />
+
+        <div className="text-center text-[11px] font-black tracking-[2px]">
+          TAX INVOICE / ORDER RECEIPT
         </div>
       </div>
 
-      <div className="border-b mt-2 mb-2" />
-
-      <div className="grid grid-cols-2 gap-8 mb-4 text-[11px] leading-snug">
-        {/* BILL TO */}
-        <div>
-          <p className="font-semibold mb-[2px] text-xs">Bill To</p>
-          <p>{billing.fullName || "-"}</p>
-          <p>{billing.line1 || "-"}</p>
-          {billing.line2 ? <p>{billing.line2}</p> : null}
-          <p>
-            {(billing.city || "-")} – {(billing.pincode || "-")}
-          </p>
-          {billing.state ? <p>{billing.state}</p> : null}
-          {billing.phone ? <p>Phone: {billing.phone}</p> : null}
-          {billing.email ? <p>Email: {billing.email}</p> : null}
+      {/* META */}
+      <div className="grid grid-cols-4 gap-[10px] mt-4">
+        <div className="border border-zinc-200 bg-zinc-50 p-[10px]">
+          <span className="block text-[9px] tracking-[0.8px] text-zinc-500 mb-1">
+            Order
+          </span>
+          <span className="text-[11px] font-black">{orderNumber || "-"}</span>
         </div>
 
-        {/* SHIP TO */}
-        <div>
-          <p className="font-semibold mb-[2px] text-xs">Ship To</p>
+        <div className="border border-zinc-200 bg-zinc-50 p-[10px]">
+          <span className="block text-[9px] tracking-[0.8px] text-zinc-500 mb-1">
+            Payment
+          </span>
+          <span className="text-[11px] font-black">
+            {payment?.status || payment?.title || "-"}
+          </span>
+        </div>
 
-          <p>{shipping.fullName || billing.fullName || "-"}</p>
-          <p>{shipping.line1 || billing.line1 || "-"}</p>
-          {(shipping.line2 || billing.line2) ? (
-            <p>{shipping.line2 || billing.line2}</p>
-          ) : null}
+        <div className="border border-zinc-200 bg-zinc-50 p-[10px]">
+          <span className="block text-[9px] tracking-[0.8px] text-zinc-500 mb-1">
+            Method
+          </span>
+          <span className="text-[11px] font-black">
+            {payment?.title || "-"}
+          </span>
+        </div>
 
-          <p>
-            {(shipping.city || billing.city || "-")} –{" "}
-            {(shipping.pincode || billing.pincode || "-")}
-          </p>
-
-          {(shipping.state || billing.state) ? (
-            <p>{shipping.state || billing.state}</p>
-          ) : null}
+        <div className="border border-zinc-200 bg-zinc-50 p-[10px]">
+          <span className="block text-[9px] tracking-[0.8px] text-zinc-500 mb-1">
+            Invoice
+          </span>
+          <span className="text-[11px] font-black">
+            {invoiceNumber || "-"}
+          </span>
         </div>
       </div>
 
-      <p className="text-[11px] mb-4">
-        <span className="font-semibold">Payment Mode:</span>{" "}
-        {payment?.title || "-"}
-        {orderDiscount > 0 && (
-          <>
-            {"  |  "}
-            <span className="font-semibold">
-              Discount {totals.couponCode ? `(${totals.couponCode})` : ""}:
-            </span>{" "}
-            -{FORMATTERS.currency(orderDiscount)}
-          </>
-        )}
-      </p>
+      {/* CUSTOMER */}
+      <div className="border border-zinc-200 p-[14px] my-[18px]">
+        <div
+          className="mb-2 text-[10px] font-black tracking-[0.6px]"
+          style={{ fontFamily: "Nunito Sans, Arial, sans-serif" }}
+        >
+          Customer / Shipping Details
+        </div>
 
-      {/* ================= ITEMS ================= */}
-      <table className="w-full text-[11px] mb-5 border-collapse">
+        <div className="grid grid-cols-2 gap-8 text-[10px] leading-[1.7] text-zinc-500">
+          <div>
+            <p className="font-black text-black mb-1">Bill To</p>
+            <p>{bill.fullName}</p>
+            <p>{bill.line1}</p>
+            {bill.line2 ? <p>{bill.line2}</p> : null}
+            <p>
+              {bill.city}, {bill.state} - {bill.pincode}
+            </p>
+            {bill.phone ? <p>Phone : {bill.phone}</p> : null}
+            {bill.email ? <p>Email : {bill.email}</p> : null}
+          </div>
+
+          <div>
+            <p className="font-black text-black mb-1">Ship To</p>
+            <p>{ship.fullName}</p>
+            <p>{ship.line1}</p>
+            {ship.line2 ? <p>{ship.line2}</p> : null}
+            <p>
+              {ship.city}, {ship.state} - {ship.pincode}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ITEMS */}
+      <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b text-left">
-            <th className="py-1 w-[5%]">#</th>
-            <th className="py-1 w-[34%]">Item</th>
-            <th className="py-1 w-[10%]">Size</th>
-            <th className="py-1 w-[12%]">HSN</th>
-            <th className="py-1 w-[8%] text-center">Qty</th>
-            <th className="py-1 w-[12%] text-right">Price</th>
-            <th className="py-1 w-[9%] text-right">Disc.</th>
-            <th className="py-1 w-[10%] text-right">GST</th>
-            <th className="py-1 w-[15%] text-right">Total</th>
+          <tr>
+            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-left text-[10px]">
+              Product
+            </th>
+            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-left text-[10px]">
+              HSN
+            </th>
+            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-left text-[10px]">
+              Size
+            </th>
+            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
+              Qty
+            </th>
+            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
+              Price
+            </th>
+            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
+              Disc.
+            </th>
+            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
+              GST
+            </th>
+            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
+              Total
+            </th>
           </tr>
         </thead>
 
         <tbody>
           {items.map((it, idx) => {
-            const size = it.size || it.selectedSize || "-";
             const unit = Number(it.priceIncl || it.price || 0);
             const qty = Number(it.qty || 0);
             const sub = +(unit * qty).toFixed(2);
@@ -214,45 +244,54 @@ export default function InvoiceTemplate({ data }) {
                 : idx === items.length - 1
                 ? +(
                     orderDiscount -
-                    items.slice(0, idx).reduce((s, x, j) => {
+                    items.slice(0, idx).reduce((sum, x) => {
                       const u = Number(x.priceIncl || x.price || 0);
                       const q = Number(x.qty || 0);
-                      const ss = u * q;
-                      return s + +((orderDiscount * ss) / baseTotal).toFixed(2);
+                      return sum + +((orderDiscount * (u * q)) / baseTotal).toFixed(2);
                     }, 0)
                   ).toFixed(2)
                 : +((orderDiscount * sub) / baseTotal).toFixed(2);
 
             const total = +(sub - allocatedDisc).toFixed(2);
-            const hsn = getHsn(it);
 
             return (
-              <tr key={`${it.sr ?? idx + 1}-main`} className="border-b align-top">
-                <td className="py-1">{it.sr ?? idx + 1}</td>
-
-                <td className="py-1 font-medium leading-snug">
-                  {(it.name || "").length > 100
-                    ? (it.name || "").slice(0, 45) + "…"
-                    : it.name || "-"}
+              <tr key={idx}>
+                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-[11px]">
+                  <div className="font-black mb-[3px]">
+                    {it.name || it.title || "-"}
+                  </div>
+                  <div className="text-[9px] text-zinc-500">
+                    {it.sku || it.productCode || ""}
+                  </div>
                 </td>
 
-                <td className="py-1 whitespace-nowrap">{size}</td>
-                <td className="py-1 whitespace-nowrap">{hsn}</td>
-                <td className="py-1 text-center">{qty}</td>
+                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-[11px]">
+                  {getHsn(it)}
+                </td>
 
-                <td className="py-1 text-right whitespace-nowrap">
+                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-[11px]">
+                  {it.size || it.selectedSize || "-"}
+                </td>
+
+                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
+                  {qty}
+                </td>
+
+                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
                   {FORMATTERS.currency(unit)}
                 </td>
 
-                <td className="py-1 text-right whitespace-nowrap">
+                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
                   {allocatedDisc > 0
                     ? `-${FORMATTERS.currency(allocatedDisc)}`
                     : "-"}
                 </td>
 
-                <td className="py-1 text-right whitespace-nowrap">{it.gstRate}%</td>
+                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
+                  {it.gstRate || 5}%
+                </td>
 
-                <td className="py-1 text-right whitespace-nowrap">
+                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px] font-black">
                   {FORMATTERS.currency(total)}
                 </td>
               </tr>
@@ -261,66 +300,96 @@ export default function InvoiceTemplate({ data }) {
         </tbody>
       </table>
 
-      {/* ================= TOTALS + BARCODE ================= */}
-      <div className="flex justify-between items-start mb-6 text-[11px]">
-        {courier?.awb && (
-          <div className="leading-tight">
-            <img
-              src={`https://barcode.tec-it.com/barcode.ashx?data=${courier.awb}&code=Code128&dpi=300`}
-              alt="AWB Barcode"
-              className="h-16 w-60 mb-1"
-            />
-          </div>
-        )}
+      {/* SUMMARY */}
+      <div className="mt-4 flex justify-between items-start">
+        <div>
+          {courier?.awb ? (
+            <>
+              <img
+                src={`https://barcode.tec-it.com/barcode.ashx?data=${courier.awb}&code=Code128&dpi=300`}
+                alt="AWB Barcode"
+                className="h-16 w-60 object-contain"
+              />
+              <p className="text-[10px] text-zinc-500">{courier.awb}</p>
+            </>
+          ) : null}
+        </div>
 
-        <div className="w-64 leading-tight space-y-[2px]">
-          <div className="flex justify-between">
+        <div className="ml-auto w-[285px] border border-zinc-200 px-[14px] py-3">
+          <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
             <span>Taxable</span>
             <span>{FORMATTERS.currency(taxableAmount)}</span>
           </div>
 
-          <div className="flex justify-between">
+          {orderDiscount > 0 ? (
+            <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
+              <span>
+                Discount {totals.couponCode ? totals.couponCode : ""}
+              </span>
+              <span>-{FORMATTERS.currency(orderDiscount)}</span>
+            </div>
+          ) : null}
+
+          <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
             <span>Tax</span>
             <span>{FORMATTERS.currency(totalTax)}</span>
           </div>
 
-          <div className="flex justify-between font-semibold border-t pt-1 mt-1">
-            <span>Grand Total</span>
+          <div className="mt-1 flex justify-between border-t border-zinc-200 pt-[11px] text-[15px] font-black">
+            <span>Final Payable</span>
             <span>{FORMATTERS.currency(payable)}</span>
           </div>
         </div>
       </div>
 
-      {/* ================= SIGNATURE ================= */}
-      <div className=" flex justify-end">
-        <div className="text-center text-[11px] leading-tight">
-          {seller.signature ? (
-            <img
-              src={seller.signature}
-              alt="Authorized Signature"
-              className="h-20 mx-auto mb-[2px] object-contain"
-            />
-          ) : (
-            <div className="mx-auto mb-2 inline-flex h-20 w-48 items-center justify-center rounded-2xl bg-oat-bg text-[10px] uppercase tracking-[0.15em] text-oat-text ring-1 ring-zinc-100">
-              OATCLUB Authorized Signatory
+      {/* FOOTER */}
+      <div className="mt-[30px] border-t border-zinc-200 pt-[18px]">
+        <div className="grid grid-cols-3 gap-[18px]">
+          <div>
+            <div className="mb-2 text-[10px] font-black tracking-[0.6px]">
+              Payment
             </div>
-          )}
-          <p className="font-semibold">Authorized Signatory</p>
+            <p className="text-[10px] leading-[1.7] text-zinc-500">
+              Method : {payment?.title || "-"}
+              <br />
+              Status : {payment?.status || "-"}
+              <br />
+              Currency : INR
+            </p>
+          </div>
+
+          <div>
+            <div className="mb-2 text-[10px] font-black tracking-[0.6px]">
+              Shipment
+            </div>
+            <p className="text-[10px] leading-[1.7] text-zinc-500">
+              Courier : {courier?.name || "-"}
+              <br />
+              AWB : {courier?.awb || "-"}
+              <br />
+              Provider : {courier?.provider || "SHIPROCKET"}
+            </p>
+          </div>
+
+          <div>
+            <div className="mb-2 text-[10px] font-black tracking-[0.6px]">
+              Support
+            </div>
+            <p className="text-[10px] leading-[1.7] text-zinc-500">
+              {seller.email || "SUPPORT@OATCLUB.IN"}
+              <br />
+              OATCLUB.IN
+              <br />
+              {seller.location || "DELHI NCR, INDIA"}
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* ================= FOOTER ================= */}
-      <div className="mt-6 pt-2 border-t text-center text-[10px] leading-snug text-gray-700 print-footer">
-        <p className="mt-[2px]">
-          <span className="font-semibold">Registered Address:</span>{" "}
-          {seller.address}
-        </p>
-
-        <p className="mt-[2px]">
-          <span className="font-semibold">GSTIN:</span> {seller.gstin}
-          {"  |  "}
-          <span className="font-semibold">PAN:</span> {seller.pan}
-        </p>
+        <div className="mt-[22px] text-center text-[10px] leading-[1.8] tracking-[0.4px] text-zinc-500">
+          THANK YOU FOR SHOPPING WITH OATCLUB
+          <br />
+          OWN ALL TRENDS
+        </div>
       </div>
     </div>
   );

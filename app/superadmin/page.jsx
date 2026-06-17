@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 const PIN = "3270";
-const SESSION_KEY = "miray_superadmin_unlocked";
+const SESSION_KEY = "oatclub_superadmin_unlocked";
 
 function clampDigit(v) {
   const s = String(v ?? "").replace(/\D/g, "");

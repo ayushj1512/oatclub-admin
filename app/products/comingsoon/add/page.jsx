@@ -362,7 +362,7 @@ export default function AddComingSoonPage() {
         <MediaPickerModal
           open={mediaOpen}
           onClose={() => setMediaOpen(false)}
-          folder="miray/comingsoon"
+          folder="oatclub/comingsoon"
           onSelect={onSelectThumb}
         />
       </div>

@@ -384,7 +384,7 @@ export default function ComingSoonDashboardPage() {
             setMediaOpen(false);
             setMediaTargetId(null);
           }}
-          folder="miray/comingsoon"
+          folder="oatclub/comingsoon"
           onSelect={onSelectMedia}
         />
       </div>
