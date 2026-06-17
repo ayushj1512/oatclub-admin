@@ -13,7 +13,6 @@ import {
 
 import { useEmailStore } from "@/store/emailStore";
 import { useOrderStore } from "@/store/orderStore";
-import { useBlueDartStore } from "@/store/bluedartStore";
 import { useOrderReviewStore } from "@/store/order.review.store";
 
 const ActionCard = ({
@@ -21,13 +20,14 @@ const ActionCard = ({
   desc,
   icon: Icon,
   onClick,
-  loading,
-  disabled,
+  loading = false,
+  disabled = false,
 }) => (
   <button
+    type="button"
     onClick={onClick}
     disabled={disabled || loading}
-    className="w-full rounded-2xl border border-gray-100 bg-white/90 p-4 text-left shadow-sm backdrop-blur transition hover:bg-gray-50 disabled:opacity-50"
+    className="w-full rounded-2xl border border-gray-100 bg-white/90 p-4 text-left shadow-sm backdrop-blur transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
   >
     <div className="flex items-start gap-3">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-100">
@@ -57,6 +57,7 @@ export default function OrderActionCenter({
   onRefresh,
 }) {
   const orderId = order?._id;
+  const isConfirmed = Boolean(order?.isConfirmed);
 
   const { loading: reviewWhatsappLoading, sendReviewWhatsapp } =
     useOrderReviewStore();
@@ -66,53 +67,28 @@ export default function OrderActionCenter({
 
   const { loading: orderLoading, bookShiprocketIfMissing } = useOrderStore();
 
-  const { loading: xbLoading, createShipment } = useXpressbeesStore();
-
-  const { creating: eshipzLoading, createShipmentFromOrder } =
-    useBlueDartStore();
-
-  const isConfirmed = !!order?.isConfirmed;
-
-  const actionLocked =
-    busy ||
-    orderLoading ||
-    xbLoading ||
-    eshipzLoading ||
-    reviewWhatsappLoading;
+  const actionLocked = busy || orderLoading || reviewWhatsappLoading;
 
   const finalTrackingId = String(trackingId || "").trim();
   const finalCourierName = String(courierName || "").trim();
 
   const finalTrackingLink =
     String(trackingUrl || "").trim() ||
-    String(order?.shipment?.shiprocket?.trackingUrl || "").trim() ||
-    String(order?.shipment?.xpressbees?.trackingUrl || "").trim() ||
-    String(order?.shipment?.bluedart?.trackingUrl || "").trim() ||
-    String(order?.shipment?.eshipz?.trackingUrl || "").trim();
+    String(order?.shipment?.shiprocket?.trackingUrl || "").trim();
 
   const canSendTrackingMail =
-    !!finalTrackingId && !!finalCourierName && !!finalTrackingLink;
+    Boolean(finalTrackingId) &&
+    Boolean(finalCourierName) &&
+    Boolean(finalTrackingLink);
 
   const hasShiprocket =
-    !!String(order?.shipment?.shiprocket?.awb || "").trim() ||
-    !!String(order?.shipment?.shiprocket?.shipmentId || "").trim();
-
-  const hasXpressbees =
-    !!String(order?.shipment?.xpressbees?.awb || "").trim() ||
-    !!String(order?.shipment?.xpressbees?.shipmentId || "").trim();
-
-  const hasEshipzBlueDart =
-    !!String(order?.shipment?.bluedart?.awb || "").trim() ||
-    !!String(order?.shipment?.bluedart?.awbNumber || "").trim() ||
-    !!String(order?.shipment?.bluedart?.shipmentId || "").trim() ||
-    !!String(order?.shipment?.eshipz?.awb || "").trim() ||
-    !!String(order?.shipment?.eshipz?.awbNumber || "").trim() ||
-    !!String(order?.shipment?.eshipz?.shipmentId || "").trim();
+    Boolean(String(order?.shipment?.shiprocket?.awb || "").trim()) ||
+    Boolean(String(order?.shipment?.shiprocket?.shipmentId || "").trim());
 
   const copyToClipboard = async (text, label = "Copied") => {
     try {
       await navigator.clipboard.writeText(String(text || ""));
-      toast.success(`${label} ✅`);
+      toast.success(label);
     } catch {
       toast.error("Copy failed");
     }
@@ -123,7 +99,7 @@ export default function OrderActionCenter({
 
     try {
       const res = await sendConfirmationEmail(orderId);
-      toast.success(res?.message || "Confirmation email sent ✅");
+      toast.success(res?.message || "Confirmation email sent");
       onRefresh?.();
     } catch (e) {
       toast.error(e?.message || "Failed to send confirmation email");
@@ -140,7 +116,7 @@ export default function OrderActionCenter({
         trackingUrl: finalTrackingLink,
       });
 
-      toast.success(res?.message || "Tracking email sent ✅");
+      toast.success(res?.message || "Tracking email sent");
       onRefresh?.();
     } catch (e) {
       toast.error(e?.message || "Failed to send tracking email");
@@ -153,20 +129,17 @@ export default function OrderActionCenter({
     const orderNumber = String(order?.orderNumber || "").trim();
 
     if (!orderNumber) {
-      return toast.error("Order number missing.");
+      toast.error("Order number missing.");
+      return;
     }
 
     try {
-      const res = await sendReviewWhatsapp(orderNumber, {
-        force: true,
-      });
+      const res = await sendReviewWhatsapp(orderNumber, { force: true });
 
       if (res?.skipped) {
-        toast(res?.message || "Review WhatsApp skipped", {
-          icon: "ℹ️",
-        });
+        toast(res?.message || "Review WhatsApp skipped", { icon: "ℹ️" });
       } else {
-        toast.success(res?.message || "Review WhatsApp sent ✅");
+        toast.success(res?.message || "Review WhatsApp sent");
       }
 
       onRefresh?.();
@@ -183,111 +156,27 @@ export default function OrderActionCenter({
     if (!orderId || actionLocked) return;
 
     if (!isConfirmed) {
-      return toast.error("Only confirmed orders will be booked ✅");
+      toast.error("Only confirmed orders can be booked.");
+      return;
     }
 
     if (hasShiprocket) {
-      return toast("Already booked with Shiprocket. Skipped ✅", {
-        icon: "ℹ️",
-      });
+      toast("Already booked with Shiprocket.", { icon: "ℹ️" });
+      return;
     }
 
     try {
       const res = await bookShiprocketIfMissing(orderId);
 
       if (res?.skipped) {
-        toast(res?.message || "Already booked. Skipped ✅", {
-          icon: "ℹ️",
-        });
+        toast(res?.message || "Already booked. Skipped.", { icon: "ℹ️" });
       } else {
-        toast.success(res?.message || "Shiprocket booked ✅");
+        toast.success(res?.message || "Shiprocket booked");
       }
 
       onRefresh?.();
     } catch (e) {
       toast.error(e?.message || "Shiprocket booking failed");
-    }
-  };
-
-  const handleBookXpressbees = async () => {
-    if (!orderId || actionLocked) return;
-
-    if (!isConfirmed) {
-      return toast.error("Only confirmed orders will be booked ✅");
-    }
-
-    if (hasXpressbees) {
-      return toast("Already booked with XpressBees. Skipped ✅", {
-        icon: "ℹ️",
-      });
-    }
-
-    try {
-      toast.loading("Creating XpressBees booking…", {
-        id: "xb-book",
-      });
-
-      const res = await createShipment({
-        orderId,
-        force: true,
-        confirmIfCOD: true,
-        preferXpressbeesProvider: true,
-      });
-
-      toast.success(res?.message || "XpressBees booking created ✅", {
-        id: "xb-book",
-      });
-
-      onRefresh?.();
-    } catch (e) {
-      toast.error(e?.message || "XpressBees booking failed", {
-        id: "xb-book",
-      });
-    }
-  };
-
-  const handleBookEshipzBlueDart = async () => {
-    if (!orderId || actionLocked) return;
-
-    if (!isConfirmed) {
-      return toast.error("Only confirmed orders will be booked ✅");
-    }
-
-    if (hasEshipzBlueDart) {
-      return toast("Already booked through Eshipz BlueDart. Skipped ✅", {
-        icon: "ℹ️",
-      });
-    }
-
-    const orderNumber = String(order?.orderNumber || "").trim();
-
-    if (!orderNumber) {
-      return toast.error("Order number missing. Please refresh and try again.");
-    }
-
-    try {
-      toast.loading("Booking through Eshipz BlueDart…", {
-        id: "eshipz-bluedart-book",
-      });
-
-      const res = await createShipmentFromOrder({
-        orderNumber,
-        carrierSlug: "bluedart",
-        carrierName: "BlueDart",
-        provider: "eshipz",
-        force: true,
-        confirmIfCOD: true,
-      });
-
-      toast.success(res?.message || "Eshipz BlueDart booking created ✅", {
-        id: "eshipz-bluedart-book",
-      });
-
-      onRefresh?.();
-    } catch (e) {
-      toast.error(e?.message || "Eshipz BlueDart booking failed", {
-        id: "eshipz-bluedart-book",
-      });
     }
   };
 
@@ -331,8 +220,8 @@ export default function OrderActionCenter({
           title="Send Tracking Email"
           desc={
             canSendTrackingMail
-              ? "Send AWB + courier + tracking link."
-              : "Requires Tracking ID + Courier + Tracking URL"
+              ? "Send AWB, courier and tracking link."
+              : "Requires Tracking ID, Courier and Tracking URL."
           }
           icon={Send}
           onClick={handleSendTracking}
@@ -341,28 +230,13 @@ export default function OrderActionCenter({
         />
 
         <ActionCard
-          title="Book through Eshipz"
+          title="Book Courier"
           desc={
             !isConfirmed
-              ? "Only confirmed orders will be booked."
-              : hasEshipzBlueDart
-              ? "Already booked through Eshipz BlueDart."
-              : "Book this order through Eshipz using BlueDart."
-          }
-          icon={Truck}
-          onClick={handleBookEshipzBlueDart}
-          loading={eshipzLoading}
-          disabled={!orderId || actionLocked || hasEshipzBlueDart || !isConfirmed}
-        />
-
-        <ActionCard
-          title="Book Courier (Shiprocket)"
-          desc={
-            !isConfirmed
-              ? "Only confirmed orders will be booked."
+              ? "Only confirmed orders can be booked."
               : hasShiprocket
               ? "Already booked with Shiprocket."
-              : "Auto book only if Shiprocket details are missing."
+              : "Book this order through Shiprocket."
           }
           icon={Truck}
           onClick={handleBookShiprocket}
@@ -371,23 +245,8 @@ export default function OrderActionCenter({
         />
 
         <ActionCard
-          title="Book Courier (XpressBees)"
-          desc={
-            !isConfirmed
-              ? "Only confirmed orders will be booked."
-              : hasXpressbees
-              ? "Already booked with XpressBees."
-              : "Manually book courier with XpressBees."
-          }
-          icon={Truck}
-          onClick={handleBookXpressbees}
-          loading={xbLoading}
-          disabled={!orderId || actionLocked || hasXpressbees || !isConfirmed}
-        />
-
-        <ActionCard
           title="Copy AWB / Tracking ID"
-          desc="Copy tracking id for courier."
+          desc="Copy tracking ID for courier."
           icon={Copy}
           onClick={() => copyToClipboard(finalTrackingId, "Tracking ID copied")}
           disabled={!finalTrackingId || actionLocked}

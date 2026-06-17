@@ -57,7 +57,6 @@ const DOMAIN_LIST = [
   { id: "customers", name: "Customers", icon: Users, route: "/customers/dashboard" },
   { id: "support", name: "Customer Support", icon: Headset, route: "/customer-support" },
   { id: "reports", name: "Reports", icon: FileBarChart, route: "/reports" },
-  { id: "tickets", name: "Tickets / Issues", icon: Ticket, route: "/tickets" },
   { id: "coupons", name: "Coupons", icon: TicketPercent, route: "/coupons" },
   {
     id: "collaboration",
