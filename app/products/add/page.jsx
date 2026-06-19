@@ -222,6 +222,95 @@ function ColorsPicker({ valueText, onChangeText }) {
   );
 }
 
+function QuickJsonImport({ images, onApply }) {
+  const [jsonText, setJsonText] = useState("");
+
+  const importJson = () => {
+    try {
+      const data = JSON.parse(jsonText);
+
+      onApply({
+        title: data.title || "",
+        price: data.price || "",
+        compareAtPrice: data.compareAtPrice || data.mrp || "",
+        categories: Array.isArray(data.categories) ? data.categories : [],
+
+        shortDescription: data.shortDescription || "",
+        howToStyle: data.howToStyle || "",
+        fabricDetails: data.fabricDetails || "",
+        keyFeaturesText: Array.isArray(data.keyFeatures)
+          ? data.keyFeatures.join(", ")
+          : data.keyFeaturesText || "",
+
+        specificationsText: Array.isArray(data.specifications)
+          ? data.specifications
+              .map((s) => `${s.key}: ${s.value}`)
+              .join("\n")
+          : data.specificationsText || "",
+
+        tagsText: Array.isArray(data.tags)
+          ? data.tags.join(", ")
+          : data.tagsText || "",
+
+        colorsText: Array.isArray(data.colors)
+          ? data.colors.join(", ")
+          : data.colorsText || "",
+
+        images,
+        thumbnail: images?.[0] || "",
+
+        attributes: Array.isArray(data.attributes) ? data.attributes : [],
+        variants: Array.isArray(data.variants) ? data.variants : [],
+
+        metaTitle: data.metaTitle || "",
+        metaDescription: data.metaDescription || "",
+        keywords: Array.isArray(data.keywords) ? data.keywords : [],
+
+        isDraft: data.isDraft ?? false,
+        isActive: data.isActive ?? true,
+        isFeatured: data.isFeatured ?? false,
+
+        originalProductLink: data.originalProductLink || "",
+      });
+
+      alert("JSON imported successfully");
+    } catch {
+      alert("Invalid JSON");
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow space-y-4">
+      <div>
+        <h2 className="font-semibold">Quick JSON Import</h2>
+        <p className="text-sm text-gray-500">
+          Select/upload images first, then paste JSON. Images will be attached automatically.
+        </p>
+      </div>
+
+      <textarea
+        value={jsonText}
+        onChange={(e) => setJsonText(e.target.value)}
+        placeholder="Paste product JSON here..."
+        className="min-h-[260px] w-full rounded-xl bg-gray-100 p-4 font-mono text-xs outline-none"
+      />
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-gray-500">
+          Selected images: <span className="font-semibold">{images?.length || 0}</span>
+        </p>
+
+        <button
+          type="button"
+          onClick={importJson}
+          className="rounded-lg bg-black px-5 py-2 text-sm font-semibold text-white"
+        >
+          Import JSON
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function AddProductPage() {
   const router = useRouter();
@@ -452,6 +541,16 @@ export default function AddProductPage() {
         </div>
 
         <CopyContentPrompt />
+
+        <QuickJsonImport
+  images={form.images}
+  onApply={(patch) =>
+    setForm((p) => ({
+      ...p,
+      ...patch,
+    }))
+  }
+/>
 
         {/* BASIC */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
