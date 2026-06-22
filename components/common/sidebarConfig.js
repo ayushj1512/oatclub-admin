@@ -116,6 +116,11 @@ reviews: [
   { label: "Outsourced Assets", href: "/media/outsourced-assets" },
 ],
 
+  email: [
+    { label: "Email Dashboard", href: "/email" },
+    { label: "Template Library", href: "/email/library" },
+  ],
+
   reels: [
     { label: "Reels Dashboard", href: "/reels" },
     { label: "Add Reels", href: "/reels/add" },
@@ -406,6 +411,7 @@ export const routeSidebarMap = [
   { prefix: "/fabrics", key: "fabrics" },
   { prefix: "/inventory", key: "inventory" },
   { prefix: "/analytics", key: "analytics" },
+  { prefix: "/email", key: "email" },
   { prefix: "/reels", key: "reels" },
   { prefix: "/marketing", key: "marketing" },
   { prefix: "/influencer-collaboration-program", key: "collaboration" },

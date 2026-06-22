@@ -9,7 +9,14 @@ import useLoginStore from "../../store/useLoginStore";
 import LoginScreen from "../login/LoginScreen";
 
 // Sidebar visible only on these routes
-const sidebarRoutes = ["/", "/dashboard", "/orders", "/inventory", "/customers"];
+const sidebarRoutes = [
+  "/",
+  "/dashboard",
+  "/orders",
+  "/inventory",
+  "/customers",
+  "/email",
+];
 
 export default function LayoutWrapper({ children }) {
   const pathname = usePathname();

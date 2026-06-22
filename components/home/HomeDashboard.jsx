@@ -25,6 +25,7 @@ import {
   Sparkles,
   CreditCard,
   MessageCircle,
+  Mail,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -49,6 +50,7 @@ const DOMAIN_LIST = [
   { id: "reviews", name: "Reviews", icon: Star, route: "/reviews" },
   { id: "rma", name: "RMA Requests", icon: RotateCcw, route: "/rma" },
   { id: "media", name: "Media", icon: Images, route: "/media" },
+  { id: "email", name: "Email", icon: Mail, route: "/email" },
   { id: "reels", name: "Reels", icon: Clapperboard, route: "/reels" },
   { id: "blogs", name: "Blogs", icon: FileText, route: "/blogs" },
   { id: "inventory", name: "Inventory", icon: Boxes, route: "/inventory" },
@@ -75,6 +77,7 @@ const CARD_HINTS = {
   shiprocket: "Manage Shiprocket sync, labels and tracking",
   reviews: "Moderate product reviews and ratings",
   fabrics: "Manage fabric records and mappings",
+  email: "Preview all brand emails, subjects, and template states",
 };
 
 const FOCUS_QUOTES = [

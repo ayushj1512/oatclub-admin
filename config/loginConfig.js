@@ -15,6 +15,7 @@ export const DOMAIN_PERMISSIONS = {
   reviews: "manageReviews",
   rma: "manageRMA",
   media: "manageMedia",
+  email: "manageEmail",
   reels: "manageReels",
   blogs: "manageBlogs",
   inventory: "manageInventory",
