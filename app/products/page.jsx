@@ -16,6 +16,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useAdminProductStore } from "@/store/adminProductStore";
 import ExportFilteredProductsButton from "@/components/product/ExportFilteredProductsButton";
+import Lightbox from "yet-another-react-lightbox";
+import "yet-another-react-lightbox/styles.css";
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL;
 const PAGE_SIZE = 100;
@@ -297,6 +299,7 @@ const CategoryInlineEditor = memo(function CategoryInlineEditor({
 export default function ProductsPage() {
   const router = useRouter();
   const firstLoadRef = useRef(false);
+  
 
   const {
     products,
@@ -327,6 +330,9 @@ export default function ProductsPage() {
   const [maxPrice, setMaxPrice] = useState("");
   const [tagFilter, setTagFilter] = useState("");
   const [skuFilter, setSkuFilter] = useState("");
+
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+const [lightboxImage, setLightboxImage] = useState("");
 
   const [sortKey, setSortKey] = useState("createdAt");
   const [sortDir, setSortDir] = useState("desc");
@@ -804,11 +810,16 @@ export default function ProductsPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <img
-                        src={p.images?.[0] || "/no-image.png"}
-                        alt=""
-                        loading="lazy"
-                        className="h-10 w-10 rounded-md border border-gray-200 object-cover"
-                      />
+  src={p.images?.[0] || "/no-image.png"}
+  alt={p.title}
+  loading="lazy"
+  onClick={() => {
+    if (!p.images?.[0]) return;
+    setLightboxImage(p.images[0]);
+    setLightboxOpen(true);
+  }}
+  className="h-10 w-10 cursor-zoom-in rounded-md border border-gray-200 object-cover transition hover:scale-110"
+/>
                       <div className="flex flex-col leading-tight">
                         <TitleInlineEditor id={p._id} value={p.title} />
                         <span className="text-xs text-gray-400">
@@ -998,6 +1009,11 @@ export default function ProductsPage() {
           background: #dc2626;
         }
       `}</style>
+      <Lightbox
+  open={lightboxOpen}
+  close={() => setLightboxOpen(false)}
+  slides={[{ src: lightboxImage }]}
+/>
     </section>
   );
 }
