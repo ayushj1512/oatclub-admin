@@ -540,6 +540,17 @@ export default function AddProductPage() {
           </button>
         </div>
 
+          {/* Images */}
+        <div className="bg-white rounded-xl p-6 shadow space-y-4">
+          <h2 className="font-semibold">Product Images</h2>
+
+          <ProductImagesEditor
+            value={form.images}
+            folder="oatclub/products"
+            onChange={(urls) => setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))}
+          />
+        </div>
+
         <CopyContentPrompt />
 
         <QuickJsonImport
@@ -646,16 +657,7 @@ export default function AddProductPage() {
           />
         </div>
 
-        {/* Images */}
-        <div className="bg-white rounded-xl p-6 shadow space-y-4">
-          <h2 className="font-semibold">Product Images</h2>
-
-          <ProductImagesEditor
-            value={form.images}
-            folder="oatclub/products"
-            onChange={(urls) => setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))}
-          />
-        </div>
+      
 
         {/* Content */}
         <ProductContentEditor

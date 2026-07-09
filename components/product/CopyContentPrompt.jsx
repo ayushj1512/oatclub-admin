@@ -32,16 +32,18 @@ Important Rules:
 6. Do not add explanation.
 7. Do not wrap JSON in code block.
 8. Output ONLY valid JSON.
-9. Use realistic Indian D2C pricing.
-10. Keep category as an array.
+9. Keep price and compareAtPrice empty string. Admin will enter pricing manually.
+10. Keep categories as an array.
 11. Do not include image URLs. Images will be selected separately in admin.
+12. Always create clothing size variants: XS, S, M, L, XL.
+13. Do not add price inside variants.
 
 Required JSON Shape:
 
 {
   "title": "",
-  "price": 0,
-  "compareAtPrice": 0,
+  "price": "",
+  "compareAtPrice": "",
   "categories": ["Apparel"],
   "shortDescription": "",
   "howToStyle": "",
@@ -58,6 +60,64 @@ Required JSON Shape:
     { "key": "Occasion", "value": "" },
     { "key": "Fabric", "value": "" },
     { "key": "Season", "value": "" }
+  ],
+  "attributes": [
+    {
+      "key": "Size",
+      "values": ["XS", "S", "M", "L", "XL"]
+    }
+  ],
+  "variants": [
+    {
+      "patternNumber": "",
+      "attributes": [{ "key": "Size", "value": "XS" }],
+      "sku": "",
+      "barcode": "",
+      "stock": 0,
+      "isInStock": false,
+      "reservedStock": 0,
+      "weight": 0
+    },
+    {
+      "patternNumber": "",
+      "attributes": [{ "key": "Size", "value": "S" }],
+      "sku": "",
+      "barcode": "",
+      "stock": 0,
+      "isInStock": false,
+      "reservedStock": 0,
+      "weight": 0
+    },
+    {
+      "patternNumber": "",
+      "attributes": [{ "key": "Size", "value": "M" }],
+      "sku": "",
+      "barcode": "",
+      "stock": 0,
+      "isInStock": false,
+      "reservedStock": 0,
+      "weight": 0
+    },
+    {
+      "patternNumber": "",
+      "attributes": [{ "key": "Size", "value": "L" }],
+      "sku": "",
+      "barcode": "",
+      "stock": 0,
+      "isInStock": false,
+      "reservedStock": 0,
+      "weight": 0
+    },
+    {
+      "patternNumber": "",
+      "attributes": [{ "key": "Size", "value": "XL" }],
+      "sku": "",
+      "barcode": "",
+      "stock": 0,
+      "isInStock": false,
+      "reservedStock": 0,
+      "weight": 0
+    }
   ],
   "tags": [],
   "colors": [],
@@ -78,10 +138,10 @@ title:
 Premium product title. Example: "Ivory Draped Cowl Neck Top"
 
 price:
-Selling price only as number. Example: 1299
+Keep empty string only. Example: ""
 
 compareAtPrice:
-MRP only as number. Example: 1999
+Keep empty string only. Example: ""
 
 categories:
 Always array.
@@ -103,6 +163,17 @@ Comma-free array of 6-8 product features.
 
 specifications:
 Array of objects with key and value.
+
+attributes:
+Always include Size with XS, S, M, L, XL.
+
+variants:
+Always create 5 variants for XS, S, M, L, XL.
+Keep patternNumber, sku and barcode empty.
+Keep stock 0.
+Keep reservedStock 0.
+Keep isInStock false.
+Do not add price or compareAtPrice inside variants.
 
 tags:
 10-15 SEO tags in lowercase.
@@ -160,7 +231,7 @@ export default function CopyContentPrompt() {
             AI Product Content Prompt
           </h2>
           <p className="mt-1 text-xs text-gray-500">
-            Copy this prompt, upload product images in ChatGPT, and generate luxury OATCLUB content.
+            Copy this prompt, upload product images in ChatGPT, and generate luxury OATCLUB content with XS–XL variants.
           </p>
         </div>
 
