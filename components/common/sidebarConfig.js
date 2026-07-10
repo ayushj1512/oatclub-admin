@@ -137,34 +137,62 @@ reviews: [
   ],
 
   products: [
-    { label: "Product Dashboard", href: "/products" },
-    { label: "Add New Product", href: "/products/add" },
-    { label: "Manage Products", href: "/products/manage" },
-    { label: "Search Product", href: "/products/search" },
-    { label: "Products RMA Insights", href: "/products/products-rma-insights" },
-    { label: "Analytics", href: "/products/analytics" },
-    { label: "Categories", href: "/products/category" },
-    { label: "Category Analytics", href: "/products/category-analytics" },
-    { label: "Bestsellers", href: "/products/bestseller" },
-    { label: "Coming Soon", href: "/products/comingsoon" },
-    { label: "Size Charts", href: "/products/size-charts" },
-    { label: "Secondary Products", href: "/products/secondary-products" },
-    { label: "Attributes", href: "/products/attributes" },
-    { label: "Variants", href: "/products/variants" },
-    { label: "Collections", href: "/products/collections" },
-    { label: "Fabric", href: "/products/fabric" },
-    { label: "Product Colors", href: "/products/colors" },
-    { label: "Name Edit", href: "/products/name-edit" },
-    { label: "Bulk Import", href: "/products/bulk-import" },
-    { label: "Bulk Export", href: "/products/bulk-export" },
-    { label: "Bulk Price Editor", href: "/products/bulkPriceEditor" },
-    { label: "Inventory Sync", href: "/products/inventory-sync" },
-    { label: "Price Updates", href: "/products/pricing" },
-    { label: "Offers & Discounts", href: "/products/offers" },
-    { label: "SEO Manager", href: "/products/seo" },
-    { label: "Reviews & Ratings", href: "/products/reviews" },
-    { label: "Media Library", href: "/media" },
-  ],
+  { label: "Product Dashboard", href: "/products" },
+  { label: "Add New Product", href: "/products/add" },
+  { label: "Manage Products", href: "/products/manage" },
+  { label: "Search Product", href: "/products/search" },
+
+  { label: "Product Group Builder", href: "/products/product-groups" },
+  {
+    label: "Existing Product Groups",
+    href: "/products/product-groups/all",
+  },
+
+  {
+    label: "Products RMA Insights",
+    href: "/products/products-rma-insights",
+  },
+  { label: "Analytics", href: "/products/analytics" },
+
+  { label: "Categories", href: "/products/category" },
+  {
+    label: "Category Analytics",
+    href: "/products/category-analytics",
+  },
+
+  { label: "Bestsellers", href: "/products/bestseller" },
+  { label: "Coming Soon", href: "/products/comingsoon" },
+  { label: "Size Charts", href: "/products/size-charts" },
+  {
+    label: "Secondary Products",
+    href: "/products/secondary-products",
+  },
+
+  { label: "Attributes", href: "/products/attributes" },
+  { label: "Variants", href: "/products/variants" },
+  { label: "Collections", href: "/products/collections" },
+  { label: "Fabric", href: "/products/fabric" },
+  { label: "Product Colors", href: "/products/colors" },
+
+  { label: "Name Edit", href: "/products/name-edit" },
+  { label: "Bulk Import", href: "/products/bulk-import" },
+  { label: "Bulk Export", href: "/products/bulk-export" },
+  {
+    label: "Bulk Price Editor",
+    href: "/products/bulkPriceEditor",
+  },
+
+  {
+    label: "Inventory Sync",
+    href: "/products/inventory-sync",
+  },
+  { label: "Price Updates", href: "/products/pricing" },
+  { label: "Offers & Discounts", href: "/products/offers" },
+
+  { label: "SEO Manager", href: "/products/seo" },
+  { label: "Reviews & Ratings", href: "/products/reviews" },
+  { label: "Media Library", href: "/media" },
+],
 
 orders: [
   { label: "Orders Dashboard", href: "/orders" },

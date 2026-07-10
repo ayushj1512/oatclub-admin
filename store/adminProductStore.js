@@ -1971,4 +1971,111 @@ fetchProductMedia: async ({
 },
 
 
+/* ============================================================
+  SYNC PRODUCT ASSOCIATION GROUP
+  PATCH /api/products/:id/association-group
+
+  payload:
+  {
+    productIds: [],
+    patternNumber: ""
+  }
+============================================================ */
+syncProductAssociationGroup: async (
+  productId,
+  productIds = [],
+  patternNumber = "",
+) => {
+  try {
+    set({ saving: true, error: null });
+
+    const sourceId = String(productId || "").trim();
+
+    const ids = Array.from(
+      new Set(
+        (Array.isArray(productIds) ? productIds : [productIds])
+          .map((item) =>
+            item && typeof item === "object"
+              ? String(item._id || "").trim()
+              : String(item || "").trim(),
+          )
+          .filter(Boolean)
+          .filter((id) => id !== sourceId),
+      ),
+    );
+
+    if (!sourceId) {
+      throw new Error("Source product is required");
+    }
+
+    if (!ids.length) {
+      throw new Error("Select at least one product to associate");
+    }
+
+    const res = await fetch(`${API}/${sourceId}/association-group`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        productIds: ids,
+        patternNumber: String(patternNumber || "").trim(),
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || "Product association failed");
+    }
+
+    const updatedProducts = Array.isArray(data.products)
+      ? data.products
+      : [];
+
+    const updatedMap = new Map(
+      updatedProducts.map((product) => [
+        String(product._id),
+        product,
+      ]),
+    );
+
+    set((state) => ({
+      products: (state.products || []).map((product) =>
+        updatedMap.has(String(product._id))
+          ? {
+              ...product,
+              ...updatedMap.get(String(product._id)),
+            }
+          : product,
+      ),
+
+      product:
+        state.product &&
+        updatedMap.has(String(state.product._id))
+          ? updatedMap.get(String(state.product._id))
+          : state.product,
+    }));
+
+    toast.success(
+      `${updatedProducts.length} products associated successfully ✅`,
+    );
+
+    return data;
+  } catch (e) {
+    console.error("❌ syncProductAssociationGroup:", e);
+
+    set({
+      error: e.message || "Product association failed",
+    });
+
+    toast.error(e.message || "Product association failed");
+    throw e;
+  } finally {
+    set({ saving: false });
+  }
+},
+
+
 }));
