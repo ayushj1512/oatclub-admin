@@ -18,12 +18,17 @@ const sortByOrder = (items = []) =>
 ---------------------------- */
 const normalizeHeroBanners = (banners = []) =>
   sortByOrder(banners).map((item, index) => ({
+    _id: item?._id,
+    clientId: safeText(item?.clientId) || safeText(item?._id),
     desktopImage: safeText(item?.desktopImage),
     mobileImage: safeText(item?.mobileImage),
+    desktopPublicId: safeText(item?.desktopPublicId),
+    mobilePublicId: safeText(item?.mobilePublicId),
     link: safeText(item?.link),
     title: safeText(item?.title),
     isActive: item?.isActive !== false,
-    sortOrder: typeof item?.sortOrder === "number" ? item.sortOrder : index,
+    sortOrder:
+      typeof item?.sortOrder === "number" ? item.sortOrder : index + 1,
   }));
 
 /* ---------------------------
