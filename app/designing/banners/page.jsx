@@ -3,156 +3,417 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
-  Plus,
-  Trash2,
-  RefreshCw,
+  Check,
+  GripVertical,
   ImageIcon,
   Link as LinkIcon,
-  GripVertical,
+  Monitor,
+  Plus,
+  RefreshCw,
+  Save,
+  Smartphone,
+  Trash2,
 } from "lucide-react";
 
 import { useHomepageSettingsStore } from "../../../store/useHomepageSettingsStore";
 import MediaPickerModal from "@/components/media/MediaPickerModal";
 
-/* ✅ Drag & Drop (dnd-kit) */
+/* =========================================================
+   Drag and Drop
+========================================================= */
+
 import {
   DndContext,
-  closestCenter,
   PointerSensor,
+  closestCenter,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+
 import {
   SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
   arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+
 import { CSS } from "@dnd-kit/utilities";
 
 /* =========================================================
-   Sortable Banner Item
+   Helpers
 ========================================================= */
+
+const createClientId = () => {
+  if (
+    typeof globalThis !== "undefined" &&
+    globalThis.crypto?.randomUUID
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `banner-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+};
+
+const createEmptyBanner = () => ({
+  clientId: createClientId(),
+
+  desktopImage: "",
+  mobileImage: "",
+
+  desktopPublicId: "",
+  mobilePublicId: "",
+
+  link: "",
+  title: "",
+
+  isActive: true,
+  sortOrder: 0,
+});
+
+const normalizeForComparison = (banner = {}) => ({
+  desktopImage: String(banner?.desktopImage || "").trim(),
+  mobileImage: String(banner?.mobileImage || "").trim(),
+
+  link: String(banner?.link || "").trim(),
+  title: String(banner?.title || "").trim(),
+
+  isActive: banner?.isActive !== false,
+  sortOrder: Number(banner?.sortOrder || 0),
+});
+
+const cloneBanners = (banners = []) =>
+  banners.map((banner) => ({ ...banner }));
+
+const reorderBanners = (banners = []) =>
+  banners.map((banner, index) => ({
+    ...banner,
+    sortOrder: index + 1,
+  }));
+
+/* =========================================================
+   Banner Preview
+========================================================= */
+
+function BannerPreview({
+  image,
+  title,
+  type,
+  emptyText,
+  aspectClass,
+}) {
+  return (
+    <div
+      className={`relative w-full overflow-hidden rounded-2xl bg-gray-100 ring-1 ring-black/5 ${aspectClass}`}
+    >
+      {image ? (
+        <Image
+          src={image}
+          alt={title || `${type} banner preview`}
+          fill
+          sizes={
+            type === "Mobile"
+              ? "(max-width: 768px) 100vw, 240px"
+              : "(max-width: 768px) 100vw, 600px"
+          }
+          className="object-cover"
+        />
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center text-gray-400">
+          <ImageIcon size={22} />
+          <span className="text-xs">{emptyText}</span>
+        </div>
+      )}
+
+      <div className="absolute bottom-2 right-2 rounded-full bg-black/80 px-2.5 py-1 text-[10px] font-medium text-white">
+        {type}
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   Media Selector
+========================================================= */
+
+function MediaSelector({
+  label,
+  description,
+  image,
+  publicId,
+  type,
+  onSelect,
+}) {
+  const isMobile = type === "mobile";
+
+  return (
+    <div className="rounded-2xl bg-gray-50 p-4 ring-1 ring-black/5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-950">
+            {isMobile ? (
+              <Smartphone size={16} />
+            ) : (
+              <Monitor size={16} />
+            )}
+
+            {label}
+
+            {!image && (
+              <span className="text-xs font-medium text-red-500">
+                Required
+              </span>
+            )}
+          </div>
+
+          <p className="mt-1 text-xs text-gray-500">
+            {description}
+          </p>
+        </div>
+
+        {image && (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
+            <Check size={13} />
+            Selected
+          </span>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={onSelect}
+        className="w-full text-left"
+      >
+        <BannerPreview
+          image={image}
+          title={label}
+          type={isMobile ? "Mobile" : "Desktop"}
+          emptyText={`Select ${label.toLowerCase()}`}
+          aspectClass={
+            isMobile
+              ? "aspect-[4/5] max-h-[320px]"
+              : "aspect-[16/6]"
+          }
+        />
+      </button>
+
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onSelect}
+          className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow-sm ring-1 ring-black/5 transition hover:bg-gray-100"
+        >
+          <ImageIcon size={14} />
+          {image ? "Change image" : "Select image"}
+        </button>
+
+        <span
+          className="max-w-[55%] truncate text-[10px] text-gray-400"
+          title={publicId || ""}
+        >
+          {publicId || "No public ID"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   Sortable Banner Card
+========================================================= */
+
 function SortableBannerCard({
   banner,
   index,
   isDirty,
-  updating,
-  onChangeMedia,
+  saving,
+  onOpenMedia,
   onUpdateField,
   onRemove,
-  onUpdateOne,
+  onSave,
 }) {
-  const id = banner._id || banner.tempId;
+  const sortableId = banner.clientId;
 
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: sortableId,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.75 : 1,
+    opacity: isDragging ? 0.72 : 1,
+    zIndex: isDragging ? 10 : "auto",
   };
 
+  const missingDesktop = !banner.desktopImage;
+  const missingMobile = !banner.mobileImage;
+
   return (
-    <div ref={setNodeRef} style={style} className="touch-manipulation">
-      <div className="flex flex-col md:flex-row gap-5 rounded-3xl bg-gray-50 ring-1 ring-black/5 p-5 hover:bg-gray-100 transition">
-        {/* Preview (16:9) */}
-        <div className="relative w-full md:w-[340px] aspect-video rounded-3xl overflow-hidden bg-white shadow-sm ring-1 ring-black/5">
-          {banner.image ? (
-            <Image
-              src={banner.image}
-              alt={banner.title || `Banner ${index + 1}`}
-              fill
-              className="object-cover"
-            />
-          ) : null}
-
-          {/* Drag Handle */}
-          <button
-            type="button"
-            className="absolute top-3 left-3 inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/90 text-gray-800 shadow-sm ring-1 ring-black/5 hover:bg-white transition"
-            title="Drag to reorder"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical size={16} />
-            <span className="text-xs font-medium">Drag</span>
-          </button>
-
-          {/* 16:9 badge */}
-          <div className="absolute bottom-3 right-3 text-[11px] px-3 py-1 rounded-full bg-gray-950/90 text-white">
-            16:9
-          </div>
-        </div>
-
-        {/* Fields */}
-        <div className="flex-1 grid gap-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="touch-manipulation"
+    >
+      <div className="rounded-3xl bg-gray-50 p-4 ring-1 ring-black/5 transition hover:bg-gray-100/80 md:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => onChangeMedia(index)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 hover:bg-gray-100 transition"
+              type="button"
+              {...attributes}
+              {...listeners}
+              title="Drag to reorder"
+              className="inline-flex cursor-grab items-center justify-center rounded-xl bg-white p-2.5 text-gray-500 shadow-sm ring-1 ring-black/5 transition hover:text-gray-950 active:cursor-grabbing"
             >
-              <ImageIcon size={16} />
-              Change Banner Image
+              <GripVertical size={17} />
             </button>
 
-            <div className="text-[11px] text-gray-400">
-              {banner.publicId ? `publicId: ${banner.publicId}` : "publicId: -"}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-950">
+                Banner {index + 1}
+              </h3>
+
+              <p className="text-xs text-gray-500">
+                Position {index + 1}
+              </p>
             </div>
           </div>
 
-          <input
-            value={banner.link || ""}
-            onChange={(e) => onUpdateField(index, "link", e.target.value)}
-            className="px-4 py-3 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
-            placeholder="Link (optional) e.g. /category/dress"
-          />
+          <div className="flex items-center gap-2">
+            {isDirty && (
+              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
+                Unsaved
+              </span>
+            )}
 
-          <input
-            value={banner.title || ""}
-            onChange={(e) => onUpdateField(index, "title", e.target.value)}
-            className="px-4 py-3 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
-            placeholder="Title (optional - internal)"
-          />
+            <button
+              type="button"
+              onClick={() => onRemove(index)}
+              disabled={saving}
+              title="Delete banner"
+              className="inline-flex items-center justify-center rounded-xl bg-white p-2.5 text-red-600 shadow-sm ring-1 ring-black/5 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm text-gray-700 flex items-center gap-2">
+        {(missingDesktop || missingMobile) && (
+          <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-700 ring-1 ring-red-100">
+            {missingDesktop && missingMobile
+              ? "Desktop and mobile images are required."
+              : missingDesktop
+                ? "Desktop image is required."
+                : "Mobile image is required."}
+          </div>
+        )}
+
+        <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+          <div className="grid gap-4 md:grid-cols-2">
+            <MediaSelector
+              label="Desktop image"
+              description="Recommended wide desktop banner"
+              image={banner.desktopImage}
+              publicId={banner.desktopPublicId}
+              type="desktop"
+              onSelect={() =>
+                onOpenMedia(index, "desktopImage")
+              }
+            />
+
+            <MediaSelector
+              label="Mobile image"
+              description="Use a portrait crop for mobile screens"
+              image={banner.mobileImage}
+              publicId={banner.mobilePublicId}
+              type="mobile"
+              onSelect={() =>
+                onOpenMedia(index, "mobileImage")
+              }
+            />
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 ring-1 ring-black/5">
+            <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+              <LinkIcon size={14} />
+              Banner information
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                Link
+              </label>
+
+              <input
+                value={banner.link || ""}
+                onChange={(event) =>
+                  onUpdateField(
+                    index,
+                    "link",
+                    event.target.value
+                  )
+                }
+                placeholder="/category/dresses"
+                className="w-full rounded-xl bg-gray-50 px-3.5 py-2.5 text-sm text-gray-950 outline-none ring-1 ring-black/5 transition placeholder:text-gray-400 focus:ring-2 focus:ring-gray-950"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-gray-600">
+                Internal title
+              </label>
+
+              <input
+                value={banner.title || ""}
+                onChange={(event) =>
+                  onUpdateField(
+                    index,
+                    "title",
+                    event.target.value
+                  )
+                }
+                placeholder="Summer collection banner"
+                className="w-full rounded-xl bg-gray-50 px-3.5 py-2.5 text-sm text-gray-950 outline-none ring-1 ring-black/5 transition placeholder:text-gray-400 focus:ring-2 focus:ring-gray-950"
+              />
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl bg-gray-50 px-3.5 py-2.5 text-sm text-gray-700 ring-1 ring-black/5">
               <input
                 type="checkbox"
                 checked={banner.isActive !== false}
-                onChange={(e) =>
-                  onUpdateField(index, "isActive", e.target.checked)
+                onChange={(event) =>
+                  onUpdateField(
+                    index,
+                    "isActive",
+                    event.target.checked
+                  )
                 }
-                className="accent-blue-600"
+                className="h-4 w-4 accent-gray-950"
               />
+
               Active
             </label>
 
-            <button
-              onClick={() => onRemove(index)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white text-red-600 shadow-sm ring-1 ring-black/5 hover:bg-red-50 transition"
-            >
-              <Trash2 size={16} />
-              Delete
-            </button>
-
-            {/* ✅ Update button only when dirty */}
             {isDirty && (
               <button
-                onClick={() => onUpdateOne()}
-                disabled={updating}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-white shadow-sm transition ${
-                  updating ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
-                }`}
+                type="button"
+                onClick={onSave}
+                disabled={
+                  saving || missingDesktop || missingMobile
+                }
+                className="mt-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {updating ? "Updating..." : "Update"}
+                <Save size={15} />
+                {saving ? "Saving..." : "Save changes"}
               </button>
             )}
-          </div>
-
-          <div className="text-xs text-gray-500">
-            Order is managed using drag & drop (sortOrder auto updates).
           </div>
         </div>
       </div>
@@ -163,6 +424,7 @@ function SortableBannerCard({
 /* =========================================================
    Page
 ========================================================= */
+
 export default function BannersManagerPage() {
   const {
     heroBanners,
@@ -170,237 +432,362 @@ export default function BannersManagerPage() {
     saving,
     error,
     success,
+
     fetchHomepageSettings,
     setHeroBannersLocal,
     updateHeroBanners,
     clearMessages,
   } = useHomepageSettingsStore();
 
-  /* ---------------------------
-     Media modal state
-  ---------------------------- */
-  const [openMediaModal, setOpenMediaModal] = useState(false);
-  const [editIndex, setEditIndex] = useState(null);
-
-  /* ---------------------------
-     New banner state
-  ---------------------------- */
-  const [newBanner, setNewBanner] = useState({
-    image: "",
-    publicId: "",
-    link: "",
-    title: "",
-    isActive: true,
-    sortOrder: 0,
+  const [mediaPicker, setMediaPicker] = useState({
+    open: false,
+    bannerIndex: null,
+    field: null,
+    isNewBanner: false,
   });
 
-  /* ✅ Track initial snapshot for dirty detection */
+  const [newBanner, setNewBanner] = useState(
+    createEmptyBanner
+  );
+
   const snapshotRef = useRef([]);
-  const [updatingOne, setUpdatingOne] = useState(false);
+  const hasLoadedRef = useRef(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    })
+  );
+
+  const sortedBanners = useMemo(
+    () =>
+      [...(heroBanners || [])].sort(
+        (a, b) =>
+          Number(a?.sortOrder || 0) -
+          Number(b?.sortOrder || 0)
+      ),
+    [heroBanners]
+  );
+
+  /* -------------------------------------------------------
+     Load
+  ------------------------------------------------------- */
 
   useEffect(() => {
     fetchHomepageSettings();
   }, [fetchHomepageSettings]);
 
-  /* ✅ Update snapshot when banners load first time */
+  /*
+    Only create the initial snapshot after the first fetch.
+    It must not update after every local field change.
+  */
   useEffect(() => {
-    if (!loading && heroBanners?.length) {
-      snapshotRef.current = JSON.parse(JSON.stringify(heroBanners));
+    if (!loading && !hasLoadedRef.current) {
+      snapshotRef.current = cloneBanners(sortedBanners);
+      hasLoadedRef.current = true;
     }
-  }, [loading, heroBanners]);
+  }, [loading, sortedBanners]);
 
-  /* ✅ local sorted view + stable drag id */
-  const sortedBanners = useMemo(() => {
-    return [...(heroBanners || [])]
-      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-      .map((b, idx) => ({
-        ...b,
-        tempId: b.tempId || b._id || `temp-${idx}-${Math.random()}`,
-      }));
-  }, [heroBanners]);
-
-  /* ---------------------------
-     DnD sensors
-  ---------------------------- */
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
-  );
-
-  /* ---------------------------
-     Helpers
-  ---------------------------- */
-  const openNewMediaPicker = () => {
-    setEditIndex(null);
-    setOpenMediaModal(true);
-  };
-
-  const openEditMediaPicker = (idx) => {
-    setEditIndex(idx);
-    setOpenMediaModal(true);
-  };
-
-  const normalizeBanner = (b) => ({
-    image: b.image || "",
-    publicId: b.publicId || "",
-    link: b.link || "",
-    title: b.title || "",
-    isActive: b.isActive !== false,
-    sortOrder: b.sortOrder || 0,
-    _id: b._id || "",
-    tempId: b.tempId || "",
-  });
+  /* -------------------------------------------------------
+     Dirty Detection
+  ------------------------------------------------------- */
 
   const isBannerDirty = (banner) => {
-    const snapshot = snapshotRef.current || [];
-    const original =
-      snapshot.find((x) => x._id && x._id === banner._id) ||
-      snapshot.find((x) => x.tempId && x.tempId === banner.tempId);
+    const original = snapshotRef.current.find(
+      (item) => item.clientId === banner.clientId
+    );
 
-    if (!original) return true; // new item not in snapshot
+    if (!original) {
+      return true;
+    }
 
-    const a = normalizeBanner(original);
-    const b = normalizeBanner(banner);
-    return JSON.stringify(a) !== JSON.stringify(b);
+    return (
+      JSON.stringify(normalizeForComparison(original)) !==
+      JSON.stringify(normalizeForComparison(banner))
+    );
+  };
+
+  const hasDirtyBanners = useMemo(() => {
+    if (
+      sortedBanners.length !== snapshotRef.current.length
+    ) {
+      return true;
+    }
+
+    return sortedBanners.some(isBannerDirty);
+  }, [sortedBanners]);
+
+  const hasIncompleteBanners = sortedBanners.some(
+    (banner) =>
+      !banner.desktopImage?.trim() ||
+      !banner.mobileImage?.trim()
+  );
+
+  /* -------------------------------------------------------
+     Media Picker
+  ------------------------------------------------------- */
+
+  const openMediaPicker = ({
+    bannerIndex = null,
+    field,
+    isNewBanner = false,
+  }) => {
+    setMediaPicker({
+      open: true,
+      bannerIndex,
+      field,
+      isNewBanner,
+    });
+  };
+
+  const closeMediaPicker = () => {
+    setMediaPicker({
+      open: false,
+      bannerIndex: null,
+      field: null,
+      isNewBanner: false,
+    });
   };
 
   const handleMediaSelect = (media) => {
-    if (!media?.url) return;
-
-    if (editIndex !== null) {
-      const next = [...sortedBanners];
-      next[editIndex] = {
-        ...next[editIndex],
-        image: media.url,
-        publicId: media.publicId || "",
-      };
-
-      const withOrder = next.map((x, i) => ({ ...x, sortOrder: i + 1 }));
-      setHeroBannersLocal(withOrder);
-    } else {
-      setNewBanner((p) => ({
-        ...p,
-        image: media.url,
-        publicId: media.publicId || "",
-      }));
+    if (!media?.url || !mediaPicker.field) {
+      return;
     }
 
-    setOpenMediaModal(false);
+    const publicIdField =
+      mediaPicker.field === "desktopImage"
+        ? "desktopPublicId"
+        : "mobilePublicId";
+
+    if (mediaPicker.isNewBanner) {
+      setNewBanner((current) => ({
+        ...current,
+        [mediaPicker.field]: media.url,
+        [publicIdField]: media.publicId || "",
+      }));
+    } else if (mediaPicker.bannerIndex !== null) {
+      const next = cloneBanners(sortedBanners);
+
+      next[mediaPicker.bannerIndex] = {
+        ...next[mediaPicker.bannerIndex],
+        [mediaPicker.field]: media.url,
+        [publicIdField]: media.publicId || "",
+      };
+
+      setHeroBannersLocal(reorderBanners(next));
+    }
+
+    closeMediaPicker();
   };
 
-  /* ✅ Add banner and auto-update backend */
+  /* -------------------------------------------------------
+     Local Editing
+  ------------------------------------------------------- */
+
+  const updateField = (index, field, value) => {
+    const next = cloneBanners(sortedBanners);
+
+    next[index] = {
+      ...next[index],
+      [field]: value,
+    };
+
+    setHeroBannersLocal(reorderBanners(next));
+  };
+
+  /* -------------------------------------------------------
+     Add
+  ------------------------------------------------------- */
+
   const addBanner = async () => {
-    if (!newBanner.image?.trim())
-      return alert("Please select banner image (recommended size 16:9)");
+    if (!newBanner.desktopImage?.trim()) {
+      window.alert(
+        "Please select a desktop image for this banner."
+      );
+      return;
+    }
+
+    if (!newBanner.mobileImage?.trim()) {
+      window.alert(
+        "Please select a mobile image for this banner."
+      );
+      return;
+    }
 
     clearMessages();
 
-    const next = [
+    const next = reorderBanners([
       ...sortedBanners,
       {
         ...newBanner,
-        image: newBanner.image.trim(),
-        publicId: newBanner.publicId || "",
-        link: String(newBanner.link || "").trim(),
-        title: String(newBanner.title || "").trim(),
-        sortOrder: sortedBanners.length + 1,
-        tempId: `temp-${Date.now()}`,
+        desktopImage: newBanner.desktopImage.trim(),
+        mobileImage: newBanner.mobileImage.trim(),
+        link: newBanner.link.trim(),
+        title: newBanner.title.trim(),
       },
-    ].map((x, i) => ({ ...x, sortOrder: i + 1 }));
+    ]);
 
     setHeroBannersLocal(next);
 
-    setNewBanner({
-      image: "",
-      publicId: "",
-      link: "",
-      title: "",
-      isActive: true,
-      sortOrder: 0,
-    });
+    const updated = await updateHeroBanners(next);
 
-    // ✅ Auto save immediately
-    await updateHeroBanners(next);
-    snapshotRef.current = JSON.parse(JSON.stringify(next));
-  };
+    if (updated) {
+      const savedBanners =
+        updated?.heroBanners || next;
 
-  const updateField = (index, key, value) => {
-    const next = [...sortedBanners];
-    next[index] = { ...next[index], [key]: value };
-    setHeroBannersLocal(next.map((x, i) => ({ ...x, sortOrder: i + 1 })));
-  };
+      snapshotRef.current =
+        cloneBanners(savedBanners);
 
-  const removeBanner = async (index) => {
-    clearMessages();
-    const next = sortedBanners.filter((_, i) => i !== index);
-    const withOrder = next.map((x, i) => ({ ...x, sortOrder: i + 1 }));
-    setHeroBannersLocal(withOrder);
-
-    // ✅ Auto save after delete too
-    await updateHeroBanners(withOrder);
-    snapshotRef.current = JSON.parse(JSON.stringify(withOrder));
-  };
-
-  /* ✅ Update when dirty (per banner) */
-  const updateAllBanners = async () => {
-    clearMessages();
-    setUpdatingOne(true);
-    try {
-      const withOrder = sortedBanners.map((x, i) => ({ ...x, sortOrder: i + 1 }));
-      await updateHeroBanners(withOrder);
-      snapshotRef.current = JSON.parse(JSON.stringify(withOrder));
-    } finally {
-      setUpdatingOne(false);
+      setNewBanner(createEmptyBanner());
     }
   };
 
-  /* ✅ Drag End */
-  const onDragEnd = (event) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
+  /* -------------------------------------------------------
+     Remove
+  ------------------------------------------------------- */
+
+  const removeBanner = async (index) => {
+    const shouldDelete = window.confirm(
+      `Delete banner ${index + 1}?`
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    clearMessages();
+
+    const next = reorderBanners(
+      sortedBanners.filter(
+        (_, bannerIndex) => bannerIndex !== index
+      )
+    );
+
+    setHeroBannersLocal(next);
+
+    const updated = await updateHeroBanners(next);
+
+    if (updated) {
+      snapshotRef.current = cloneBanners(
+        updated?.heroBanners || next
+      );
+    }
+  };
+
+  /* -------------------------------------------------------
+     Save
+  ------------------------------------------------------- */
+
+  const saveAllBanners = async () => {
+    if (hasIncompleteBanners) {
+      window.alert(
+        "Every banner must have both a desktop and mobile image."
+      );
+      return;
+    }
+
+    clearMessages();
+
+    const ordered = reorderBanners(sortedBanners);
+    const updated = await updateHeroBanners(ordered);
+
+    if (updated) {
+      snapshotRef.current = cloneBanners(
+        updated?.heroBanners || ordered
+      );
+    }
+  };
+
+  /* -------------------------------------------------------
+     Refresh
+  ------------------------------------------------------- */
+
+  const refreshBanners = async () => {
+    clearMessages();
+
+    hasLoadedRef.current = false;
+
+    const data = await fetchHomepageSettings();
+
+    if (data) {
+      snapshotRef.current = cloneBanners(
+        data?.heroBanners || []
+      );
+
+      hasLoadedRef.current = true;
+    }
+  };
+
+  /* -------------------------------------------------------
+     Drag End
+  ------------------------------------------------------- */
+
+  const handleDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) {
+      return;
+    }
 
     const oldIndex = sortedBanners.findIndex(
-      (b) => (b._id || b.tempId) === active.id
-    );
-    const newIndex = sortedBanners.findIndex(
-      (b) => (b._id || b.tempId) === over.id
+      (banner) => banner.clientId === active.id
     );
 
-    const moved = arrayMove(sortedBanners, oldIndex, newIndex);
-    const withOrder = moved.map((x, i) => ({ ...x, sortOrder: i + 1 }));
-    setHeroBannersLocal(withOrder);
+    const newIndex = sortedBanners.findIndex(
+      (banner) => banner.clientId === over.id
+    );
+
+    if (oldIndex < 0 || newIndex < 0) {
+      return;
+    }
+
+    const moved = arrayMove(
+      sortedBanners,
+      oldIndex,
+      newIndex
+    );
+
+    setHeroBannersLocal(reorderBanners(moved));
   };
 
   return (
-    <div className="p-6 md:p-10 bg-gray-50 min-h-screen">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8 lg:p-10">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-950">
-            Banners Manager
+          <h1 className="text-2xl font-bold tracking-tight text-gray-950 md:text-3xl">
+            Hero Banners
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage hero slider banners shown on homepage •{" "}
-            <span className="font-semibold text-blue-600">Banner Size: 16:9</span>
+
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+            Every homepage banner requires a separate desktop
+            and mobile image.
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => fetchHomepageSettings()}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white text-gray-800 shadow-sm ring-1 ring-black/5 hover:bg-gray-100 transition"
+            type="button"
+            onClick={refreshBanners}
+            disabled={loading || saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-gray-800 shadow-sm ring-1 ring-black/5 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCw size={16} />
+            <RefreshCw
+              size={16}
+              className={loading ? "animate-spin" : ""}
+            />
             Refresh
           </button>
 
-          {/* ✅ Show "Update All" only when ANY banner dirty */}
-          {sortedBanners.some(isBannerDirty) && (
+          {hasDirtyBanners && (
             <button
-              onClick={updateAllBanners}
-              disabled={saving || updatingOne}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-green-600 text-white shadow-sm hover:bg-green-700 transition disabled:opacity-60"
+              type="button"
+              onClick={saveAllBanners}
+              disabled={saving || hasIncompleteBanners}
+              className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {saving || updatingOne ? "Updating..." : "Update Changes"}
+              <Save size={16} />
+              {saving ? "Saving..." : "Save all changes"}
             </button>
           )}
         </div>
@@ -409,187 +796,223 @@ export default function BannersManagerPage() {
       {/* Messages */}
       <div className="mt-5 space-y-2">
         {loading && (
-          <div className="text-sm px-4 py-3 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 text-gray-700">
+          <div className="rounded-2xl bg-white px-4 py-3 text-sm text-gray-700 shadow-sm ring-1 ring-black/5">
             Loading banners...
           </div>
         )}
+
         {error && (
-          <div className="text-sm px-4 py-3 rounded-2xl bg-red-50 shadow-sm ring-1 ring-red-200 text-red-700">
+          <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
             {error}
           </div>
         )}
+
         {success && (
-          <div className="text-sm px-4 py-3 rounded-2xl bg-green-50 shadow-sm ring-1 ring-green-200 text-green-700">
+          <div className="rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700 ring-1 ring-green-200">
             {success}
           </div>
         )}
       </div>
 
-      {/* ✅ Media Picker Modal */}
+      {/* Media Picker */}
       <MediaPickerModal
-        open={openMediaModal}
-        onClose={() => setOpenMediaModal(false)}
+        open={mediaPicker.open}
+        onClose={closeMediaPicker}
         folder="oatclub/banners"
         onSelect={handleMediaSelect}
       />
 
       {/* Add New Banner */}
-      <div className="mt-8 bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+      <section className="mt-8 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="font-semibold text-gray-950 text-lg">Add New Banner</h2>
-            <p className="text-xs text-gray-500 mt-1">
-              Recommended banner size: <span className="font-semibold">16:9</span>
+            <h2 className="text-lg font-semibold text-gray-950">
+              Add New Banner
+            </h2>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Both images are mandatory before adding the
+              banner.
             </p>
           </div>
 
           <button
+            type="button"
             onClick={addBanner}
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-blue-600 text-white shadow-sm hover:bg-blue-700 transition disabled:opacity-60"
+            disabled={
+              saving ||
+              !newBanner.desktopImage ||
+              !newBanner.mobileImage
+            }
+            className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus size={16} />
-            {saving ? "Adding..." : "Add Banner"}
+            {saving ? "Adding..." : "Add banner"}
           </button>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4 mt-6">
-          {/* Media Selector */}
-          <div className="rounded-3xl bg-gray-50 ring-1 ring-black/5 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                onClick={() => openNewMediaPicker()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 hover:bg-gray-100 transition"
-              >
-                <ImageIcon size={16} />
-                Select Banner Image
-              </button>
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <MediaSelector
+            label="Desktop image"
+            description="Recommended wide crop for desktop screens"
+            image={newBanner.desktopImage}
+            publicId={newBanner.desktopPublicId}
+            type="desktop"
+            onSelect={() =>
+              openMediaPicker({
+                field: "desktopImage",
+                isNewBanner: true,
+              })
+            }
+          />
 
-              {newBanner.image ? (
-                <span className="text-xs text-gray-600">Image selected ✅</span>
-              ) : (
-                <span className="text-xs text-gray-400">No media selected</span>
-              )}
-            </div>
+          <MediaSelector
+            label="Mobile image"
+            description="Recommended portrait crop for mobile screens"
+            image={newBanner.mobileImage}
+            publicId={newBanner.mobilePublicId}
+            type="mobile"
+            onSelect={() =>
+              openMediaPicker({
+                field: "mobileImage",
+                isNewBanner: true,
+              })
+            }
+          />
+        </div>
 
-            {newBanner.image ? (
-              <div className="mt-4 relative w-full aspect-video rounded-3xl overflow-hidden bg-white shadow-sm ring-1 ring-black/5">
-                <Image
-                  src={newBanner.image}
-                  alt="New banner preview"
-                  fill
-                  className="object-cover"
-                />
-                <div className="absolute bottom-3 right-3 text-[11px] px-3 py-1 rounded-full bg-gray-950/90 text-white">
-                  16:9
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 w-full aspect-video rounded-3xl bg-gradient-to-br from-gray-100 to-gray-200 ring-1 ring-black/5 flex items-center justify-center text-gray-400 text-sm">
-                16:9 Preview will appear here
-              </div>
-            )}
-
-            <div className="mt-3 text-[11px] text-gray-400">
-              {newBanner.publicId ? `publicId: ${newBanner.publicId}` : "publicId: -"}
-            </div>
-          </div>
-
-          {/* Fields */}
-          <div className="rounded-3xl bg-gray-50 ring-1 ring-black/5 p-4 space-y-3">
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <LinkIcon size={14} />
-              Link + internal title (optional)
-            </div>
+        <div className="mt-4 grid gap-4 rounded-2xl bg-gray-50 p-4 ring-1 ring-black/5 md:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+              Banner link
+            </label>
 
             <input
               value={newBanner.link}
-              onChange={(e) =>
-                setNewBanner((p) => ({ ...p, link: e.target.value }))
+              onChange={(event) =>
+                setNewBanner((current) => ({
+                  ...current,
+                  link: event.target.value,
+                }))
               }
-              placeholder="Link (optional) e.g. /category/dress"
-              className="px-4 py-3 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+              placeholder="/category/dresses"
+              className="w-full rounded-xl bg-white px-3.5 py-2.5 text-sm text-gray-950 outline-none ring-1 ring-black/5 transition placeholder:text-gray-400 focus:ring-2 focus:ring-gray-950"
             />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+              Internal title
+            </label>
 
             <input
               value={newBanner.title}
-              onChange={(e) =>
-                setNewBanner((p) => ({ ...p, title: e.target.value }))
+              onChange={(event) =>
+                setNewBanner((current) => ({
+                  ...current,
+                  title: event.target.value,
+                }))
               }
-              placeholder="Title (optional - internal)"
-              className="px-4 py-3 rounded-2xl bg-white ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500 transition"
+              placeholder="Summer collection banner"
+              className="w-full rounded-xl bg-white px-3.5 py-2.5 text-sm text-gray-950 outline-none ring-1 ring-black/5 transition placeholder:text-gray-400 focus:ring-2 focus:ring-gray-950"
+            />
+          </div>
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={newBanner.isActive}
+              onChange={(event) =>
+                setNewBanner((current) => ({
+                  ...current,
+                  isActive: event.target.checked,
+                }))
+              }
+              className="h-4 w-4 accent-gray-950"
             />
 
-            <label className="text-sm text-gray-700 flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={newBanner.isActive}
-                onChange={(e) =>
-                  setNewBanner((p) => ({ ...p, isActive: e.target.checked }))
-                }
-                className="accent-blue-600"
-              />
-              Active
-            </label>
+            Active banner
+          </label>
+        </div>
+      </section>
 
-            <div className="text-xs text-gray-500 leading-relaxed">
-              Tip: Reorder banners using{" "}
-              <span className="font-semibold text-gray-950">Drag & Drop</span> below.
-            </div>
+      {/* Existing Banners */}
+      <section className="mt-8 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-950">
+              Existing Banners{" "}
+              <span className="text-gray-400">
+                ({sortedBanners.length})
+              </span>
+            </h2>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Drag banners to change their homepage order.
+            </p>
           </div>
-        </div>
-      </div>
 
-      {/* Banner List */}
-      <div className="mt-8 bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-6">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="font-semibold text-gray-950 text-lg">
-            Existing Banners{" "}
-            <span className="text-gray-400">({sortedBanners.length})</span>
-          </h2>
-          <p className="text-xs text-gray-500">
-            Drag banners to reorder •{" "}
-            <span className="font-semibold text-gray-950">16:9</span>
-          </p>
+          {hasIncompleteBanners && (
+            <span className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-red-100">
+              Mobile or desktop image missing
+            </span>
+          )}
         </div>
 
-        {sortedBanners.length === 0 ? (
-          <p className="text-sm text-gray-500 mt-4">No banners added yet.</p>
+        {sortedBanners.length === 0 && !loading ? (
+          <div className="mt-5 rounded-2xl bg-gray-50 px-5 py-10 text-center ring-1 ring-black/5">
+            <ImageIcon
+              size={24}
+              className="mx-auto text-gray-300"
+            />
+
+            <p className="mt-2 text-sm font-medium text-gray-700">
+              No banners added
+            </p>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Add your first desktop and mobile banner above.
+            </p>
+          </div>
         ) : (
           <div className="mt-5">
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
-              onDragEnd={onDragEnd}
+              onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={sortedBanners.map((b) => b._id || b.tempId)}
+                items={sortedBanners.map(
+                  (banner) => banner.clientId
+                )}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-4">
-                  {sortedBanners.map((b, idx) => {
-                    const dirty = isBannerDirty(b);
-
-                    return (
-                      <SortableBannerCard
-                        key={b._id || b.tempId}
-                        banner={b}
-                        index={idx}
-                        isDirty={dirty}
-                        updating={saving || updatingOne}
-                        onChangeMedia={openEditMediaPicker}
-                        onUpdateField={updateField}
-                        onRemove={removeBanner}
-                        onUpdateOne={updateAllBanners}
-                      />
-                    );
-                  })}
+                  {sortedBanners.map((banner, index) => (
+                    <SortableBannerCard
+                      key={banner.clientId}
+                      banner={banner}
+                      index={index}
+                      isDirty={isBannerDirty(banner)}
+                      saving={saving}
+                      onOpenMedia={(bannerIndex, field) =>
+                        openMediaPicker({
+                          bannerIndex,
+                          field,
+                          isNewBanner: false,
+                        })
+                      }
+                      onUpdateField={updateField}
+                      onRemove={removeBanner}
+                      onSave={saveAllBanners}
+                    />
+                  ))}
                 </div>
               </SortableContext>
             </DndContext>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
