@@ -1,4 +1,4 @@
-  "use client";
+"use client";
 
   import { useEffect, useMemo, useState } from "react";
   import Link from "next/link";
@@ -6,6 +6,11 @@
   import { useAdminBlogStore } from "@/store/adminBlogStore";
   import { useAdminProductStore } from "@/store/adminProductStore";
   import MediaPickerModal from "@/components/media/MediaPickerModal";
+import BlogPromptCard from "@/components/blogs/BlogPromptCard";
+import BlogJsonImporter from "@/components/blogs/BlogJsonImporter";
+import { useRouter } from "next/navigation";
+
+
 
   /* ---------------- utils ---------------- */
   const slugify = (s = "") =>
@@ -179,6 +184,8 @@
       setSelectedProducts([]);
     };
 
+    const router = useRouter();
+
     return (
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-3">
@@ -316,6 +323,7 @@
 
   export default function BlogCreatePage() {
     const { createBlog, saving } = useAdminBlogStore();
+    const router = useRouter();
 
     /* ---------------- form state ---------------- */
     const [form, setForm] = useState({
@@ -361,18 +369,36 @@
 
     const removeTag = (t) => set("tags", (form.tags || []).filter((x) => x !== t));
 
+    /* ---------------- JSON import ---------------- */
+    const handleJsonImport = (data) => {
+      setForm((prev) => ({
+        ...prev,
+        ...data,
+        image: prev.image,
+        products: prev.products,
+      }));
+
+      setTagsInput("");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
     /* ---------------- submit ---------------- */
     const handleSubmit = async () => {
-      if (!form.title.trim()) return alert("Title is required");
-      if (!form.excerpt.trim()) return alert("Excerpt is required");
+  if (!form.title.trim()) return alert("Title is required");
+  if (!form.excerpt.trim()) return alert("Excerpt is required");
 
-      await createBlog({
-        ...form,
-        slug: previewSlug,
-        tags: form.tags || [],
-        products: form.products || [],
-      });
-    };
+  const result = await createBlog({
+    ...form,
+    slug: previewSlug,
+    tags: form.tags || [],
+    products: form.products || [],
+  });
+
+  // Navigate only if blog creation succeeded
+  if (result !== false) {
+    router.push("/blogs/all");
+  }
+};
 
     return (
       <section className="min-h-screen bg-[#f6f7f9]">
@@ -409,7 +435,14 @@
 
           {/* ================= BLOG COVER IMAGE ================= */}
           <div className="bg-white rounded-2xl shadow-sm p-8 space-y-4">
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+            <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+              <span className="grid h-6 w-6 place-items-center rounded-full bg-black text-white">
+                1
+              </span>
+              Select image
+            </div>
+
+            <h2 className="text-xl font-semibold text-black">
               Blog cover image
             </h2>
 
@@ -461,6 +494,26 @@
                 set("image", media.url);
                 setImagePickerOpen(false);
               }}
+            />
+          </div>
+
+          {/* ================= AI JSON WORKFLOW ================= */}
+          <BlogPromptCard imageUrl={form.image} />
+
+          <BlogJsonImporter
+            disabled={!form.image}
+            onImport={handleJsonImport}
+
+
+          />
+
+           {/* ================= PRODUCTS (UPDATED) ================= */}
+          <div className="bg-white rounded-2xl shadow-sm p-8">
+            <ProductLinker
+              value={form.products}
+              onChange={(ids) => set("products", ids)}
+              label="Linked products"
+              max={24}
             />
           </div>
 
@@ -586,15 +639,7 @@
             </div>
           </div>
 
-          {/* ================= PRODUCTS (UPDATED) ================= */}
-          <div className="bg-white rounded-2xl shadow-sm p-8">
-            <ProductLinker
-              value={form.products}
-              onChange={(ids) => set("products", ids)}
-              label="Linked products"
-              max={24}
-            />
-          </div>
+         
 
           {/* ================= CONTENT ================= */}
           <div className="bg-white rounded-2xl shadow-sm p-8 space-y-4">
