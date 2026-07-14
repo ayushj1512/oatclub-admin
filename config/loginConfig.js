@@ -6,6 +6,7 @@ export const DOMAIN_PERMISSIONS = {
   production: "manageProduction",
   accounts: "manageAccounts",
   products: "manageProducts",
+  barcode: "manageBarcode", // ✅ NEW MODULE
   orders: "manageOrders",
 
   refunds: "manageRefunds",
@@ -35,10 +36,12 @@ export const ALL_PERMISSIONS = Array.from(
 );
 
 export const ROLE_DEFAULT_PERMS = {
+  /* Full Access */
   superadmin: ["*"],
 
   admin: [...ALL_PERMISSIONS],
 
+  /* Customer Care */
   customer_care: [
     "manageSupport",
     "manageOrders",
@@ -47,22 +50,35 @@ export const ROLE_DEFAULT_PERMS = {
     "manageFast2SMS",
   ],
 
+  /* Warehouse Staff */
   staff: [
     "manageOrders",
     "manageInventory",
     "manageFabrics",
     "manageReviews",
+    "manageBarcode", // ✅ Added
   ],
 
+  /* Read Only */
   viewer: ["viewReports"],
 
-  influencer: ["manageMedia", "manageReels", "manageInfluencerProgram"],
+  /* Influencer */
+  influencer: [
+    "manageMedia",
+    "manageReels",
+    "manageInfluencerProgram",
+  ],
 
-  warehouse: ["manageProduction", "manageOrders"],
+  /* Warehouse */
+  warehouse: [
+    "manageProduction",
+    "manageOrders",
+    "manageBarcode", // ✅ Added
+  ],
 };
 
-export const hasPermission = (permissions = [], perm) => {
-  if (!perm) return false;
+export const hasPermission = (permissions = [], permission) => {
+  if (!permission) return false;
   if (permissions.includes("*")) return true;
-  return permissions.includes(perm);
+  return permissions.includes(permission);
 };

@@ -102,6 +102,37 @@ reviews: [
     { label: "Zero Inventory", href: "/inventory/zero-inventory" },
   ],
 
+  barcodes: [
+  {
+    label: "Barcode Dashboard",
+    href: "/barcodes",
+  },
+  {
+    label: "Generate Barcodes",
+    href: "/barcodes/generate",
+  },
+  {
+    label: "Print Barcode Tags",
+    href: "/barcodes/print",
+  },
+  {
+    label: "Scan Barcode",
+    href: "/barcodes/scan",
+  },
+  {
+    label: "All Barcode Items",
+    href: "/barcodes/all",
+  },
+  {
+    label: "Stock In",
+    href: "/barcodes/stock-in",
+  },
+  {
+    label: "Stock-In History",
+    href: "/barcodes/stock-in/history",
+  },
+],
+
   fabrics: [
     { label: "Fabric Dashboard", href: "/fabrics" },
     { label: "Add Fabric", href: "/fabrics/add-fabric" },
@@ -439,6 +470,10 @@ export const routeSidebarMap = [
   { prefix: "/fabrics", key: "fabrics" },
   { prefix: "/inventory", key: "inventory" },
   { prefix: "/analytics", key: "analytics" },
+   {
+    prefix: "/barcodes",
+    key: "barcodes",
+  },
   { prefix: "/email", key: "email" },
   { prefix: "/reels", key: "reels" },
   { prefix: "/marketing", key: "marketing" },

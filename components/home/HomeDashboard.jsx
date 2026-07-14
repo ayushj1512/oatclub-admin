@@ -26,6 +26,7 @@ import {
   CreditCard,
   MessageCircle,
   Mail,
+  Barcode,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -38,28 +39,144 @@ import {
 import LiveClock from "@/components/dashboard/LiveClock";
 
 const DOMAIN_LIST = [
-  { id: "designing", name: "Designing", icon: Palette, route: "/designing" },
-  { id: "design_lab", name: "Design Lab", icon: Sparkles, route: "/design-lab" },
-  { id: "production", name: "Production / Tailoring", icon: Ticket, route: "/production" },
-  { id: "accounts", name: "Accounts", icon: Calculator, route: "/accounts" },
-  { id: "products", name: "Products", icon: Package, route: "/products" },
-  { id: "orders", name: "Orders", icon: ClipboardList, route: "/orders" },
-  { id: "refunds", name: "Refunds", icon: CreditCard, route: "/refunds" },
-  { id: "fast2sms", name: "Fast2SMS", icon: MessageCircle, route: "/fast2sms" },
-  { id: "shiprocket", name: "Shiprocket", icon: Package, route: "/shiprocket" },
-  { id: "reviews", name: "Reviews", icon: Star, route: "/reviews" },
-  { id: "rma", name: "RMA Requests", icon: RotateCcw, route: "/rma" },
-  { id: "media", name: "Media", icon: Images, route: "/media" },
-  { id: "email", name: "Email", icon: Mail, route: "/email" },
-  { id: "reels", name: "Reels", icon: Clapperboard, route: "/reels" },
-  { id: "blogs", name: "Blogs", icon: FileText, route: "/blogs" },
-  { id: "inventory", name: "Inventory", icon: Boxes, route: "/inventory" },
-  { id: "fabrics", name: "Fabrics", icon: Scissors, route: "/fabrics" },
-  { id: "marketing", name: "Marketing", icon: BarChart3, route: "/marketing" },
-  { id: "customers", name: "Customers", icon: Users, route: "/customers/dashboard" },
-  { id: "support", name: "Customer Support", icon: Headset, route: "/customer-support" },
-  { id: "reports", name: "Reports", icon: FileBarChart, route: "/reports" },
-  { id: "coupons", name: "Coupons", icon: TicketPercent, route: "/coupons" },
+  {
+    id: "designing",
+    name: "Designing",
+    icon: Palette,
+    route: "/designing",
+  },
+  {
+    id: "design_lab",
+    name: "Design Lab",
+    icon: Sparkles,
+    route: "/design-lab",
+  },
+  {
+    id: "production",
+    name: "Production / Tailoring",
+    icon: Ticket,
+    route: "/production",
+  },
+  {
+    id: "accounts",
+    name: "Accounts",
+    icon: Calculator,
+    route: "/accounts",
+  },
+  {
+    id: "products",
+    name: "Products",
+    icon: Package,
+    route: "/products",
+  },
+  {
+    id: "barcode",
+    name: "Barcode",
+    icon: Barcode,
+    route: "/barcode",
+  },
+  {
+    id: "orders",
+    name: "Orders",
+    icon: ClipboardList,
+    route: "/orders",
+  },
+  {
+    id: "refunds",
+    name: "Refunds",
+    icon: CreditCard,
+    route: "/refunds",
+  },
+  {
+    id: "fast2sms",
+    name: "Fast2SMS",
+    icon: MessageCircle,
+    route: "/fast2sms",
+  },
+  {
+    id: "shiprocket",
+    name: "Shiprocket",
+    icon: Package,
+    route: "/shiprocket",
+  },
+  {
+    id: "reviews",
+    name: "Reviews",
+    icon: Star,
+    route: "/reviews",
+  },
+  {
+    id: "rma",
+    name: "RMA Requests",
+    icon: RotateCcw,
+    route: "/rma",
+  },
+  {
+    id: "media",
+    name: "Media",
+    icon: Images,
+    route: "/media",
+  },
+  {
+    id: "email",
+    name: "Email",
+    icon: Mail,
+    route: "/email",
+  },
+  {
+    id: "reels",
+    name: "Reels",
+    icon: Clapperboard,
+    route: "/reels",
+  },
+  {
+    id: "blogs",
+    name: "Blogs",
+    icon: FileText,
+    route: "/blogs",
+  },
+  {
+    id: "inventory",
+    name: "Inventory",
+    icon: Boxes,
+    route: "/inventory",
+  },
+  {
+    id: "fabrics",
+    name: "Fabrics",
+    icon: Scissors,
+    route: "/fabrics",
+  },
+  {
+    id: "marketing",
+    name: "Marketing",
+    icon: BarChart3,
+    route: "/marketing",
+  },
+  {
+    id: "customers",
+    name: "Customers",
+    icon: Users,
+    route: "/customers/dashboard",
+  },
+  {
+    id: "support",
+    name: "Customer Support",
+    icon: Headset,
+    route: "/customer-support",
+  },
+  {
+    id: "reports",
+    name: "Reports",
+    icon: FileBarChart,
+    route: "/reports",
+  },
+  {
+    id: "coupons",
+    name: "Coupons",
+    icon: TicketPercent,
+    route: "/coupons",
+  },
   {
     id: "collaboration",
     name: "Influencer Collaborations",
@@ -70,6 +187,7 @@ const DOMAIN_LIST = [
 
 const CARD_HINTS = {
   design_lab: "Creative apparel design workspace",
+  barcode: "Generate, print and manage unique product barcodes",
   refunds: "Manage Razorpay refunds and manual refund proofs",
   fast2sms: "View WhatsApp confirmation logs and message status",
   rma: "View return and exchange requests",
@@ -91,22 +209,38 @@ const isFeaturedCard = (id) => id === "design_lab";
 
 export default function HomeDashboard() {
   const router = useRouter();
-  const admin = useLoginStore((s) => s.admin);
+
+  const admin = useLoginStore((state) => state.admin);
   const role = admin?.role || "viewer";
 
   const permissions = useMemo(() => {
-    if (admin?.permissions?.length) return admin.permissions;
+    if (admin?.permissions?.length) {
+      return admin.permissions;
+    }
+
     return ROLE_DEFAULT_PERMS[role] || [];
   }, [admin?.permissions, role]);
 
   const allowedDomains = useMemo(() => {
-    return DOMAIN_LIST.filter((item) =>
-      hasPermission(permissions, DOMAIN_PERMISSIONS[item.id])
-    );
+    return DOMAIN_LIST.filter((item) => {
+      const requiredPermission = DOMAIN_PERMISSIONS[item.id];
+
+      /*
+       * Keeps Barcode visible until its permission is added
+       * inside loginConfig.
+       */
+      if (item.id === "barcode" && !requiredPermission) {
+        return true;
+      }
+
+      return hasPermission(permissions, requiredPermission);
+    });
   }, [permissions]);
 
   const sortedDomains = useMemo(() => {
-    return [...allowedDomains].sort((a, b) => a.name.localeCompare(b.name));
+    return [...allowedDomains].sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
   }, [allowedDomains]);
 
   const focusQuote = useMemo(() => {
@@ -115,7 +249,10 @@ export default function HomeDashboard() {
   }, []);
 
   const adminName =
-    admin?.fullName || admin?.name || admin?.username || "OATCLUB team";
+    admin?.fullName ||
+    admin?.name ||
+    admin?.username ||
+    "OATCLUB team";
 
   return (
     <div className="min-h-screen bg-oat-bg px-3 py-5 sm:px-6 sm:py-7 md:px-8">
@@ -137,8 +274,9 @@ export default function HomeDashboard() {
             </h1>
 
             <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-600 sm:text-base">
-              OATCLUB admin control room for orders, drops, customers, and
-              growth. Everything stays quiet, scannable, and ready for action.
+              OATCLUB admin control room for orders, drops, customers,
+              barcodes, and growth. Everything stays quiet, scannable, and
+              ready for action.
             </p>
           </div>
 
@@ -150,6 +288,7 @@ export default function HomeDashboard() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
               Today&apos;s focus
             </p>
+
             <p className="mt-2 text-sm font-medium leading-6 text-zinc-800">
               {focusQuote}
             </p>
@@ -159,6 +298,7 @@ export default function HomeDashboard() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
               Modules
             </p>
+
             <p className="mt-2 text-3xl font-black text-zinc-950">
               {sortedDomains.length}
             </p>
@@ -168,7 +308,10 @@ export default function HomeDashboard() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
               Workspace
             </p>
-            <p className="mt-2 text-3xl font-black text-zinc-950">Live</p>
+
+            <p className="mt-2 text-3xl font-black text-zinc-950">
+              Live
+            </p>
           </div>
         </div>
       </section>
@@ -184,6 +327,7 @@ export default function HomeDashboard() {
               <h2 className="text-2xl font-black tracking-tight text-zinc-950">
                 OATCLUB workspaces
               </h2>
+
               <p className="mt-1 text-sm text-zinc-500">
                 Choose where you want to work.
               </p>
@@ -199,58 +343,73 @@ export default function HomeDashboard() {
             className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
           >
             <AnimatePresence initial={false}>
-              {sortedDomains.map(({ id, name, icon: Icon, route }, index) => {
-                const featured = isFeaturedCard(id);
+              {sortedDomains.map(
+                ({ id, name, icon: Icon, route }, index) => {
+                  const featured = isFeaturedCard(id);
 
-                return (
-                  <motion.button
-                    key={id}
-                    layout
-                    type="button"
-                    onClick={() => router.push(route)}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 36 }}
-                    className={[
-                      "group flex min-h-[116px] items-start gap-4 rounded-3xl border bg-white p-4 text-left transition-all duration-300",
-                      featured
-                        ? "border-zinc-200 shadow-[0_16px_44px_rgba(9,9,11,0.055)] hover:-translate-y-1"
-                        : "border-zinc-100 shadow-sm hover:-translate-y-1 hover:border-zinc-200 hover:shadow-[0_12px_30px_rgba(9,9,11,0.04)]",
-                    ].join(" ")}
-                  >
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-sm">
-                      <Icon size={20} />
-                    </span>
+                  return (
+                    <motion.button
+                      key={id}
+                      layout
+                      type="button"
+                      onClick={() => router.push(route)}
+                      initial={{
+                        opacity: 0,
+                        y: 8,
+                      }}
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                      }}
+                      exit={{
+                        opacity: 0,
+                        y: 8,
+                      }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 420,
+                        damping: 36,
+                      }}
+                      className={[
+                        "group flex min-h-[116px] items-start gap-4 rounded-3xl border bg-white p-4 text-left transition-all duration-300",
+                        featured
+                          ? "border-zinc-200 shadow-[0_16px_44px_rgba(9,9,11,0.055)] hover:-translate-y-1"
+                          : "border-zinc-100 shadow-sm hover:-translate-y-1 hover:border-zinc-200 hover:shadow-[0_12px_30px_rgba(9,9,11,0.04)]",
+                      ].join(" ")}
+                    >
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-sm">
+                        <Icon size={20} />
+                      </span>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-
-                        {featured && (
-                          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-700">
-                            Featured
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
+                            {String(index + 1).padStart(2, "0")}
                           </span>
-                        )}
+
+                          {featured && (
+                            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-700">
+                              Featured
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 className="mt-1 text-sm font-bold leading-snug text-zinc-950 sm:text-base">
+                          {name}
+                        </h3>
+
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">
+                          {CARD_HINTS[id] || "Open this workspace."}
+                        </p>
                       </div>
 
-                      <h3 className="mt-1 text-sm font-bold leading-snug text-zinc-950 sm:text-base">
-                        {name}
-                      </h3>
-
-                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">
-                        {CARD_HINTS[id] || "Open this workspace."}
-                      </p>
-                    </div>
-
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-50 text-zinc-400 transition group-hover:bg-zinc-950 group-hover:text-white">
-                      <ArrowUpRight size={15} />
-                    </span>
-                  </motion.button>
-                );
-              })}
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-50 text-zinc-400 transition group-hover:bg-zinc-950 group-hover:text-white">
+                        <ArrowUpRight size={15} />
+                      </span>
+                    </motion.button>
+                  );
+                }
+              )}
             </AnimatePresence>
           </motion.div>
         </section>
