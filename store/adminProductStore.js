@@ -30,6 +30,39 @@ const buildProductQuery = (params = {}) => {
   return query.toString();
 };
 
+const normalizeProductCode = (value = "") => {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "";
+
+  const digits = raw.replace(/\D/g, "");
+
+  if (/^\d+$/.test(raw) && digits) {
+    return digits.padStart(5, "0");
+  }
+
+  return raw.toUpperCase().replace(/\s+/g, "");
+};
+
+const buildProductCodeCandidates = (value = "") => {
+  const normalized = normalizeProductCode(value);
+  const digits = normalized.replace(/\D/g, "");
+
+  if (!digits) return [normalized].filter(Boolean);
+
+  return Array.from(
+    new Set([
+      normalized,
+      digits,
+      digits.padStart(5, "0"),
+      digits.padStart(6, "0"),
+      digits.replace(/^0+/, "") || "0",
+      digits.slice(-5),
+      digits.slice(-6),
+    ]),
+  ).filter(Boolean);
+};
+
 /* ============================================================
   Helpers (admin-side payload hygiene)
   - remove variant.price fields (no longer in schema)
@@ -420,6 +453,55 @@ export const useAdminProductStore = create((set, get) => ({
     return null;
   } finally {
     set({ loading: false });
+  }
+},
+
+/* ============================================================
+  SEARCH PRODUCT FOR BARCODE
+============================================================ */
+searchProductForBarcode: async (code) => {
+  const normalizedCode = normalizeProductCode(code);
+
+  if (!normalizedCode) return null;
+
+  try {
+    const candidates = buildProductCodeCandidates(normalizedCode);
+
+    for (const candidate of candidates) {
+      const query = new URLSearchParams({
+        productCode: candidate,
+        page: "1",
+        limit: "10",
+        activeOnly: "false",
+        excludeDrafts: "false",
+      });
+
+      const res = await fetch(`${API}/card-search?${query.toString()}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to search product");
+      }
+
+      const products = Array.isArray(data.products) ? data.products : [];
+
+      const exactMatch =
+        products.find(
+          (product) =>
+            normalizeProductCode(product?.productCode) === normalizedCode,
+        ) || products[0];
+
+      if (exactMatch) return exactMatch;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("searchProductForBarcode error:", error);
+    throw error;
   }
 },
 

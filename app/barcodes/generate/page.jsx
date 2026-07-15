@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Barcode,
+  CheckCircle2,
   Loader2,
   PackagePlus,
+  Search,
   X,
 } from "lucide-react";
 
 import BarcodePrintGrid from "@/components/barcode/BarcodePrintGrid";
 import { useBarcodeStore } from "@/store/barcodeStore";
+import { useAdminProductStore } from "@/store/adminProductStore";
 
 const SIZES = [
   "XS",
@@ -31,6 +34,20 @@ const INITIAL_FORM = {
   quantity: 1,
 };
 
+const normalizeProductCode = (value = "") => {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "";
+
+  const digits = raw.replace(/\D/g, "");
+
+  if (/^\d+$/.test(raw) && digits) {
+    return digits.padStart(5, "0");
+  }
+
+  return raw.toUpperCase().replace(/\s+/g, "");
+};
+
 export default function GenerateBarcodePage() {
   const {
     creating,
@@ -42,8 +59,13 @@ export default function GenerateBarcodePage() {
     clearMessages,
   } = useBarcodeStore();
 
+  const { searchProductForBarcode } = useAdminProductStore();
+
   const [form, setForm] = useState(INITIAL_FORM);
   const [generatedItems, setGeneratedItems] = useState([]);
+  const [matchedProduct, setMatchedProduct] = useState(null);
+  const [searchingProduct, setSearchingProduct] = useState(false);
+  const [productError, setProductError] = useState("");
 
   const submitting = creating || batchCreating;
 
@@ -54,11 +76,74 @@ export default function GenerateBarcodePage() {
     }));
   };
 
-  const validateForm = () => {
-    const productId = String(form.productId || "")
-      .trim()
-      .toUpperCase();
+  const findProduct = async (value) => {
+    const normalizedCode = normalizeProductCode(value);
 
+    if (!normalizedCode) {
+      setMatchedProduct(null);
+      setProductError("");
+      return;
+    }
+
+    try {
+      setSearchingProduct(true);
+      setProductError("");
+      setMatchedProduct(null);
+
+      const product = await searchProductForBarcode(normalizedCode);
+
+      if (!product) {
+        setProductError("No product found with this code");
+        return;
+      }
+
+      setMatchedProduct(product);
+
+      setForm((current) => ({
+        ...current,
+        productId: String(product.productCode || normalizedCode),
+        price:
+          product.price !== undefined && product.price !== null
+            ? String(product.price)
+            : current.price,
+      }));
+    } catch (searchError) {
+      console.error(searchError);
+      setProductError(searchError.message || "Failed to search product");
+    } finally {
+      setSearchingProduct(false);
+    }
+  };
+
+  useEffect(() => {
+    const rawCode = String(form.productId || "").trim();
+
+    if (!rawCode) {
+      setMatchedProduct(null);
+      setProductError("");
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      findProduct(rawCode);
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [form.productId]);
+
+  const handleProductCodeBlur = () => {
+    const normalizedCode = normalizeProductCode(form.productId);
+
+    if (!normalizedCode) return;
+
+    setForm((current) => ({
+      ...current,
+      productId: normalizedCode,
+    }));
+  };
+
+  const validateForm = () => {
+    const productId = normalizeProductCode(form.productId);
     const size = String(form.size || "").trim().toUpperCase();
     const price = Number(form.price);
     const quantity = Number(form.quantity);
@@ -105,10 +190,11 @@ export default function GenerateBarcodePage() {
       if (payload.quantity === 1) {
         const item = await createBarcodeItem(payload);
         setGeneratedItems([item]);
-      } else {
-        const items = await createBarcodeBatch(payload);
-        setGeneratedItems(items);
+        return;
       }
+
+      const items = await createBarcodeBatch(payload);
+      setGeneratedItems(items);
     } catch (submitError) {
       console.error(submitError);
     }
@@ -127,8 +213,8 @@ export default function GenerateBarcodePage() {
           </h1>
 
           <p className="mt-3 max-w-2xl text-sm leading-7 text-neutral-600">
-            Every physical unit receives a globally unique
-            serial number and Code 128 barcode.
+            Enter the product code and its MRP will be fetched automatically.
+            Every physical unit receives a unique Code 128 barcode.
           </p>
         </section>
 
@@ -144,8 +230,8 @@ export default function GenerateBarcodePage() {
               </h2>
 
               <p className="mt-1 text-xs leading-6 text-neutral-500">
-                Enter variant information and the number of
-                physical units being produced.
+                Product code is normalized automatically. For example, 336
+                becomes 00336.
               </p>
             </div>
           </div>
@@ -154,16 +240,51 @@ export default function GenerateBarcodePage() {
             onSubmit={handleSubmit}
             className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4"
           >
-            <Field label="Product ID">
-              <input
-                type="text"
-                value={form.productId}
-                onChange={(event) =>
-                  updateField("productId", event.target.value)
-                }
-                placeholder="Example: 1081"
-                className="field-control"
-              />
+            <Field label="Product Code">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={form.productId}
+                  onChange={(event) => {
+                    updateField("productId", event.target.value);
+                    setMatchedProduct(null);
+                    setProductError("");
+                  }}
+                  onBlur={handleProductCodeBlur}
+                  placeholder="Example: 336"
+                  autoComplete="off"
+                  className="field-control pr-10"
+                />
+
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400">
+                  {searchingProduct ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : matchedProduct ? (
+                    <CheckCircle2 size={16} className="text-emerald-600" />
+                  ) : (
+                    <Search size={16} />
+                  )}
+                </span>
+              </div>
+
+              {matchedProduct && (
+                <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                  <p className="truncate text-xs font-semibold text-emerald-900">
+                    {matchedProduct.title}
+                  </p>
+
+                  <p className="mt-0.5 text-[10px] text-emerald-700">
+                    Code: {matchedProduct.productCode} · MRP: ₹
+                    {Number(matchedProduct.price || 0).toLocaleString("en-IN")}
+                  </p>
+                </div>
+              )}
+
+              {productError && (
+                <p className="mt-2 text-[11px] text-red-600">
+                  {productError}
+                </p>
+              )}
             </Field>
 
             <Field label="Size">
@@ -196,7 +317,7 @@ export default function GenerateBarcodePage() {
                   onChange={(event) =>
                     updateField("price", event.target.value)
                   }
-                  placeholder="1499"
+                  placeholder="Auto-filled"
                   className="field-control pl-8"
                 />
               </div>
@@ -217,7 +338,7 @@ export default function GenerateBarcodePage() {
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || searchingProduct}
               className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 md:col-span-2 xl:col-span-4"
             >
               {submitting ? (
