@@ -112,7 +112,10 @@ const normalizeProductPayload = (payload) => {
   // ✅ boolean hygiene
   if (out.isBestSeller !== undefined) out.isBestSeller = toBool(out.isBestSeller);
   if (out.isTrending !== undefined) out.isTrending = toBool(out.isTrending);
-  if (out.isSamplingDone !== undefined) out.isSamplingDone = toBool(out.isSamplingDone);
+  if (out.availableForCollab !== undefined) {
+  out.availableForCollab = toBool(out.availableForCollab);
+}
+if (out.isSamplingDone !== undefined) out.isSamplingDone = toBool(out.isSamplingDone);
   if (out.isActive !== undefined) out.isActive = toBool(out.isActive);
   if (out.isDraft !== undefined) out.isDraft = toBool(out.isDraft);
   // ✅ HSN Code hygiene: trim + digits-only (allow empty)
@@ -1708,6 +1711,118 @@ searchProductForBarcode: async (code) => {
     }
   },
 
+  /* ============================================================
+  COLLAB READY — SINGLE PRODUCT
+
+  PATCH /api/products/:id/collab-ready
+  body: { availableForCollab: true/false }
+============================================================ */
+updateCollabReadyStatus: async (
+  productId,
+  availableForCollab,
+) => {
+  try {
+    const id = String(productId || "").trim();
+
+    if (!id) {
+      throw new Error("Product ID is required");
+    }
+
+    const nextValue = Boolean(availableForCollab);
+
+    set({
+      saving: true,
+      error: null,
+    });
+
+    const res = await fetch(
+      `${API}/${id}/collab-ready`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          availableForCollab: nextValue,
+        }),
+      },
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(
+        data?.message ||
+          "Collab-ready status update failed",
+      );
+    }
+
+    const updated =
+      Array.isArray(data?.products) &&
+      data.products.length
+        ? data.products[0]
+        : data?.product || null;
+
+    set((state) => ({
+      products: (state.products || []).map(
+        (product) =>
+          String(product?._id) === id
+            ? {
+                ...product,
+                ...(updated || {}),
+                availableForCollab:
+                  updated?.availableForCollab ??
+                  nextValue,
+              }
+            : product,
+      ),
+
+      product:
+        String(state.product?._id || "") === id
+          ? {
+              ...state.product,
+              ...(updated || {}),
+              availableForCollab:
+                updated?.availableForCollab ??
+                nextValue,
+            }
+          : state.product,
+    }));
+
+    toast.success(
+      nextValue
+        ? "Marked Collab Ready ✅"
+        : "Removed from Collab Ready ✅",
+    );
+
+    return updated || {
+      _id: id,
+      availableForCollab: nextValue,
+    };
+  } catch (error) {
+    console.error(
+      "❌ updateCollabReadyStatus:",
+      error,
+    );
+
+    set({
+      error:
+        error?.message ||
+        "Collab-ready status update failed",
+    });
+
+    toast.error(
+      error?.message ||
+        "Collab-ready status update failed",
+    );
+
+    throw error;
+  } finally {
+    set({ saving: false });
+  }
+},
+
 
     /* ============================================================
     ✅ TOGGLE TRENDING
@@ -2158,6 +2273,140 @@ syncProductAssociationGroup: async (
     set({ saving: false });
   }
 },
+/* ============================================================
+  COLLAB READY — SINGLE + BULK
+============================================================ */
+setCollabReady: async (input, availableForCollab) => {
+  try {
+    const ids = Array.from(
+      new Set(
+        (Array.isArray(input) ? input : [input])
+          .map((item) =>
+            item && typeof item === "object"
+              ? String(item._id || "").trim()
+              : String(item || "").trim(),
+          )
+          .filter(Boolean),
+      ),
+    );
 
+    if (!ids.length) {
+      toast.error("Select at least one product");
+      return null;
+    }
+
+    const nextValue =
+      typeof availableForCollab === "boolean"
+        ? availableForCollab
+        : ["true", "1", "yes"].includes(
+            String(availableForCollab).trim().toLowerCase(),
+          );
+
+    const isBulk = ids.length > 1;
+
+    set({
+      saving: true,
+      error: null,
+    });
+
+    const url = isBulk
+      ? `${API}/bulk/collab-ready`
+      : `${API}/${ids[0]}/collab-ready`;
+
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        ...(isBulk ? { ids } : {}),
+        availableForCollab: nextValue,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(
+        data?.message || "Collab-ready update failed",
+      );
+    }
+
+    const updatedProducts = Array.isArray(data?.products)
+      ? data.products
+      : data?.product
+        ? [data.product]
+        : [];
+
+    const updatedMap = new Map(
+      updatedProducts.map((product) => [
+        String(product?._id || ""),
+        product,
+      ]),
+    );
+
+    const selectedIds = new Set(ids.map(String));
+
+    set((state) => ({
+      products: (state.products || []).map((product) => {
+        const id = String(product?._id || "");
+
+        if (!selectedIds.has(id)) return product;
+
+        const updated = updatedMap.get(id);
+
+        return {
+          ...product,
+          ...(updated || {}),
+          availableForCollab:
+            updated?.availableForCollab ?? nextValue,
+        };
+      }),
+
+      product:
+        state.product &&
+        selectedIds.has(String(state.product?._id || ""))
+          ? {
+              ...state.product,
+              ...(updatedMap.get(
+                String(state.product?._id || ""),
+              ) || {}),
+              availableForCollab:
+                updatedMap.get(
+                  String(state.product?._id || ""),
+                )?.availableForCollab ?? nextValue,
+            }
+          : state.product,
+
+      bulkSelectedIds: isBulk
+        ? []
+        : state.bulkSelectedIds,
+    }));
+
+    toast.success(
+      nextValue
+        ? `${ids.length} product(s) marked Collab Ready ✅`
+        : `${ids.length} product(s) removed from Collab Ready ✅`,
+    );
+
+    return data;
+  } catch (error) {
+    console.error("❌ setCollabReady:", error);
+
+    set({
+      error:
+        error?.message || "Collab-ready update failed",
+    });
+
+    toast.error(
+      error?.message || "Collab-ready update failed",
+    );
+
+    throw error;
+  } finally {
+    set({ saving: false });
+  }
+},
 
 }));
