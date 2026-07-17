@@ -27,6 +27,7 @@ import {
   MessageCircle,
   Mail,
   Barcode,
+  Factory,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -56,6 +57,12 @@ const DOMAIN_LIST = [
     name: "Production / Tailoring",
     icon: Ticket,
     route: "/production",
+  },
+  {
+    id: "vendors",
+    name: "Vendors",
+    icon: Factory,
+    route: "/vendors",
   },
   {
     id: "accounts",
@@ -187,6 +194,7 @@ const DOMAIN_LIST = [
 
 const CARD_HINTS = {
   design_lab: "Creative apparel design workspace",
+  vendors: "Create vendors and assign product codes and modules",
   barcode: "Generate, print and manage unique product barcodes",
   refunds: "Manage Razorpay refunds and manual refund proofs",
   fast2sms: "View WhatsApp confirmation logs and message status",
@@ -226,10 +234,13 @@ export default function HomeDashboard() {
       const requiredPermission = DOMAIN_PERMISSIONS[item.id];
 
       /*
-       * Keeps Barcode visible until its permission is added
-       * inside loginConfig.
+       * Keep these modules visible until their permissions
+       * are added inside loginConfig.
        */
-      if (item.id === "barcode" && !requiredPermission) {
+      if (
+        ["barcode", "vendors"].includes(item.id) &&
+        !requiredPermission
+      ) {
         return true;
       }
 
@@ -275,8 +286,8 @@ export default function HomeDashboard() {
 
             <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-600 sm:text-base">
               OATCLUB admin control room for orders, drops, customers,
-              barcodes, and growth. Everything stays quiet, scannable, and
-              ready for action.
+              barcodes, vendors, and growth. Everything stays quiet,
+              scannable, and ready for action.
             </p>
           </div>
 

@@ -4,9 +4,10 @@ export const DOMAIN_PERMISSIONS = {
   designing: "manageDesigning",
   design_lab: "manageDesignLab",
   production: "manageProduction",
+  vendors: "manageVendors", // ✅ NEW MODULE
   accounts: "manageAccounts",
   products: "manageProducts",
-  barcode: "manageBarcode", // ✅ NEW MODULE
+  barcode: "manageBarcode",
   orders: "manageOrders",
 
   refunds: "manageRefunds",
@@ -56,7 +57,7 @@ export const ROLE_DEFAULT_PERMS = {
     "manageInventory",
     "manageFabrics",
     "manageReviews",
-    "manageBarcode", // ✅ Added
+    "manageBarcode",
   ],
 
   /* Read Only */
@@ -73,12 +74,13 @@ export const ROLE_DEFAULT_PERMS = {
   warehouse: [
     "manageProduction",
     "manageOrders",
-    "manageBarcode", // ✅ Added
+    "manageBarcode",
   ],
 };
 
 export const hasPermission = (permissions = [], permission) => {
   if (!permission) return false;
   if (permissions.includes("*")) return true;
+
   return permissions.includes(permission);
 };

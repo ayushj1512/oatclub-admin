@@ -55,6 +55,21 @@ export const sidebarMenus = {
     { label: "Barcode Generator", href: "/production/barcode" },
   ],
 
+  vendors: [
+  {
+    label: "Vendor Dashboard",
+    href: "/vendors",
+  },
+  {
+    label: "Create Vendor",
+    href: "/vendors/create",
+  },
+  {
+    label: "Vendor List",
+    href: "/vendors",
+  },
+],
+
   fast2sms: [
     { label: "Fast2SMS Dashboard", href: "/fast2sms" },
     {
@@ -507,5 +522,6 @@ export const routeSidebarMap = [
   { prefix: "/customers", key: "customers" },
   { prefix: "/sales", key: "sales" },
   { prefix: "/account", key: "account_user" },
+  { prefix: "/vendors", key: "vendors" },
   { prefix: "/fast2sms", key: "fast2sms" },
 ];
