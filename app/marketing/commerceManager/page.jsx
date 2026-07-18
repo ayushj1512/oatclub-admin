@@ -114,18 +114,18 @@ function StatCard({ icon: Icon, label, value, subValue }) {
 
 export default function CommerceManagerPage() {
   const {
-  config,
-  loading,
-  saving,
-  actionLoading,
-  fetchConfig,
-  updateConfig,
-  addProductCodes,
-  removeProductCodes,
-  clearAllProductCodes,
-  toggleStatus,
-  refreshXmlFeed,
-} = useAdminCommerceManagerStore();
+    config,
+    loading,
+    saving,
+    actionLoading,
+    fetchConfig,
+    updateConfig,
+    addProductCodes,
+    removeProductCodes,
+    clearAllProductCodes,
+    toggleStatus,
+    refreshXmlFeed,
+  } = useAdminCommerceManagerStore();
 
   const adminProducts = useAdminProductStore((state) => state.products);
 
@@ -233,12 +233,12 @@ export default function CommerceManagerPage() {
   };
 
   const handleRefreshXmlFeed = async () => {
-  const res = await refreshXmlFeed();
+    const res = await refreshXmlFeed();
 
-  if (res?.success) {
-    await fetchConfig();
-  }
-};
+    if (res?.success) {
+      await fetchConfig();
+    }
+  };
 
   const handleSaveNotes = async () => {
     await updateConfig({
@@ -490,22 +490,22 @@ export default function CommerceManagerPage() {
                 </button>
 
                 <button
-  onClick={handleRefreshXmlFeed}
-  disabled={actionLoading}
-  className={`${softButtonClass} bg-black text-white hover:bg-zinc-800`}
->
-  <RefreshCcw
-    className={`h-4 w-4 ${actionLoading ? "animate-spin" : ""}`}
-  />
-  Refresh XML Feed
-</button>
+                  onClick={handleRefreshXmlFeed}
+                  disabled={actionLoading}
+                  className={`${softButtonClass} bg-black text-white hover:bg-zinc-800`}
+                >
+                  <RefreshCcw
+                    className={`h-4 w-4 ${actionLoading ? "animate-spin" : ""}`}
+                  />
+                  Refresh XML Feed
+                </button>
 
                 <button
                   onClick={handleToggleStatus}
                   disabled={actionLoading}
                   className={`${softButtonClass} ${config?.isActive
-                      ? "bg-black text-white hover:bg-zinc-800"
-                      : "bg-zinc-700 text-white hover:bg-black"
+                    ? "bg-black text-white hover:bg-zinc-800"
+                    : "bg-zinc-700 text-white hover:bg-black"
                     }`}
                 >
                   <Power className="h-4 w-4" />
@@ -658,8 +658,8 @@ export default function CommerceManagerPage() {
               }}
               onDrop={handleDrop}
               className={`rounded-[22px] p-5 text-center transition ${dragActive
-                  ? "bg-[#ededed] ring-2 ring-black/15"
-                  : "bg-[#f6f6f6] ring-1 ring-black/5"
+                ? "bg-[#ededed] ring-2 ring-black/15"
+                : "bg-[#f6f6f6] ring-1 ring-black/5"
                 }`}
             >
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white ring-1 ring-black/5">

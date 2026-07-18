@@ -255,17 +255,17 @@ export default function ProductPicker({
       setTotal(
         Number(
           response?.total ??
-            response?.data?.total ??
-            store.total ??
-            products.length
+          response?.data?.total ??
+          store.total ??
+          products.length
         )
       );
 
       const responsePages = Number(
         response?.pages ??
-          response?.data?.pages ??
-          store.pages ??
-          0
+        response?.data?.pages ??
+        store.pages ??
+        0
       );
 
       if (responsePages) {
@@ -605,11 +605,10 @@ export default function ProductPicker({
                   <button
                     type="button"
                     onClick={() => toggleProduct(product)}
-                    className={`shrink-0 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ${
-                      selected
+                    className={`shrink-0 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ${selected
                         ? "bg-black text-white ring-black"
                         : "text-black/70 ring-black/10 hover:bg-black/[0.03]"
-                    }`}
+                      }`}
                   >
                     {selected ? "Selected" : "Select"}
                   </button>

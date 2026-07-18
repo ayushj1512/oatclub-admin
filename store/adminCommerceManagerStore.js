@@ -192,7 +192,7 @@ export const useAdminCommerceManagerStore = create(
                 productCodes: normalizedCodes,
                 lastUpdatedBy,
               }),
-            }
+            },
           );
 
           if (!res.ok) {
@@ -254,7 +254,7 @@ export const useAdminCommerceManagerStore = create(
                 productCodes: normalizedCodes,
                 lastUpdatedBy,
               }),
-            }
+            },
           );
 
           if (!res.ok) {
@@ -303,7 +303,7 @@ export const useAdminCommerceManagerStore = create(
               headers: { "Content-Type": "application/json" },
               credentials: "include",
               body: JSON.stringify({ lastUpdatedBy }),
-            }
+            },
           );
 
           if (!res.ok) {
@@ -377,7 +377,7 @@ export const useAdminCommerceManagerStore = create(
           if (showToast) {
             toast.success(
               data?.message ||
-                `Commerce manager ${isActive ? "activated" : "deactivated"}`
+                `Commerce manager ${isActive ? "activated" : "deactivated"}`,
             );
           }
 
@@ -397,40 +397,40 @@ export const useAdminCommerceManagerStore = create(
       },
 
       refreshXmlFeed: async () => {
-  set({ actionLoading: true, error: "" });
+        set({ actionLoading: true, error: "" });
 
-  try {
-    const res = await fetch(
-      `${BASE_URL}/api/commerce-manager/xml/refresh`,
-      {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-      }
-    );
+        try {
+          const res = await fetch(
+            `${BASE_URL}/api/commerce-manager/xml/refresh`,
+            {
+              method: "POST",
+              credentials: "include",
+              cache: "no-store",
+            },
+          );
 
-    const data = await res.json();
+          const data = await res.json();
 
-    if (!res.ok) {
-      throw new Error(data?.message || "Failed to refresh XML feed");
-    }
+          if (!res.ok) {
+            throw new Error(data?.message || "Failed to refresh XML feed");
+          }
 
-    set({ actionLoading: false });
-    toast.success(data?.message || "XML feed refreshed");
+          set({ actionLoading: false });
+          toast.success(data?.message || "XML feed refreshed");
 
-    return { success: true, data };
-  } catch (error) {
-    const message = error?.message || "Failed to refresh XML feed";
+          return { success: true, data };
+        } catch (error) {
+          const message = error?.message || "Failed to refresh XML feed";
 
-    set({
-      actionLoading: false,
-      error: message,
-    });
+          set({
+            actionLoading: false,
+            error: message,
+          });
 
-    toast.error(message);
-    return { success: false, message };
-  }
-},
+          toast.error(message);
+          return { success: false, message };
+        }
+      },
 
       /* -----------------------------
          LOCAL HELPERS
@@ -466,7 +466,7 @@ export const useAdminCommerceManagerStore = create(
         const current = get().config || {};
         const prevCodes = safeArray(current?.selectedProductCodes);
         const nextCodes = prevCodes.filter(
-          (item) => normalizeCode(item) !== target
+          (item) => normalizeCode(item) !== target,
         );
 
         set({
@@ -478,6 +478,6 @@ export const useAdminCommerceManagerStore = create(
         });
       },
     }),
-    { name: "admin-commerce-manager-store" }
-  )
+    { name: "admin-commerce-manager-store" },
+  ),
 );
