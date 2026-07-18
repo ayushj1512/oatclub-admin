@@ -114,17 +114,18 @@ function StatCard({ icon: Icon, label, value, subValue }) {
 
 export default function CommerceManagerPage() {
   const {
-    config,
-    loading,
-    saving,
-    actionLoading,
-    fetchConfig,
-    updateConfig,
-    addProductCodes,
-    removeProductCodes,
-    clearAllProductCodes,
-    toggleStatus,
-  } = useAdminCommerceManagerStore();
+  config,
+  loading,
+  saving,
+  actionLoading,
+  fetchConfig,
+  updateConfig,
+  addProductCodes,
+  removeProductCodes,
+  clearAllProductCodes,
+  toggleStatus,
+  refreshXmlFeed,
+} = useAdminCommerceManagerStore();
 
   const adminProducts = useAdminProductStore((state) => state.products);
 
@@ -132,6 +133,7 @@ export default function CommerceManagerPage() {
   const [manualInput, setManualInput] = useState("");
   const [removeInput, setRemoveInput] = useState("");
   const [selectedProductIds, setSelectedProductIds] = useState([]);
+  const [pickerSelectedProducts, setPickerSelectedProducts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [excelCodes, setExcelCodes] = useState([]);
   const [excelFileName, setExcelFileName] = useState("");
@@ -188,29 +190,28 @@ export default function CommerceManagerPage() {
       .sort((a, b) => String(a.title).localeCompare(String(b.title)));
   }, [selectedCodes, selectedProductsMap]);
 
-  const pickerSelectedCodes = useMemo(() => {
-    const idSet = new Set(safeArray(selectedProductIds).map(String));
+  const pickerSelectedCodes = useMemo(
+    () =>
+      normalizeCodes(
+        safeArray(pickerSelectedProducts).map((product) =>
+          getProductCode(product)
+        )
+      ),
+    [pickerSelectedProducts]
+  );
 
-    return normalizeCodes(
-      safeArray(adminProducts)
-        .filter((product) => idSet.has(String(product?._id || "")))
-        .map((product) => getProductCode(product))
-    );
-  }, [selectedProductIds, adminProducts]);
-
-  const pickerSelectedProductsPreview = useMemo(() => {
-    const idSet = new Set(safeArray(selectedProductIds).map(String));
-
-    return safeArray(adminProducts)
-      .filter((product) => idSet.has(String(product?._id || "")))
-      .map((product) => ({
-        _id: String(product?._id || ""),
-        title: product?.title || product?.name || "Untitled Product",
-        code: getProductCode(product),
-        image: getProductImage(product),
-      }))
-      .filter((item) => item.code);
-  }, [selectedProductIds, adminProducts]);
+  const pickerSelectedProductsPreview = useMemo(
+    () =>
+      safeArray(pickerSelectedProducts)
+        .map((product) => ({
+          _id: String(product?._id || getProductCode(product)),
+          title: product?.title || product?.name || "Untitled Product",
+          code: getProductCode(product),
+          image: getProductImage(product),
+        }))
+        .filter((item) => item.code),
+    [pickerSelectedProducts]
+  );
 
   const stats = useMemo(
     () => ({
@@ -230,6 +231,14 @@ export default function CommerceManagerPage() {
   const handleRefresh = async () => {
     await fetchConfig(true);
   };
+
+  const handleRefreshXmlFeed = async () => {
+  const res = await refreshXmlFeed();
+
+  if (res?.success) {
+    await fetchConfig();
+  }
+};
 
   const handleSaveNotes = async () => {
     await updateConfig({
@@ -285,7 +294,7 @@ export default function CommerceManagerPage() {
 
   const handleAddPickerSelection = async () => {
     if (!pickerSelectedCodes.length) {
-      toast.error("Please select products first");
+      toast.error("Selected products do not have valid product codes");
       return;
     }
 
@@ -296,6 +305,7 @@ export default function CommerceManagerPage() {
 
     if (res?.success) {
       setSelectedProductIds([]);
+      setPickerSelectedProducts([]);
       toast.success(`${pickerSelectedCodes.length} code(s) added`);
     }
   };
@@ -476,17 +486,27 @@ export default function CommerceManagerPage() {
                   className={`${softButtonClass} bg-white text-black ring-1 ring-black/8 hover:bg-[#f7f7f7]`}
                 >
                   <RefreshCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                  Refresh
+                  Reload Config
                 </button>
+
+                <button
+  onClick={handleRefreshXmlFeed}
+  disabled={actionLoading}
+  className={`${softButtonClass} bg-black text-white hover:bg-zinc-800`}
+>
+  <RefreshCcw
+    className={`h-4 w-4 ${actionLoading ? "animate-spin" : ""}`}
+  />
+  Refresh XML Feed
+</button>
 
                 <button
                   onClick={handleToggleStatus}
                   disabled={actionLoading}
-                  className={`${softButtonClass} ${
-                    config?.isActive
+                  className={`${softButtonClass} ${config?.isActive
                       ? "bg-black text-white hover:bg-zinc-800"
                       : "bg-zinc-700 text-white hover:bg-black"
-                  }`}
+                    }`}
                 >
                   <Power className="h-4 w-4" />
                   {config?.isActive ? "Active" : "Inactive"}
@@ -637,11 +657,10 @@ export default function CommerceManagerPage() {
                 setDragActive(false);
               }}
               onDrop={handleDrop}
-              className={`rounded-[22px] p-5 text-center transition ${
-                dragActive
+              className={`rounded-[22px] p-5 text-center transition ${dragActive
                   ? "bg-[#ededed] ring-2 ring-black/15"
                   : "bg-[#f6f6f6] ring-1 ring-black/5"
-              }`}
+                }`}
             >
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white ring-1 ring-black/5">
                 <Upload className="h-6 w-6" />
@@ -751,6 +770,7 @@ export default function CommerceManagerPage() {
               multiple
               value={selectedProductIds}
               onChange={setSelectedProductIds}
+              onSelectedProductsChange={setPickerSelectedProducts}
               defaultCategory={selectedCategory}
               categoryOptions={[]}
             />
@@ -802,8 +822,8 @@ export default function CommerceManagerPage() {
         </section>
 
         <section className={`${cardClass} p-5 md:p-6`}>
-     
-     
+
+
 
           <SelectedProductCodesTable
             codes={matchedSelectedProducts.map((item) => item.code)}

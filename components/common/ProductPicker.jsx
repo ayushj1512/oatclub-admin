@@ -1,141 +1,168 @@
 // src/components/common/ProductPicker.jsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdminProductStore } from "@/store/adminProductStore";
 import toast from "react-hot-toast";
 
+const PAD_TO = 5;
+
+const safeArray = (value) => (Array.isArray(value) ? value : []);
+
 const useDebouncedValue = (value, delay = 300) => {
   const [debounced, setDebounced] = useState(value);
+
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
   }, [value, delay]);
+
   return debounced;
 };
 
-/**
- * ✅ IMPORTANT FIX:
- * Your productCode in API response is "00336" (5 digits), not 6.
- * So we normalize to 5 digits.
- *
- * Also if someone types 000336, we take last 5 digits => 00336.
- */
-const PAD_TO = 5;
+const normalizeProductCode = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
 
-const normalizeProductCode = (raw) => {
-  const s = String(raw ?? "").trim();
-  if (!s) return "";
-  const digits = s.replace(/[^\d]/g, ""); // keep digits only
-  if (!digits) return "";
-
-  // if more than PAD_TO digits (e.g. 000336), keep last PAD_TO
-  const tail = digits.length > PAD_TO ? digits.slice(-PAD_TO) : digits;
-
-  if (tail.length >= PAD_TO) return tail;
-  return tail.padStart(PAD_TO, "0");
-};
-
-const isNumericLike = (raw) => {
-  const s = String(raw ?? "").trim();
-  if (!s) return false;
-  return /^\d+$/.test(s);
-};
-
-// tries common image keys used in product schema
-const getProductImage = (p) => {
-  if (!p) return "";
-  if (typeof p.thumbnail === "string" && p.thumbnail) return p.thumbnail;
-  if (typeof p.image === "string" && p.image) return p.image;
-  if (typeof p.mainImage === "string" && p.mainImage) return p.mainImage;
-  if (typeof p.featuredImage === "string" && p.featuredImage) return p.featuredImage;
-
-  if (Array.isArray(p.images) && p.images.length) {
-    const first = p.images[0];
-    if (typeof first === "string") return first;
-    if (first?.url) return first.url;
-    if (first?.src) return first.src;
+  if (!/^\d+$/.test(raw)) {
+    return raw.toUpperCase().replace(/\s+/g, "");
   }
 
-  if (Array.isArray(p.variants) && p.variants.length) {
-    const v0 = p.variants[0];
-    if (typeof v0?.image === "string" && v0.image) return v0.image;
-    if (typeof v0?.thumbnail === "string" && v0.thumbnail) return v0.thumbnail;
+  const digits =
+    raw.length > PAD_TO ? raw.slice(-PAD_TO) : raw;
+
+  return digits.padStart(PAD_TO, "0");
+};
+
+const isNumericLike = (value) =>
+  /^\d+$/.test(String(value ?? "").trim());
+
+const getProductImage = (product) => {
+  if (!product) return "";
+
+  const directKeys = [
+    product?.thumbnail,
+    product?.image,
+    product?.mainImage,
+    product?.featuredImage,
+  ];
+
+  const directImage = directKeys.find(
+    (image) => typeof image === "string" && image.trim()
+  );
+
+  if (directImage) return directImage;
+
+  const firstImage = safeArray(product?.images)[0];
+
+  if (typeof firstImage === "string") return firstImage;
+  if (typeof firstImage?.url === "string") return firstImage.url;
+  if (typeof firstImage?.src === "string") return firstImage.src;
+
+  const firstVariant = safeArray(product?.variants)[0];
+
+  if (typeof firstVariant?.image === "string") {
+    return firstVariant.image;
+  }
+
+  if (typeof firstVariant?.image?.url === "string") {
+    return firstVariant.image.url;
+  }
+
+  if (typeof firstVariant?.image?.src === "string") {
+    return firstVariant.image.src;
+  }
+
+  if (typeof firstVariant?.thumbnail === "string") {
+    return firstVariant.thumbnail;
   }
 
   return "";
 };
 
-// product code helper (prefer productCode / sku / styleCode / patternNumber / code)
-const getProductCodeRaw = (p) => {
-  if (!p) return "";
-  const candidates = [p.productCode, p.sku, p.styleCode, p.patternNumber, p.code]
-    .map((x) => (x == null ? "" : String(x).trim()))
-    .filter(Boolean);
-  return candidates[0] || "";
+const getProductCode = (product) => {
+  const candidates = [
+    product?.productCode,
+    product?.sku,
+    product?.styleCode,
+    product?.patternNumber,
+    product?.code,
+    product?.productDetails?.productCode,
+    product?.productDetails?.code,
+  ];
+
+  const code = candidates
+    .map((value) => String(value ?? "").trim())
+    .find(Boolean);
+
+  return normalizeProductCode(code);
 };
 
-const getProductCodeNormalized = (p) => {
-  const raw = getProductCodeRaw(p);
-  const normalized = normalizeProductCode(raw);
-  return normalized || raw;
-};
+const mergeUniqueProducts = (previous = [], incoming = []) => {
+  const map = new Map();
 
-// merge & de-dupe by _id
-const mergeUniqueById = (prev, next) => {
-  const out = Array.isArray(prev) ? [...prev] : [];
-  const seen = new Set(out.map((p) => String(p?._id || "")));
-  (Array.isArray(next) ? next : []).forEach((p) => {
-    const id = String(p?._id || "");
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    out.push(p);
+  [...safeArray(previous), ...safeArray(incoming)].forEach((product) => {
+    const id = String(product?._id || "").trim();
+    if (id) map.set(id, product);
   });
-  return out;
+
+  return [...map.values()];
+};
+
+const extractProducts = (response, fallback = []) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.products)) return response.products;
+  if (Array.isArray(response?.data?.products)) return response.data.products;
+
+  return safeArray(fallback);
 };
 
 export default function ProductPicker({
-  value, // string[] (ids) or string (id)
-  onChange, // (next) => void
+  title = "Select Products",
   multiple = true,
   required = false,
-
-  categoryOptions = [], // [{label,value}]
+  value,
+  onChange,
+  onSelectedProductsChange,
+  categoryOptions = [],
   defaultCategory = "",
   lockedCategory = "",
-
   initialLimit = 20,
-  title = "Select Products",
 }) {
-  const { loading, fetchProducts, fetchProductsByCategory } = useAdminProductStore();
+  const {
+    loading,
+    fetchProducts,
+    fetchProductsByCategory,
+  } = useAdminProductStore();
 
   const selectedIds = useMemo(() => {
-    if (multiple) return Array.isArray(value) ? value : [];
-    return value ? [value] : [];
+    if (multiple) {
+      return safeArray(value).map(String);
+    }
+
+    return value ? [String(value)] : [];
   }, [value, multiple]);
 
   const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 300);
-
-  const [category, setCategory] = useState(lockedCategory || defaultCategory || "");
-  const activeCategory = lockedCategory || category;
-
+  const [category, setCategory] = useState(
+    lockedCategory || defaultCategory || ""
+  );
   const [limit, setLimit] = useState(initialLimit);
 
-  // local list for infinite mode
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
-
   const [loadingMore, setLoadingMore] = useState(false);
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   const sentinelRef = useRef(null);
+  const requestSequenceRef = useRef(0);
+  const productCacheRef = useRef(new Map());
 
-  // ✅ ignore stale results (typing fast / category switches)
-  const requestSeqRef = useRef(0);
+  const activeCategory = lockedCategory || category;
 
-  // numeric search => code search
   const normalizedSearchCode = useMemo(() => {
     if (!isNumericLike(debouncedSearch)) return "";
     return normalizeProductCode(debouncedSearch);
@@ -143,237 +170,304 @@ export default function ProductPicker({
 
   const queryParams = useMemo(() => {
     const params = { limit };
-    const s = String(debouncedSearch || "").trim();
-    if (!s) return params;
+    const searchValue = String(debouncedSearch || "").trim();
 
-    // ✅ numeric => ONLY code params (avoid backend mixing title search)
+    if (!searchValue) return params;
+
     if (normalizedSearchCode) {
-      params.productCode = normalizedSearchCode;
-      params.code = normalizedSearchCode;
-      params.sku = normalizedSearchCode;
-      return params;
+      return {
+        ...params,
+        productCode: normalizedSearchCode,
+        code: normalizedSearchCode,
+        sku: normalizedSearchCode,
+      };
     }
 
-    // ✅ text => send multiple common keys (backend might support any)
-    params.q = s;
-    params.search = s;
-    params.title = s;
-    return params;
+    return {
+      ...params,
+      q: searchValue,
+      search: searchValue,
+      title: searchValue,
+    };
   }, [debouncedSearch, normalizedSearchCode, limit]);
 
-  const resetPaginationState = () => {
+  const cacheProducts = (products = []) => {
+    safeArray(products).forEach((product) => {
+      const id = String(product?._id || "").trim();
+
+      if (id) {
+        productCacheRef.current.set(id, product);
+      }
+    });
+  };
+
+  const emitSelectedProducts = (nextIds = selectedIds) => {
+    if (typeof onSelectedProductsChange !== "function") return;
+
+    const selectedProducts = safeArray(nextIds)
+      .map((id) => productCacheRef.current.get(String(id)))
+      .filter(Boolean);
+
+    onSelectedProductsChange(selectedProducts);
+  };
+
+  const getStoreSnapshot = () => {
+    const store = useAdminProductStore.getState?.() || {};
+
+    return {
+      products: safeArray(store?.products),
+      total: Number(store?.total || 0),
+      pages: Number(store?.pages || 0),
+    };
+  };
+
+  const loadPage = async (nextPage, replace = false) => {
+    const requestId = ++requestSequenceRef.current;
+
+    setLoadingMore(true);
+
+    try {
+      const params = {
+        ...queryParams,
+        page: nextPage,
+      };
+
+      let response;
+
+      if (activeCategory) {
+        response = await fetchProductsByCategory(activeCategory, params);
+      } else {
+        response = await fetchProducts(params);
+      }
+
+      if (requestId !== requestSequenceRef.current) return;
+
+      const store = getStoreSnapshot();
+      const products = extractProducts(response, store.products);
+
+      cacheProducts(products);
+
+      setItems((previous) =>
+        replace ? products : mergeUniqueProducts(previous, products)
+      );
+
+      setPage(nextPage);
+      setTotal(
+        Number(
+          response?.total ??
+            response?.data?.total ??
+            store.total ??
+            products.length
+        )
+      );
+
+      const responsePages = Number(
+        response?.pages ??
+          response?.data?.pages ??
+          store.pages ??
+          0
+      );
+
+      if (responsePages) {
+        setPages(responsePages);
+      } else {
+        setPages(
+          products.length < limit
+            ? nextPage
+            : nextPage + 1
+        );
+      }
+    } catch (error) {
+      if (requestId !== requestSequenceRef.current) return;
+
+      console.error("ProductPicker load error:", error);
+      toast.error(error?.message || "Failed to load products");
+    } finally {
+      if (requestId === requestSequenceRef.current) {
+        setLoadingMore(false);
+      }
+    }
+  };
+
+  useEffect(() => {
     setItems([]);
     setPage(1);
     setPages(1);
     setTotal(0);
-  };
 
-  const getListFromStoreFallback = () => {
-    const store = useAdminProductStore.getState?.();
-    const fromStore = Array.isArray(store?.products) ? store.products : [];
-    return { store, fromStore };
-  };
-
-  const resetAndLoadFirst = async () => {
-    const seq = ++requestSeqRef.current;
-
-    resetPaginationState();
-    setLoadingMore(true);
-
-    try {
-      const params = { ...queryParams, page: 1 };
-
-      let list = null;
-
-      // IMPORTANT: support both cases (function returns array OR only updates store)
-      if (activeCategory) {
-        list = await fetchProductsByCategory(activeCategory, params);
-      } else {
-        const res = await fetchProducts(params);
-        if (Array.isArray(res)) list = res;
-        else if (Array.isArray(res?.products)) list = res.products;
-      }
-
-      if (seq !== requestSeqRef.current) return;
-
-      const { store, fromStore } = getListFromStoreFallback();
-      const initial = Array.isArray(list) ? list : fromStore;
-
-      setItems(initial);
-
-      // prefer store meta if available
-      const nextTotal = typeof store?.total === "number" ? store.total : initial.length;
-      const nextPages =
-        typeof store?.pages === "number"
-          ? store.pages
-          : initial.length < limit
-          ? 1
-          : 2;
-
-      setPage(1);
-      setPages(nextPages);
-      setTotal(nextTotal);
-    } catch (e) {
-      if (seq !== requestSeqRef.current) return;
-      toast.error(e?.message || "Failed to load products");
-    } finally {
-      if (seq === requestSeqRef.current) setLoadingMore(false);
-    }
-  };
-
-  const loadMore = async () => {
-    if (loadingMore || loading) return;
-    if (page >= pages) return;
-
-    const nextPage = page + 1;
-    const seq = ++requestSeqRef.current;
-
-    setLoadingMore(true);
-
-    try {
-      const params = { ...queryParams, page: nextPage };
-
-      let list = null;
-      if (activeCategory) {
-        list = await fetchProductsByCategory(activeCategory, params);
-      } else {
-        const res = await fetchProducts(params);
-        if (Array.isArray(res)) list = res;
-        else if (Array.isArray(res?.products)) list = res.products;
-      }
-
-      if (seq !== requestSeqRef.current) return;
-
-      const { store, fromStore } = getListFromStoreFallback();
-      const next = Array.isArray(list) ? list : fromStore;
-
-      setItems((prev) => mergeUniqueById(prev, next));
-      setPage(nextPage);
-
-      // prefer store paging; else infer end by batch size
-      if (typeof store?.pages === "number") setPages(store.pages);
-      if (typeof store?.total === "number") setTotal(store.total);
-
-      if (typeof store?.pages !== "number" && (next?.length || 0) < limit) {
-        setPages(nextPage); // end
-      }
-    } catch (e) {
-      if (seq !== requestSeqRef.current) return;
-      toast.error(e?.message || "Failed to load more products");
-      setPages(page); // stop further loads
-    } finally {
-      if (seq === requestSeqRef.current) setLoadingMore(false);
-    }
-  };
-
-  useEffect(() => {
-    resetAndLoadFirst();
+    loadPage(1, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, activeCategory, limit]);
 
-  // intersection observer for infinite scroll
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
+    cacheProducts(items);
+    emitSelectedProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, selectedIds]);
 
-    const io = new IntersectionObserver(
+  useEffect(() => {
+    const element = sentinelRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) loadMore();
+        if (
+          entries[0]?.isIntersecting &&
+          !loadingMore &&
+          !loading &&
+          page < pages
+        ) {
+          loadPage(page + 1);
+        }
       },
-      { root: null, rootMargin: "220px", threshold: 0.01 }
+      {
+        root: null,
+        rootMargin: "220px",
+        threshold: 0.01,
+      }
     );
 
-    io.observe(el);
-    return () => io.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pages, loadingMore, loading, debouncedSearch, activeCategory, limit]);
+    observer.observe(element);
 
-  /**
-   * ✅ Better client-side fallback:
-   * If backend code search doesn’t work, we still try matching in:
-   * - productCode (normalized)
-   * - SKU contains "-00336-" (variants sku like DRE-00336-XS)
-   */
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pages, loadingMore, loading]);
+
   const visibleItems = useMemo(() => {
     if (!normalizedSearchCode) return items;
 
-    const needle = normalizedSearchCode; // e.g. "00336"
+    return safeArray(items).filter((product) => {
+      const productCode = getProductCode(product);
 
-    return (items || []).filter((p) => {
-      const codeNorm = getProductCodeNormalized(p); // "00336"
-      if (normalizeProductCode(codeNorm) === needle) return true;
+      if (productCode === normalizedSearchCode) {
+        return true;
+      }
 
-      // SKU contains fallback (variant sku has code)
-      const skuTop = String(p?.sku || "").toUpperCase();
-      if (skuTop.includes(needle)) return true;
+      const productSku = String(product?.sku || "").toUpperCase();
 
-      const v0Sku = String(p?.variants?.[0]?.sku || "").toUpperCase();
-      if (v0Sku.includes(needle)) return true;
+      if (productSku.includes(normalizedSearchCode)) {
+        return true;
+      }
 
-      return false;
+      return safeArray(product?.variants).some((variant) =>
+        String(variant?.sku || "")
+          .toUpperCase()
+          .includes(normalizedSearchCode)
+      );
     });
   }, [items, normalizedSearchCode]);
 
-  const toggleId = (id) => {
+  const updateSelection = (nextValue) => {
+    onChange?.(nextValue);
+
+    const nextIds = multiple
+      ? safeArray(nextValue).map(String)
+      : nextValue
+        ? [String(nextValue)]
+        : [];
+
+    emitSelectedProducts(nextIds);
+  };
+
+  const toggleProduct = (product) => {
+    const id = String(product?._id || "").trim();
     if (!id) return;
 
+    productCacheRef.current.set(id, product);
+
     if (!multiple) {
-      onChange?.(id);
+      updateSelection(id);
       return;
     }
 
     const exists = selectedIds.includes(id);
-    const next = exists ? selectedIds.filter((x) => x !== id) : [...selectedIds, id];
-    onChange?.(next);
+
+    updateSelection(
+      exists
+        ? selectedIds.filter((selectedId) => selectedId !== id)
+        : [...selectedIds, id]
+    );
   };
 
-  const clearSelection = () => onChange?.(multiple ? [] : null);
+  const clearSelection = () => {
+    updateSelection(multiple ? [] : null);
+  };
 
   const selectAllLoaded = () => {
     if (!multiple) return;
-    const loadedIds = (visibleItems || []).map((p) => p?._id).filter(Boolean);
-    onChange?.(Array.from(new Set([...selectedIds, ...loadedIds])));
+
+    const loadedIds = visibleItems
+      .map((product) => {
+        const id = String(product?._id || "").trim();
+
+        if (id) {
+          productCacheRef.current.set(id, product);
+        }
+
+        return id;
+      })
+      .filter(Boolean);
+
+    updateSelection([...new Set([...selectedIds, ...loadedIds])]);
   };
 
   const unselectAllLoaded = () => {
     if (!multiple) return;
-    const loadedSet = new Set((visibleItems || []).map((p) => p?._id).filter(Boolean));
-    onChange?.(selectedIds.filter((id) => !loadedSet.has(id)));
+
+    const loadedIds = new Set(
+      visibleItems
+        .map((product) => String(product?._id || "").trim())
+        .filter(Boolean)
+    );
+
+    updateSelection(
+      selectedIds.filter((id) => !loadedIds.has(id))
+    );
   };
 
-  const isValid = () => {
-    if (!required) return true;
-    if (multiple) return selectedIds.length > 0;
-    return Boolean(value);
-  };
+  const isValid = !required || selectedIds.length > 0;
 
-  const onDone = () => {
-    if (!isValid()) return toast.error("Please select at least 1 product");
-    toast.success("Products selected ✅");
+  const handleDone = () => {
+    if (!isValid) {
+      toast.error("Please select at least 1 product");
+      return;
+    }
+
+    emitSelectedProducts();
+    toast.success("Products selected");
   };
 
   return (
-    <div className="w-full rounded-2xl bg-white shadow-[0_1px_0_rgba(0,0,0,0.04)] ring-1 ring-black/5">
+    <div className="w-full rounded-2xl bg-white ring-1 ring-black/5">
       <div className="px-4 pt-4 md:px-5 md:pt-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-[15px] font-semibold text-black">{title}</h3>
+            <h3 className="text-[15px] font-semibold text-black">
+              {title}
+            </h3>
+
             <p className="mt-1 text-xs text-black/55">
               Selected{" "}
-              <span className="font-medium text-black/80">{selectedIds.length}</span>
-              {typeof total === "number" ? (
-                <>
-                  {" "}
-                  • Loaded{" "}
-                  <span className="font-medium text-black/80">{items.length}</span> /{" "}
-                  <span className="font-medium text-black/80">{total}</span>
-                </>
-              ) : null}
+              <span className="font-medium text-black/80">
+                {selectedIds.length}
+              </span>
+              {" • "}
+              Loaded{" "}
+              <span className="font-medium text-black/80">
+                {items.length}
+              </span>
+              {" / "}
+              <span className="font-medium text-black/80">
+                {total}
+              </span>
             </p>
+
             {normalizedSearchCode ? (
               <p className="mt-1 text-[11px] text-black/40">
                 Code search:{" "}
-                <span className="font-medium text-black/70">{normalizedSearchCode}</span>
+                <span className="font-medium text-black/70">
+                  {normalizedSearchCode}
+                </span>
               </p>
             ) : null}
           </div>
@@ -386,9 +480,10 @@ export default function ProductPicker({
             >
               Clear
             </button>
+
             <button
               type="button"
-              onClick={onDone}
+              onClick={handleDone}
               className="rounded-xl bg-black px-3 py-2 text-xs font-medium text-white hover:opacity-90"
             >
               Done
@@ -399,33 +494,36 @@ export default function ProductPicker({
         <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by title or code (e.g. 336 / 00336)…"
-            className="w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-black placeholder:text-black/35 ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-black/20"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by title or code"
+            className="w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-black placeholder:text-black/35 ring-1 ring-black/10 outline-none focus:ring-2 focus:ring-black/20"
           />
 
           <select
             value={limit}
-            onChange={(e) => setLimit(Number(e.target.value) || 20)}
-            className="w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-black ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-black/20"
+            onChange={(event) =>
+              setLimit(Number(event.target.value) || 20)
+            }
+            className="w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-black ring-1 ring-black/10 outline-none"
           >
-            {[10, 20, 50, 100].map((n) => (
-              <option key={n} value={n}>
-                {n} / batch
+            {[10, 20, 50, 100].map((number) => (
+              <option key={number} value={number}>
+                {number} / batch
               </option>
             ))}
           </select>
 
           <select
-            disabled={!!lockedCategory}
             value={activeCategory}
-            onChange={(e) => setCategory(e.target.value)}
-            className="w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-black ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-60"
+            disabled={Boolean(lockedCategory)}
+            onChange={(event) => setCategory(event.target.value)}
+            className="w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-black ring-1 ring-black/10 outline-none disabled:opacity-60"
           >
             <option value="">All categories</option>
-            {categoryOptions.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
+
+            {categoryOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -438,110 +536,106 @@ export default function ProductPicker({
               onClick={selectAllLoaded}
               className="rounded-xl px-3 py-2 text-xs font-medium text-black/70 ring-1 ring-black/10 hover:bg-black/[0.03]"
             >
-              Select all (loaded)
+              Select all loaded
             </button>
+
             <button
               type="button"
               onClick={unselectAllLoaded}
               className="rounded-xl px-3 py-2 text-xs font-medium text-black/70 ring-1 ring-black/10 hover:bg-black/[0.03]"
             >
-              Unselect all (loaded)
+              Unselect loaded
             </button>
           </div>
         ) : null}
       </div>
 
-      <div className="mt-4">
-        <div className="max-h-[520px] overflow-auto px-2 pb-3 md:px-3">
-          {loadingMore && items.length === 0 ? (
-            <div className="rounded-2xl bg-gray-50 p-4 text-sm text-black/60 ring-1 ring-black/5">
-              Loading…
-            </div>
-          ) : visibleItems.length === 0 ? (
-            <div className="rounded-2xl bg-gray-50 p-4 text-sm text-black/60 ring-1 ring-black/5">
-              No products found.
-            </div>
-          ) : (
-            <>
-              <ul className="space-y-2">
-                {visibleItems.map((p) => {
-                  const id = p?._id;
-                  const checked = id ? selectedIds.includes(id) : false;
-                  const img = getProductImage(p);
-                  const code = getProductCodeNormalized(p);
-                  const subtitle = code ? `Code: ${code}` : "No code";
+      <div className="mt-4 max-h-[520px] overflow-auto px-3 pb-4">
+        {loadingMore && items.length === 0 ? (
+          <div className="rounded-2xl bg-gray-50 p-4 text-sm text-black/60">
+            Loading products...
+          </div>
+        ) : visibleItems.length === 0 ? (
+          <div className="rounded-2xl bg-gray-50 p-4 text-sm text-black/60">
+            No products found.
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {visibleItems.map((product) => {
+              const id = String(product?._id || "");
+              const selected = selectedIds.includes(id);
+              const image = getProductImage(product);
+              const code = getProductCode(product);
 
-                  return (
-                    <li
-                      key={id}
-                      className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 ring-1 ring-black/5 hover:bg-black/[0.015]"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-gray-100 ring-1 ring-black/5">
-                          {img ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={img}
-                              alt={p?.title || "Product"}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-[10px] text-black/35">
-                              NO IMG
-                            </div>
-                          )}
+              return (
+                <li
+                  key={id}
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 ring-1 ring-black/5"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                      {image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={image}
+                          alt={product?.title || "Product"}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-black/35">
+                          NO IMG
                         </div>
+                      )}
+                    </div>
 
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-black">
-                            {p?.title || "Untitled"}
-                          </p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-black">
+                        {product?.title ||
+                          product?.name ||
+                          "Untitled Product"}
+                      </p>
 
-                          <p className="truncate text-[11px] text-black/45">{subtitle}</p>
-                        </div>
-                      </div>
+                      <p className="truncate text-[11px] text-black/45">
+                        {code ? `Code: ${code}` : "No product code"}
+                      </p>
+                    </div>
+                  </div>
 
-                      <button
-                        type="button"
-                        onClick={() => toggleId(id)}
-                        className={`shrink-0 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ${
-                          checked
-                            ? "bg-black text-white ring-black"
-                            : "text-black/70 ring-black/10 hover:bg-black/[0.03]"
-                        }`}
-                      >
-                        {checked ? "Selected" : "Select"}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                  <button
+                    type="button"
+                    onClick={() => toggleProduct(product)}
+                    className={`shrink-0 rounded-xl px-3 py-2 text-xs font-semibold ring-1 ${
+                      selected
+                        ? "bg-black text-white ring-black"
+                        : "text-black/70 ring-black/10 hover:bg-black/[0.03]"
+                    }`}
+                  >
+                    {selected ? "Selected" : "Select"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-              <div ref={sentinelRef} className="h-10" />
+        <div ref={sentinelRef} className="h-10" />
 
-              {loadingMore ? (
-                <div className="mt-2 rounded-2xl bg-gray-50 p-3 text-xs text-black/55 ring-1 ring-black/5">
-                  Loading more…
-                </div>
-              ) : page >= pages ? (
-                <div className="mt-2 rounded-2xl bg-gray-50 p-3 text-xs text-black/55 ring-1 ring-black/5">
-                  You’ve reached the end.
-                </div>
-              ) : null}
-            </>
-          )}
+        {loadingMore && items.length > 0 ? (
+          <div className="rounded-2xl bg-gray-50 p-3 text-xs text-black/55">
+            Loading more...
+          </div>
+        ) : page >= pages && items.length > 0 ? (
+          <div className="rounded-2xl bg-gray-50 p-3 text-xs text-black/55">
+            You have reached the end.
+          </div>
+        ) : null}
 
-          {!isValid() ? (
-            <p className="mt-3 px-2 text-xs text-red-600">Selection is required.</p>
-          ) : null}
-        </div>
-
-        <div className="px-4 pb-4 md:px-5 md:pb-5">
-          <p className="text-[11px] text-black/40">
-            Infinite scroll enabled — keep scrolling to load more.
+        {!isValid ? (
+          <p className="mt-3 text-xs text-red-600">
+            Selection is required.
           </p>
-        </div>
+        ) : null}
       </div>
     </div>
   );

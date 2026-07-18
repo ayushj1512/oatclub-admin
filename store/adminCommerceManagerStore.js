@@ -396,6 +396,42 @@ export const useAdminCommerceManagerStore = create(
         }
       },
 
+      refreshXmlFeed: async () => {
+  set({ actionLoading: true, error: "" });
+
+  try {
+    const res = await fetch(
+      `${BASE_URL}/api/commerce-manager/xml/refresh`,
+      {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data?.message || "Failed to refresh XML feed");
+    }
+
+    set({ actionLoading: false });
+    toast.success(data?.message || "XML feed refreshed");
+
+    return { success: true, data };
+  } catch (error) {
+    const message = error?.message || "Failed to refresh XML feed";
+
+    set({
+      actionLoading: false,
+      error: message,
+    });
+
+    toast.error(message);
+    return { success: false, message };
+  }
+},
+
       /* -----------------------------
          LOCAL HELPERS
       ----------------------------- */
