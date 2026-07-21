@@ -7,6 +7,7 @@ import {
   Palette,
   Calculator,
   Boxes,
+    BadgeDollarSign,
   BarChart3,
   Users,
   FileBarChart,
@@ -190,6 +191,12 @@ const DOMAIN_LIST = [
     icon: Handshake,
     route: "/influencer-collaboration-program",
   },
+  {
+  id: "affiliate",
+  name: "Affiliate",
+  icon: BadgeDollarSign,
+  route: "/affiliate",
+},
 ];
 
 const CARD_HINTS = {
@@ -204,6 +211,8 @@ const CARD_HINTS = {
   reviews: "Moderate product reviews and ratings",
   fabrics: "Manage fabric records and mappings",
   email: "Preview all brand emails, subjects, and template states",
+  affiliate:
+  "Manage affiliates, referrals, commissions and payouts",
 };
 
 const FOCUS_QUOTES = [

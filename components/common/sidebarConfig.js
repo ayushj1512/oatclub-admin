@@ -467,6 +467,17 @@ export const sidebarMenus = {
     { label: "Meta XML Sync", href: "/superadmin/xml-sync" },
   ],
 
+    affiliate: [
+    { label: "Affiliate Dashboard", href: "/affiliate" },
+    { label: "All Affiliates", href: "/affiliate/all" },
+    { label: "Create Affiliate", href: "/affiliate/create" },
+    { label: "Coupon Performance", href: "/affiliate/coupons" },
+    { label: "Affiliate Orders", href: "/affiliate/orders" },
+    { label: "Commissions", href: "/affiliate/commissions" },
+    { label: "Pending Payouts", href: "/affiliate/pending-payouts" },
+    { label: "Payout History", href: "/affiliate/payout-history" },
+  ],
+
   collaboration: [
     { label: "Influencer Program", href: "/influencer-collaboration-program" },
     {
@@ -524,4 +535,5 @@ export const routeSidebarMap = [
   { prefix: "/account", key: "account_user" },
   { prefix: "/vendors", key: "vendors" },
   { prefix: "/fast2sms", key: "fast2sms" },
+    { prefix: "/affiliate", key: "affiliate" },
 ];

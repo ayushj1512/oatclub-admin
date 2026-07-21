@@ -4,7 +4,8 @@ export const DOMAIN_PERMISSIONS = {
   designing: "manageDesigning",
   design_lab: "manageDesignLab",
   production: "manageProduction",
-  vendors: "manageVendors", // ✅ NEW MODULE
+  vendors: "manageVendors",
+
   accounts: "manageAccounts",
   products: "manageProducts",
   barcode: "manageBarcode",
@@ -20,29 +21,33 @@ export const DOMAIN_PERMISSIONS = {
   email: "manageEmail",
   reels: "manageReels",
   blogs: "manageBlogs",
+
   inventory: "manageInventory",
   fabrics: "manageFabrics",
+
   marketing: "manageMarketing",
   customers: "manageCustomers",
   support: "manageSupport",
+
   reports: "viewReports",
   tickets: "manageTickets",
   coupons: "manageCoupons",
+
   collaboration: "manageInfluencerProgram",
+  affiliate: "manageAffiliate",
+
   warehouse: "manageProduction",
 };
 
-export const ALL_PERMISSIONS = Array.from(
-  new Set(Object.values(DOMAIN_PERMISSIONS))
-);
+export const ALL_PERMISSIONS = [...new Set(Object.values(DOMAIN_PERMISSIONS))];
 
 export const ROLE_DEFAULT_PERMS = {
-  /* Full Access */
+  // Full Access
   superadmin: ["*"],
 
   admin: [...ALL_PERMISSIONS],
 
-  /* Customer Care */
+  // Customer Care
   customer_care: [
     "manageSupport",
     "manageOrders",
@@ -51,7 +56,7 @@ export const ROLE_DEFAULT_PERMS = {
     "manageFast2SMS",
   ],
 
-  /* Warehouse Staff */
+  // Operations Staff
   staff: [
     "manageOrders",
     "manageInventory",
@@ -60,22 +65,22 @@ export const ROLE_DEFAULT_PERMS = {
     "manageBarcode",
   ],
 
-  /* Read Only */
+  // Read Only
   viewer: ["viewReports"],
 
-  /* Influencer */
+  // Influencer Team
   influencer: [
     "manageMedia",
     "manageReels",
     "manageInfluencerProgram",
+    "manageAffiliate",
   ],
 
-  /* Warehouse */
-  warehouse: [
-    "manageProduction",
-    "manageOrders",
-    "manageBarcode",
-  ],
+  // Affiliate Team
+  affiliate: ["manageAffiliate", "viewReports"],
+
+  // Warehouse
+  warehouse: ["manageProduction", "manageOrders", "manageBarcode"],
 };
 
 export const hasPermission = (permissions = [], permission) => {
