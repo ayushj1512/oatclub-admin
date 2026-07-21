@@ -9,7 +9,7 @@ import CategoryMultiSelect from "@/components/product/CategoryMultiSelect";
 import AttributeSelector from "@/components/product/AttributeSelector";
 import ProductContentEditor from "@/components/product/ProductContentEditor";
 import ProductVariantsEditor from "@/components/product/ProductVariantsEditor";
-import ProductImagesEditor from "@/components/product/ProductImagesEditor";
+import ProductMediaManager from "@/components/product/ProductMediaManager";
 import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
 import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
@@ -70,7 +70,7 @@ export default function ProductDetailsPage({ params }) {
 
     images: [],
     thumbnail: "",
-
+productSpotlight: [],
     fabrics: [], // ✅ NEW
     crossSellProducts: [],
     collections: [],
@@ -161,7 +161,7 @@ export default function ProductDetailsPage({ params }) {
             typeof x === "string" ? x : x?._id,
           ),
           collections: safeArr(pData?.collections),
- originalProductLink: s(pData?.originalProductLink),
+          originalProductLink: s(pData?.originalProductLink),
           highlights: safeArr(pData?.highlights),
           weight: n(pData?.weight),
           dimensions: pData?.dimensions || { length: 0, width: 0, height: 0, unit: "cm" },
@@ -250,7 +250,7 @@ export default function ProductDetailsPage({ params }) {
 
         images: safeArr(form.images).filter(Boolean),
         thumbnail: safeArr(form.images)[0] || "",
-
+        productSpotlight: safeArr(form.productSpotlight).filter(Boolean),
         tags: uniqLower(s(form.tagsText).split(",")),
         colors: uniqLower(s(form.colorsText).split(",")),
 
@@ -292,6 +292,7 @@ export default function ProductDetailsPage({ params }) {
         ...p,
         images: imgs,
         thumbnail: imgs[0] || "",
+        productSpotlight: safeArr(updated?.productSpotlight),
         fabrics: safeArr(updated?.fabrics),
       }));
     } catch (e) {
@@ -381,20 +382,33 @@ export default function ProductDetailsPage({ params }) {
           </div>
         </div>
 
-        {/* Images */}
-        <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
-          <h2 className="text-lg md:text-xl font-semibold">Product Images</h2>
-
-          <ProductImagesEditor
-            value={form.images}
-            folder="oatclub/products"
-            onChange={(urls) =>
-              setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))
+        {/* Product Media */}
+        <div className="bg-white p-5 md:p-6 rounded-xl shadow">
+          <ProductMediaManager
+            images={editing ? form.images : safeArr(product?.images)}
+            productSpotlight={
+              editing
+                ? form.productSpotlight
+                : safeArr(product?.productSpotlight)
+            }
+            readonly={!editing}
+            onImagesChange={(urls) =>
+              setForm((prev) => ({
+                ...prev,
+                images: urls,
+                thumbnail: urls?.[0] || "",
+              }))
+            }
+            onSpotlightChange={(urls) =>
+              setForm((prev) => ({
+                ...prev,
+                productSpotlight: urls,
+              }))
             }
           />
         </div>
 
-         {/* ✅ NEW: Original product link */}
+        {/* ✅ NEW: Original product link */}
         <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
           <OriginalProductLinkField
             value={editing ? form.originalProductLink : s(product?.originalProductLink)}

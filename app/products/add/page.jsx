@@ -8,7 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import CategoryMultiSelect from "@/components/product/CategoryMultiSelect";
 import AttributeSelector from "@/components/product/AttributeSelector";
 import ProductVariantsEditor from "@/components/product/ProductVariantsEditor";
-import ProductImagesEditor from "@/components/product/ProductImagesEditor";
+import ProductMediaManager from "@/components/product/ProductMediaManager";
 import ProductContentEditor from "@/components/product/ProductContentEditor";
 import ProductAdvancedFields from "@/components/product/ProductAdvancedFields";
 import CrossSellSelector from "@/components/product/CrossSellSelector";
@@ -44,7 +44,7 @@ const parseList = (v) => {
   try {
     const parsed = JSON.parse(t);
     if (Array.isArray(parsed)) return parsed.map((x) => String(x || "").trim()).filter(Boolean);
-  } catch {}
+  } catch { }
   return t.split(",").map((x) => x.trim()).filter(Boolean);
 };
 
@@ -164,9 +164,8 @@ function ColorsPicker({ valueText, onChangeText }) {
               key={c}
               type="button"
               onClick={() => toggleChip(c)}
-              className={`px-3 py-1 rounded-full text-sm border transition ${
-                on ? "bg-black text-white border-black" : "bg-white text-gray-800 border-gray-200"
-              }`}
+              className={`px-3 py-1 rounded-full text-sm border transition ${on ? "bg-black text-white border-black" : "bg-white text-gray-800 border-gray-200"
+                }`}
               title="Click to toggle"
             >
               {c}
@@ -244,8 +243,8 @@ function QuickJsonImport({ images, onApply }) {
 
         specificationsText: Array.isArray(data.specifications)
           ? data.specifications
-              .map((s) => `${s.key}: ${s.value}`)
-              .join("\n")
+            .map((s) => `${s.key}: ${s.value}`)
+            .join("\n")
           : data.specificationsText || "",
 
         tagsText: Array.isArray(data.tags)
@@ -341,6 +340,7 @@ export default function AddProductPage() {
 
     images: [],
     thumbnail: "",
+    productSpotlight: [],
 
     crossSellProducts: [],
 
@@ -388,6 +388,7 @@ export default function AddProductPage() {
         categories: safeArr(parsed?.categories),
         images: safeArr(parsed?.images),
         thumbnail: safeArr(parsed?.images)?.[0] || parsed?.thumbnail || "",
+        productSpotlight: safeArr(parsed?.productSpotlight),
         fabrics: safeArr(parsed?.fabrics),
         attributes: safeArr(parsed?.attributes),
         variants: safeArr(parsed?.variants),
@@ -464,7 +465,7 @@ export default function AddProductPage() {
 
       images: safeArr(form.images),
       thumbnail: safeArr(form.images)?.[0] || "",
-
+      productSpotlight: safeArr(form.productSpotlight),
       tags,
       colors,
 
@@ -540,28 +541,39 @@ export default function AddProductPage() {
           </button>
         </div>
 
-          {/* Images */}
-        <div className="bg-white rounded-xl p-6 shadow space-y-4">
-          <h2 className="font-semibold">Product Images</h2>
-
-          <ProductImagesEditor
-            value={form.images}
-            folder="oatclub/products"
-            onChange={(urls) => setForm((p) => ({ ...p, images: urls, thumbnail: urls?.[0] || "" }))}
+        {/* Images */}
+        {/* Product Media */}
+        <div className="bg-white rounded-xl p-6 shadow">
+          <ProductMediaManager
+            images={form.images}
+            productSpotlight={form.productSpotlight}
+            onImagesChange={(urls) =>
+              setForm((prev) => ({
+                ...prev,
+                images: urls,
+                thumbnail: urls?.[0] || "",
+              }))
+            }
+            onSpotlightChange={(urls) =>
+              setForm((prev) => ({
+                ...prev,
+                productSpotlight: urls,
+              }))
+            }
           />
         </div>
 
         <CopyContentPrompt />
 
         <QuickJsonImport
-  images={form.images}
-  onApply={(patch) =>
-    setForm((p) => ({
-      ...p,
-      ...patch,
-    }))
-  }
-/>
+          images={form.images}
+          onApply={(patch) =>
+            setForm((p) => ({
+              ...p,
+              ...patch,
+            }))
+          }
+        />
 
         {/* BASIC */}
         <div className="bg-white rounded-xl p-6 shadow space-y-4">
@@ -657,7 +669,7 @@ export default function AddProductPage() {
           />
         </div>
 
-      
+
 
         {/* Content */}
         <ProductContentEditor
@@ -673,7 +685,7 @@ export default function AddProductPage() {
           onChange={(next) => setForm((p) => ({ ...p, ...next }))}
         />
 
-     
+
 
         {/* Attributes */}
         <AttributeSelector
