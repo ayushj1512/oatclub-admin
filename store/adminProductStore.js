@@ -121,6 +121,11 @@ const normalizeProductPayload = (payload) => {
   if (out.availableForCollab !== undefined) {
     out.availableForCollab = toBool(out.availableForCollab);
   }
+  if (out.isDispatchReady !== undefined) {
+  out.isDispatchReady = toBool(
+    out.isDispatchReady,
+  );
+}
   if (out.isSamplingDone !== undefined)
     out.isSamplingDone = toBool(out.isSamplingDone);
   if (out.isActive !== undefined) out.isActive = toBool(out.isActive);
@@ -352,7 +357,9 @@ export const useAdminProductStore = create((set, get) => ({
   products: [],
   product: null,
   bulkSelectedIds: [],
-  bulkPriceDraft: {}, // { [id]: { price?, compareAtPrice? } }
+  bulkPriceDraft: {},
+  metadataPreview: null,
+   // { [id]: { price?, compareAtPrice? } }
   page: 1,
   limit: 100,
   total: 0,
@@ -411,6 +418,8 @@ export const useAdminProductStore = create((set, get) => ({
         isBestSeller: params.isBestSeller,
         isTrending: params.isTrending,
         isPrimaryProduct: params.isPrimaryProduct,
+        isDispatchReady:
+  params.isDispatchReady,
         search: params.search,
         sort: params.sort,
         sku: params.sku,
@@ -2396,4 +2405,584 @@ export const useAdminProductStore = create((set, get) => ({
       set({ saving: false });
     }
   },
+    /* ============================================================
+     DISPATCH READY — SINGLE + BULK
+
+     Single:
+     setDispatchReady(productId, true)
+
+     Bulk:
+     setDispatchReady([id1, id2], false)
+  ============================================================ */
+
+  setDispatchReady: async (
+    input,
+    isDispatchReady,
+  ) => {
+    try {
+      const ids = Array.from(
+        new Set(
+          (
+            Array.isArray(input)
+              ? input
+              : [input]
+          )
+            .map((item) =>
+              item &&
+              typeof item === "object"
+                ? String(
+                    item._id || "",
+                  ).trim()
+                : String(
+                    item || "",
+                  ).trim(),
+            )
+            .filter(Boolean),
+        ),
+      );
+
+      if (!ids.length) {
+        toast.error(
+          "Select at least one product",
+        );
+
+        return null;
+      }
+
+      const nextValue =
+        typeof isDispatchReady ===
+        "boolean"
+          ? isDispatchReady
+          : [
+              "true",
+              "1",
+              "yes",
+            ].includes(
+              String(
+                isDispatchReady,
+              )
+                .trim()
+                .toLowerCase(),
+            );
+
+      const isBulk = ids.length > 1;
+
+      set({
+        saving: true,
+        error: null,
+      });
+
+      const url = isBulk
+        ? `${API}/bulk/dispatch-ready`
+        : `${API}/${ids[0]}/dispatch-ready`;
+
+      const res = await fetch(url, {
+        method: "PATCH",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        credentials: "include",
+
+        body: JSON.stringify({
+          ...(isBulk
+            ? {
+                ids,
+              }
+            : {}),
+
+          isDispatchReady:
+            nextValue,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message ||
+            "Dispatch-ready update failed",
+        );
+      }
+
+      const updatedProducts =
+        Array.isArray(data?.products)
+          ? data.products
+          : data?.product
+            ? [data.product]
+            : [];
+
+      const updatedMap = new Map(
+        updatedProducts.map(
+          (product) => [
+            String(
+              product?._id || "",
+            ),
+            product,
+          ],
+        ),
+      );
+
+      const selectedIds = new Set(
+        ids.map(String),
+      );
+
+      set((state) => ({
+        products: (
+          state.products || []
+        ).map((product) => {
+          const id = String(
+            product?._id || "",
+          );
+
+          if (!selectedIds.has(id)) {
+            return product;
+          }
+
+          const updated =
+            updatedMap.get(id);
+
+          return {
+            ...product,
+            ...(updated || {}),
+
+            isDispatchReady:
+              updated
+                ?.isDispatchReady ??
+              nextValue,
+          };
+        }),
+
+        product:
+          state.product &&
+          selectedIds.has(
+            String(
+              state.product?._id ||
+                "",
+            ),
+          )
+            ? {
+                ...state.product,
+
+                ...(updatedMap.get(
+                  String(
+                    state.product
+                      ?._id || "",
+                  ),
+                ) || {}),
+
+                isDispatchReady:
+                  updatedMap.get(
+                    String(
+                      state.product
+                        ?._id || "",
+                    ),
+                  )
+                    ?.isDispatchReady ??
+                  nextValue,
+              }
+            : state.product,
+
+        bulkSelectedIds: isBulk
+          ? []
+          : state.bulkSelectedIds,
+      }));
+
+      toast.success(
+        nextValue
+          ? `${ids.length} product(s) marked Dispatch Ready ✅`
+          : `${ids.length} product(s) removed from Dispatch Ready`,
+      );
+
+      return data;
+    } catch (error) {
+      console.error(
+        "❌ setDispatchReady:",
+        error,
+      );
+
+      set({
+        error:
+          error?.message ||
+          "Dispatch-ready update failed",
+      });
+
+      toast.error(
+        error?.message ||
+          "Dispatch-ready update failed",
+      );
+
+      throw error;
+    } finally {
+      set({
+        saving: false,
+      });
+    }
+  },
+
+  /* ============================================================
+     BULK METADATA PREVIEW
+
+     previewBulkMetadata([
+       {
+         productCode: "00001",
+         metaTitle: "...",
+         metaDescription: "...",
+         keywords: "dress,women"
+       }
+     ])
+  ============================================================ */
+
+  previewBulkMetadata: async (
+    products = [],
+  ) => {
+    try {
+      if (
+        !Array.isArray(products) ||
+        !products.length
+      ) {
+        toast.error(
+          "No metadata rows found",
+        );
+
+        return null;
+      }
+
+      set({
+        loading: true,
+        error: null,
+        metadataPreview: null,
+      });
+
+      const payload = products
+        .map((row) => ({
+          productCode: String(
+            row?.productCode || "",
+          ).trim(),
+
+          metaTitle: String(
+            row?.metaTitle || "",
+          ).trim(),
+
+          metaDescription: String(
+            row?.metaDescription || "",
+          ).trim(),
+
+          keywords: Array.isArray(
+            row?.keywords,
+          )
+            ? row.keywords
+            : String(
+                row?.keywords || "",
+              )
+                .split(",")
+                .map((item) =>
+                  item.trim(),
+                )
+                .filter(Boolean),
+        }))
+        .filter(
+          (row) => row.productCode,
+        );
+
+      if (!payload.length) {
+        throw new Error(
+          "No valid metadata rows found",
+        );
+      }
+
+      const res = await fetch(
+        `${API}/bulk/metadata/preview`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            products: payload,
+          }),
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message ||
+            "Metadata preview failed",
+        );
+      }
+
+      set({
+        metadataPreview: data,
+      });
+
+      const changedCount =
+        Number(
+          data?.summary
+            ?.changedProducts,
+        ) || 0;
+
+      toast.success(
+        `${changedCount} changed product(s) found ✅`,
+      );
+
+      return data;
+    } catch (error) {
+      console.error(
+        "❌ previewBulkMetadata:",
+        error,
+      );
+
+      set({
+        error:
+          error?.message ||
+          "Metadata preview failed",
+
+        metadataPreview: null,
+      });
+
+      toast.error(
+        error?.message ||
+          "Metadata preview failed",
+      );
+
+      throw error;
+    } finally {
+      set({
+        loading: false,
+      });
+    }
+  },
+
+  /* ============================================================
+     CONFIRM BULK METADATA
+
+     By default metadataPreview.changes update honge.
+
+     confirmBulkMetadata()
+
+     Ya manually:
+     confirmBulkMetadata(changes)
+  ============================================================ */
+
+  confirmBulkMetadata: async (
+    changes,
+  ) => {
+    try {
+      const previewChanges =
+        get().metadataPreview?.changes;
+
+      const selectedChanges =
+        Array.isArray(changes)
+          ? changes
+          : Array.isArray(
+                previewChanges,
+              )
+            ? previewChanges
+            : [];
+
+      if (!selectedChanges.length) {
+        toast.error(
+          "No metadata changes to update",
+        );
+
+        return null;
+      }
+
+      set({
+        saving: true,
+        error: null,
+      });
+
+      const payload =
+        selectedChanges
+          .map((item) => {
+            const source =
+              item?.incoming &&
+              typeof item.incoming ===
+                "object"
+                ? item.incoming
+                : item;
+
+            return {
+              productCode: String(
+                item?.productCode ||
+                  source
+                    ?.productCode ||
+                  "",
+              ).trim(),
+
+              metaTitle: String(
+                source?.metaTitle ||
+                  "",
+              ).trim(),
+
+              metaDescription:
+                String(
+                  source
+                    ?.metaDescription ||
+                    "",
+                ).trim(),
+
+              keywords:
+                Array.isArray(
+                  source?.keywords,
+                )
+                  ? source.keywords
+                  : String(
+                      source
+                        ?.keywords ||
+                        "",
+                    )
+                      .split(",")
+                      .map((value) =>
+                        value.trim(),
+                      )
+                      .filter(Boolean),
+            };
+          })
+          .filter(
+            (row) =>
+              row.productCode,
+          );
+
+      if (!payload.length) {
+        throw new Error(
+          "No valid metadata changes found",
+        );
+      }
+
+      const res = await fetch(
+        `${API}/bulk/metadata/confirm`,
+        {
+          method: "PATCH",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            changes: payload,
+          }),
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message ||
+            "Metadata update failed",
+        );
+      }
+
+      const updatedMap = new Map(
+        payload.map((item) => [
+          String(
+            item.productCode,
+          ),
+          item,
+        ]),
+      );
+
+      set((state) => ({
+        products: (
+          state.products || []
+        ).map((product) => {
+          const update =
+            updatedMap.get(
+              String(
+                product
+                  ?.productCode ||
+                  "",
+              ),
+            );
+
+          if (!update) {
+            return product;
+          }
+
+          return {
+            ...product,
+            metaTitle:
+              update.metaTitle,
+
+            metaDescription:
+              update.metaDescription,
+
+            keywords:
+              update.keywords,
+          };
+        }),
+
+        product:
+          state.product &&
+          updatedMap.has(
+            String(
+              state.product
+                ?.productCode ||
+                "",
+            ),
+          )
+            ? {
+                ...state.product,
+
+                ...updatedMap.get(
+                  String(
+                    state.product
+                      ?.productCode ||
+                      "",
+                  ),
+                ),
+              }
+            : state.product,
+
+        metadataPreview: null,
+      }));
+
+      toast.success(
+        `${data?.summary?.modified ?? data?.modifiedCount ?? payload.length} product metadata updated ✅`,
+      );
+
+      return data;
+    } catch (error) {
+      console.error(
+        "❌ confirmBulkMetadata:",
+        error,
+      );
+
+      set({
+        error:
+          error?.message ||
+          "Metadata update failed",
+      });
+
+      toast.error(
+        error?.message ||
+          "Metadata update failed",
+      );
+
+      throw error;
+    } finally {
+      set({
+        saving: false,
+      });
+    }
+  },
+
+  clearMetadataPreview: () =>
+    set({
+      metadataPreview: null,
+    }),
 }));

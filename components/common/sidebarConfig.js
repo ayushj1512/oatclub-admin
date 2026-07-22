@@ -56,19 +56,19 @@ export const sidebarMenus = {
   ],
 
   vendors: [
-  {
-    label: "Vendor Dashboard",
-    href: "/vendors",
-  },
-  {
-    label: "Create Vendor",
-    href: "/vendors/create",
-  },
-  {
-    label: "Vendor List",
-    href: "/vendors",
-  },
-],
+    {
+      label: "Vendor Dashboard",
+      href: "/vendors",
+    },
+    {
+      label: "Create Vendor",
+      href: "/vendors/create",
+    },
+    {
+      label: "Vendor List",
+      href: "/vendors",
+    },
+  ],
 
   fast2sms: [
     { label: "Fast2SMS Dashboard", href: "/fast2sms" },
@@ -91,11 +91,11 @@ export const sidebarMenus = {
   ],
 
   otp: [
-  { label: "OTP Dashboard", href: "/otp" },
-  { label: "Test OTP", href: "/otp/test" },
-  { label: "OTP Logs", href: "/otp/logs" },
-  { label: "Analytics", href: "/otp/analytics" },
-],
+    { label: "OTP Dashboard", href: "/otp" },
+    { label: "Test OTP", href: "/otp/test" },
+    { label: "OTP Logs", href: "/otp/logs" },
+    { label: "Analytics", href: "/otp/analytics" },
+  ],
 
   reviews: [
     { label: "Reviews Dashboard", href: "/reviews" },
@@ -248,7 +248,10 @@ export const sidebarMenus = {
     },
     { label: "Price Updates", href: "/products/pricing" },
     { label: "Offers & Discounts", href: "/products/offers" },
-
+    {
+      label: "Product Meta Editor",
+      href: "/products/product-meta-editor",
+    },
     { label: "SEO Manager", href: "/products/seo" },
     { label: "Reviews & Ratings", href: "/products/reviews" },
     { label: "Media Library", href: "/media" },
@@ -273,10 +276,10 @@ export const sidebarMenus = {
     },
     { label: "Confirmed Orders", href: "/orders/confirmed-orders" },
     { label: "Unconfirmed Orders", href: "/orders/unconfirmed-orders" },
-{
-  label: "WhatsApp Confirmations",
-  href: "/orders/unconfirmed-order-whatsappmessage",
-},
+    {
+      label: "WhatsApp Confirmations",
+      href: "/orders/unconfirmed-order-whatsappmessage",
+    },
     { label: "Duplicate Orders", href: "/orders/duplicate-orders" },
     { label: "Refund Escalation", href: "/orders/refund-escalation" },
     { label: "Order Analytics", href: "/orders/report" },
@@ -335,6 +338,10 @@ export const sidebarMenus = {
     { label: "Campaigns", href: "/marketing/campaigns" },
     { label: "Create Campaign", href: "/marketing/campaigns/create" },
     { label: "Email", href: "/marketing/email" },
+    {
+      label: "Product Meta Editor",
+      href: "/marketing/product-meta-editor",
+    },
     { label: "Marketing Spend", href: "/marketing/marketingSpend" },
     { label: "ROAS", href: "/marketing/ROAS" },
     { label: "Commerce Manager", href: "/marketing/commerceManager" },
@@ -371,9 +378,9 @@ export const sidebarMenus = {
       href: "/customer-support/customer-confirmation",
     },
     {
-  label: "WhatsApp Confirmations",
-  href: "/customer-support/unconfirmed-order-whatsappmessage",
-},
+      label: "WhatsApp Confirmations",
+      href: "/customer-support/unconfirmed-order-whatsappmessage",
+    },
     { label: "Duplicate Orders", href: "/customer-support/duplicate-orders" },
     { label: "Order Remark", href: "/customer-support/remark" },
     { label: "All Orders", href: "/customer-support/all-orders" },
@@ -481,7 +488,7 @@ export const sidebarMenus = {
     { label: "Meta XML Sync", href: "/superadmin/xml-sync" },
   ],
 
-    affiliate: [
+  affiliate: [
     { label: "Affiliate Dashboard", href: "/affiliate" },
     { label: "All Affiliates", href: "/affiliate/all" },
     { label: "Create Affiliate", href: "/affiliate/create" },
@@ -550,5 +557,5 @@ export const routeSidebarMap = [
   { prefix: "/account", key: "account_user" },
   { prefix: "/vendors", key: "vendors" },
   { prefix: "/fast2sms", key: "fast2sms" },
-    { prefix: "/affiliate", key: "affiliate" },
+  { prefix: "/affiliate", key: "affiliate" },
 ];
