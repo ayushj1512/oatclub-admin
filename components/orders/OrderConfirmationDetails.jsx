@@ -60,9 +60,9 @@ const getConfirmedByMeta = (confirmedBy) => {
 const getCustomerName = (order) =>
   String(
     order?.customerId?.name ||
-      order?.customer?.name ||
-      order?.shippingAddressSnapshot?.name ||
-      "Customer"
+    order?.customer?.name ||
+    order?.shippingAddressSnapshot?.name ||
+    "Customer"
   ).trim();
 
 const getCustomerPhone = (order) => {
@@ -105,27 +105,25 @@ const getOrderItemsSummary = (order) => {
     const size = item?.selectedSize || item?.variant?.size;
     const quantity = Number(item?.quantity || 1);
 
-    return `${title}${size ? ` (${size})` : ""}${
-      quantity > 1 ? ` × ${quantity}` : ""
-    }`;
+    return `${title}${size ? ` (${size})` : ""}${quantity > 1 ? ` × ${quantity}` : ""
+      }`;
   });
 
   const remainingCount = items.length - visibleItems.length;
 
   return remainingCount > 0
-    ? `${visibleItems.join(", ")} and ${remainingCount} more item${
-        remainingCount > 1 ? "s" : ""
-      }`
+    ? `${visibleItems.join(", ")} and ${remainingCount} more item${remainingCount > 1 ? "s" : ""
+    }`
     : visibleItems.join(", ");
 };
 
 const getOrderTotal = (order) =>
   Number(
     order?.pricing?.grandTotal ||
-      order?.grandTotal ||
-      order?.totalAmount ||
-      order?.total ||
-      0
+    order?.grandTotal ||
+    order?.totalAmount ||
+    order?.total ||
+    0
   );
 
 const createWhatsAppLink = (order) => {
@@ -142,24 +140,28 @@ const createWhatsAppLink = (order) => {
 
 Greetings from OATCLUB!
 
-Thank you for placing your order with us. Please confirm your order before we process it.
+Thank you for placing your order with us.
+
+We'd like to confirm your order before we begin processing it.
 
 *Order Summary*
 Order: *${orderNumber}*
-Items: ${itemSummary}${
-  orderTotal > 0
-    ? `\nTotal: *Rs. ${orderTotal.toLocaleString("en-IN")}*`
-    : ""
-}
+Items: ${itemSummary}
+Total: *₹${orderTotal.toLocaleString("en-IN")}*
 
-Please reply with:
+As each order is carefully curated and quality-checked specifically for you, our dispatch timeline is up to *7 days*.
 
-[YES] Confirm my order
-[NO] Cancel my order
+As a growing brand, we're committed to ensuring every order meets our quality standards before it leaves our warehouse. We truly appreciate your patience and support.
 
-Once confirmed, we will begin processing your order.
+Kindly reply with:
 
-Thank you,
+YES - Confirm my order
+NO - Cancel my order
+
+Once we receive your confirmation, we'll begin preparing your order.
+
+Thank you for choosing OATCLUB.
+
 *Team OATCLUB*
 Own All Trends`;
 
@@ -189,11 +191,10 @@ export default function OrderConfirmationDetails({ order }) {
         </div>
 
         <span
-          className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
-            isConfirmed
+          className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${isConfirmed
               ? "bg-green-50 text-green-700"
               : "bg-red-50 text-red-700"
-          }`}
+            }`}
         >
           {isConfirmed ? "Confirmed" : "Not Confirmed"}
         </span>
