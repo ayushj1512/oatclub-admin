@@ -7,7 +7,7 @@ import {
   Palette,
   Calculator,
   Boxes,
-    BadgeDollarSign,
+  BadgeDollarSign,
   BarChart3,
   Users,
   FileBarChart,
@@ -29,6 +29,7 @@ import {
   Mail,
   Barcode,
   Factory,
+  KeyRound,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -94,6 +95,12 @@ const DOMAIN_LIST = [
     name: "Refunds",
     icon: CreditCard,
     route: "/refunds",
+  },
+  {
+    id: "otp",
+    name: "OTP & Verification",
+    icon: KeyRound,
+    route: "/otp",
   },
   {
     id: "fast2sms",
@@ -192,11 +199,11 @@ const DOMAIN_LIST = [
     route: "/influencer-collaboration-program",
   },
   {
-  id: "affiliate",
-  name: "Affiliate",
-  icon: BadgeDollarSign,
-  route: "/affiliate",
-},
+    id: "affiliate",
+    name: "Affiliate",
+    icon: BadgeDollarSign,
+    route: "/affiliate",
+  },
 ];
 
 const CARD_HINTS = {
@@ -204,15 +211,15 @@ const CARD_HINTS = {
   vendors: "Create vendors and assign product codes and modules",
   barcode: "Generate, print and manage unique product barcodes",
   refunds: "Manage Razorpay refunds and manual refund proofs",
+  otp: "Send OTPs, inspect verification logs and monitor delivery",
   fast2sms: "View WhatsApp confirmation logs and message status",
   rma: "View return and exchange requests",
   collaboration: "Track ongoing influencer collaborations",
   shiprocket: "Manage Shiprocket sync, labels and tracking",
   reviews: "Moderate product reviews and ratings",
   fabrics: "Manage fabric records and mappings",
-  email: "Preview all brand emails, subjects, and template states",
-  affiliate:
-  "Manage affiliates, referrals, commissions and payouts",
+  email: "Preview all brand emails, subjects and template states",
+  affiliate: "Manage affiliates, referrals, commissions and payouts",
 };
 
 const FOCUS_QUOTES = [
@@ -221,6 +228,8 @@ const FOCUS_QUOTES = [
   "Ship with clarity. Review with patience. Repeat.",
   "The best admin day is quiet, focused, and already moving.",
 ];
+
+const ALWAYS_VISIBLE_MODULES = ["barcode", "vendors", "otp"];
 
 const isFeaturedCard = (id) => id === "design_lab";
 
@@ -238,34 +247,34 @@ export default function HomeDashboard() {
     return ROLE_DEFAULT_PERMS[role] || [];
   }, [admin?.permissions, role]);
 
-  const allowedDomains = useMemo(() => {
-    return DOMAIN_LIST.filter((item) => {
-      const requiredPermission = DOMAIN_PERMISSIONS[item.id];
+  const allowedDomains = useMemo(
+    () =>
+      DOMAIN_LIST.filter((item) => {
+        const requiredPermission = DOMAIN_PERMISSIONS[item.id];
 
-      /*
-       * Keep these modules visible until their permissions
-       * are added inside loginConfig.
-       */
-      if (
-        ["barcode", "vendors"].includes(item.id) &&
-        !requiredPermission
-      ) {
-        return true;
-      }
+        if (
+          ALWAYS_VISIBLE_MODULES.includes(item.id) &&
+          !requiredPermission
+        ) {
+          return true;
+        }
 
-      return hasPermission(permissions, requiredPermission);
-    });
-  }, [permissions]);
+        return hasPermission(permissions, requiredPermission);
+      }),
+    [permissions]
+  );
 
-  const sortedDomains = useMemo(() => {
-    return [...allowedDomains].sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
-  }, [allowedDomains]);
+  const sortedDomains = useMemo(
+    () =>
+      [...allowedDomains].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      ),
+    [allowedDomains]
+  );
 
   const focusQuote = useMemo(() => {
-    const dayIndex = new Date().getDate() % FOCUS_QUOTES.length;
-    return FOCUS_QUOTES[dayIndex];
+    const index = new Date().getDate() % FOCUS_QUOTES.length;
+    return FOCUS_QUOTES[index];
   }, []);
 
   const adminName =
@@ -294,9 +303,8 @@ export default function HomeDashboard() {
             </h1>
 
             <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-600 sm:text-base">
-              OATCLUB admin control room for orders, drops, customers,
-              barcodes, vendors, and growth. Everything stays quiet,
-              scannable, and ready for action.
+              OATCLUB admin control room for orders, products, customers,
+              OTPs, barcodes, vendors and growth.
             </p>
           </div>
 
@@ -373,18 +381,9 @@ export default function HomeDashboard() {
                       layout
                       type="button"
                       onClick={() => router.push(route)}
-                      initial={{
-                        opacity: 0,
-                        y: 8,
-                      }}
-                      animate={{
-                        opacity: 1,
-                        y: 0,
-                      }}
-                      exit={{
-                        opacity: 0,
-                        y: 8,
-                      }}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
                       transition={{
                         type: "spring",
                         stiffness: 420,

@@ -12,6 +12,7 @@ export const DOMAIN_PERMISSIONS = {
   orders: "manageOrders",
 
   refunds: "manageRefunds",
+  otp: "manageOTP",
   fast2sms: "manageFast2SMS",
   shiprocket: "manageOrders",
 
@@ -39,24 +40,27 @@ export const DOMAIN_PERMISSIONS = {
   warehouse: "manageProduction",
 };
 
-export const ALL_PERMISSIONS = [...new Set(Object.values(DOMAIN_PERMISSIONS))];
+export const ALL_PERMISSIONS = [
+  ...new Set(Object.values(DOMAIN_PERMISSIONS)),
+];
 
 export const ROLE_DEFAULT_PERMS = {
-  // Full Access
+  // Full access
   superadmin: ["*"],
 
   admin: [...ALL_PERMISSIONS],
 
-  // Customer Care
+  // Customer care
   customer_care: [
     "manageSupport",
     "manageOrders",
     "manageReviews",
     "manageRefunds",
     "manageFast2SMS",
+    "manageOTP",
   ],
 
-  // Operations Staff
+  // Operations staff
   staff: [
     "manageOrders",
     "manageInventory",
@@ -65,10 +69,10 @@ export const ROLE_DEFAULT_PERMS = {
     "manageBarcode",
   ],
 
-  // Read Only
+  // Read only
   viewer: ["viewReports"],
 
-  // Influencer Team
+  // Influencer team
   influencer: [
     "manageMedia",
     "manageReels",
@@ -76,11 +80,15 @@ export const ROLE_DEFAULT_PERMS = {
     "manageAffiliate",
   ],
 
-  // Affiliate Team
+  // Affiliate team
   affiliate: ["manageAffiliate", "viewReports"],
 
   // Warehouse
-  warehouse: ["manageProduction", "manageOrders", "manageBarcode"],
+  warehouse: [
+    "manageProduction",
+    "manageOrders",
+    "manageBarcode",
+  ],
 };
 
 export const hasPermission = (permissions = [], permission) => {

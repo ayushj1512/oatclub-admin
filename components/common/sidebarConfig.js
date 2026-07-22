@@ -90,6 +90,13 @@ export const sidebarMenus = {
     },
   ],
 
+  otp: [
+  { label: "OTP Dashboard", href: "/otp" },
+  { label: "Test OTP", href: "/otp/test" },
+  { label: "OTP Logs", href: "/otp/logs" },
+  { label: "Analytics", href: "/otp/analytics" },
+],
+
   reviews: [
     { label: "Reviews Dashboard", href: "/reviews" },
     { label: "Manage Reviews", href: "/reviews/manage" },
@@ -266,7 +273,10 @@ export const sidebarMenus = {
     },
     { label: "Confirmed Orders", href: "/orders/confirmed-orders" },
     { label: "Unconfirmed Orders", href: "/orders/unconfirmed-orders" },
-
+{
+  label: "WhatsApp Confirmations",
+  href: "/orders/unconfirmed-order-whatsappmessage",
+},
     { label: "Duplicate Orders", href: "/orders/duplicate-orders" },
     { label: "Refund Escalation", href: "/orders/refund-escalation" },
     { label: "Order Analytics", href: "/orders/report" },
@@ -360,6 +370,10 @@ export const sidebarMenus = {
       label: "Customer Confirmation",
       href: "/customer-support/customer-confirmation",
     },
+    {
+  label: "WhatsApp Confirmations",
+  href: "/customer-support/unconfirmed-order-whatsappmessage",
+},
     { label: "Duplicate Orders", href: "/customer-support/duplicate-orders" },
     { label: "Order Remark", href: "/customer-support/remark" },
     { label: "All Orders", href: "/customer-support/all-orders" },
@@ -522,6 +536,7 @@ export const routeSidebarMap = [
   { prefix: "/accounts", key: "accounts" },
   { prefix: "/media", key: "media" },
   { prefix: "/blogs", key: "blogs" },
+  { prefix: "/otp", key: "otp" },
   { prefix: "/products", key: "products" },
   { prefix: "/reviews", key: "reviews" },
   { prefix: "/wordpress", key: "wordpress" },
