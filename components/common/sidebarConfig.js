@@ -221,6 +221,10 @@ export const sidebarMenus = {
       label: "Collab Ready Products",
       href: "/products/collab-ready",
     },
+    {
+      label: "Dispatch Ready Products",
+      href: "/products/dispatch-ready",
+    },
     { label: "Coming Soon", href: "/products/comingsoon" },
     { label: "Size Charts", href: "/products/size-charts" },
     {
