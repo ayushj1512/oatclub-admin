@@ -12,6 +12,9 @@ import {
   Tag,
   Sparkles,
   PackageSearch,
+  Copy,
+  Check,
+  Braces,
 } from "lucide-react";
 
 import MediaPickerModal from "@/components/media/MediaPickerModal";
@@ -27,8 +30,96 @@ function cleanHashtags(input = "") {
     .map((x) => (x.startsWith("#") ? x : `#${x}`));
 }
 
+const REEL_CONTENT_PROMPT = `You are the Senior Fashion Content Manager, Luxury Copywriter, Social Media Strategist, and SEO Expert for OATCLUB.
+
+Brand Name: OATCLUB
+Tagline: Own All Trends
+
+Analyze the uploaded fashion product or reel visuals and create premium social media reel content.
+
+Tone:
+- Premium
+- Fashion-forward
+- Modern luxury
+- Zara inspired
+- Mango inspired
+- Massimo Dutti inspired
+- Clean and editorial
+- Short and conversion focused
+- No cheap marketplace language
+- No generic AI wording
+- No excessive emojis
+- No markdown
+- No explanation
+
+Output ONLY valid JSON in this exact shape:
+
+{
+  "title": "",
+  "caption": "",
+  "hashtags": []
+}
+
+Field Rules:
+
+title:
+- Internal reel title
+- 3 to 7 words
+- Clear, premium and easy to identify in admin
+- Example: "Ivory Draped Evening Edit"
+
+caption:
+- 2 to 4 short refined lines
+- Start with a strong fashion-led hook
+- Mention silhouette, styling mood or occasion
+- Keep it luxurious and natural
+- Include a subtle OATCLUB call to action
+- Use a maximum of 2 tasteful emojis
+- Do not include hashtags inside caption
+
+hashtags:
+- Return an array of 10 to 15 hashtags
+- Every hashtag must start with #
+- Mix brand, product, styling, trend and discovery hashtags
+- Include #OATCLUB and #OwnAllTrends
+- Avoid spammy or irrelevant hashtags
+- Use PascalCase or readable lowercase formatting
+
+Content Direction:
+- Dress: elegant occasion-led copy
+- Co-Ord Set: polished matching-set styling
+- Crop Top: elevated Gen-Z fashion copy
+- Corset Top: feminine structured styling
+- Resort Wear: vacation luxury mood
+- Party Wear: evening glamour
+- Denim: effortless street-luxe styling
+- Basics: clean elevated everyday wardrobe copy
+
+Output only valid JSON.`;
+
+function normalizeImportedHashtags(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .map((item) => (item.startsWith("#") ? item : `#${item}`))
+      .join(", ");
+  }
+
+  return String(value || "")
+    .split(/[,\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => (item.startsWith("#") ? item : `#${item}`))
+    .join(", ");
+}
+
 export default function AddReelPage() {
   const router = useRouter();
+
+  const [promptCopied, setPromptCopied] = useState(false);
+  const [jsonInput, setJsonInput] = useState("");
+  const [jsonError, setJsonError] = useState("");
 
   /* -----------------------------
      STORES
@@ -78,6 +169,63 @@ const [videoUrl, setVideoUrl] = useState("");
   ------------------------------ */
   const update = (key, value) => setForm((p) => ({ ...p, [key]: value }));
 
+
+  const copyContentPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(REEL_CONTENT_PROMPT);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 1500);
+    } catch {
+      alert("Copy failed. Please try again.");
+    }
+  };
+
+  const importContentJson = () => {
+    try {
+      const cleaned = jsonInput
+        .trim()
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/\s*```$/, "");
+
+      if (!cleaned) {
+        setJsonError("Paste generated JSON first.");
+        return;
+      }
+
+      const parsed = JSON.parse(cleaned);
+
+      if (
+        typeof parsed?.title !== "string" ||
+        typeof parsed?.caption !== "string" ||
+        (!Array.isArray(parsed?.hashtags) &&
+          typeof parsed?.hashtags !== "string")
+      ) {
+        setJsonError(
+          "JSON must contain title, caption and hashtags."
+        );
+        return;
+      }
+
+      setForm((previous) => ({
+        ...previous,
+        title: parsed.title.trim(),
+        caption: parsed.caption.trim(),
+        hashtags: normalizeImportedHashtags(parsed.hashtags),
+      }));
+
+      setJsonError("");
+    } catch {
+      setJsonError("Invalid JSON. Remove extra text and try again.");
+    }
+  };
+
+  const clearContentJson = () => {
+    setJsonInput("");
+    setJsonError("");
+  };
+
+
   const onSelectMedia = (media) => {
     if (!media?.url) return;
     setSelectedMedia(media);
@@ -86,6 +234,9 @@ const [videoUrl, setVideoUrl] = useState("");
 
   const reset = () => {
     setSelectedMedia(null);
+    setVideoUrl("");
+    setJsonInput("");
+    setJsonError("");
     setForm({
       title: "",
       caption: "",
@@ -190,6 +341,98 @@ const [videoUrl, setVideoUrl] = useState("");
         folder="oatclub/reels"
         onSelect={onSelectMedia}
       />
+
+
+      {/* AI Reel Content Tools */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} className="text-gray-950" />
+                <h2 className="font-semibold text-gray-950">
+                  Luxury Reel Content Prompt
+                </h2>
+              </div>
+              <p className="mt-1 max-w-xl text-xs leading-relaxed text-gray-500">
+                Copy the prompt, upload the reel or product visuals in ChatGPT,
+                then paste the generated JSON into the playground.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={copyContentPrompt}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gray-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-black"
+            >
+              {promptCopied ? <Check size={16} /> : <Copy size={16} />}
+              {promptCopied ? "Copied" : "Copy Prompt"}
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-2xl bg-gray-50 px-4 py-3 text-xs leading-relaxed text-gray-500 ring-1 ring-black/5">
+            Imports:
+            <span className="ml-1 font-medium text-gray-800">
+              title, caption and hashtags
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+          <div className="flex items-center gap-2">
+            <Braces size={16} className="text-gray-950" />
+            <h2 className="font-semibold text-gray-950">
+              Reel JSON Playground
+            </h2>
+          </div>
+
+          <p className="mt-1 text-xs leading-relaxed text-gray-500">
+            Paste the AI response below and import it directly into the reel
+            form.
+          </p>
+
+          <textarea
+            value={jsonInput}
+            onChange={(event) => {
+              setJsonInput(event.target.value);
+              if (jsonError) setJsonError("");
+            }}
+            rows={8}
+            spellCheck={false}
+            placeholder={`{
+  "title": "Ivory Draped Evening Edit",
+  "caption": "Soft structure. Effortless impact.\\nDiscover the new OATCLUB edit ✨",
+  "hashtags": ["#OATCLUB", "#OwnAllTrends", "#EveningStyle"]
+}`}
+            className="mt-4 w-full resize-y rounded-2xl bg-gray-950 px-4 py-3 font-mono text-xs leading-relaxed text-gray-100 outline-none ring-1 ring-black/10 transition placeholder:text-gray-500 focus:ring-2 focus:ring-gray-500"
+          />
+
+          {jsonError && (
+            <p className="mt-2 text-xs font-medium text-red-600">
+              {jsonError}
+            </p>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={importContentJson}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-black"
+            >
+              <Sparkles size={15} />
+              Import Content
+            </button>
+
+            <button
+              type="button"
+              onClick={clearContentJson}
+              className="inline-flex items-center justify-center rounded-2xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
+            >
+              Clear JSON
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Main form */}
       <div className="grid md:grid-cols-2 gap-5">
