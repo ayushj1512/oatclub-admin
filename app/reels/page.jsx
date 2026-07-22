@@ -1,28 +1,42 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import {
-  RefreshCw,
-  Plus,
-  Settings2,
-  Video,
-  BarChart3,
-  Eye,
-  Heart,
-  Share2,
-  MousePointerClick,
-  Bookmark,
+  ArrowDown,
+  ArrowUp,
   BadgeCheck,
   BadgeX,
+  BarChart3,
+  Bookmark,
+  Eye,
+  GripVertical,
+  Heart,
+  Loader2,
+  MousePointerClick,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Settings2,
+  Share2,
+  Video,
 } from "lucide-react";
 
 import { useAdminReelsStore } from "@/store/useAdminReelsStore";
 import { useAdminProductStore } from "@/store/adminProductStore";
 
-const shortText = (s = "", max = 36) =>
-  String(s || "").length > max ? String(s).slice(0, max) + "…" : s;
+const shortText = (value = "", max = 40) => {
+  const text = String(value || "");
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+};
+
+const applyPriorities = (items = []) =>
+  items.map((reel, index) => ({
+    ...reel,
+    priority: items.length - index,
+  }));
 
 export default function ReelsDashboardPage() {
   const router = useRouter();
@@ -30,8 +44,10 @@ export default function ReelsDashboardPage() {
   const {
     reels,
     loading,
+    saving,
     error,
     fetchReels,
+    reorderReels,
     toggleReelActive,
     clearMessages,
   } = useAdminReelsStore();
@@ -42,16 +58,25 @@ export default function ReelsDashboardPage() {
   const [placement, setPlacement] = useState("home_row");
   const [activeNow, setActiveNow] = useState(true);
 
-  // ✅ Load reels + products once
+  const [orderedReels, setOrderedReels] = useState([]);
+  const [draggedId, setDraggedId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
+  const [hasChanges, setHasChanges] = useState(false);
+
   useEffect(() => {
-    fetchProducts({ page: 1, limit: 500, isActive: true });
+    fetchProducts({
+      page: 1,
+      limit: 500,
+      isActive: true,
+    });
   }, [fetchProducts]);
 
   const load = async () => {
     clearMessages();
+
     await fetchReels({
       page: 1,
-      limit: 200,
+      limit: 100,
       sort,
       placement,
       activeNow: activeNow ? "true" : "false",
@@ -63,145 +88,511 @@ export default function ReelsDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort, placement, activeNow]);
 
+  useEffect(() => {
+    if (!hasChanges) {
+      setOrderedReels(reels || []);
+    }
+  }, [reels, hasChanges]);
+
   const stats = useMemo(() => {
-    const list = reels || [];
+    const list = orderedReels || [];
+
     return {
       total: list.length,
-      active: list.filter((r) => r.isActive).length,
-      inactive: list.filter((r) => !r.isActive).length,
-      views: list.reduce((sum, r) => sum + (r.analytics?.views || 0), 0),
-      taps: list.reduce((sum, r) => sum + (r.analytics?.taps || 0), 0),
-      likes: list.reduce((sum, r) => sum + (r.analytics?.likes || 0), 0),
-      wishlist: list.reduce((sum, r) => sum + (r.analytics?.wishlist || 0), 0),
-      shares: list.reduce((sum, r) => sum + (r.analytics?.shares || 0), 0),
-    };
-  }, [reels]);
+      active: list.filter((reel) => reel.isActive).length,
+      inactive: list.filter((reel) => !reel.isActive).length,
 
-  const toggleActive = (id, current) => toggleReelActive(id, !current);
+      views: list.reduce(
+        (sum, reel) => sum + Number(reel.analytics?.views || 0),
+        0
+      ),
+
+      taps: list.reduce(
+        (sum, reel) => sum + Number(reel.analytics?.taps || 0),
+        0
+      ),
+
+      likes: list.reduce(
+        (sum, reel) => sum + Number(reel.analytics?.likes || 0),
+        0
+      ),
+
+      wishlist: list.reduce(
+        (sum, reel) => sum + Number(reel.analytics?.wishlist || 0),
+        0
+      ),
+
+      shares: list.reduce(
+        (sum, reel) => sum + Number(reel.analytics?.shares || 0),
+        0
+      ),
+    };
+  }, [orderedReels]);
+
+  const canReorder = sort === "priority" && !saving;
+
+  const updateLocalOrder = (nextReels) => {
+    setOrderedReels(applyPriorities(nextReels));
+    setHasChanges(true);
+  };
+
+  const moveReel = (index, direction) => {
+    if (!canReorder) return;
+
+    const targetIndex = index + direction;
+
+    if (
+      targetIndex < 0 ||
+      targetIndex >= orderedReels.length
+    ) {
+      return;
+    }
+
+    const next = [...orderedReels];
+
+    [next[index], next[targetIndex]] = [
+      next[targetIndex],
+      next[index],
+    ];
+
+    updateLocalOrder(next);
+  };
+
+  const handleDragStart = (event, reelId) => {
+    if (!canReorder) {
+      event.preventDefault();
+      return;
+    }
+
+    setDraggedId(reelId);
+
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", reelId);
+  };
+
+  const handleDragOver = (event, reelId) => {
+    if (!canReorder) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+
+    setDragOverId(reelId);
+  };
+
+  const handleDrop = (event, targetId) => {
+    event.preventDefault();
+
+    if (
+      !canReorder ||
+      !draggedId ||
+      draggedId === targetId
+    ) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const fromIndex = orderedReels.findIndex(
+      (reel) => reel._id === draggedId
+    );
+
+    const targetIndex = orderedReels.findIndex(
+      (reel) => reel._id === targetId
+    );
+
+    if (fromIndex === -1 || targetIndex === -1) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const next = [...orderedReels];
+    const [movedReel] = next.splice(fromIndex, 1);
+
+    next.splice(targetIndex, 0, movedReel);
+
+    updateLocalOrder(next);
+
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const saveOrder = async () => {
+    if (!hasChanges || saving) return;
+
+    const saved = await reorderReels(
+      applyPriorities(orderedReels)
+    );
+
+    if (saved) {
+      setOrderedReels(saved);
+      setHasChanges(false);
+    }
+  };
+
+  const resetOrder = () => {
+    if (saving) return;
+
+    setOrderedReels(reels || []);
+    setHasChanges(false);
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleRefresh = async () => {
+    if (saving) return;
+
+    setHasChanges(false);
+    await load();
+  };
+
+  const toggleActive = async (id, currentStatus) => {
+    const updated = await toggleReelActive(
+      id,
+      !currentStatus
+    );
+
+    if (!updated) return;
+
+    setOrderedReels((current) =>
+      current.map((reel) =>
+        reel._id === id ? updated : reel
+      )
+    );
+  };
 
   return (
-    <section className="min-h-screen bg-gray-50 p-6 md:p-10">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* ✅ Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <section className="min-h-screen bg-gray-50 p-4 md:p-10">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* Header */}
+
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-black/5 flex items-center justify-center">
-              <Video size={18} className="text-gray-900" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+              <Video size={18} />
             </div>
+
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-950">
+              <h1 className="text-2xl font-bold tracking-tight text-gray-950 md:text-3xl">
                 Reels Dashboard
               </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Manage reels + analytics (views, taps, likes, wishlist, shares).
+
+              <p className="mt-1 text-sm text-gray-500">
+                Arrange reels, then save the final order.
               </p>
             </div>
           </div>
 
-          <div className="flex gap-2 flex-wrap">
-            <Btn onClick={() => router.push("/reels/add")} icon={Plus}>
+          <div className="flex flex-wrap gap-2">
+            <Btn
+              icon={Plus}
+              onClick={() => router.push("/reels/add")}
+            >
               Add Reel
             </Btn>
-            <Btn onClick={() => router.push("/reels/manage")} icon={Settings2} variant="white">
+
+            <Btn
+              icon={Settings2}
+              variant="white"
+              onClick={() => router.push("/reels/manage")}
+            >
               Manage
             </Btn>
-            <Btn onClick={load} icon={RefreshCw} variant="black">
+
+            <Btn
+              icon={RefreshCw}
+              variant="white"
+              disabled={loading || saving}
+              onClick={handleRefresh}
+            >
               Refresh
+            </Btn>
+
+            {hasChanges && (
+              <Btn
+                icon={RotateCcw}
+                variant="white"
+                disabled={saving}
+                onClick={resetOrder}
+              >
+                Reset
+              </Btn>
+            )}
+
+            <Btn
+              icon={saving ? Loader2 : Save}
+              variant="black"
+              disabled={!hasChanges || saving}
+              loading={saving}
+              onClick={saveOrder}
+            >
+              {saving ? "Saving..." : "Save Order"}
             </Btn>
           </div>
         </div>
 
-        {/* ✅ Error */}
+        {/* Messages */}
+
         {error && (
-          <div className="text-sm px-4 py-3 rounded-2xl bg-red-50 ring-1 ring-red-200 text-red-700">
+          <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
             {error}
           </div>
         )}
 
-        {/* ✅ Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-          <StatCard icon={BarChart3} label="Total" value={stats.total} />
-          <StatCard icon={BadgeCheck} label="Active" value={stats.active} />
-          <StatCard icon={BadgeX} label="Inactive" value={stats.inactive} />
-          <StatCard icon={Eye} label="Views" value={stats.views} />
-          <StatCard icon={MousePointerClick} label="Taps" value={stats.taps} />
-          <StatCard icon={Heart} label="Likes" value={stats.likes} />
-          <StatCard icon={Bookmark} label="Wishlist" value={stats.wishlist} />
-          <StatCard icon={Share2} label="Shares" value={stats.shares} />
+        {hasChanges && !saving && (
+          <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200">
+            Reel order has unsaved changes.
+          </div>
+        )}
+
+        {/* Stats */}
+
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-8">
+          <StatCard
+            icon={BarChart3}
+            label="Total"
+            value={stats.total}
+          />
+
+          <StatCard
+            icon={BadgeCheck}
+            label="Active"
+            value={stats.active}
+          />
+
+          <StatCard
+            icon={BadgeX}
+            label="Inactive"
+            value={stats.inactive}
+          />
+
+          <StatCard
+            icon={Eye}
+            label="Views"
+            value={stats.views}
+          />
+
+          <StatCard
+            icon={MousePointerClick}
+            label="Taps"
+            value={stats.taps}
+          />
+
+          <StatCard
+            icon={Heart}
+            label="Likes"
+            value={stats.likes}
+          />
+
+          <StatCard
+            icon={Bookmark}
+            label="Wishlist"
+            value={stats.wishlist}
+          />
+
+          <StatCard
+            icon={Share2}
+            label="Shares"
+            value={stats.shares}
+          />
         </div>
 
-        {/* ✅ Filters */}
-        <div className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex gap-3 flex-wrap">
-            <Select value={placement} onChange={setPlacement}>
+        {/* Filters */}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+          <div className="flex flex-wrap gap-3">
+            <Select
+              value={placement}
+              disabled={loading || saving || hasChanges}
+              onChange={setPlacement}
+            >
               <option value="home_row">Home Row</option>
               <option value="global">Global</option>
-              <option value="category_page">Category Page</option>
-              <option value="product_page">Product Page</option>
+              <option value="category_page">
+                Category Page
+              </option>
+              <option value="product_page">
+                Product Page
+              </option>
             </Select>
 
-            <Select value={sort} onChange={setSort}>
+            <Select
+              value={sort}
+              disabled={loading || saving || hasChanges}
+              onChange={setSort}
+            >
               <option value="priority">Priority</option>
               <option value="newest">Newest</option>
-              <option value="mostViewed">Most Viewed</option>
-              <option value="mostLiked">Most Liked</option>
+              <option value="mostViewed">
+                Most Viewed
+              </option>
+              <option value="mostLiked">
+                Most Liked
+              </option>
             </Select>
 
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700 px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5">
+            <label className="inline-flex items-center gap-2 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700 ring-1 ring-black/5">
               <input
                 type="checkbox"
                 checked={activeNow}
-                onChange={(e) => setActiveNow(e.target.checked)}
+                disabled={loading || saving || hasChanges}
+                onChange={(event) =>
+                  setActiveNow(event.target.checked)
+                }
                 className="accent-blue-600"
               />
+
               Active Now
             </label>
           </div>
 
           <div className="text-sm text-gray-600">
-            Showing <b>{reels?.length || 0}</b> reels
+            Showing <b>{orderedReels.length}</b> reels
           </div>
         </div>
 
-        {/* ✅ Grid */}
-        {loading ? (
-          <div className="text-sm text-gray-600">Loading reels…</div>
-        ) : !reels?.length ? (
-          <div className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-6 text-gray-700">
-            No reels found.
-            <button
-              onClick={() => router.push("/reels/add")}
-              className="ml-2 text-blue-600 hover:underline"
-            >
-              Add your first reel
-            </button>
-            .
+        {sort !== "priority" && (
+          <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200">
+            Select Priority sort to enable ordering.
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {reels.map((r) => {
-              const linked = products?.find((p) => p._id === r.product?.productId);
+        )}
 
-              const img =
-                linked?.thumbnail ||
-                linked?.images?.[0] ||
-                r.product?.image ||
+        {/* Reels */}
+
+        {loading ? (
+          <LoadingState />
+        ) : !orderedReels.length ? (
+          <EmptyState
+            onAdd={() => router.push("/reels/add")}
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {orderedReels.map((reel, index) => {
+              const linkedProduct = products?.find(
+                (product) =>
+                  String(product._id) ===
+                  String(reel.product?.productId)
+              );
+
+              const image =
+                linkedProduct?.thumbnail ||
+                linkedProduct?.images?.[0] ||
+                reel.product?.image ||
                 "/placeholder.png";
 
-              const name = linked?.title || r.product?.name || "Linked Product";
-              const slug = linked?.slug || r.product?.slug || "-";
-              const price = linked?.price || r.product?.price || 0;
+              const productName =
+                linkedProduct?.title ||
+                reel.product?.name ||
+                "Linked Product";
+
+              const productSlug =
+                linkedProduct?.slug ||
+                reel.product?.slug ||
+                "-";
+
+              const price =
+                linkedProduct?.price ||
+                reel.product?.price ||
+                0;
+
+              const isDragging =
+                draggedId === reel._id;
+
+              const isDragTarget =
+                dragOverId === reel._id &&
+                draggedId !== reel._id;
 
               return (
-                <div
-                  key={r._id}
-                  className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 overflow-hidden hover:shadow-md transition"
+                <article
+                  key={reel._id}
+                  draggable={canReorder}
+                  onDragStart={(event) =>
+                    handleDragStart(event, reel._id)
+                  }
+                  onDragOver={(event) =>
+                    handleDragOver(event, reel._id)
+                  }
+                  onDrop={(event) =>
+                    handleDrop(event, reel._id)
+                  }
+                  onDragEnd={handleDragEnd}
+                  className={[
+                    "overflow-hidden rounded-3xl bg-white shadow-sm ring-1 transition",
+                    isDragging
+                      ? "scale-[0.98] opacity-50 ring-blue-400"
+                      : "",
+                    isDragTarget
+                      ? "ring-2 ring-blue-500"
+                      : "",
+                    !isDragging && !isDragTarget
+                      ? "ring-black/5 hover:shadow-md"
+                      : "",
+                  ].join(" ")}
                 >
-                  {/* ✅ Video: smaller + autoplay */}
-                  <div className="w-full h-[420px] md:h-[460px] bg-black">
+                  {/* Order bar */}
+
+                  <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={
+                          canReorder
+                            ? "cursor-grab rounded-xl p-2 text-gray-500 hover:bg-gray-100 active:cursor-grabbing"
+                            : "cursor-not-allowed rounded-xl p-2 text-gray-300"
+                        }
+                      >
+                        <GripVertical size={18} />
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-semibold text-gray-950">
+                          Position {index + 1}
+                        </div>
+
+                        <div className="text-[11px] text-gray-500">
+                          Priority{" "}
+                          {orderedReels.length - index}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-1">
+                      <OrderButton
+                        icon={ArrowUp}
+                        label="Move up"
+                        disabled={
+                          !canReorder || index === 0
+                        }
+                        onClick={() =>
+                          moveReel(index, -1)
+                        }
+                      />
+
+                      <OrderButton
+                        icon={ArrowDown}
+                        label="Move down"
+                        disabled={
+                          !canReorder ||
+                          index === orderedReels.length - 1
+                        }
+                        onClick={() =>
+                          moveReel(index, 1)
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Video */}
+
+                  <div className="h-[420px] w-full bg-black md:h-[460px]">
                     <video
-                      src={r.src}
-                      className="w-full h-full object-cover bg-black"
+                      src={reel.src}
+                      poster={reel.poster || undefined}
+                      className="h-full w-full object-cover"
                       preload="metadata"
                       autoPlay
                       loop
@@ -210,80 +601,140 @@ export default function ReelsDashboardPage() {
                     />
                   </div>
 
-                  <div className="p-4 space-y-3">
+                  {/* Details */}
+
+                  <div className="space-y-3 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-gray-950 truncate">
-                          {shortText(r.title || r.caption || r.slug, 40)}
+                        <div className="truncate text-sm font-semibold text-gray-950">
+                          {shortText(
+                            reel.title ||
+                              reel.caption ||
+                              reel.slug
+                          )}
                         </div>
-                        <div className="text-[11px] text-gray-500 mt-1">
-                          Placement: <b>{r.placement}</b> • Priority:{" "}
-                          <b>{r.priority || 0}</b>
+
+                        <div className="mt-1 text-[11px] text-gray-500">
+                          Placement:{" "}
+                          <b>{reel.placement}</b>
                         </div>
                       </div>
 
                       <button
-                        onClick={() => toggleActive(r._id, r.isActive)}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ring-1 transition ${
-                          r.isActive
-                            ? "bg-green-50 text-green-700 ring-green-200 hover:bg-green-100"
-                            : "bg-gray-100 text-gray-600 ring-black/10 hover:bg-gray-200"
-                        }`}
+                        type="button"
+                        disabled={saving}
+                        onClick={() =>
+                          toggleActive(
+                            reel._id,
+                            reel.isActive
+                          )
+                        }
+                        className={[
+                          "rounded-full px-3 py-1 text-xs font-semibold ring-1 transition disabled:opacity-50",
+                          reel.isActive
+                            ? "bg-green-50 text-green-700 ring-green-200"
+                            : "bg-gray-100 text-gray-600 ring-black/10",
+                        ].join(" ")}
                       >
-                        {r.isActive ? "Active" : "Inactive"}
+                        {reel.isActive
+                          ? "Active"
+                          : "Inactive"}
                       </button>
                     </div>
 
-                    {/* ✅ Product */}
-                    {r.product?.productId && (
-                      <div className="flex items-center gap-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 p-3">
-                        <div className="w-10 h-12 rounded-xl overflow-hidden bg-white ring-1 ring-black/5 relative shrink-0">
+                    {reel.product?.productId && (
+                      <div className="flex items-center gap-3 rounded-2xl bg-gray-50 p-3 ring-1 ring-black/5">
+                        <div className="relative h-12 w-10 shrink-0 overflow-hidden rounded-xl bg-white">
                           <Image
-                            src={img}
-                            alt={name ? `${name} product image` : "Product image"}
+                            src={image}
+                            alt={productName}
                             fill
                             className="object-cover"
                             unoptimized
                           />
                         </div>
+
                         <div className="min-w-0">
-                          <div className="text-xs font-semibold text-gray-900 truncate">
-                            {name}
+                          <div className="truncate text-xs font-semibold text-gray-900">
+                            {productName}
                           </div>
-                          <div className="text-[11px] text-gray-500">
-                            ₹{price} • {slug}
+
+                          <div className="truncate text-[11px] text-gray-500">
+                            ₹
+                            {Number(price).toLocaleString(
+                              "en-IN"
+                            )}{" "}
+                            • {productSlug}
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {/* ✅ Analytics */}
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <MiniStat icon={Eye} label="Views" value={r.analytics?.views || 0} />
-                      <MiniStat icon={MousePointerClick} label="Taps" value={r.analytics?.taps || 0} />
-                      <MiniStat icon={Heart} label="Likes" value={r.analytics?.likes || 0} />
-                      <MiniStat icon={Bookmark} label="Wishlist" value={r.analytics?.wishlist || 0} />
-                      <MiniStat icon={Share2} label="Shares" value={r.analytics?.shares || 0} />
-                      <MiniStat icon={BarChart3} label="Unique" value={r.analytics?.uniqueViews || 0} />
+                    <div className="grid grid-cols-3 gap-2">
+                      <MiniStat
+                        icon={Eye}
+                        label="Views"
+                        value={reel.analytics?.views}
+                      />
+
+                      <MiniStat
+                        icon={MousePointerClick}
+                        label="Taps"
+                        value={reel.analytics?.taps}
+                      />
+
+                      <MiniStat
+                        icon={Heart}
+                        label="Likes"
+                        value={reel.analytics?.likes}
+                      />
+
+                      <MiniStat
+                        icon={Bookmark}
+                        label="Wishlist"
+                        value={reel.analytics?.wishlist}
+                      />
+
+                      <MiniStat
+                        icon={Share2}
+                        label="Shares"
+                        value={reel.analytics?.shares}
+                      />
+
+                      <MiniStat
+                        icon={BarChart3}
+                        label="Unique"
+                        value={reel.analytics?.uniqueViews}
+                      />
                     </div>
 
-                    {/* ✅ Actions */}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => router.push(`/reels/manage?focus=${r._id}`)}
-                        className="flex-1 px-4 py-2 rounded-2xl bg-white text-gray-800 shadow-sm ring-1 ring-black/5 hover:bg-gray-100 transition text-sm"
+                        type="button"
+                        onClick={() =>
+                          router.push(
+                            `/reels/manage?focus=${reel._id}`
+                          )
+                        }
+                        className="flex-1 rounded-2xl bg-white px-4 py-2 text-sm ring-1 ring-black/5 hover:bg-gray-100"
                       >
                         Open
                       </button>
+
                       <button
-                        onClick={() => router.push(`/reels/manage?edit=${r._id}`)}
-                        className="px-4 py-2 rounded-2xl bg-gray-950 text-white shadow-sm hover:bg-black transition text-sm"
+                        type="button"
+                        onClick={() =>
+                          router.push(
+                            `/reels/manage?edit=${reel._id}`
+                          )
+                        }
+                        className="rounded-2xl bg-gray-950 px-4 py-2 text-sm text-white hover:bg-black"
                       >
                         Edit
                       </button>
                     </div>
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
@@ -293,46 +744,97 @@ export default function ReelsDashboardPage() {
   );
 }
 
-/* ---------------- UI Helpers ---------------- */
-
-function Btn({ children, icon: Icon, onClick, variant = "blue" }) {
+function Btn({
+  children,
+  icon: Icon,
+  onClick,
+  variant = "blue",
+  disabled = false,
+  loading = false,
+}) {
   const styles = {
     blue: "bg-blue-600 text-white hover:bg-blue-700",
     black: "bg-gray-950 text-white hover:bg-black",
-    white: "bg-white text-gray-800 ring-1 ring-black/5 hover:bg-gray-100",
+    white:
+      "bg-white text-gray-800 ring-1 ring-black/5 hover:bg-gray-100",
   };
+
   return (
     <button
+      type="button"
+      disabled={disabled}
       onClick={onClick}
-      className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl shadow-sm transition ${styles[variant]}`}
+      className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${styles[variant]}`}
     >
-      {Icon && <Icon size={16} />}
+      {Icon && (
+        <Icon
+          size={16}
+          className={loading ? "animate-spin" : ""}
+        />
+      )}
+
       {children}
     </button>
   );
 }
 
-function Select({ value, onChange, children }) {
+function Select({
+  value,
+  onChange,
+  children,
+  disabled,
+}) {
   return (
     <select
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="px-4 py-3 rounded-2xl bg-gray-50 ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-blue-500"
+      disabled={disabled}
+      onChange={(event) =>
+        onChange(event.target.value)
+      }
+      className="rounded-2xl bg-gray-50 px-4 py-3 outline-none ring-1 ring-black/5 disabled:opacity-50"
     >
       {children}
     </select>
   );
 }
 
+function OrderButton({
+  icon: Icon,
+  label,
+  disabled,
+  onClick,
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="rounded-xl bg-gray-50 p-2 text-gray-700 ring-1 ring-black/5 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-30"
+    >
+      <Icon size={16} />
+    </button>
+  );
+}
+
 function StatCard({ icon: Icon, label, value }) {
   return (
-    <div className="bg-white rounded-3xl shadow-sm ring-1 ring-black/5 p-4 flex items-center gap-3">
-      <div className="w-10 h-10 rounded-2xl bg-gray-50 ring-1 ring-black/5 flex items-center justify-center">
-        <Icon size={16} className="text-gray-800" />
+    <div className="flex items-center gap-3 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-50">
+        <Icon size={16} />
       </div>
+
       <div>
-        <div className="text-xs text-gray-500">{label}</div>
-        <div className="text-lg font-bold text-gray-950">{value}</div>
+        <div className="text-xs text-gray-500">
+          {label}
+        </div>
+
+        <div className="text-lg font-bold">
+          {Number(value || 0).toLocaleString(
+            "en-IN"
+          )}
+        </div>
       </div>
     </div>
   );
@@ -340,12 +842,50 @@ function StatCard({ icon: Icon, label, value }) {
 
 function MiniStat({ icon: Icon, label, value }) {
   return (
-    <div className="rounded-2xl bg-gray-50 ring-1 ring-black/5 px-3 py-2">
+    <div className="rounded-2xl bg-gray-50 px-3 py-2 ring-1 ring-black/5">
       <div className="flex items-center gap-2 text-gray-600">
         <Icon size={14} />
         <span className="text-[11px]">{label}</span>
       </div>
-      <div className="text-sm font-bold text-gray-950 mt-1">{value}</div>
+
+      <div className="mt-1 text-sm font-bold">
+        {Number(value || 0).toLocaleString(
+          "en-IN"
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-3xl bg-white p-10 text-sm text-gray-600">
+      <Loader2 size={18} className="animate-spin" />
+      Loading reels...
+    </div>
+  );
+}
+
+function EmptyState({ onAdd }) {
+  return (
+    <div className="rounded-3xl bg-white p-8 text-center shadow-sm ring-1 ring-black/5">
+      <Video
+        size={28}
+        className="mx-auto text-gray-400"
+      />
+
+      <h2 className="mt-3 font-semibold">
+        No reels found
+      </h2>
+
+      <button
+        type="button"
+        onClick={onAdd}
+        className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm text-white"
+      >
+        <Plus size={16} />
+        Add Reel
+      </button>
     </div>
   );
 }
