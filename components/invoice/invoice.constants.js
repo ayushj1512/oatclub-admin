@@ -17,11 +17,11 @@ export const SELLER = {
 logo: "http://res.cloudinary.com/dpsvrt4sd/image/upload/v1781123546/odb5ckquouajjzfbxin0.webp",  signature: "",
 
   // Address & Contact
-  address: "REGISTERED BUSINESS ADDRESS AS PER GST",
+  address: "house no. 1033, 2nd floor Gali no.15, lakhapat colony part2 meethapur extension, badarpur, South Delhi",
   city: "New Delhi",
   state: "Delhi",
   country: "India",
-  pincode: "",
+  pincode: "110044",
 
   phone: "(+91) 7217649990",
   email: "hey@oatclub.in",

@@ -1,590 +1,563 @@
-// components/production/packed/PackedOrderRow.jsx
+
+// components/production/PackedOrderRow.jsx
 "use client";
 
-import React, { useMemo, useEffect, useRef, useState, useCallback } from "react";
-import { createPortal } from "react-dom";
-import { useReactToPrint } from "react-to-print";
-import { MoreVertical, Printer } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Check,
+  Copy,
+  Edit3,
+  PackageCheck,
+  Save,
+  Truck,
+  X,
+} from "lucide-react";
 
 import { useOrderStore } from "@/store/orderStore";
-import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
-import { SELLER } from "@/components/invoice/invoice.constants";
 
-/**
- * ✅ FIXES INCLUDED
- * 1) <tbody> hydration error: no <div> inside <tbody>
- *    -> Hidden invoice is rendered via Portal (document.body)
- *
- * 2) Tracking/AWB input disappearing:
- *    -> use stable string key idKey for edit map access
- *
- * 3) ✅ USE updateTracking() from store for saving courier/AWB:
- *    -> calls PATCH /api/orders/:id/tracking
- *
- * ✅ Compact height + Invoice: ONLY PRINT
- */
+const safe = (value) => String(value ?? "").trim();
+
+const getAwb = (order = {}) =>
+  safe(
+    order?.shipment?.awb ||
+      order?.shipment?.shiprocket?.awb ||
+      order?.trackingDetails?.awb ||
+      order?.trackingDetails?.trackingId
+  );
+
+const getCourier = (order = {}) =>
+  safe(
+    order?.shipment?.courierName ||
+      order?.shipment?.shiprocket?.courierName ||
+      order?.trackingDetails?.courierName
+  );
+
+const getItemsText = (order = {}) => {
+  const items = Array.isArray(order?.items) ? order.items : [];
+
+  if (!items.length) return "No items";
+
+  const totalQty = items.reduce(
+    (sum, item) => sum + Number(item?.quantity || 0),
+    0
+  );
+
+  const firstTitle =
+    safe(items?.[0]?.productSnapshot?.title) ||
+    safe(items?.[0]?.title) ||
+    "Item";
+
+  if (items.length === 1) {
+    return `${firstTitle} × ${totalQty || 1}`;
+  }
+
+  return `${firstTitle} + ${items.length - 1} more · Qty ${totalQty}`;
+};
+
 export default function PackedOrderRow({
-  order: o,
+  order,
+  variant = "mobile",
   loading = false,
+
   edit = {},
   onBeginEdit,
   onSetField,
   onCancelEdit,
-  // onSaveShiprocket is kept optional, but we now SAVE via updateTracking by default
   onSaveShiprocket,
+
   onMarkPicked,
   onMarkShipped,
-  variant = "mobile", // "mobile" | "desktop"
+
+  selected = false,
+  showSelection = false,
+  onToggleSelect,
 }) {
-  const { updateTracking } = useOrderStore();
+  const updateTracking = useOrderStore(
+    (state) => state.updateTracking
+  );
 
-  const safe = (v) => String(v ?? "").trim();
+  const [localSaving, setLocalSaving] = useState(false);
 
-  // ✅ stable key for edit map (fixes input reset)
-  const idKey = safe(o?._id) || safe(o?.orderNumber) || "order";
-  const ed = edit?.[idKey];
+  const orderId = safe(order?._id);
+  const idKey = orderId || safe(order?.orderNumber) || "order";
 
-  const orderId = safe(o?._id); // ✅ real id for API
+  const currentEdit = edit?.[idKey];
 
-  // Shiprocket ONLY
-  const shipAwb = safe(o?.shipment?.shiprocket?.awb);
-  const shipCourier = safe(o?.shipment?.shiprocket?.courierName);
-  const missing = !shipCourier || !shipAwb;
+  const courier = getCourier(order);
+  const awb = getAwb(order);
+  const trackingMissing = !courier || !awb;
 
-  const paymentMethod = safe(o?.paymentMethod).toUpperCase() || "-";
-  const paymentStatus = safe(o?.paymentStatus) || "-";
+  const paymentMethod =
+    safe(order?.paymentMethod).toUpperCase() || "-";
 
-  const status = safe(o?.fulfillmentStatus) || "-";
-  const shipmentStatus = safe(o?.shipment?.status) || "-";
+  const paymentStatus =
+    safe(order?.paymentStatus) || "-";
 
-  const itemsText = useMemo(() => {
-    const items = Array.isArray(o?.items) ? o.items : [];
-    const totalQty = items.reduce((sum, it) => sum + Number(it?.quantity || 0), 0);
-    const firstTitle =
-      items?.[0]?.productSnapshot?.title || items?.[0]?.title || "Item";
-    if (items.length <= 1) return `${firstTitle} × ${totalQty || 1}`;
-    return `${firstTitle} + ${items.length - 1} more (qty: ${totalQty})`;
-  }, [o]);
+  const fulfillmentStatus =
+    safe(order?.fulfillmentStatus) || "-";
 
-  const copy = async (text) => {
+  const shipmentStatus =
+    safe(order?.shipment?.status) || "-";
+
+  const itemsText = useMemo(
+    () => getItemsText(order),
+    [order]
+  );
+
+  const saving =
+    loading ||
+    localSaving ||
+    Boolean(currentEdit?.saving);
+
+  const copyText = async (value) => {
+    const text = safe(value);
+    if (!text) return;
+
     try {
-      await navigator.clipboard.writeText(String(text ?? ""));
-    } catch {}
+      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      console.error("Clipboard copy failed:", error);
+    }
   };
 
-  /* =========================================================
-     ✅ SAVE Shiprocket tracking using store.updateTracking()
-  ========================================================= */
-  const setSavingFlag = (val) => {
-    if (typeof onSetField === "function") onSetField(idKey, "saving", val);
+  const startEditing = () => {
+    onBeginEdit?.(order);
   };
 
-  const saveTrackingViaStore = useCallback(async () => {
-    if (!o) return;
-    if (!orderId) return;
+  const cancelEditing = () => {
+    onCancelEdit?.(idKey);
+  };
 
-    const courier = safe(ed?.courier);
-    const awb = safe(ed?.awb);
+  const saveTracking = async () => {
+    if (!orderId) {
+      alert("Order ID is missing.");
+      return;
+    }
 
-    if (!courier || !awb) {
+    const nextCourier = safe(currentEdit?.courier);
+    const nextAwb = safe(currentEdit?.awb);
+
+    if (!nextCourier || !nextAwb) {
       alert("Courier and AWB both required.");
       return;
     }
 
-    setSavingFlag(true);
+    setLocalSaving(true);
+    onSetField?.(idKey, "saving", true);
+
     try {
-      // ✅ REQUIRED: use tracking API (your store strips undefined deeply)
       await updateTracking(orderId, {
         shipment: {
           provider: "shiprocket",
+
+          courierName: nextCourier,
+          awb: nextAwb,
+
           shiprocket: {
-            courierName: courier,
-            awb,
+            courierName: nextCourier,
+            awb: nextAwb,
           },
         },
-        // keep trackingDetails in sync (billing-safe fallback)
+
         trackingDetails: {
-          courierName: courier,
-          trackingId: awb,
+          provider: "shiprocket",
+          courierName: nextCourier,
+          trackingId: nextAwb,
+          awb: nextAwb,
         },
       });
 
-      // optional callback if you still want refresh logic at page-level
-      if (typeof onSaveShiprocket === "function") {
-        await onSaveShiprocket(o);
-      }
-    } catch (e) {
-      console.error(e);
-      alert(e?.message || "Failed to save tracking");
+      onCancelEdit?.(idKey);
+      await onSaveShiprocket?.(order);
+    } catch (error) {
+      console.error("saveTracking error:", error);
+      alert(error?.message || "Failed to save tracking.");
     } finally {
-      setSavingFlag(false);
+      setLocalSaving(false);
+      onSetField?.(idKey, "saving", false);
     }
-  }, [o, orderId, ed?.courier, ed?.awb, updateTracking, onSaveShiprocket]);
-
-  /* =========================================================
-     INVOICE: PRINT ONLY (PORTAL)
-  ========================================================= */
-  const invoiceWrapRef = useRef(null);
-  const invoiceRef = useRef(null);
-  const [invoiceMenuOpen, setInvoiceMenuOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
-
-  const orderNumber = safe(o?.orderNumber) || idKey || "order";
-
-  const normalizedInvoice = useMemo(() => {
-    if (!o) return null;
-
-    const billing = {
-      fullName: o.billingAddressSnapshot?.fullName || o.customerId?.name || "-",
-      line1: o.billingAddressSnapshot?.line1 || "-",
-      line2: o.billingAddressSnapshot?.line2 || "",
-      city: o.billingAddressSnapshot?.city || "",
-      pincode: o.billingAddressSnapshot?.pincode || "",
-      state: o.billingAddressSnapshot?.state || "",
-      phone: o.customerId?.phone || "",
-      email: o.customerId?.email || "",
-    };
-
-    const shipping = {
-      fullName: o.shippingAddressSnapshot?.fullName || "-",
-      line1: o.shippingAddressSnapshot?.line1 || "-",
-      line2: o.shippingAddressSnapshot?.line2 || "",
-      city: o.shippingAddressSnapshot?.city || "",
-      pincode: o.shippingAddressSnapshot?.pincode || "",
-      state: o.shippingAddressSnapshot?.state || "",
-    };
-
-    const items = (Array.isArray(o.items) ? o.items : []).map((it, idx) => {
-      const snap = it?.productSnapshot || {};
-      const size = it?.selectedSize || it?.size || it?.variant?.size || "-";
-      return {
-        sr: idx + 1,
-        name: snap.title || it?.productId?.title || "Unnamed Product",
-        qty: Number(it?.quantity || 0),
-        priceIncl: Number(it?.price || 0),
-        gstRate: 5,
-        size,
-        selectedSize: size,
-      };
-    });
-
-    const couponCode = o?.coupon?.code || "";
-    const discount = Number(o?.discount || o?.coupon?.discount || 0);
-
-    return {
-      seller: SELLER,
-      orderNumber: o.orderNumber,
-      orderDate: o.createdAt,
-      invoiceNumber: o.orderNumber,
-      billing,
-      shipping,
-      courier: { name: shipCourier || "-", awb: shipAwb || "-" },
-      items,
-      totals: {
-        taxable: Number(o.subtotal || 0),
-        tax: Number(o.tax || 0),
-        grandTotal: Number(o.finalPayable || 0),
-        discount,
-        couponCode,
-        finalPayable: Number(o.finalPayable || 0),
-      },
-      payment: { title: o.paymentMethod || "-" },
-    };
-  }, [o, shipCourier, shipAwb]);
-
-  const printInvoice = useReactToPrint({
-    contentRef: invoiceRef,
-    documentTitle: `Invoice-${orderNumber}`,
-    pageStyle: `
-      @page { size: A4; margin: 10mm; }
-      @media print {
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      }
-    `,
-  });
-
-  const onPrintInvoice = useCallback(() => {
-    setInvoiceMenuOpen(false);
-    if (!invoiceRef.current) return;
-    if (typeof printInvoice !== "function") return;
-    requestAnimationFrame(() => printInvoice());
-  }, [printInvoice]);
-
-  useEffect(() => {
-    const onDown = (e) => {
-      if (!invoiceMenuOpen) return;
-      if (!invoiceWrapRef.current) return;
-      if (!invoiceWrapRef.current.contains(e.target)) setInvoiceMenuOpen(false);
-    };
-    const onEsc = (e) => {
-      if (e.key === "Escape") setInvoiceMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, [invoiceMenuOpen]);
-
-  /* =========================
-     UI ATOMS (COMPACT)
-  ========================= */
-  const Chip = ({ children, tone = "neutral" }) => {
-    const base =
-      "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none";
-    const map = {
-      neutral: "border-zinc-200 bg-zinc-100 text-zinc-900",
-      accent: "border-blue-200 bg-blue-50 text-blue-900",
-      ok: "border-emerald-200 bg-emerald-50 text-emerald-800",
-      warn: "border-amber-200 bg-amber-50 text-amber-800",
-    };
-    return <span className={`${base} ${map[tone] || map.neutral}`}>{children}</span>;
   };
 
-  const Btn = ({ children, onClick, disabled, variant = "ghost", title }) => {
-    const base =
-      "rounded-lg px-2 py-1.5 text-xs font-extrabold transition active:scale-[0.99] leading-none";
-    const styles = {
-      ghost: disabled
-        ? "cursor-not-allowed border border-zinc-200 bg-zinc-100 text-zinc-500"
-        : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50",
-      primary: disabled
-        ? "cursor-not-allowed bg-blue-300 text-white"
-        : "bg-blue-600 text-white hover:bg-blue-700",
-    };
+  const TrackingView = () => {
+    if (currentEdit || trackingMissing) {
+      return (
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Input
+              value={currentEdit?.courier ?? ""}
+              onChange={(event) =>
+                onSetField?.(
+                  idKey,
+                  "courier",
+                  event.target.value
+                )
+              }
+              placeholder="Courier name"
+              disabled={saving}
+            />
+
+            <Input
+              value={currentEdit?.awb ?? ""}
+              onChange={(event) =>
+                onSetField?.(
+                  idKey,
+                  "awb",
+                  event.target.value
+                )
+              }
+              placeholder="AWB / Tracking ID"
+              disabled={saving}
+            />
+          </div>
+
+          <div className="mt-2 flex justify-end gap-2">
+            <Button
+              onClick={cancelEditing}
+              disabled={saving}
+            >
+              <X size={13} />
+              Cancel
+            </Button>
+
+            <Button
+              variant="primary"
+              onClick={saveTracking}
+              disabled={saving}
+            >
+              <Save size={13} />
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <button
-        type="button"
-        title={title}
-        onClick={onClick}
-        disabled={disabled}
-        className={`${base} ${styles[variant]}`}
-      >
-        {children}
-      </button>
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-xs font-semibold text-zinc-900">
+            {courier}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => copyText(awb)}
+            className="mt-0.5 inline-flex items-center gap-1 font-mono text-[11px] font-bold text-blue-700 hover:underline"
+            title="Copy AWB"
+          >
+            {awb}
+            <Copy size={11} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={startEditing}
+          disabled={loading}
+          className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] font-bold text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Edit3 size={12} />
+          Edit
+        </button>
+      </div>
     );
   };
 
-  const Input = (props) => (
+  if (variant === "mobile") {
+    return (
+      <div className="rounded-2xl border border-zinc-200 bg-white p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <button
+              type="button"
+              onClick={() => copyText(order?.orderNumber)}
+              className="inline-flex max-w-full items-center gap-1 truncate text-sm font-extrabold text-zinc-950 hover:text-blue-700"
+              title="Copy order number"
+            >
+              {safe(order?.orderNumber) || "-"}
+              <Copy size={12} />
+            </button>
+
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              <Chip tone={order?.isConfirmed ? "success" : "warning"}>
+                {order?.isConfirmed
+                  ? "Confirmed"
+                  : "Unconfirmed"}
+              </Chip>
+
+              <Chip>{paymentMethod}</Chip>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 gap-1.5">
+            <Button
+              onClick={() =>
+                onMarkPicked?.(orderId || idKey)
+              }
+              disabled={loading}
+            >
+              <PackageCheck size={13} />
+              Picked
+            </Button>
+
+            <Button
+              variant="primary"
+              onClick={() =>
+                onMarkShipped?.(orderId || idKey)
+              }
+              disabled={loading}
+            >
+              <Truck size={13} />
+              Shipped
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          <MobileRow
+            label="Items"
+            value={itemsText}
+          />
+
+          <MobileRow
+            label="Payment"
+            value={`${paymentMethod} · ${paymentStatus}`}
+          />
+
+          <div>
+            <div className="mb-1 text-[11px] font-semibold text-zinc-500">
+              Courier / AWB
+            </div>
+
+            <TrackingView />
+          </div>
+
+          <MobileRow
+            label="Status"
+            value={
+              <div className="flex flex-wrap justify-end gap-1.5">
+                <Chip tone="accent">
+                  {fulfillmentStatus}
+                </Chip>
+
+                <Chip>
+                  shipment: {shipmentStatus}
+                </Chip>
+              </div>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * Desktop mode returns its own <tr>.
+   * Do not wrap this component inside another <tr>.
+   */
+  return (
+    <tr className="bg-white transition hover:bg-zinc-50/70">
+      {showSelection && (
+        <Td className="w-[56px]">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            disabled={loading}
+            className="h-4 w-4 cursor-pointer accent-blue-600 disabled:cursor-not-allowed"
+            aria-label={`Select order ${
+              order?.orderNumber || ""
+            }`}
+          />
+        </Td>
+      )}
+
+      <Td>
+        <button
+          type="button"
+          onClick={() => copyText(order?.orderNumber)}
+          className="inline-flex items-center gap-1 text-xs font-extrabold text-zinc-950 hover:text-blue-700"
+          title="Copy order number"
+        >
+          {safe(order?.orderNumber) || "-"}
+          <Copy size={11} />
+        </button>
+
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          <Chip tone={order?.isConfirmed ? "success" : "warning"}>
+            {order?.isConfirmed
+              ? "Confirmed"
+              : "Unconfirmed"}
+          </Chip>
+
+          <Chip>{paymentMethod}</Chip>
+        </div>
+      </Td>
+
+      <Td>
+        <div
+          className="max-w-[340px] truncate text-xs text-zinc-900"
+          title={itemsText}
+        >
+          {itemsText}
+        </div>
+      </Td>
+
+      <Td>
+        <div className="text-xs font-semibold text-zinc-900">
+          {paymentMethod}
+        </div>
+
+        <div className="mt-0.5 text-[11px] text-zinc-500">
+          {paymentStatus}
+        </div>
+      </Td>
+
+      <Td className="min-w-[280px]">
+        <TrackingView />
+      </Td>
+
+      <Td>
+        <div className="flex flex-col items-start gap-1">
+          <Chip tone="accent">
+            {fulfillmentStatus}
+          </Chip>
+
+          <span className="text-[11px] text-zinc-500">
+            shipment: {shipmentStatus}
+          </span>
+        </div>
+      </Td>
+
+      <Td className="text-right">
+        <div className="flex justify-end gap-1.5">
+          <Button
+            onClick={() =>
+              onMarkPicked?.(orderId || idKey)
+            }
+            disabled={loading}
+          >
+            <PackageCheck size={13} />
+            Picked
+          </Button>
+
+          <Button
+            variant="primary"
+            onClick={() =>
+              onMarkShipped?.(orderId || idKey)
+            }
+            disabled={loading}
+          >
+            <Truck size={13} />
+            Shipped
+          </Button>
+        </div>
+      </Td>
+    </tr>
+  );
+}
+
+function Chip({ children, tone = "neutral" }) {
+  const tones = {
+    neutral:
+      "border-zinc-200 bg-zinc-100 text-zinc-800",
+
+    accent:
+      "border-blue-200 bg-blue-50 text-blue-800",
+
+    success:
+      "border-emerald-200 bg-emerald-50 text-emerald-800",
+
+    warning:
+      "border-amber-200 bg-amber-50 text-amber-800",
+  };
+
+  return (
+    <span
+      className={[
+        "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+        tones[tone] || tones.neutral,
+      ].join(" ")}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Button({
+  children,
+  onClick,
+  disabled,
+  variant = "secondary",
+}) {
+  const variants = {
+    secondary: disabled
+      ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
+      : "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-100",
+
+    primary: disabled
+      ? "cursor-not-allowed border-blue-200 bg-blue-300 text-white"
+      : "border-blue-600 bg-blue-600 text-white hover:bg-blue-700",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        "inline-flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-bold transition",
+        variants[variant] || variants.secondary,
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Input({ className = "", ...props }) {
+  return (
     <input
       {...props}
       autoCapitalize="none"
       autoCorrect="off"
       spellCheck={false}
       className={[
-        "w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none",
-        "placeholder:text-zinc-400 focus:border-blue-300",
-        props.className || "",
+        "w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 outline-none",
+        "placeholder:text-zinc-400 focus:border-blue-400 disabled:cursor-not-allowed disabled:bg-zinc-100",
+        className,
       ].join(" ")}
     />
   );
-
-  const InvoiceActions = ({ align = "right" }) => (
-    <div className="relative" ref={invoiceWrapRef}>
-      <button
-        type="button"
-        onClick={() => setInvoiceMenuOpen((v) => !v)}
-        className="inline-flex items-center justify-center rounded-lg border border-zinc-300 bg-white p-1.5 text-zinc-900 hover:bg-zinc-50 transition"
-        title="Invoice actions"
-        disabled={!normalizedInvoice}
-      >
-        <MoreVertical size={16} />
-      </button>
-
-      {invoiceMenuOpen ? (
-        <div
-          className={`absolute mt-1.5 w-44 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg z-50 ${
-            align === "right" ? "right-0" : "left-0"
-          }`}
-        >
-          <button
-            type="button"
-            onClick={onPrintInvoice}
-            className="w-full flex items-center gap-2 px-2.5 py-2 text-[11px] font-extrabold hover:bg-zinc-50"
-          >
-            <Printer size={14} />
-            Print Invoice
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-
-  // ✅ hidden print DOM -> portal to body (no tbody nesting)
-  const HiddenInvoicePortal =
-    mounted && typeof document !== "undefined"
-      ? createPortal(
-          <div style={{ position: "absolute", left: "-9999px", top: 0 }}>
-            <div ref={invoiceRef} style={{ width: "210mm", background: "white" }}>
-              {normalizedInvoice ? <InvoiceTemplate data={normalizedInvoice} /> : null}
-            </div>
-          </div>,
-          document.body
-        )
-      : null;
-
-  /* =========================
-     MOBILE CARD
-  ========================= */
-  if (variant === "mobile") {
-    return (
-      <>
-        <div className="rounded-xl border border-zinc-200 bg-white p-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <button
-                type="button"
-                onClick={() => copy(o?.orderNumber)}
-                className="truncate text-sm font-extrabold underline decoration-blue-300 underline-offset-4 hover:decoration-blue-500"
-                title="Copy order number"
-              >
-                {o?.orderNumber || "-"}
-              </button>
-
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {o?.isConfirmed ? <Chip tone="ok">Confirmed</Chip> : <Chip tone="warn">Unconfirmed</Chip>}
-                <Chip tone="neutral">{paymentMethod}</Chip>
-              </div>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-1.5">
-              <InvoiceActions align="right" />
-              <Btn variant="ghost" disabled={loading} onClick={() => onMarkPicked?.(orderId || idKey)}>
-                Picked
-              </Btn>
-              <Btn variant="primary" disabled={loading} onClick={() => onMarkShipped?.(orderId || idKey)}>
-                Shipped
-              </Btn>
-            </div>
-          </div>
-
-          <div className="mt-2 grid gap-1.5 text-xs">
-            <Row label="Items" value={itemsText} />
-            <Row
-              label="Pay"
-              value={<span className="text-[11px] text-zinc-500">{paymentStatus}</span>}
-            />
-
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-2.5">
-              <div className="mb-1.5 flex items-center justify-between">
-                <div className="text-[11px] font-extrabold text-zinc-700">Shiprocket</div>
-                {missing ? <Chip tone="warn">Missing</Chip> : null}
-              </div>
-
-              {!missing && !ed ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-xs text-zinc-900">{shipCourier}</div>
-
-                  <button
-                    type="button"
-                    onClick={() => copy(shipAwb)}
-                    className="font-mono text-[11px] font-bold underline decoration-blue-300 underline-offset-4 hover:decoration-blue-500"
-                    title="Copy AWB"
-                  >
-                    {shipAwb}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onBeginEdit?.(o)}
-                    className="ml-auto text-[11px] font-bold text-blue-700 hover:underline"
-                  >
-                    Edit
-                  </button>
-                </div>
-              ) : (
-                <div className="grid gap-1.5">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      value={ed?.courier ?? ""}
-                      onChange={(e) => onSetField?.(idKey, "courier", e.target.value)}
-                      placeholder="Courier"
-                    />
-                    <Input
-                      value={ed?.awb ?? ""}
-                      onChange={(e) => onSetField?.(idKey, "awb", e.target.value)}
-                      placeholder="AWB / Tracking"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-1.5">
-                    <Btn
-                      variant="ghost"
-                      disabled={loading || ed?.saving}
-                      onClick={() => onCancelEdit?.(idKey)}
-                    >
-                      Cancel
-                    </Btn>
-                    <Btn
-                      variant="primary"
-                      disabled={loading || ed?.saving}
-                      onClick={saveTrackingViaStore}
-                    >
-                      {ed?.saving ? "Saving…" : "Save"}
-                    </Btn>
-                  </div>
-
-                  <div className="text-[10px] text-zinc-500">
-                    Saves into <b>shipment.shiprocket</b> + <b>trackingDetails</b>.
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <Row
-              label="Status"
-              value={
-                <span className="inline-flex items-center gap-1.5">
-                  <Chip tone="accent">{status}</Chip>
-                  <span className="text-[11px] text-zinc-500">shipment: {shipmentStatus}</span>
-                </span>
-              }
-            />
-          </div>
-        </div>
-
-        {HiddenInvoicePortal}
-      </>
-    );
-  }
-
-  /* =========================
-     DESKTOP TABLE ROW
-  ========================= */
-  return (
-    <>
-      <tr className="bg-white hover:bg-zinc-50/60">
-        <Td className="py-2">
-          <button
-            type="button"
-            onClick={() => copy(o?.orderNumber)}
-            className="text-xs font-extrabold underline decoration-blue-300 underline-offset-4 hover:decoration-blue-500"
-            title="Copy order number"
-          >
-            {o?.orderNumber || "-"}
-          </button>
-
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {o?.isConfirmed ? <Chip tone="ok">Confirmed</Chip> : <Chip tone="warn">Unconfirmed</Chip>}
-            <Chip tone="neutral">{paymentMethod}</Chip>
-          </div>
-        </Td>
-
-        <Td className="py-2">
-          <div className="max-w-[420px] truncate text-xs text-zinc-900">{itemsText}</div>
-        </Td>
-
-        <Td className="py-2">
-          <div className="text-xs font-semibold text-zinc-900">{paymentMethod}</div>
-          <div className="text-[11px] text-zinc-500">{paymentStatus}</div>
-        </Td>
-
-        <Td className="py-2">
-          {!missing && !ed ? (
-            <div className="flex items-center gap-2">
-              <div className="text-xs text-zinc-900">{shipCourier}</div>
-
-              <button
-                type="button"
-                onClick={() => copy(shipAwb)}
-                className="font-mono text-[11px] font-bold underline decoration-blue-300 underline-offset-4 hover:decoration-blue-500"
-                title="Copy AWB"
-              >
-                {shipAwb}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onBeginEdit?.(o)}
-                className="ml-auto text-[11px] font-bold text-blue-700 hover:underline"
-              >
-                Edit
-              </button>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-2.5">
-              <div className="mb-1.5 flex items-center justify-between">
-                <div className="text-[11px] font-extrabold text-zinc-700">
-                  {missing ? "Missing Shiprocket" : "Edit Shiprocket"}
-                </div>
-                {missing ? <Chip tone="warn">Req</Chip> : null}
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5">
-                <Input
-                  value={ed?.courier ?? ""}
-                  onChange={(e) => onSetField?.(idKey, "courier", e.target.value)}
-                  placeholder="Courier"
-                />
-                <Input
-                  value={ed?.awb ?? ""}
-                  onChange={(e) => onSetField?.(idKey, "awb", e.target.value)}
-                  placeholder="AWB / Tracking"
-                />
-              </div>
-
-              <div className="mt-1.5 flex justify-end gap-1.5">
-                <Btn
-                  variant="ghost"
-                  disabled={loading || ed?.saving}
-                  onClick={() => onCancelEdit?.(idKey)}
-                >
-                  Cancel
-                </Btn>
-                <Btn
-                  variant="primary"
-                  disabled={loading || ed?.saving}
-                  onClick={saveTrackingViaStore}
-                >
-                  {ed?.saving ? "Saving…" : "Save"}
-                </Btn>
-              </div>
-            </div>
-          )}
-        </Td>
-
-        <Td className="py-2">
-          <div className="flex flex-col gap-1">
-            <Chip tone="accent">{status}</Chip>
-            <div className="text-[11px] text-zinc-500">shipment: {shipmentStatus}</div>
-          </div>
-        </Td>
-
-        <Td className="py-2 text-right">
-          <div className="flex justify-end items-center gap-1.5">
-            <InvoiceActions align="right" />
-            <Btn variant="ghost" disabled={loading} onClick={() => onMarkPicked?.(orderId || idKey)}>
-              Picked
-            </Btn>
-            <Btn variant="primary" disabled={loading} onClick={() => onMarkShipped?.(orderId || idKey)}>
-              Shipped
-            </Btn>
-          </div>
-        </Td>
-      </tr>
-
-      {HiddenInvoicePortal}
-    </>
-  );
 }
 
-/* -------- small helpers -------- */
-
-function Row({ label, value }) {
+function MobileRow({ label, value }) {
   return (
-    <div className="flex items-start justify-between gap-2">
-      <div className="shrink-0 text-[11px] font-semibold text-zinc-500">{label}</div>
-      <div className="min-w-0 text-right text-xs text-zinc-900">{value}</div>
+    <div className="flex items-start justify-between gap-3 border-b border-zinc-100 pb-2 last:border-b-0 last:pb-0">
+      <div className="shrink-0 text-[11px] font-semibold text-zinc-500">
+        {label}
+      </div>
+
+      <div className="min-w-0 text-right text-xs text-zinc-900">
+        {value}
+      </div>
     </div>
   );
 }
 
-function Td({ children, colSpan, className = "" }) {
+function Td({
+  children,
+  colSpan,
+  className = "",
+}) {
   return (
-    <td colSpan={colSpan} className={`px-3 py-2 align-top whitespace-nowrap ${className}`}>
+    <td
+      colSpan={colSpan}
+      className={[
+        "whitespace-nowrap px-3 py-2 align-top",
+        className,
+      ].join(" ")}
+    >
       {children}
     </td>
   );

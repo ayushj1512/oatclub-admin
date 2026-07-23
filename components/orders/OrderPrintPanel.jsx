@@ -1,182 +1,313 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useReactToPrint } from "react-to-print";
-import { FileText, PackageCheck, Printer } from "lucide-react";
+import {
+  AlertCircle,
+  FileText,
+  Loader2,
+  PackageCheck,
+  Printer,
+  RefreshCw,
+} from "lucide-react";
 
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import PackingSlipTemplate from "@/components/invoice/PackingSlipTemplate";
-import { SELLER } from "@/components/invoice/invoice.constants";
+import { useOrderStore } from "@/store/orderStore";
+
+const safe = (value) => String(value ?? "").trim();
 
 export default function OrderPrintPanel({
   order,
+  invoice: suppliedInvoice = null,
   courierName = "",
   trackingId = "",
 }) {
   const invoiceRef = useRef(null);
   const packingRef = useRef(null);
 
+  const fetchInvoiceByOrderNumber = useOrderStore(
+    (state) => state.fetchInvoiceByOrderNumber
+  );
+
+  const fetchInvoiceByOrderId = useOrderStore(
+    (state) => state.fetchInvoiceByOrderId
+  );
+
   const [previewTab, setPreviewTab] = useState("invoice");
+  const [invoice, setInvoice] = useState(suppliedInvoice);
+  const [loading, setLoading] = useState(!suppliedInvoice);
+  const [error, setError] = useState("");
 
-  const normalized = useMemo(() => {
-    if (!order) return null;
+  const orderId = safe(order?._id || order?.id);
+  const orderNumber = safe(
+    suppliedInvoice?.orderNumber || order?.orderNumber
+  );
 
-    const billing = {
-      fullName:
-        order.billingAddressSnapshot?.fullName ||
-        order.customerId?.name ||
-        "-",
-      line1: order.billingAddressSnapshot?.line1 || "-",
-      line2: order.billingAddressSnapshot?.line2 || "",
-      city: order.billingAddressSnapshot?.city || "",
-      pincode: order.billingAddressSnapshot?.pincode || "",
-      state: order.billingAddressSnapshot?.state || "",
-      phone: order.customerId?.phone || "",
-      email: order.customerId?.email || "",
-    };
+  const loadInvoice = useCallback(async () => {
+    if (suppliedInvoice) {
+      setInvoice(suppliedInvoice);
+      setLoading(false);
+      setError("");
+      return suppliedInvoice;
+    }
 
-    const shipping = {
-      fullName: order.shippingAddressSnapshot?.fullName || "-",
-      line1: order.shippingAddressSnapshot?.line1 || "-",
-      line2: order.shippingAddressSnapshot?.line2 || "",
-      city: order.shippingAddressSnapshot?.city || "",
-      pincode: order.shippingAddressSnapshot?.pincode || "",
-      state: order.shippingAddressSnapshot?.state || "",
-    };
+    if (!orderNumber && !orderId) {
+      setInvoice(null);
+      setLoading(false);
+      setError("Order number or order ID is missing.");
+      return null;
+    }
 
-    // ✅ ITEMS: include size so invoice/packing templates can show it
-    const items =
-      (order.items || []).map((it, idx) => {
-        const snap = it.productSnapshot || {};
-        return {
-          sr: idx + 1,
-          name: snap.title || it.productId?.title || "Unnamed Product",
-          qty: Number(it.quantity || 0),
-          priceIncl: Number(it.price || 0),
-          gstRate: 5,
+    setLoading(true);
+    setError("");
 
-          // ⭐️ NEW
-          size: it.selectedSize || it.size || it.variant?.size || "-",
-          selectedSize: it.selectedSize || it.size || it.variant?.size || "-",
-        };
-      }) || [];
+    try {
+      let result = null;
 
-    // ✅ COUPON / DISCOUNT: order-level
-    const couponCode = order.coupon?.code || "";
-    const discount = Number(order.discount || order.coupon?.discount || 0);
+      if (orderNumber) {
+        result = await fetchInvoiceByOrderNumber(orderNumber, {
+          silent: true,
+        });
+      } else {
+        result = await fetchInvoiceByOrderId(orderId, {
+          silent: true,
+        });
+      }
 
-    return {
-      seller: SELLER,
-      orderNumber: order.orderNumber,
-      orderDate: order.createdAt,
-      invoiceNumber: order.orderNumber,
+      if (!result) {
+        throw new Error("Invoice was not returned by the backend.");
+      }
 
-      billing,
-      shipping,
+      /*
+       * Backend courier data is preferred.
+       * Props remain as a fallback for old packed-order records.
+       */
+      const normalizedInvoice = {
+        ...result,
 
-      courier: {
-        name: courierName || "-",
-        awb: trackingId || "-",
-      },
+        courier: {
+          ...(result?.courier || {}),
 
-      items,
+          name:
+            safe(result?.courier?.name) ||
+            safe(result?.courier?.courierName) ||
+            safe(courierName) ||
+            "-",
 
-      totals: {
-        // ✅ keep gross numbers correct
-        taxable: Number(order.subtotal || 0),
-        tax: Number(order.tax || 0),
+          courierName:
+            safe(result?.courier?.courierName) ||
+            safe(result?.courier?.name) ||
+            safe(courierName) ||
+            "-",
 
-        // ✅ optional if templates still read it
-        grandTotal: Number(order.finalPayable || 0),
+          awb:
+            safe(result?.courier?.awb) ||
+            safe(result?.courier?.trackingId) ||
+            safe(trackingId) ||
+            "-",
 
-        // ⭐️ NEW (used by updated InvoiceTemplate)
-        discount,
-        couponCode,
-        finalPayable: Number(order.finalPayable || 0),
-      },
+          trackingId:
+            safe(result?.courier?.trackingId) ||
+            safe(result?.courier?.awb) ||
+            safe(trackingId) ||
+            "-",
+        },
+      };
 
-      payment: {
-        title: order.paymentMethod || "-",
-      },
-    };
-  }, [order, courierName, trackingId]);
+      setInvoice(normalizedInvoice);
+      return normalizedInvoice;
+    } catch (fetchError) {
+      console.error("OrderPrintPanel loadInvoice error:", fetchError);
+
+      setInvoice(null);
+      setError(
+        fetchError?.message || "Failed to load invoice from backend."
+      );
+
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    suppliedInvoice,
+    orderNumber,
+    orderId,
+    courierName,
+    trackingId,
+    fetchInvoiceByOrderNumber,
+    fetchInvoiceByOrderId,
+  ]);
+
+  useEffect(() => {
+    loadInvoice();
+  }, [loadInvoice]);
 
   const printPackingSlip = useReactToPrint({
     contentRef: packingRef,
-    documentTitle: `PackingSlip-${normalized?.orderNumber || "order"}`,
+
+    documentTitle: `PackingSlip-${
+      invoice?.orderNumber || orderNumber || "order"
+    }`,
+
     pageStyle: `
-      @page { size: A4; margin: 10mm; }
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+
       @media print {
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+          background: white;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
       }
     `,
   });
 
   const printInvoice = useReactToPrint({
     contentRef: invoiceRef,
-    documentTitle: `Invoice-${normalized?.orderNumber || "order"}`,
+
+    documentTitle: `Invoice-${
+      invoice?.orderNumber || orderNumber || "order"
+    }`,
+
     pageStyle: `
-      @page { size: A4; margin: 10mm; }
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+
       @media print {
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+          background: white;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
       }
     `,
   });
 
-  if (!order || !normalized) return null;
+  if (!order && !suppliedInvoice) {
+    return null;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-40 items-center justify-center rounded-2xl border border-zinc-200 bg-white p-6">
+        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-600">
+          <Loader2 size={18} className="animate-spin" />
+          Loading invoice from backend...
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !invoice) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+        <div className="flex items-start gap-3">
+          <AlertCircle
+            size={18}
+            className="mt-0.5 shrink-0 text-red-600"
+          />
+
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-red-900">
+              Invoice could not be loaded
+            </div>
+
+            <div className="mt-1 text-xs text-red-700">
+              {error || "Backend did not return invoice data."}
+            </div>
+
+            <button
+              type="button"
+              onClick={loadInvoice}
+              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-800"
+            >
+              <RefreshCw size={14} />
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const printingDisabled = loading || !invoice;
 
   return (
-    <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
-      {/* Tabs */}
-      <div className="flex items-center justify-between px-5 py-3 bg-gray-50">
-        <div className="flex gap-2">
+    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200">
+      {/* Header and tabs */}
+      <div className="flex flex-col gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
           <button
+            type="button"
             onClick={() => setPreviewTab("invoice")}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+            className={[
+              "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
               previewTab === "invoice"
                 ? "bg-blue-600 text-white"
-                : "bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-100"
-            }`}
+                : "bg-white text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-100",
+            ].join(" ")}
           >
             Invoice Preview
           </button>
 
           <button
+            type="button"
             onClick={() => setPreviewTab("packing")}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+            className={[
+              "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
               previewTab === "packing"
-                ? "bg-gray-900 text-white"
-                : "bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-100"
-            }`}
+                ? "bg-zinc-900 text-white"
+                : "bg-white text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-100",
+            ].join(" ")}
           >
             Packing Slip Preview
           </button>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
+            type="button"
             onClick={() => printPackingSlip?.()}
-            className="inline-flex items-center gap-2 text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-black transition"
+            disabled={printingDisabled}
+            className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-zinc-300"
           >
             <PackageCheck size={14} />
             Packing Slip
           </button>
 
           <button
+            type="button"
             onClick={() => printInvoice?.()}
-            className="inline-flex items-center gap-2 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            disabled={printingDisabled}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
           >
             <FileText size={14} />
             Invoice
           </button>
 
           <button
-            onClick={() =>
-              previewTab === "invoice"
-                ? printInvoice?.()
-                : printPackingSlip?.()
-            }
-            className="inline-flex items-center gap-2 text-xs px-3 py-1.5 bg-black text-white rounded-lg hover:bg-gray-900 transition"
+            type="button"
+            disabled={printingDisabled}
+            onClick={() => {
+              if (previewTab === "invoice") {
+                printInvoice?.();
+              } else {
+                printPackingSlip?.();
+              }
+            }}
+            className="inline-flex items-center gap-2 rounded-lg bg-black px-3 py-1.5 text-xs font-bold text-white transition hover:bg-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-300"
           >
             <Printer size={14} />
             Print
@@ -184,35 +315,60 @@ export default function OrderPrintPanel({
         </div>
       </div>
 
-      {/* Preview */}
-      <div className="p-6 flex justify-center bg-white">
-        {previewTab === "invoice" ? (
-          <div
-            style={{ transform: "scale(0.55)", width: "210mm" }}
-            className="origin-top"
-          >
-            <InvoiceTemplate data={normalized} />
-          </div>
-        ) : (
-          <div
-            style={{ transform: "scale(0.75)", width: "210mm" }}
-            className="origin-top"
-          >
-            <PackingSlipTemplate data={normalized} />
-          </div>
-        )}
+      {/* Backend status */}
+      <div className="border-b border-emerald-100 bg-emerald-50 px-4 py-2 text-[11px] font-semibold text-emerald-800">
+        Backend invoice loaded • {invoice?.invoiceNumber || orderNumber}
       </div>
 
-      {/* Print Content Offscreen */}
-      <div style={{ position: "absolute", left: "-9999px", top: 0 }}>
+      {/* Preview */}
+      <div className="overflow-auto bg-white p-4 sm:p-6">
+        <div className="flex min-w-[760px] justify-center">
+          {previewTab === "invoice" ? (
+            <div
+              className="origin-top"
+              style={{
+                width: "210mm",
+                transform: "scale(0.58)",
+                transformOrigin: "top center",
+              }}
+            >
+              <InvoiceTemplate data={invoice} />
+            </div>
+          ) : (
+            <div
+              className="origin-top"
+              style={{
+                width: "210mm",
+                transform: "scale(0.72)",
+                transformOrigin: "top center",
+              }}
+            >
+              <PackingSlipTemplate data={invoice} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Offscreen printable content */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          left: "-100000px",
+          top: 0,
+          width: "210mm",
+          background: "#ffffff",
+        }}
+      >
         <div ref={invoiceRef}>
-          <InvoiceTemplate data={normalized} />
+          <InvoiceTemplate data={invoice} />
         </div>
 
         <div ref={packingRef}>
-          <PackingSlipTemplate data={normalized} />
+          <PackingSlipTemplate data={invoice} />
         </div>
       </div>
     </div>
   );
 }
+

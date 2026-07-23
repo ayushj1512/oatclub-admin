@@ -1,12 +1,12 @@
 "use client";
 
-import { FORMATTERS } from "./invoice.constants";
+import { FORMATTERS, SELLER } from "./invoice.constants";
 
 export default function InvoiceTemplate({ data }) {
   if (!data) return null;
 
   const {
-    seller = {},
+    seller: invoiceSeller = {},
     billing = {},
     shipping = {},
     courier = {},
@@ -17,6 +17,11 @@ export default function InvoiceTemplate({ data }) {
     invoiceNumber,
     payment = {},
   } = data;
+
+  const seller = {
+    ...SELLER,
+    ...invoiceSeller,
+  };
 
   const logo =
     seller.logo ||
@@ -50,10 +55,10 @@ export default function InvoiceTemplate({ data }) {
   const getHsn = (it) =>
     String(
       it?.hsnCode ||
-        it?.productSnapshot?.hsnCode ||
-        it?.product?.hsnCode ||
-        it?.productId?.hsnCode ||
-        "62105000"
+      it?.productSnapshot?.hsnCode ||
+      it?.product?.hsnCode ||
+      it?.productId?.hsnCode ||
+      "62105000"
     ).trim() || "62105000";
 
   const getAddress = (addr = {}) => ({
@@ -160,6 +165,71 @@ export default function InvoiceTemplate({ data }) {
         </div>
       </div>
 
+      {/* SELLER DETAILS */}
+      <div className="border border-zinc-200 p-[14px] mt-[18px]">
+        <div
+          className="mb-2 text-[10px] font-black tracking-[0.6px]"
+          style={{ fontFamily: "Nunito Sans, Arial, sans-serif" }}
+        >
+          Seller Details
+        </div>
+
+        <div className="grid grid-cols-2 gap-8 text-[10px] leading-[1.7] text-zinc-500">
+          <div>
+            <p className="font-black text-black mb-1">
+              {seller.name || seller.brand || "OATCLUB"}
+            </p>
+
+            {seller.address ? <p>{seller.address}</p> : null}
+
+            <p>
+              {[seller.city, seller.state, seller.pincode]
+                .filter(Boolean)
+                .join(", ")}
+            </p>
+
+            {seller.country ? <p>{seller.country}</p> : null}
+          </div>
+
+          <div>
+            {seller.gstin ? (
+              <p>
+                <span className="font-black text-black">GSTIN:</span>{" "}
+                {seller.gstin}
+              </p>
+            ) : null}
+
+            {seller.pan ? (
+              <p>
+                <span className="font-black text-black">PAN:</span>{" "}
+                {seller.pan}
+              </p>
+            ) : null}
+
+            {seller.phone ? (
+              <p>
+                <span className="font-black text-black">Phone:</span>{" "}
+                {seller.phone}
+              </p>
+            ) : null}
+
+            {seller.email ? (
+              <p>
+                <span className="font-black text-black">Email:</span>{" "}
+                {seller.email}
+              </p>
+            ) : null}
+
+            {seller.website ? (
+              <p>
+                <span className="font-black text-black">Website:</span>{" "}
+                {seller.website}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
       {/* CUSTOMER */}
       <div className="border border-zinc-200 p-[14px] my-[18px]">
         <div
@@ -240,17 +310,17 @@ export default function InvoiceTemplate({ data }) {
               itemDisc > 0
                 ? +itemDisc.toFixed(2)
                 : !orderDiscount || !baseTotal
-                ? 0
-                : idx === items.length - 1
-                ? +(
-                    orderDiscount -
-                    items.slice(0, idx).reduce((sum, x) => {
-                      const u = Number(x.priceIncl || x.price || 0);
-                      const q = Number(x.qty || 0);
-                      return sum + +((orderDiscount * (u * q)) / baseTotal).toFixed(2);
-                    }, 0)
-                  ).toFixed(2)
-                : +((orderDiscount * sub) / baseTotal).toFixed(2);
+                  ? 0
+                  : idx === items.length - 1
+                    ? +(
+                      orderDiscount -
+                      items.slice(0, idx).reduce((sum, x) => {
+                        const u = Number(x.priceIncl || x.price || 0);
+                        const q = Number(x.qty || 0);
+                        return sum + +((orderDiscount * (u * q)) / baseTotal).toFixed(2);
+                      }, 0)
+                    ).toFixed(2)
+                    : +((orderDiscount * sub) / baseTotal).toFixed(2);
 
             const total = +(sub - allocatedDisc).toFixed(2);
 
@@ -343,54 +413,20 @@ export default function InvoiceTemplate({ data }) {
       </div>
 
       {/* FOOTER */}
-      <div className="mt-[30px] border-t border-zinc-200 pt-[18px]">
-        <div className="grid grid-cols-3 gap-[18px]">
-          <div>
-            <div className="mb-2 text-[10px] font-black tracking-[0.6px]">
-              Payment
-            </div>
-            <p className="text-[10px] leading-[1.7] text-zinc-500">
-              Method : {payment?.title || "-"}
-              <br />
-              Status : {payment?.status || "-"}
-              <br />
-              Currency : INR
-            </p>
-          </div>
+      <p className="text-[10px] leading-[1.7] text-zinc-500">
+        {seller.email || "HEY@OATCLUB.IN"}
+        <br />
 
-          <div>
-            <div className="mb-2 text-[10px] font-black tracking-[0.6px]">
-              Shipment
-            </div>
-            <p className="text-[10px] leading-[1.7] text-zinc-500">
-              Courier : {courier?.name || "-"}
-              <br />
-              AWB : {courier?.awb || "-"}
-              <br />
-              Provider : {courier?.provider || "SHIPROCKET"}
-            </p>
-          </div>
+        {seller.website
+          ? seller.website.replace(/^https?:\/\//, "").replace(/\/$/, "")
+          : "OATCLUB.IN"}
 
-          <div>
-            <div className="mb-2 text-[10px] font-black tracking-[0.6px]">
-              Support
-            </div>
-            <p className="text-[10px] leading-[1.7] text-zinc-500">
-              {seller.email || "SUPPORT@OATCLUB.IN"}
-              <br />
-              OATCLUB.IN
-              <br />
-              {seller.location || "DELHI NCR, INDIA"}
-            </p>
-          </div>
-        </div>
+        <br />
 
-        <div className="mt-[22px] text-center text-[10px] leading-[1.8] tracking-[0.4px] text-zinc-500">
-          THANK YOU FOR SHOPPING WITH OATCLUB
-          <br />
-          OWN ALL TRENDS
-        </div>
-      </div>
+        {[seller.city, seller.state, seller.country]
+          .filter(Boolean)
+          .join(", ")}
+      </p>
     </div>
   );
 }

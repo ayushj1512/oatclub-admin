@@ -1,156 +1,270 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { MoreVertical, Printer } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertCircle,
+  Loader2,
+  MoreVertical,
+  Printer,
+  RefreshCw,
+} from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
-import { SELLER } from "@/components/invoice/invoice.constants";
+import { useOrderStore } from "@/store/orderStore";
+
+const safe = (value) => String(value ?? "").trim();
 
 export default function OrderRowActions({
   order,
   courierName = "",
   trackingId = "",
 }) {
-  const wrapRef = useRef(null);
+  const menuRef = useRef(null);
   const invoiceRef = useRef(null);
 
+  const fetchInvoiceByOrderNumber = useOrderStore(
+    (state) => state.fetchInvoiceByOrderNumber
+  );
+
+  const fetchInvoiceByOrderId = useOrderStore(
+    (state) => state.fetchInvoiceByOrderId
+  );
+
   const [open, setOpen] = useState(false);
+  const [invoice, setInvoice] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [pendingPrint, setPendingPrint] = useState(false);
 
-  const orderNumber = order?.orderNumber || order?._id || "order";
+  const orderId = safe(order?._id || order?.id);
+  const orderNumber = safe(order?.orderNumber);
+  const printTitle = orderNumber || orderId || "order";
 
-  const normalized = useMemo(() => {
-    if (!order) return null;
-
-    const billing = {
-      fullName:
-        order.billingAddressSnapshot?.fullName || order.customerId?.name || "-",
-      line1: order.billingAddressSnapshot?.line1 || "-",
-      line2: order.billingAddressSnapshot?.line2 || "",
-      city: order.billingAddressSnapshot?.city || "",
-      pincode: order.billingAddressSnapshot?.pincode || "",
-      state: order.billingAddressSnapshot?.state || "",
-      phone: order.customerId?.phone || "",
-      email: order.customerId?.email || "",
-    };
-
-    const shipping = {
-      fullName: order.shippingAddressSnapshot?.fullName || "-",
-      line1: order.shippingAddressSnapshot?.line1 || "-",
-      line2: order.shippingAddressSnapshot?.line2 || "",
-      city: order.shippingAddressSnapshot?.city || "",
-      pincode: order.shippingAddressSnapshot?.pincode || "",
-      state: order.shippingAddressSnapshot?.state || "",
-    };
-
-    const items = (Array.isArray(order.items) ? order.items : []).map(
-      (it, idx) => {
-        const snap = it?.productSnapshot || {};
-        const size = it?.selectedSize || it?.size || it?.variant?.size || "-";
-        return {
-          sr: idx + 1,
-          name: snap.title || it?.productId?.title || "Unnamed Product",
-          qty: Number(it?.quantity || 0),
-          priceIncl: Number(it?.price || 0),
-          gstRate: 5,
-          size,
-          selectedSize: size,
-        };
-      }
-    );
-
-    const couponCode = order?.coupon?.code || "";
-    const discount = Number(order?.discount || order?.coupon?.discount || 0);
-
-    return {
-      seller: SELLER,
-      orderNumber: order.orderNumber,
-      orderDate: order.createdAt,
-      invoiceNumber: order.orderNumber,
-      billing,
-      shipping,
-      courier: { name: courierName || "-", awb: trackingId || "-" },
-      items,
-      totals: {
-        taxable: Number(order.subtotal || 0),
-        tax: Number(order.tax || 0),
-        grandTotal: Number(order.finalPayable || 0),
-        discount,
-        couponCode,
-        finalPayable: Number(order.finalPayable || 0),
-      },
-      payment: { title: order.paymentMethod || "-" },
-    };
-  }, [order, courierName, trackingId]);
-
-  // ✅ Print (react-to-print) — contentRef version (reliable)
   const printInvoice = useReactToPrint({
     contentRef: invoiceRef,
-    documentTitle: `Invoice-${orderNumber}`,
+    documentTitle: `Invoice-${printTitle}`,
     pageStyle: `
-      @page { size: A4; margin: 10mm; }
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+
       @media print {
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+          background: white;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
       }
     `,
   });
 
-  const safePrint = useCallback(() => {
-    setOpen(false);
-    if (!invoiceRef.current) return;
-    if (typeof printInvoice !== "function") return;
-    requestAnimationFrame(() => printInvoice());
-  }, [printInvoice]);
+  const loadInvoice = useCallback(async () => {
+    if (!orderNumber && !orderId) {
+      throw new Error("Order number or order ID is missing.");
+    }
 
-  // ✅ Close on outside click + ESC
+    const result = orderNumber
+      ? await fetchInvoiceByOrderNumber(orderNumber, {
+          silent: true,
+        })
+      : await fetchInvoiceByOrderId(orderId, {
+          silent: true,
+        });
+
+    if (!result) {
+      throw new Error("Backend did not return invoice data.");
+    }
+
+    return {
+      ...result,
+
+      courier: {
+        ...(result?.courier || {}),
+
+        name:
+          safe(result?.courier?.name) ||
+          safe(result?.courier?.courierName) ||
+          safe(courierName) ||
+          "-",
+
+        courierName:
+          safe(result?.courier?.courierName) ||
+          safe(result?.courier?.name) ||
+          safe(courierName) ||
+          "-",
+
+        awb:
+          safe(result?.courier?.awb) ||
+          safe(result?.courier?.trackingId) ||
+          safe(trackingId) ||
+          "-",
+
+        trackingId:
+          safe(result?.courier?.trackingId) ||
+          safe(result?.courier?.awb) ||
+          safe(trackingId) ||
+          "-",
+      },
+    };
+  }, [
+    orderNumber,
+    orderId,
+    courierName,
+    trackingId,
+    fetchInvoiceByOrderNumber,
+    fetchInvoiceByOrderId,
+  ]);
+
+  const handlePrint = async () => {
+    setOpen(false);
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await loadInvoice();
+
+      setInvoice(result);
+      setPendingPrint(true);
+    } catch (fetchError) {
+      console.error("OrderRowActions invoice error:", fetchError);
+      setError(fetchError?.message || "Failed to load invoice.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const onDown = (e) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target)) setOpen(false);
+    if (!pendingPrint || !invoice) return undefined;
+
+    const timer = window.setTimeout(() => {
+      printInvoice?.();
+      setPendingPrint(false);
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [pendingPrint, invoice, printInvoice]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(event.target)
+      ) {
+        setOpen(false);
+      }
     };
-    const onEsc = (e) => {
-      if (e.key === "Escape") setOpen(false);
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
     };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+
     return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onEsc);
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick
+      );
+
+      document.removeEventListener(
+        "keydown",
+        handleEscape
+      );
     };
   }, []);
 
-  if (!order || !normalized) return null;
+  if (!order) return null;
 
   return (
     <>
-      <div className="relative" ref={wrapRef}>
+      <div ref={menuRef} className="relative">
         <button
-          onClick={() => setOpen((v) => !v)}
-          className="p-2 rounded-lg hover:bg-black/[0.05] transition"
           type="button"
-          title="Invoice Options"
+          onClick={() => setOpen((current) => !current)}
+          disabled={loading}
+          title="Invoice options"
+          className="inline-flex items-center justify-center rounded-lg p-2 text-zinc-700 transition hover:bg-black/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <MoreVertical size={18} />
+          {loading ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <MoreVertical size={18} />
+          )}
         </button>
 
-        {open ? (
-          <div className="absolute right-0 mt-2 w-52 bg-white border border-gray-200 rounded-2xl shadow-lg z-40 overflow-hidden text-xs font-semibold">
+        {open && (
+          <div className="absolute right-0 z-50 mt-2 w-48 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg">
             <button
-              onClick={safePrint}
-              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50"
               type="button"
+              onClick={handlePrint}
+              disabled={loading}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-bold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Printer size={14} />
-              Print Invoice
+              {loading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Printer size={14} />
+              )}
+
+              {loading ? "Preparing..." : "Print Invoice"}
             </button>
           </div>
-        ) : null}
+        )}
+
+        {error && (
+          <div className="absolute right-0 z-50 mt-2 w-64 rounded-xl border border-red-200 bg-red-50 p-3 shadow-lg">
+            <div className="flex items-start gap-2 text-xs text-red-800">
+              <AlertCircle
+                size={15}
+                className="mt-0.5 shrink-0"
+              />
+
+              <div className="min-w-0 flex-1">
+                <div>{error}</div>
+
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="mt-2 inline-flex items-center gap-1 font-bold hover:underline"
+                >
+                  <RefreshCw size={12} />
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Hidden printable invoice */}
-      <div style={{ position: "absolute", left: "-9999px", top: 0 }}>
-        <div ref={invoiceRef} style={{ width: "210mm", background: "white" }}>
-          <InvoiceTemplate data={normalized} />
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          left: "-200vw",
+          top: 0,
+          width: "210mm",
+          height: 0,
+          overflow: "hidden",
+          pointerEvents: "none",
+          background: "#ffffff",
+        }}
+      >
+        <div
+          ref={invoiceRef}
+          style={{
+            width: "210mm",
+            background: "#ffffff",
+          }}
+        >
+          {invoice ? <InvoiceTemplate data={invoice} /> : null}
         </div>
       </div>
     </>

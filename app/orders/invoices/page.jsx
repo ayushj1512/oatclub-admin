@@ -14,222 +14,30 @@ import {
   MapPin,
   RefreshCcw,
   Search,
-  XCircle,
 } from "lucide-react";
 
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
-import { useOrderInvoiceStore } from "@/store/orderInvoiceStore";
+import { useOrderStore } from "@/store/orderStore";
 import { normalizeOrderNumberInput } from "@/utils/formatters";
 
-const safe = (v) => String(v ?? "").trim();
+const safe = (value) => String(value ?? "").trim();
 
-const formatCurrency = (value) => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "—";
-  try {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 2,
-    }).format(n);
-  } catch {
-    return `₹${n.toFixed(2)}`;
-  }
-};
+const unique = (values = []) =>
+  [...new Set(values.map(safe).filter(Boolean))];
 
-const formatDate = (value) => {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  try {
-    return new Intl.DateTimeFormat("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(d);
-  } catch {
-    return "—";
-  }
-};
-
-const compactAddress = (addr) => {
-  if (!addr) return "";
-  return [
-    safe(addr?.line1),
-    safe(addr?.line2),
-    safe(addr?.city),
-    safe(addr?.state),
-    safe(addr?.pincode),
-    safe(addr?.country),
-  ]
-    .filter(Boolean)
-    .join(", ");
-};
-
-const normalizeInvoiceForTemplate = (item) => {
-  if (!item || typeof item !== "object") return item;
-
-  const shipping = item?.shipping || item?.shippingAddressSnapshot || {};
-  const billing = item?.billing || item?.billingAddressSnapshot || {};
-  const totals = item?.totals || {};
-  const payment = item?.payment || {};
-  const seller = item?.seller || {};
-  const raw = item?.raw || {};
-
-  return {
-    ...item,
-
-    seller: {
-      ...seller,
-      address:
-        safe(seller?.address) ||
-        compactAddress({
-          line1: seller?.address,
-          city: seller?.city,
-          state: seller?.state,
-          pincode: seller?.pincode,
-          country: seller?.country,
-        }),
-    },
-
-    billing,
-    shipping,
-
-    billingAddressSnapshot: {
-      fullName: safe(billing?.fullName),
-      phone: safe(billing?.phone),
-      email: safe(billing?.email),
-      line1: safe(billing?.line1),
-      line2: safe(billing?.line2),
-      city: safe(billing?.city),
-      state: safe(billing?.state),
-      country: safe(billing?.country || "India"),
-      pincode: safe(billing?.pincode),
-    },
-
-    shippingAddressSnapshot: {
-      fullName: safe(shipping?.fullName),
-      phone: safe(shipping?.phone),
-      email: safe(shipping?.email),
-      line1: safe(shipping?.line1),
-      line2: safe(shipping?.line2),
-      city: safe(shipping?.city),
-      state: safe(shipping?.state),
-      country: safe(shipping?.country || "India"),
-      pincode: safe(shipping?.pincode),
-    },
-
-    customerName:
-      safe(item?.customerName) ||
-      safe(shipping?.fullName) ||
-      safe(billing?.fullName),
-
-    orderDate: item?.orderDate || item?.createdAt || item?.updatedAt || "",
-    createdAt: item?.createdAt || item?.orderDate || item?.updatedAt || "",
-
-    grandTotal:
-      totals?.grandTotal ?? totals?.finalPayable ?? item?.grandTotal ?? null,
-    totalAmount:
-      totals?.grandTotal ?? totals?.finalPayable ?? item?.totalAmount ?? null,
-    finalAmount:
-      totals?.finalPayable ?? totals?.grandTotal ?? item?.finalAmount ?? null,
-    amount:
-      totals?.grandTotal ?? totals?.finalPayable ?? item?.amount ?? null,
-
-    status:
-      safe(item?.status) ||
-      safe(raw?.fulfillmentStatus) ||
-      safe(payment?.status) ||
-      "Ready",
-
-    orderStatus:
-      safe(item?.orderStatus) || safe(raw?.fulfillmentStatus) || "",
-
-    paymentStatus: safe(item?.paymentStatus) || safe(payment?.status) || "",
-    paymentMethod: safe(item?.paymentMethod) || safe(payment?.method) || "",
-    paymentTitle: safe(item?.paymentTitle) || safe(payment?.title) || "",
-
-    courierName: safe(item?.courierName) || safe(item?.courier?.name) || "-",
-    awb: safe(item?.awb) || safe(item?.courier?.awb) || "-",
-  };
-};
-
-const getInvoiceAmount = (item) => {
-  const candidates = [
-    item?.grandTotal,
-    item?.totalAmount,
-    item?.finalAmount,
-    item?.amount,
-    item?.totals?.grandTotal,
-    item?.totals?.finalPayable,
-    item?.summary?.grandTotal,
-  ];
-
-  for (const val of candidates) {
-    const n = Number(val);
-    if (Number.isFinite(n)) return n;
-  }
-
-  return null;
-};
-
-const getInvoiceCustomerName = (item) => {
-  return (
-    safe(item?.customerName) ||
-    safe(item?.shipping?.fullName) ||
-    safe(item?.billing?.fullName) ||
-    safe(item?.shippingAddressSnapshot?.fullName) ||
-    safe(item?.billingAddressSnapshot?.fullName) ||
-    safe(item?.customer?.name) ||
-    safe(item?.user?.name) ||
-    "Customer"
-  );
-};
-
-const getInvoiceDate = (item) => {
-  return item?.orderDate || item?.createdAt || item?.updatedAt || "";
-};
-
-const getInvoiceStatus = (item) => {
-  return (
-    safe(item?.status) ||
-    safe(item?.orderStatus) ||
-    safe(item?.raw?.fulfillmentStatus) ||
-    safe(item?.payment?.status) ||
-    "Ready"
-  );
-};
-
-const getInvoiceAddress = (item) => {
-  return (
-    compactAddress(item?.shipping) ||
-    compactAddress(item?.shippingAddressSnapshot) ||
-    compactAddress(item?.billing) ||
-    compactAddress(item?.billingAddressSnapshot) ||
-    ""
-  );
-};
-
-const normalizeOrderNumber = (value = "") => {
-  return normalizeOrderNumberInput(value);
-};
-
-const tokenizeInput = (input = "") =>
-  String(input)
+const parseInput = (input = "") => {
+  const tokens = String(input)
     .split(/[\n,\s]+/)
-    .map((x) => safe(x))
+    .map(safe)
     .filter(Boolean);
-
-const analyzeOrderInput = (input = "") => {
-  const tokens = tokenizeInput(input);
 
   const valid = [];
   const invalid = [];
+  const duplicates = [];
   const seen = new Set();
-  const duplicateValues = [];
 
   tokens.forEach((token) => {
-    const normalized = normalizeOrderNumber(token);
+    const normalized = normalizeOrderNumberInput(token);
 
     if (!normalized) {
       invalid.push(token);
@@ -237,7 +45,7 @@ const analyzeOrderInput = (input = "") => {
     }
 
     if (seen.has(normalized)) {
-      duplicateValues.push(normalized);
+      duplicates.push(normalized);
       return;
     }
 
@@ -246,195 +54,159 @@ const analyzeOrderInput = (input = "") => {
   });
 
   return {
-    rawCount: tokens.length,
+    total: tokens.length,
     valid,
     invalid,
-    duplicateValues: [...new Set(duplicateValues)],
+    duplicates: unique(duplicates),
   };
 };
 
-const SAMPLE_INPUT = `1100
-12
-123
-1201`;
+const formatCurrency = (value) => {
+  const number = Number(value);
 
-function StatCard({ label, value, tone = "default" }) {
-  const toneClass =
-    tone === "green"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : tone === "red"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : tone === "amber"
-      ? "border-amber-200 bg-amber-50 text-amber-700"
-      : "border-zinc-200 bg-zinc-50 text-zinc-700";
+  if (!Number.isFinite(number)) return "—";
 
-  return (
-    <div className={`rounded-2xl border p-3 ${toneClass}`}>
-      <div className="text-xs font-semibold uppercase tracking-wide opacity-80">
-        {label}
-      </div>
-      <div className="mt-1 text-xl font-bold">{value}</div>
-    </div>
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(number);
+};
+
+const formatDate = (value) => {
+  const date = new Date(value);
+
+  if (!value || Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+};
+
+const addressText = (address = {}) =>
+  [
+    address?.line1,
+    address?.line2,
+    address?.city,
+    address?.state,
+    address?.pincode,
+    address?.country,
+  ]
+    .map(safe)
+    .filter(Boolean)
+    .join(", ");
+
+const getAmount = (invoice = {}) =>
+  Number(
+    invoice?.totals?.finalPayable ??
+      invoice?.totals?.grandTotal ??
+      invoice?.finalPayable ??
+      invoice?.totalAmount ??
+      0
   );
-}
 
-function Chip({ children, tone = "default" }) {
-  const toneClass =
-    tone === "green"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : tone === "red"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : tone === "amber"
-      ? "border-amber-200 bg-amber-50 text-amber-700"
-      : "border-zinc-200 bg-white text-zinc-700";
+const getStatus = (invoice = {}) =>
+  safe(
+    invoice?.status?.fulfillment ||
+      invoice?.raw?.fulfillmentStatus ||
+      invoice?.payment?.status ||
+      invoice?.status
+  ) || "Ready";
 
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${toneClass}`}
-    >
-      {children}
-    </span>
-  );
-}
+const getCustomerName = (invoice = {}) =>
+  safe(
+    invoice?.shipping?.fullName ||
+      invoice?.billing?.fullName ||
+      invoice?.customer?.name
+  ) || "Customer";
 
-function Banner({ type = "info", children }) {
-  const styles =
-    type === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-      : type === "warning"
-      ? "border-amber-200 bg-amber-50 text-amber-800"
-      : type === "error"
-      ? "border-red-200 bg-red-50 text-red-800"
-      : "border-zinc-200 bg-zinc-50 text-zinc-800";
+const getAddress = (invoice = {}) =>
+  addressText(invoice?.shipping) ||
+  addressText(invoice?.billing);
 
-  const Icon =
-    type === "success"
-      ? CheckCircle2
-      : type === "warning"
-      ? AlertCircle
-      : type === "error"
-      ? XCircle
-      : AlertCircle;
-
-  return (
-    <div className={`rounded-2xl border p-3 ${styles}`}>
-      <div className="flex items-start gap-2">
-        <Icon size={16} className="mt-0.5 shrink-0" />
-        <div className="text-sm">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function LoadingCard() {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-      <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3">
-        <div className="h-4 w-40 animate-pulse rounded bg-zinc-200" />
-      </div>
-      <div className="space-y-3 p-4">
-        <div className="h-4 w-1/3 animate-pulse rounded bg-zinc-200" />
-        <div className="h-4 w-2/3 animate-pulse rounded bg-zinc-200" />
-        <div className="h-32 w-full animate-pulse rounded-2xl bg-zinc-100" />
-      </div>
-    </div>
-  );
-}
+const SAMPLE_INPUT = `000001
+000002
+000003`;
 
 export default function OrdersInvoicePage() {
   const printRef = useRef(null);
 
-  const [input, setInput] = useState("");
-  const [pageError, setPageError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [warningMessage, setWarningMessage] = useState("");
-  const [previewSearch, setPreviewSearch] = useState("");
-  const [collapsedMap, setCollapsedMap] = useState({});
-  const [isPasting, setIsPasting] = useState(false);
-
   const {
     invoices,
-    invoice,
-    loading,
-    error,
-    fetchInvoiceByOrderNumber,
+    invoiceLoading,
+    invoiceError,
+    invoiceMissingOrderNumbers,
     fetchInvoicesByOrderNumbers,
-    clearInvoice,
     clearInvoices,
-  } = useOrderInvoiceStore();
+  } = useOrderStore();
 
-  const parsed = useMemo(() => analyzeOrderInput(input), [input]);
-  const orderNumbers = parsed.valid;
+  const [input, setInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [message, setMessage] = useState("");
+  const [pageError, setPageError] = useState("");
+  const [collapsed, setCollapsed] = useState({});
+  const [pasting, setPasting] = useState(false);
+  const [pendingPrint, setPendingPrint] = useState(false);
 
-  const visibleInvoices = useMemo(() => {
-    const base = Array.isArray(invoices) && invoices.length
-      ? invoices
-      : invoice
-      ? [invoice]
-      : [];
+  const parsed = useMemo(() => parseInput(input), [input]);
 
-    return base.map(normalizeInvoiceForTemplate);
-  }, [invoices, invoice]);
-
-  const loadedOrderNumbers = useMemo(() => {
-    return new Set(
-      visibleInvoices
-        .map((item) => safe(item?.orderNumber).toUpperCase())
-        .filter(Boolean)
-    );
-  }, [visibleInvoices]);
-
-  const missingOrderNumbers = useMemo(() => {
-    if (!orderNumbers.length || !visibleInvoices.length) return [];
-    return orderNumbers.filter((num) => !loadedOrderNumbers.has(num));
-  }, [orderNumbers, visibleInvoices, loadedOrderNumbers]);
+  const loadedInvoices = useMemo(
+    () => (Array.isArray(invoices) ? invoices : []),
+    [invoices]
+  );
 
   const filteredInvoices = useMemo(() => {
-    const q = safe(previewSearch).toLowerCase();
-    if (!q) return visibleInvoices;
+    const query = safe(search).toLowerCase();
 
-    return visibleInvoices.filter((item) => {
+    if (!query) return loadedInvoices;
+
+    return loadedInvoices.filter((invoice) => {
       const haystack = [
-        item?.orderNumber,
-        getInvoiceCustomerName(item),
-        getInvoiceStatus(item),
-        getInvoiceAddress(item),
-        item?.shipping?.phone,
-        item?.shipping?.email,
-        item?.billing?.phone,
-        item?.billing?.email,
+        invoice?.orderNumber,
+        invoice?.invoiceNumber,
+        getCustomerName(invoice),
+        getStatus(invoice),
+        getAddress(invoice),
+        invoice?.shipping?.phone,
+        invoice?.shipping?.email,
+        invoice?.billing?.phone,
+        invoice?.billing?.email,
+        invoice?.courier?.awb,
       ]
-        .map((x) => safe(x).toLowerCase())
+        .map((value) => safe(value).toLowerCase())
         .join(" ");
 
-      return haystack.includes(q);
+      return haystack.includes(query);
     });
-  }, [previewSearch, visibleInvoices]);
-
-  useEffect(() => {
-    const next = {};
-    visibleInvoices.forEach((item, index) => {
-      const key = item?.orderNumber || `invoice-${index}`;
-      next[key] = collapsedMap[key] ?? false;
-    });
-    setCollapsedMap(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleInvoices.length]);
+  }, [loadedInvoices, search]);
 
   const printInvoices = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `Invoices-${visibleInvoices.length || 0}`,
+    documentTitle: `Invoices-${loadedInvoices.length}`,
+
     pageStyle: `
-      @page { size: A4; margin: 10mm; }
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+
       @media print {
-        html, body {
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+          background: white;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
+
         .invoice-print-page {
           break-after: page;
           page-break-after: always;
         }
+
         .invoice-print-page:last-child {
           break-after: auto;
           page-break-after: auto;
@@ -443,538 +215,542 @@ export default function OrdersInvoicePage() {
     `,
   });
 
+  useEffect(() => {
+    if (!pendingPrint || !loadedInvoices.length) return undefined;
+
+    const timer = window.setTimeout(() => {
+      printInvoices?.();
+      setPendingPrint(false);
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [pendingPrint, loadedInvoices, printInvoices]);
+
+  useEffect(() => {
+    setCollapsed((previous) => {
+      const next = {};
+
+      loadedInvoices.forEach((invoice, index) => {
+        const key =
+          safe(invoice?.orderNumber) || `invoice-${index}`;
+
+        next[key] = previous[key] ?? false;
+      });
+
+      return next;
+    });
+  }, [loadedInvoices]);
+
   const resetMessages = () => {
+    setMessage("");
     setPageError("");
-    setSuccessMessage("");
-    setWarningMessage("");
   };
 
-  const fetchData = async () => {
+  const loadInvoices = async () => {
     resetMessages();
 
-    if (!orderNumbers.length) {
-      setPageError("Please enter at least one valid order number.");
+    if (!parsed.valid.length) {
+      setPageError("Enter at least one valid order number.");
       return [];
     }
 
     try {
-      clearInvoice?.();
-      clearInvoices?.();
+      const result = await fetchInvoicesByOrderNumbers(
+        parsed.valid
+      );
 
-      if (orderNumbers.length === 1) {
-        const one = await fetchInvoiceByOrderNumber(orderNumbers[0]);
-        const list = one ? [normalizeInvoiceForTemplate(one)] : [];
-
-        if (!list.length) {
-          setPageError("No invoice found for the given order number.");
-          return [];
-        }
-
-        setSuccessMessage("1 invoice loaded successfully.");
-        return list;
-      }
-
-      const many = await fetchInvoicesByOrderNumbers(orderNumbers);
-      const list = Array.isArray(many)
-        ? many.map(normalizeInvoiceForTemplate)
-        : [];
+      const list = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.invoices)
+          ? result.invoices
+          : [];
 
       if (!list.length) {
-        setPageError("No invoices found for the given order numbers.");
+        setPageError("No invoices found.");
         return [];
       }
 
-      const fetchedSet = new Set(
-        list.map((x) => safe(x?.orderNumber).toUpperCase()).filter(Boolean)
+      const missing = Array.isArray(
+        result?.missingOrderNumbers
+      )
+        ? result.missingOrderNumbers
+        : [];
+
+      setMessage(
+        `${list.length} invoice${
+          list.length === 1 ? "" : "s"
+        } loaded${missing.length ? `, ${missing.length} missing` : ""}.`
       );
-
-      const missing = orderNumbers.filter((num) => !fetchedSet.has(num));
-
-      setSuccessMessage(
-        `${list.length} invoice${list.length === 1 ? "" : "s"} loaded successfully.`
-      );
-
-      if (missing.length) {
-        setWarningMessage(
-          `${missing.length} order number${
-            missing.length === 1 ? "" : "s"
-          } did not return an invoice.`
-        );
-      }
 
       return list;
-    } catch (err) {
-      const msg =
-        err?.message ||
-        "Failed to load invoice. Please check the order number and try again.";
+    } catch (error) {
+      setPageError(
+        error?.message || "Failed to load invoices."
+      );
 
-      setPageError(msg);
       return [];
     }
   };
 
-  const handleFetch = async () => {
-    await fetchData();
-  };
-
   const handlePrint = async () => {
-    let list = visibleInvoices;
+    let list = loadedInvoices;
 
     if (!list.length) {
-      list = await fetchData();
+      list = await loadInvoices();
     }
 
-    if (!Array.isArray(list) || !list.length) return;
+    if (!list.length) return;
 
-    setTimeout(() => {
-      printInvoices?.();
-    }, 80);
-  };
-
-  const handleReset = () => {
-    setInput("");
-    setPreviewSearch("");
-    setCollapsedMap({});
-    resetMessages();
-    clearInvoice?.();
-    clearInvoices?.();
+    setPendingPrint(true);
   };
 
   const handlePaste = async () => {
     try {
-      setIsPasting(true);
+      setPasting(true);
+
       const text = await navigator.clipboard.readText();
-      setInput((prev) => {
-        const current = safe(prev);
-        if (!current) return text;
-        return `${current}\n${text}`;
-      });
+
+      setInput((current) =>
+        safe(current) ? `${current}\n${text}` : text
+      );
     } catch {
-      setPageError("Clipboard access failed. Please paste manually.");
+      setPageError("Clipboard access failed.");
     } finally {
-      setIsPasting(false);
+      setPasting(false);
     }
   };
 
-  const handleSample = () => {
-    setInput(SAMPLE_INPUT);
+  const handleReset = () => {
+    setInput("");
+    setSearch("");
+    setCollapsed({});
     resetMessages();
+    clearInvoices();
   };
 
-  const expandAll = () => {
+  const setAllCollapsed = (value) => {
     const next = {};
-    visibleInvoices.forEach((item, index) => {
-      const key = item?.orderNumber || `invoice-${index}`;
-      next[key] = false;
+
+    loadedInvoices.forEach((invoice, index) => {
+      const key =
+        safe(invoice?.orderNumber) || `invoice-${index}`;
+
+      next[key] = value;
     });
-    setCollapsedMap(next);
+
+    setCollapsed(next);
   };
-
-  const collapseAll = () => {
-    const next = {};
-    visibleInvoices.forEach((item, index) => {
-      const key = item?.orderNumber || `invoice-${index}`;
-      next[key] = true;
-    });
-    setCollapsedMap(next);
-  };
-
-  const toggleCard = (key) => {
-    setCollapsedMap((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      const isEnter = e.key === "Enter";
-      const withCommand = e.ctrlKey || e.metaKey;
-      if (isEnter && withCommand) {
-        e.preventDefault();
-        if (!loading) handleFetch();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const printButtonLabel = visibleInvoices.length
-    ? `Print Loaded (${visibleInvoices.length})`
-    : orderNumbers.length
-    ? `Load & Print (${orderNumbers.length})`
-    : "Print";
 
   return (
     <div className="min-h-screen bg-zinc-50 p-4 md:p-6">
-      <div className="mx-auto max-w-5xl space-y-4">
-        <div className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm md:p-5">
-          <div className="mb-4">
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
-              Invoice Panel
-            </h1>
-            <p className="mt-1 text-sm text-zinc-600">
-              Enter one or more backend order numbers exactly as shown on orders.
-            </p>
+      <div className="mx-auto max-w-6xl space-y-4">
+        <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm md:p-5">
+          <h1 className="text-2xl font-bold text-zinc-950">
+            Invoice Panel
+          </h1>
+
+          <p className="mt-1 text-sm text-zinc-500">
+            Enter one or more order numbers to fetch invoices
+            from the backend.
+          </p>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              onClick={handlePaste}
+              disabled={invoiceLoading || pasting}
+            >
+              {pasting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <ClipboardPaste size={16} />
+              )}
+              Paste
+            </Button>
+
+            <Button
+              onClick={() => setInput(SAMPLE_INPUT)}
+              disabled={invoiceLoading}
+            >
+              Sample
+            </Button>
+
+            <Button
+              onClick={() => setInput("")}
+              disabled={invoiceLoading || !input}
+            >
+              Clear Input
+            </Button>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handlePaste}
-                disabled={loading || isPasting}
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isPasting ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <ClipboardPaste size={16} />
-                )}
-                Paste
-              </button>
+          <textarea
+            rows={6}
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            placeholder={`000001
+000002
+000003`}
+            className="mt-3 w-full rounded-2xl border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
 
-              <button
-                type="button"
-                onClick={handleSample}
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Sample
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setInput("")}
-                disabled={loading || !input}
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Clear Input
-              </button>
-
-              <div className="ml-auto text-xs text-zinc-500">
-                Tip: Press <span className="font-semibold">Ctrl/Cmd + Enter</span>{" "}
-                to load invoices
-              </div>
-            </div>
-
-            <textarea
-              rows={6}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={`Examples:
-000110
-000012
-000123, 001201`}
-              className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100"
+          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <Stat label="Pasted" value={parsed.total} />
+            <Stat label="Valid" value={parsed.valid.length} tone="green" />
+            <Stat label="Invalid" value={parsed.invalid.length} tone="red" />
+            <Stat
+              label="Duplicates"
+              value={parsed.duplicates.length}
+              tone="amber"
             />
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard label="Pasted" value={parsed.rawCount} />
-              <StatCard label="Valid" value={parsed.valid.length} tone="green" />
-              <StatCard
-                label="Invalid"
-                value={parsed.invalid.length}
-                tone={parsed.invalid.length ? "red" : "default"}
-              />
-              <StatCard
-                label="Duplicates"
-                value={parsed.duplicateValues.length}
-                tone={parsed.duplicateValues.length ? "amber" : "default"}
-              />
-            </div>
-
-            {!!parsed.valid.length && (
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  Normalized Order Numbers ({parsed.valid.length})
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {parsed.valid.map((num) => (
-                    <Chip key={num}>{num}</Chip>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!!parsed.invalid.length && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 p-3">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-700">
-                  Invalid Entries ({parsed.invalid.length})
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {parsed.invalid.map((item, index) => (
-                    <Chip key={`${item}-${index}`} tone="red">
-                      {item}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!!parsed.duplicateValues.length && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
-                  Removed Duplicates ({parsed.duplicateValues.length})
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {parsed.duplicateValues.map((item) => (
-                    <Chip key={item} tone="amber">
-                      {item}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleFetch}
-                disabled={loading}
-                className={[
-                  "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-                  loading
-                    ? "cursor-not-allowed bg-zinc-200 text-zinc-500"
-                    : "bg-blue-600 text-white hover:bg-blue-700",
-                ].join(" ")}
-              >
-                {loading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Search size={16} />
-                )}
-                {orderNumbers.length
-                  ? `Load Invoices (${orderNumbers.length})`
-                  : "Load Invoices"}
-              </button>
-
-              <button
-                type="button"
-                onClick={handlePrint}
-                disabled={loading}
-                className={[
-                  "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-                  loading
-                    ? "cursor-not-allowed bg-zinc-200 text-zinc-500"
-                    : "bg-zinc-900 text-white hover:bg-black",
-                ].join(" ")}
-              >
-                {loading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <FileText size={16} />
-                )}
-                {printButtonLabel}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <RefreshCcw size={16} />
-                Reset
-              </button>
-            </div>
-
-            {successMessage ? <Banner type="success">{successMessage}</Banner> : null}
-
-            {warningMessage ? (
-              <Banner type="warning">
-                <div className="space-y-2">
-                  <div>{warningMessage}</div>
-                  {!!missingOrderNumbers.length && (
-                    <div className="flex flex-wrap gap-2">
-                      {missingOrderNumbers.map((num) => (
-                        <Chip key={num} tone="amber">
-                          {num}
-                        </Chip>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Banner>
-            ) : null}
-
-            {(pageError || error) && (
-              <Banner type="error">{pageError || error}</Banner>
-            )}
           </div>
-        </div>
 
-        <div className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm md:p-5">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          {!!parsed.valid.length && (
+            <div className="mt-3 flex flex-wrap gap-2 rounded-2xl bg-zinc-50 p-3">
+              {parsed.valid.map((number) => (
+                <Chip key={number}>{number}</Chip>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              variant="primary"
+              onClick={loadInvoices}
+              disabled={invoiceLoading || !parsed.valid.length}
+            >
+              {invoiceLoading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Search size={16} />
+              )}
+
+              Load Invoices ({parsed.valid.length})
+            </Button>
+
+            <Button
+              variant="dark"
+              onClick={handlePrint}
+              disabled={
+                invoiceLoading ||
+                (!parsed.valid.length && !loadedInvoices.length)
+              }
+            >
+              <FileText size={16} />
+
+              {loadedInvoices.length
+                ? `Print Loaded (${loadedInvoices.length})`
+                : `Load & Print (${parsed.valid.length})`}
+            </Button>
+
+            <Button
+              onClick={handleReset}
+              disabled={invoiceLoading}
+            >
+              <RefreshCcw size={16} />
+              Reset
+            </Button>
+          </div>
+
+          {message && (
+            <Banner tone="success">
+              <CheckCircle2 size={16} />
+              {message}
+            </Banner>
+          )}
+
+          {(pageError || invoiceError) && (
+            <Banner tone="error">
+              <AlertCircle size={16} />
+              {pageError || invoiceError}
+            </Banner>
+          )}
+
+          {!!invoiceMissingOrderNumbers.length && (
+            <Banner tone="warning">
+              <AlertCircle size={16} />
+
+              <div>
+                <div className="font-semibold">
+                  Missing invoices
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {invoiceMissingOrderNumbers.map((number) => (
+                    <Chip key={number}>{number}</Chip>
+                  ))}
+                </div>
+              </div>
+            </Banner>
+          )}
+        </section>
+
+        <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm md:p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-zinc-900">Invoice Preview</h2>
-              <p className="text-sm text-zinc-600">
-                {visibleInvoices.length} invoice
-                {visibleInvoices.length === 1 ? "" : "s"} loaded
+              <h2 className="text-lg font-bold text-zinc-950">
+                Invoice Preview
+              </h2>
+
+              <p className="text-sm text-zinc-500">
+                {loadedInvoices.length} invoice
+                {loadedInvoices.length === 1 ? "" : "s"} loaded
               </p>
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="relative min-w-[240px]">
+            <div className="flex flex-wrap gap-2">
+              <div className="relative">
                 <Search
-                  size={16}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
                 />
+
                 <input
-                  type="text"
-                  value={previewSearch}
-                  onChange={(e) => setPreviewSearch(e.target.value)}
-                  placeholder="Search loaded invoices"
-                  className="w-full rounded-xl border border-zinc-300 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100"
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(event.target.value)
+                  }
+                  placeholder="Search invoices"
+                  className="rounded-xl border border-zinc-300 py-2 pl-9 pr-3 text-sm outline-none"
                 />
               </div>
 
-              <button
-                type="button"
-                onClick={expandAll}
+              <Button
+                onClick={() => setAllCollapsed(false)}
                 disabled={!filteredInvoices.length}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <ChevronDown size={16} />
-                Expand All
-              </button>
+                Expand
+              </Button>
 
-              <button
-                type="button"
-                onClick={collapseAll}
+              <Button
+                onClick={() => setAllCollapsed(true)}
                 disabled={!filteredInvoices.length}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <ChevronUp size={16} />
-                Collapse All
-              </button>
+                Collapse
+              </Button>
             </div>
           </div>
 
-          {!loading && !visibleInvoices.length ? (
-            <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-12 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
-                <Eye size={20} className="text-zinc-500" />
-              </div>
-              <div className="text-sm font-semibold text-zinc-800">
-                No invoices loaded yet
-              </div>
-              <div className="mt-1 text-sm text-zinc-500">
-                Enter order numbers above and click{" "}
-                <span className="font-semibold">Load Invoices</span>.
+          {invoiceLoading && (
+            <div className="mt-4 flex items-center justify-center rounded-2xl border border-zinc-200 p-10 text-sm text-zinc-500">
+              <Loader2 size={18} className="mr-2 animate-spin" />
+              Loading invoices...
+            </div>
+          )}
+
+          {!invoiceLoading && !loadedInvoices.length && (
+            <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 py-12 text-center">
+              <Eye
+                size={22}
+                className="mx-auto text-zinc-400"
+              />
+
+              <div className="mt-2 text-sm font-semibold">
+                No invoices loaded
               </div>
             </div>
-          ) : null}
+          )}
 
-          {loading ? (
-            <div className="space-y-4">
-              <LoadingCard />
-              <LoadingCard />
-              <LoadingCard />
-            </div>
-          ) : null}
+          {!invoiceLoading && filteredInvoices.length > 0 && (
+            <div className="mt-4 space-y-3">
+              {filteredInvoices.map((invoice, index) => {
+                const key =
+                  safe(invoice?.orderNumber) ||
+                  `invoice-${index}`;
 
-          {!loading && visibleInvoices.length > 0 && !filteredInvoices.length ? (
-            <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-500">
-              No loaded invoices match your search.
-            </div>
-          ) : null}
-
-          {!loading && filteredInvoices.length > 0 ? (
-            <div className="space-y-4">
-              {filteredInvoices.map((item, index) => {
-                const key = item?.orderNumber || `invoice-${index}`;
-                const isCollapsed = !!collapsedMap[key];
-                const customerName = getInvoiceCustomerName(item);
-                const invoiceDate = formatDate(getInvoiceDate(item));
-                const amount = formatCurrency(getInvoiceAmount(item));
-                const status = getInvoiceStatus(item);
-                const address = getInvoiceAddress(item);
+                const isCollapsed = Boolean(collapsed[key]);
 
                 return (
-                  <div
-                    key={`${item?.orderNumber || "invoice"}-${index}`}
-                    className="overflow-hidden rounded-2xl border border-zinc-200 bg-white"
+                  <article
+                    key={key}
+                    className="overflow-hidden rounded-2xl border border-zinc-200"
                   >
                     <button
                       type="button"
-                      onClick={() => toggleCard(key)}
-                      className="w-full bg-zinc-50 px-4 py-3 text-left transition hover:bg-zinc-100"
+                      onClick={() =>
+                        setCollapsed((current) => ({
+                          ...current,
+                          [key]: !current[key],
+                        }))
+                      }
+                      className="w-full bg-zinc-50 p-4 text-left hover:bg-zinc-100"
                     >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div className="min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-base font-bold text-zinc-900">
-                              {item?.orderNumber || `Invoice ${index + 1}`}
+                            <span className="font-bold text-zinc-950">
+                              {invoice?.orderNumber}
                             </span>
-                            <Chip>{status}</Chip>
+
+                            <Chip>{getStatus(invoice)}</Chip>
                           </div>
 
                           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-600">
                             <span>
-                              <span className="font-medium text-zinc-800">
-                                Customer:
-                              </span>{" "}
-                              {customerName}
+                              {getCustomerName(invoice)}
                             </span>
+
                             <span>
-                              <span className="font-medium text-zinc-800">
-                                Date:
-                              </span>{" "}
-                              {invoiceDate}
+                              {formatDate(
+                                invoice?.orderDate ||
+                                  invoice?.createdAt
+                              )}
                             </span>
+
                             <span>
-                              <span className="font-medium text-zinc-800">
-                                Amount:
-                              </span>{" "}
-                              {amount}
+                              {formatCurrency(getAmount(invoice))}
                             </span>
                           </div>
 
-                          {!!address && (
-                            <div className="mt-2 flex items-start gap-2 text-sm text-zinc-600">
-                              <MapPin size={15} className="mt-0.5 shrink-0" />
-                              <span className="line-clamp-2">{address}</span>
+                          {!!getAddress(invoice) && (
+                            <div className="mt-2 flex items-start gap-2 text-sm text-zinc-500">
+                              <MapPin
+                                size={15}
+                                className="mt-0.5 shrink-0"
+                              />
+
+                              <span>{getAddress(invoice)}</span>
                             </div>
                           )}
                         </div>
 
-                        <div className="shrink-0 text-zinc-500">
-                          {isCollapsed ? (
-                            <ChevronDown size={18} />
-                          ) : (
-                            <ChevronUp size={18} />
-                          )}
-                        </div>
+                        {isCollapsed ? (
+                          <ChevronDown size={18} />
+                        ) : (
+                          <ChevronUp size={18} />
+                        )}
                       </div>
                     </button>
 
                     {!isCollapsed && (
-                      <div className="border-t border-zinc-200 bg-white p-3 md:p-4">
-                        <InvoiceTemplate data={item} />
+                      <div className="border-t border-zinc-200 p-3">
+                        <InvoiceTemplate data={invoice} />
                       </div>
                     )}
-                  </div>
+                  </article>
                 );
               })}
             </div>
-          ) : null}
-        </div>
+          )}
+        </section>
       </div>
 
-      <div style={{ position: "absolute", left: "-99999px", top: 0 }}>
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          left: "-200vw",
+          top: 0,
+          width: "210mm",
+          height: 0,
+          overflow: "hidden",
+          pointerEvents: "none",
+        }}
+      >
         <div ref={printRef}>
-          {visibleInvoices.map((item, index) => (
+          {loadedInvoices.map((invoice, index) => (
             <div
-              key={`print-${item?.orderNumber || "invoice"}-${index}`}
+              key={`print-${
+                invoice?.invoiceNumber ||
+                invoice?.orderNumber ||
+                index
+              }`}
               className="invoice-print-page"
             >
-              <InvoiceTemplate data={item} />
+              <InvoiceTemplate data={invoice} />
             </div>
           ))}
         </div>
       </div>
     </div>
+  );
+}
+
+function Stat({ label, value, tone = "default" }) {
+  const tones = {
+    default: "border-zinc-200 bg-zinc-50 text-zinc-800",
+    green:
+      "border-emerald-200 bg-emerald-50 text-emerald-800",
+    red: "border-red-200 bg-red-50 text-red-800",
+    amber:
+      "border-amber-200 bg-amber-50 text-amber-800",
+  };
+
+  return (
+    <div
+      className={`rounded-2xl border p-3 ${
+        tones[tone] || tones.default
+      }`}
+    >
+      <div className="text-xs font-semibold uppercase">
+        {label}
+      </div>
+
+      <div className="mt-1 text-xl font-bold">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Chip({ children }) {
+  return (
+    <span className="inline-flex rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700">
+      {children}
+    </span>
+  );
+}
+
+function Banner({ children, tone }) {
+  const tones = {
+    success:
+      "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warning:
+      "border-amber-200 bg-amber-50 text-amber-800",
+    error: "border-red-200 bg-red-50 text-red-800",
+  };
+
+  return (
+    <div
+      className={`mt-3 flex items-start gap-2 rounded-2xl border p-3 text-sm ${
+        tones[tone]
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Button({
+  children,
+  onClick,
+  disabled,
+  variant = "default",
+}) {
+  const variants = {
+    default: disabled
+      ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
+      : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
+
+    primary: disabled
+      ? "cursor-not-allowed border-blue-200 bg-blue-300 text-white"
+      : "border-blue-600 bg-blue-600 text-white hover:bg-blue-700",
+
+    dark: disabled
+      ? "cursor-not-allowed border-zinc-300 bg-zinc-300 text-white"
+      : "border-zinc-900 bg-zinc-900 text-white hover:bg-black",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+        variants[variant]
+      }`}
+    >
+      {children}
+    </button>
   );
 }

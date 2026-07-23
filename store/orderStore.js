@@ -20,12 +20,16 @@ const stripUndefinedDeep = (obj) => {
 };
 
 const normalizePriority = (v) => {
-  const p = String(v ?? "").trim().toLowerCase();
+  const p = String(v ?? "")
+    .trim()
+    .toLowerCase();
   return ["normal", "medium", "high"].includes(p) ? p : "";
 };
 
 const normalizePaymentMethod = (v) => {
-  const pm = String(v ?? "").trim().toLowerCase();
+  const pm = String(v ?? "")
+    .trim()
+    .toLowerCase();
   return ["cod", "razorpay", "wallet", "exchange"].includes(pm) ? pm : "";
 };
 
@@ -99,6 +103,13 @@ export const useOrderStore = create((set, get) => ({
   order: null,
   loading: false,
   error: null,
+  /* ---------------- INVOICES ---------------- */
+
+  invoices: [],
+  invoicesByOrderNumber: {},
+  invoiceLoading: false,
+  invoiceError: null,
+  invoiceMissingOrderNumbers: [],
   productOrderCount: null,
   ordersMeta: null,
   customerSupportOrderDetails: {},
@@ -126,7 +137,7 @@ export const useOrderStore = create((set, get) => ({
       orders: (s.orders || []).map((o) =>
         String(o?._id) === String(updatedOrder._id)
           ? { ...o, ...updatedOrder }
-          : o
+          : o,
       ),
     }));
   },
@@ -150,7 +161,7 @@ export const useOrderStore = create((set, get) => ({
 
     set((s) => ({
       orders: (s.orders || []).filter(
-        (o) => String(o?._id) !== String(orderId)
+        (o) => String(o?._id) !== String(orderId),
       ),
     }));
   },
@@ -159,6 +170,30 @@ export const useOrderStore = create((set, get) => ({
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.message || "Request failed");
     return data;
+  },
+
+  _normalizeInvoicesPayload: (data) => {
+    const invoices = Array.isArray(data?.invoices)
+      ? data.invoices
+      : Array.isArray(data)
+        ? data
+        : [];
+
+    const missingOrderNumbers = Array.isArray(data?.missingOrderNumbers)
+      ? data.missingOrderNumbers
+      : [];
+
+    const invoicesByOrderNumber = Object.fromEntries(
+      invoices
+        .map((invoice) => [String(invoice?.orderNumber || "").trim(), invoice])
+        .filter(([orderNumber]) => Boolean(orderNumber)),
+    );
+
+    return {
+      invoices,
+      invoicesByOrderNumber,
+      missingOrderNumbers,
+    };
   },
 
   _get: async (path, { silent = false } = {}) => {
@@ -227,12 +262,16 @@ export const useOrderStore = create((set, get) => ({
     // ✅ wallet / customer credit support
     const walletAmount = Number(
       p.walletAmount ??
-      p.walletCredit?.amount ??
-      p.paymentBreakdown?.walletAmount ??
-      0
+        p.walletCredit?.amount ??
+        p.paymentBreakdown?.walletAmount ??
+        0,
     );
 
-    if (walletAmount > 0 || p.useWallet === true || p.paymentMethod === "wallet") {
+    if (
+      walletAmount > 0 ||
+      p.useWallet === true ||
+      p.paymentMethod === "wallet"
+    ) {
       p.useWallet = true;
       p.walletAmount = Math.max(0, walletAmount);
 
@@ -348,6 +387,232 @@ export const useOrderStore = create((set, get) => ({
     return orders;
   },
 
+  /* ============================================================
+     INVOICES
+  ============================================================ */
+
+  /**
+   * Fetch multiple normalized invoices from backend.
+   *
+   * POST /api/orders/invoices
+   *
+   * @param {Array<string>} orderNumbers
+   * @param {{ silent?: boolean }} options
+   */
+  fetchInvoicesByOrderNumbers: async (
+    orderNumbers = [],
+    { silent = false } = {},
+  ) => {
+    const normalizedOrderNumbers = [
+      ...new Set(
+        (Array.isArray(orderNumbers) ? orderNumbers : [])
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean),
+      ),
+    ];
+
+    if (!normalizedOrderNumbers.length) {
+      set({
+        invoices: [],
+        invoicesByOrderNumber: {},
+        invoiceMissingOrderNumbers: [],
+        invoiceError: "Select at least one order",
+      });
+
+      return {
+        invoices: [],
+        invoicesByOrderNumber: {},
+        missingOrderNumbers: [],
+      };
+    }
+
+    if (!silent) {
+      set({
+        invoiceLoading: true,
+        invoiceError: null,
+        invoiceMissingOrderNumbers: [],
+      });
+    }
+
+    try {
+      const response = await fetch(`${API}/api/orders/invoices`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          orderNumbers: normalizedOrderNumbers,
+        }),
+      });
+
+      const data = await get()._json(response);
+      const normalized = get()._normalizeInvoicesPayload(data);
+
+      set({
+        invoices: normalized.invoices,
+        invoicesByOrderNumber: normalized.invoicesByOrderNumber,
+        invoiceMissingOrderNumbers: normalized.missingOrderNumbers,
+        invoiceLoading: false,
+        invoiceError: null,
+      });
+
+      return {
+        ...data,
+        ...normalized,
+      };
+    } catch (error) {
+      console.error("fetchInvoicesByOrderNumbers error:", error);
+
+      set({
+        invoiceLoading: false,
+        invoiceError: error?.message || "Failed to fetch invoices",
+      });
+
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch one invoice using MongoDB order ID.
+   */
+  fetchInvoiceByOrderId: async (orderId, { silent = false } = {}) => {
+    const id = String(orderId ?? "").trim();
+
+    if (!id) {
+      throw new Error("Order ID is required");
+    }
+
+    if (!silent) {
+      set({
+        invoiceLoading: true,
+        invoiceError: null,
+      });
+    }
+
+    try {
+      const response = await fetch(
+        `${API}/api/orders/${encodeURIComponent(id)}/invoice`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      const data = await get()._json(response);
+      const invoice = data?.invoice || null;
+
+      if (invoice?.orderNumber) {
+        const orderNumber = String(invoice.orderNumber).trim();
+
+        set((state) => ({
+          invoices: [
+            invoice,
+            ...(state.invoices || []).filter(
+              (item) => String(item?.orderNumber || "").trim() !== orderNumber,
+            ),
+          ],
+
+          invoicesByOrderNumber: {
+            ...(state.invoicesByOrderNumber || {}),
+            [orderNumber]: invoice,
+          },
+
+          invoiceLoading: false,
+          invoiceError: null,
+        }));
+      } else {
+        set({
+          invoiceLoading: false,
+          invoiceError: null,
+        });
+      }
+
+      return invoice;
+    } catch (error) {
+      set({
+        invoiceLoading: false,
+        invoiceError: error?.message || "Failed to fetch invoice",
+      });
+
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch one invoice using readable order number.
+   */
+  fetchInvoiceByOrderNumber: async (orderNumber, { silent = false } = {}) => {
+    const number = String(orderNumber ?? "").trim();
+
+    if (!number) {
+      throw new Error("Order number is required");
+    }
+
+    if (!silent) {
+      set({
+        invoiceLoading: true,
+        invoiceError: null,
+      });
+    }
+
+    try {
+      const response = await fetch(
+        `${API}/api/orders/by-number/${encodeURIComponent(number)}/invoice`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      const data = await get()._json(response);
+      const invoice = data?.invoice || null;
+
+      if (invoice?.orderNumber) {
+        const normalizedNumber = String(invoice.orderNumber).trim();
+
+        set((state) => ({
+          invoices: [
+            invoice,
+            ...(state.invoices || []).filter(
+              (item) =>
+                String(item?.orderNumber || "").trim() !== normalizedNumber,
+            ),
+          ],
+
+          invoicesByOrderNumber: {
+            ...(state.invoicesByOrderNumber || {}),
+            [normalizedNumber]: invoice,
+          },
+
+          invoiceLoading: false,
+          invoiceError: null,
+        }));
+      } else {
+        set({
+          invoiceLoading: false,
+          invoiceError: null,
+        });
+      }
+
+      return invoice;
+    } catch (error) {
+      set({
+        invoiceLoading: false,
+        invoiceError: error?.message || "Failed to fetch invoice",
+      });
+
+      throw error;
+    }
+  },
+
+  clearInvoices: () =>
+    set({
+      invoices: [],
+      invoicesByOrderNumber: {},
+      invoiceMissingOrderNumbers: [],
+      invoiceLoading: false,
+      invoiceError: null,
+    }),
+
   // ✅ CONFIRMED ORDERS
   fetchConfirmedOrders: async (filters = {}) => {
     return get().fetchAllOrders({
@@ -368,7 +633,7 @@ export const useOrderStore = create((set, get) => ({
     const currMeta = get().ordersMeta;
     const nextPage = Math.max(
       1,
-      Number(currMeta?.page || filters?.page || 1) + 1
+      Number(currMeta?.page || filters?.page || 1) + 1,
     );
     const limit = Number(filters?.limit || currMeta?.limit || 200);
 
@@ -459,7 +724,7 @@ export const useOrderStore = create((set, get) => ({
     const currMeta = get().ordersMeta;
     const nextPage = Math.max(
       1,
-      Number(currMeta?.page || filters?.page || 1) + 1
+      Number(currMeta?.page || filters?.page || 1) + 1,
     );
     const limit = Number(filters?.limit || currMeta?.limit || 50);
 
@@ -516,11 +781,12 @@ export const useOrderStore = create((set, get) => ({
     return order;
   },
 
-
   updateOrderPaymentStatus: async (orderId, paymentStatus) => {
     if (!orderId) return null;
 
-    const status = String(paymentStatus || "").trim().toLowerCase();
+    const status = String(paymentStatus || "")
+      .trim()
+      .toLowerCase();
 
     const allowedStatuses = [
       "pending",
@@ -650,7 +916,7 @@ export const useOrderStore = create((set, get) => ({
     try {
       const data = await get()._get(
         `/api/orders/${orderId}/confirmation-details`,
-        { silent: true }
+        { silent: true },
       );
 
       const details = data?.data || data || null;
@@ -675,7 +941,7 @@ export const useOrderStore = create((set, get) => ({
 
     const data = await get()._post(
       `/api/orders/${orderId}/duplicate-exchange`,
-      payload
+      payload,
     );
     const newOrder = get()._normalizeOrder(data);
 
@@ -694,7 +960,7 @@ export const useOrderStore = create((set, get) => ({
 
     const data = await get()._post(
       `/api/orders/${orderId}/shiprocket/book`,
-      {}
+      {},
     );
     const order = get()._normalizeOrder(data);
 
@@ -733,7 +999,7 @@ export const useOrderStore = create((set, get) => ({
     }
 
     const data = await get()._get(
-      `/api/orders/product-order-count?q=${encodeURIComponent(search)}`
+      `/api/orders/product-order-count?q=${encodeURIComponent(search)}`,
     );
 
     const result = {
@@ -744,7 +1010,6 @@ export const useOrderStore = create((set, get) => ({
     set({ productOrderCount: result });
     return result;
   },
-
 
   // ✅ NEW FUNCTION ONLY
   searchOrdersByLocation: async (params = {}) => {
@@ -780,28 +1045,28 @@ export const useOrderStore = create((set, get) => ({
 
       const data = await get()._get(
         `/api/orders/location/search?${query.toString()}`,
-        { silent: true }
+        { silent: true },
       );
 
       set({
         orders: Array.isArray(data?.orders) ? data.orders : [],
         ordersMeta: data?.pagination
           ? {
-            page: Number(data.pagination.page || 1),
-            limit: Number(data.pagination.limit || 100),
-            totalCount: Number(data.pagination.total || 0),
-            totalPages: Number(data.pagination.totalPages || 1),
-            hasMore: Boolean(data.pagination.hasNextPage),
-            hasPrevPage: Boolean(data.pagination.hasPrevPage),
-          }
+              page: Number(data.pagination.page || 1),
+              limit: Number(data.pagination.limit || 100),
+              totalCount: Number(data.pagination.total || 0),
+              totalPages: Number(data.pagination.totalPages || 1),
+              hasMore: Boolean(data.pagination.hasNextPage),
+              hasPrevPage: Boolean(data.pagination.hasPrevPage),
+            }
           : {
-            page: 1,
-            limit: Number(params.limit || 100),
-            totalCount: 0,
-            totalPages: 1,
-            hasMore: false,
-            hasPrevPage: false,
-          },
+              page: 1,
+              limit: Number(params.limit || 100),
+              totalCount: 0,
+              totalPages: 1,
+              hasMore: false,
+              hasPrevPage: false,
+            },
         loading: false,
         error: null,
       });
@@ -820,9 +1085,7 @@ export const useOrderStore = create((set, get) => ({
     return {
       used: Boolean(o?.walletCredit?.used || o?.analytics?.creditsUsed),
       amount: Number(
-        o?.walletCredit?.amount ||
-        o?.paymentBreakdown?.walletAmount ||
-        0
+        o?.walletCredit?.amount || o?.paymentBreakdown?.walletAmount || 0,
       ),
       transactionId: o?.walletCredit?.transactionId || "",
       debitedAt: o?.walletCredit?.debitedAt || null,
@@ -832,7 +1095,6 @@ export const useOrderStore = create((set, get) => ({
       paymentStatus: o?.paymentStatus || "",
     };
   },
-
 
   /* ---------------- DUPLICATE ORDER ALERTS ---------------- */
 
@@ -876,5 +1138,10 @@ export const useOrderStore = create((set, get) => ({
       // ✅ dashboard
       orderDashboard: null,
       orderDashboardLoading: false,
+      invoices: [],
+      invoicesByOrderNumber: {},
+      invoiceLoading: false,
+      invoiceError: null,
+      invoiceMissingOrderNumbers: [],
     }),
 }));
