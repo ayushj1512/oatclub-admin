@@ -159,11 +159,46 @@ export const sidebarMenus = {
   ],
 
   fabrics: [
-    { label: "Fabric Dashboard", href: "/fabrics" },
-    { label: "Add Fabric", href: "/fabrics/add-fabric" },
-    { label: "Fabric Inventory", href: "/fabrics/fabric-inventory" },
-    { label: "Fabric Actions", href: "/fabrics/actions" },
-    { label: "Fabric Logs", href: "/fabrics/logs" },
+    {
+      label: "Fabric Dashboard",
+      href: "/fabrics",
+    },
+    {
+      label: "Search Fabrics",
+      href: "/fabrics/search",
+    },
+    {
+      label: "Add Fabric",
+      href: "/fabrics/add-fabric",
+    },
+    {
+      label: "Fabric Inventory",
+      href: "/fabrics/inventory",
+    },
+    {
+      label: "Import Fabrics",
+      href: "/fabrics/import",
+    },
+    {
+      label: "Fabric Actions",
+      href: "/fabrics/actions",
+    },
+    {
+      label: "Fabric Logs",
+      href: "/fabrics/logs",
+    },
+    {
+      label: "Fabric Price Logs",
+      href: "/fabrics/price-logs",
+    },
+    {
+      label: "Fabric Product Assignment",
+      href: "/fabrics/fabric-product-assignment",
+    },
+    {
+      label: "Low Stock Fabrics",
+      href: "/fabrics/low-stock",
+    },
   ],
 
   media: [
@@ -224,6 +259,10 @@ export const sidebarMenus = {
     {
       label: "Dispatch Ready Products",
       href: "/products/dispatch-ready",
+    },
+    {
+      label: "Excel Export Builder",
+      href: "/products/import-excel",
     },
     { label: "Coming Soon", href: "/products/comingsoon" },
     { label: "Size Charts", href: "/products/size-charts" },

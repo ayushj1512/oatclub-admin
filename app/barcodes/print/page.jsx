@@ -15,9 +15,13 @@ const PAGE_LIMIT = 48;
 
 const EMPTY_FILTERS = {
   q: "",
-  productId: "",
+  productCode: "",
   size: "",
-  price: "",
+  uniqueId: "",
+  status: "",
+  source: "",
+  assignedOrderNumber: "",
+  inwardBatchCode: "",
 };
 
 const SIZES = [
@@ -32,6 +36,54 @@ const SIZES = [
   "5XL",
   "FREE",
 ];
+
+const STATUSES = [
+  "available",
+  "reserved",
+  "allocated",
+  "packed",
+  "shipped",
+  "delivered",
+  "returned",
+  "damaged",
+  "lost",
+  "removed",
+];
+
+const SOURCES = [
+  "production",
+  "vendor",
+  "return",
+  "manual",
+  "opening-stock",
+  "other",
+];
+
+const normalizeProductCode = (
+  value = ""
+) => {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "";
+
+  if (/^\d+$/.test(raw)) {
+    return raw.padStart(5, "0");
+  }
+
+  return raw
+    .toUpperCase()
+    .replace(/\s+/g, "");
+};
+
+const formatLabel = (value = "") =>
+  String(value || "")
+    .split("-")
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+    )
+    .join(" ");
 
 export default function PrintBarcodePage() {
   const {
@@ -51,12 +103,16 @@ export default function PrintBarcodePage() {
   useEffect(() => {
     fetchBarcodeItems({
       ...EMPTY_FILTERS,
+      sort: "newest",
       page: 1,
       limit: PAGE_LIMIT,
     }).catch(() => {});
   }, [fetchBarcodeItems]);
 
-  const updateFilter = (field, value) => {
+  const updateFilter = (
+    field,
+    value
+  ) => {
     setFilters((current) => ({
       ...current,
       [field]: value,
@@ -68,32 +124,73 @@ export default function PrintBarcodePage() {
   ) => {
     await fetchBarcodeItems({
       ...nextFilters,
+      sort: "newest",
       page: 1,
       limit: PAGE_LIMIT,
     }).catch(() => {});
   };
 
-  const handleSearch = async (event) => {
+  const handleSearch = async (
+    event
+  ) => {
     event.preventDefault();
 
     await fetchFilteredItems({
       ...filters,
-      q: filters.q.trim(),
-      productId:
-        filters.productId.trim(),
-      price: filters.price
-        ? Number(filters.price)
+
+      q: String(filters.q || "").trim(),
+
+      productCode:
+        normalizeProductCode(
+          filters.productCode
+        ),
+
+      size: String(
+        filters.size || ""
+      )
+        .trim()
+        .toUpperCase(),
+
+      uniqueId: filters.uniqueId
+        ? Number(filters.uniqueId)
         : "",
+
+      status: String(
+        filters.status || ""
+      )
+        .trim()
+        .toLowerCase(),
+
+      source: String(
+        filters.source || ""
+      )
+        .trim()
+        .toLowerCase(),
+
+      assignedOrderNumber: String(
+        filters.assignedOrderNumber || ""
+      )
+        .trim()
+        .toUpperCase(),
+
+      inwardBatchCode: String(
+        filters.inwardBatchCode || ""
+      )
+        .trim()
+        .toUpperCase(),
     });
   };
 
   const resetFilters = async () => {
-    setFilters(EMPTY_FILTERS);
+    setFilters({
+      ...EMPTY_FILTERS,
+    });
+
     clearMessages?.();
 
-    await fetchFilteredItems(
-      EMPTY_FILTERS
-    );
+    await fetchFilteredItems({
+      ...EMPTY_FILTERS,
+    });
   };
 
   return (
@@ -109,18 +206,18 @@ export default function PrintBarcodePage() {
           </h1>
 
           <p className="mt-3 max-w-2xl text-sm leading-7 text-neutral-600">
-            Search existing barcode units,
-            select the required tags and
-            print or download them.
+            Search and print exact physical
+            product pieces using barcodes like
+            00034-M-29.
           </p>
         </section>
 
         <section className="no-print rounded-2xl border border-neutral-200 bg-white p-5">
           <form
             onSubmit={handleSearch}
-            className="grid gap-3 md:grid-cols-2 xl:grid-cols-5"
+            className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"
           >
-            <div className="relative xl:col-span-2">
+            <div className="relative md:col-span-2 xl:col-span-2">
               <Search
                 size={16}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
@@ -135,21 +232,31 @@ export default function PrintBarcodePage() {
                     event.target.value
                   )
                 }
-                placeholder="Search barcode or serial"
+                placeholder="Search barcode, piece SKU, product code or order"
                 className="filter-control pl-10"
               />
             </div>
 
             <input
               type="text"
-              value={filters.productId}
+              value={
+                filters.productCode
+              }
               onChange={(event) =>
                 updateFilter(
-                  "productId",
+                  "productCode",
                   event.target.value
                 )
               }
-              placeholder="Product ID"
+              onBlur={() =>
+                updateFilter(
+                  "productCode",
+                  normalizeProductCode(
+                    filters.productCode
+                  )
+                )
+              }
+              placeholder="Product code"
               className="filter-control"
             />
 
@@ -179,23 +286,103 @@ export default function PrintBarcodePage() {
 
             <input
               type="number"
-              value={filters.price}
+              min="1"
+              step="1"
+              value={filters.uniqueId}
               onChange={(event) =>
                 updateFilter(
-                  "price",
+                  "uniqueId",
                   event.target.value
                 )
               }
-              placeholder="Price"
-              min="0"
-              step="1"
+              placeholder="Unique piece ID"
+              className="filter-control"
+            />
+
+            <select
+              value={filters.status}
+              onChange={(event) =>
+                updateFilter(
+                  "status",
+                  event.target.value
+                )
+              }
+              className="filter-control"
+            >
+              <option value="">
+                All statuses
+              </option>
+
+              {STATUSES.map(
+                (status) => (
+                  <option
+                    key={status}
+                    value={status}
+                  >
+                    {formatLabel(status)}
+                  </option>
+                )
+              )}
+            </select>
+
+            <select
+              value={filters.source}
+              onChange={(event) =>
+                updateFilter(
+                  "source",
+                  event.target.value
+                )
+              }
+              className="filter-control"
+            >
+              <option value="">
+                All sources
+              </option>
+
+              {SOURCES.map((source) => (
+                <option
+                  key={source}
+                  value={source}
+                >
+                  {formatLabel(source)}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="text"
+              value={
+                filters.assignedOrderNumber
+              }
+              onChange={(event) =>
+                updateFilter(
+                  "assignedOrderNumber",
+                  event.target.value
+                )
+              }
+              placeholder="Order number"
+              className="filter-control"
+            />
+
+            <input
+              type="text"
+              value={
+                filters.inwardBatchCode
+              }
+              onChange={(event) =>
+                updateFilter(
+                  "inwardBatchCode",
+                  event.target.value
+                )
+              }
+              placeholder="Inward batch code"
               className="filter-control"
             />
 
             <button
               type="submit"
               disabled={loading}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 xl:col-span-4"
+              className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50 md:col-span-1 xl:col-span-3"
             >
               {loading ? (
                 <Loader2
@@ -213,7 +400,7 @@ export default function PrintBarcodePage() {
               type="button"
               onClick={resetFilters}
               disabled={loading}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-950 bg-white px-4 text-xs font-semibold text-neutral-950 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-950 bg-white px-4 text-xs font-semibold text-neutral-950 transition hover:bg-neutral-950 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw size={16} />
               Reset
@@ -245,7 +432,7 @@ export default function PrintBarcodePage() {
           ) : (
             <BarcodePrintGrid
               items={items}
-              title="Available Barcode Tags"
+              title="Available Physical Product Tags"
               emptyMessage="No barcode records matched the selected filters."
             />
           )}
@@ -254,7 +441,9 @@ export default function PrintBarcodePage() {
             <div className="no-print mt-6 flex items-center justify-between border-t border-neutral-200 pt-4">
               <button
                 type="button"
-                onClick={previousPage}
+                onClick={() =>
+                  previousPage()
+                }
                 disabled={
                   loading ||
                   !pagination.hasPreviousPage
@@ -264,14 +453,21 @@ export default function PrintBarcodePage() {
                 Previous
               </button>
 
-              <span className="text-xs text-neutral-500">
-                Page {pagination.page} of{" "}
-                {pagination.pages}
-              </span>
+              <div className="text-center">
+                <span className="block text-xs font-semibold text-neutral-700">
+                  Page {pagination.page} of{" "}
+                  {pagination.pages}
+                </span>
+
+                <span className="mt-1 block text-[10px] text-neutral-500">
+                  {pagination.total} physical
+                  pieces
+                </span>
+              </div>
 
               <button
                 type="button"
-                onClick={nextPage}
+                onClick={() => nextPage()}
                 disabled={
                   loading ||
                   !pagination.hasNextPage

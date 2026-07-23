@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useFabricStore } from "@/store/fabricStore";
+import useFabricStore from "@/store/fabricStore";
 import AddEditFabricModal from "@/components/fabric/AddEditFabricModal";
 
-/* ============================================================
-   FABRIC MANAGER (B/W CLEAN UI)
-============================================================ */
 export default function FabricManager() {
   const {
-    fabrics,
+    fabrics = [],
     loading,
+    formLoading,
     error,
     filters,
     fetchFabrics,
@@ -19,39 +17,30 @@ export default function FabricManager() {
     deleteFabric,
     updateMovementStatus,
     setFilters,
-    clearFilters,
+    resetFilters,
   } = useFabricStore();
 
-  /* -------------------------------
-     LOCAL STATE
-  -------------------------------- */
   const [showModal, setShowModal] = useState(false);
   const [editingFabric, setEditingFabric] = useState(null);
 
-  /* -------------------------------
-     FETCH ON LOAD
-  -------------------------------- */
   useEffect(() => {
     fetchFabrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* -------------------------------
-     DERIVED
-  -------------------------------- */
   const count = fabrics?.length || 0;
 
   const activeFilterLabel = useMemo(() => {
     const parts = [];
-    if (filters.q) parts.push(`q: "${filters.q}"`);
-    if (filters.status) parts.push(`status: ${filters.status}`);
-    if (filters.movementStatus) parts.push(`movement: ${filters.movementStatus}`);
+
+    if (filters?.q) parts.push(`q: "${filters.q}"`);
+    if (filters?.status) parts.push(`status: ${filters.status}`);
+    if (filters?.movementStatus)
+      parts.push(`movement: ${filters.movementStatus}`);
+
     return parts.length ? parts.join(" • ") : "No filters";
   }, [filters]);
 
-  /* -------------------------------
-     MODAL HANDLERS
-  -------------------------------- */
   const openCreate = () => {
     setEditingFabric(null);
     setShowModal(true);
@@ -68,29 +57,31 @@ export default function FabricManager() {
   };
 
   const handleSubmit = async (payload) => {
-    try {
-      if (editingFabric) {
-        await updateFabric(editingFabric._id, payload);
-      } else {
-        await createFabric(payload);
-      }
+    const res = editingFabric
+      ? await updateFabric(editingFabric._id, payload)
+      : await createFabric(payload);
+
+    if (res?.success !== false) {
       closeModal();
-      // optional: refresh list if backend mutates fields
       await fetchFabrics();
-    } catch (_) {}
+    }
   };
 
   const handleReset = async () => {
-    clearFilters();
-    await fetchFabrics();
+    resetFilters();
+    await fetchFabrics({
+      q: "",
+      status: "",
+      movementStatus: "",
+      category: "",
+      unit: "",
+      isActive: "",
+      page: 1,
+    });
   };
 
-  /* -------------------------------
-     RENDER
-  -------------------------------- */
   return (
     <div className="min-h-screen bg-white text-black p-4 md:p-6">
-      {/* ================= HEADER ================= */}
       <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
         <div className="flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -104,7 +95,7 @@ export default function FabricManager() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => fetchFabrics()}
-            className="px-3 py-2 rounded-lg border border-black/15 hover:border-black/30 hover:bg-black/5 text-sm"
+            className="px-3 py-2 rounded-lg border border-black/15 hover:border-black/30 hover:bg-black/5 text-sm disabled:opacity-50"
             disabled={loading}
           >
             Refresh
@@ -112,14 +103,14 @@ export default function FabricManager() {
 
           <button
             onClick={openCreate}
-            className="px-4 py-2 rounded-lg bg-black text-white hover:bg-black/90 text-sm font-medium"
+            className="px-4 py-2 rounded-lg bg-black text-white hover:bg-black/90 text-sm font-medium disabled:opacity-50"
+            disabled={loading || formLoading}
           >
             + Add Fabric
           </button>
         </div>
       </div>
 
-      {/* ================= FILTER BAR ================= */}
       <div className="mt-5 border border-black/10 rounded-2xl p-4">
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="flex flex-col sm:flex-row gap-3 flex-1">
@@ -127,8 +118,10 @@ export default function FabricManager() {
               <label className="text-xs text-gray-600">Search</label>
               <input
                 placeholder="Name / code / category"
-                value={filters.q}
-                onChange={(e) => setFilters({ q: e.target.value })}
+                value={filters?.q || ""}
+                onChange={(e) =>
+                  setFilters({ q: e.target.value, page: 1 })
+                }
                 className="mt-1 w-full border border-black/15 rounded-lg px-3 py-2 text-sm outline-none focus:border-black"
               />
             </div>
@@ -136,8 +129,10 @@ export default function FabricManager() {
             <div className="min-w-[180px]">
               <label className="text-xs text-gray-600">Status</label>
               <select
-                value={filters.status}
-                onChange={(e) => setFilters({ status: e.target.value })}
+                value={filters?.status || ""}
+                onChange={(e) =>
+                  setFilters({ status: e.target.value, page: 1 })
+                }
                 className="mt-1 w-full border border-black/15 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-black"
               >
                 <option value="">All</option>
@@ -150,8 +145,13 @@ export default function FabricManager() {
             <div className="min-w-[180px]">
               <label className="text-xs text-gray-600">Movement</label>
               <select
-                value={filters.movementStatus}
-                onChange={(e) => setFilters({ movementStatus: e.target.value })}
+                value={filters?.movementStatus || ""}
+                onChange={(e) =>
+                  setFilters({
+                    movementStatus: e.target.value,
+                    page: 1,
+                  })
+                }
                 className="mt-1 w-full border border-black/15 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-black"
               >
                 <option value="">All</option>
@@ -171,7 +171,7 @@ export default function FabricManager() {
 
             <button
               onClick={handleReset}
-              className="text-sm underline underline-offset-4 hover:opacity-80"
+              className="text-sm underline underline-offset-4 hover:opacity-80 disabled:opacity-50"
               disabled={loading}
             >
               Reset
@@ -180,7 +180,6 @@ export default function FabricManager() {
         </div>
       </div>
 
-      {/* ================= TABLE ================= */}
       <div className="mt-5 border border-black/10 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -191,14 +190,16 @@ export default function FabricManager() {
                 <th className="p-4 font-medium w-[220px]">Category</th>
                 <th className="p-4 font-medium w-[110px]">Unit</th>
                 <th className="p-4 font-medium w-[180px]">Movement</th>
-                <th className="p-4 font-medium text-right w-[160px]">Actions</th>
+                <th className="p-4 font-medium text-right w-[160px]">
+                  Actions
+                </th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-black/10">
               {loading && (
                 <tr>
-                  <td colSpan="6" className="p-6 text-center text-gray-600">
+                  <td colSpan={6} className="p-6 text-center text-gray-600">
                     Loading fabrics…
                   </td>
                 </tr>
@@ -206,7 +207,7 @@ export default function FabricManager() {
 
               {!loading && fabrics.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="p-6 text-center text-gray-500">
+                  <td colSpan={6} className="p-6 text-center text-gray-500">
                     No fabrics found
                   </td>
                 </tr>
@@ -216,7 +217,7 @@ export default function FabricManager() {
                 fabrics.map((f) => (
                   <tr key={f._id} className="hover:bg-black/5 transition">
                     <td className="p-4">
-                      <div className="font-medium">{f.name}</div>
+                      <div className="font-medium">{f.name || "Untitled"}</div>
                       <div className="text-xs text-gray-600 mt-1">
                         <span className="text-gray-500">ID:</span> {f._id}
                       </div>
@@ -236,11 +237,12 @@ export default function FabricManager() {
 
                     <td className="p-4">
                       <select
-                        value={f.movementStatus}
+                        value={f.movementStatus || "idle"}
                         onChange={(e) =>
                           updateMovementStatus(f._id, e.target.value)
                         }
                         className="border border-black/15 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-black"
+                        disabled={formLoading}
                       >
                         <option value="idle">Idle</option>
                         <option value="incoming">Incoming</option>
@@ -253,12 +255,15 @@ export default function FabricManager() {
                       <button
                         onClick={() => openEdit(f)}
                         className="text-sm underline underline-offset-4 hover:opacity-80"
+                        disabled={formLoading}
                       >
                         Edit
                       </button>
+
                       <button
                         onClick={() => deleteFabric(f._id)}
                         className="text-sm underline underline-offset-4 text-red-600 hover:opacity-80"
+                        disabled={formLoading}
                       >
                         Delete
                       </button>
@@ -269,28 +274,24 @@ export default function FabricManager() {
           </table>
         </div>
 
-        {/* FOOTER STRIP */}
         <div className="px-4 py-3 bg-white border-t border-black/10 text-xs text-gray-600 flex items-center justify-between">
           <div>
-            Showing <span className="font-medium text-black">{count}</span> fabrics
+            Showing <span className="font-medium text-black">{count}</span>{" "}
+            fabrics
           </div>
+
           <div className="flex items-center gap-2">
-            {error ? (
-              <span className="text-red-600">{error}</span>
-            ) : (
-              <span>—</span>
-            )}
+            {error ? <span className="text-red-600">{error}</span> : <span>—</span>}
           </div>
         </div>
       </div>
 
-      {/* ================= ADD / EDIT MODAL ================= */}
       <AddEditFabricModal
         open={showModal}
         onClose={closeModal}
         onSubmit={handleSubmit}
         fabric={editingFabric}
-        loading={loading}
+        loading={formLoading || loading}
       />
     </div>
   );

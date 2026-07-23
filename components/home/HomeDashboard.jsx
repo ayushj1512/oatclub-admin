@@ -82,7 +82,7 @@ const DOMAIN_LIST = [
     id: "barcode",
     name: "Barcode",
     icon: Barcode,
-    route: "/barcode",
+    route: "/barcodes",
   },
   {
     id: "orders",

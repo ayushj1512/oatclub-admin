@@ -1,522 +1,323 @@
- "use client";
+"use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
+  ArrowLeft,
+  Download,
+  RefreshCw,
   Search,
-  RefreshCcw,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Minus,
-  SlidersHorizontal,
-  CalendarDays,
-  FileText,
-  Package2,
+  FileClock,
 } from "lucide-react";
-import { useFabricLogStore } from "@/store/useFabricLogStore";
+import * as XLSX from "xlsx";
+import useFabricLogStore from "@/store/fabricLogStore";
 
-const ACTION_OPTIONS = [
-  { label: "All Actions", value: "" },
-  { label: "Stock Added", value: "stock_added" },
-  { label: "Stock Subtracted", value: "stock_subtracted" },
-  { label: "Stock Adjusted", value: "stock_adjusted" },
-  { label: "Negative Blocked", value: "negative_stock_blocked" },
-  { label: "Created", value: "created" },
-  { label: "Updated", value: "updated" },
-  { label: "Deleted", value: "deleted" },
+const actionOptions = [
+  "created",
+  "updated",
+  "status_changed",
+  "movement_changed",
+  "product_codes_added",
+  "product_codes_removed",
+  "activated",
+  "deactivated",
+  "stock_added",
+  "stock_subtracted",
+  "stock_adjusted",
+  "negative_stock_blocked",
 ];
 
-const TYPE_OPTIONS = [
-  { label: "All Types", value: "" },
-  { label: "Add", value: "add" },
-  { label: "Subtract", value: "subtract" },
-  { label: "Adjust", value: "adjust" },
-  { label: "Info", value: "info" },
-];
+const typeOptions = ["add", "subtract", "adjust", "info"];
 
 const formatDate = (value) => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
+  if (!value) return "-";
+  return new Date(value).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
-};
-
-const formatQty = (value) => {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num)) return "0";
-  return Number.isInteger(num) ? String(num) : num.toFixed(2);
-};
-
-const getTypeBadge = (type) => {
-  if (type === "add") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  }
-  if (type === "subtract") {
-    return "bg-red-50 text-red-700 border-red-200";
-  }
-  if (type === "adjust") {
-    return "bg-amber-50 text-amber-700 border-amber-200";
-  }
-  return "bg-neutral-100 text-neutral-700 border-neutral-200";
-};
-
-const getActionBadge = (action) => {
-  if (action === "stock_added") {
-    return "bg-emerald-50 text-emerald-700";
-  }
-  if (action === "stock_subtracted") {
-    return "bg-red-50 text-red-700";
-  }
-  if (action === "stock_adjusted") {
-    return "bg-amber-50 text-amber-700";
-  }
-  if (action === "negative_stock_blocked") {
-    return "bg-rose-50 text-rose-700";
-  }
-  return "bg-neutral-100 text-neutral-700";
 };
 
 export default function FabricLogsPage() {
   const {
-    logs,
-    loading,
-    error,
+    fabricLogs,
+    fabricLogsLoading,
+    fabricLogsError,
     pagination,
     filters,
-    setFilters,
+    setFabricLogFilters,
+    resetFabricLogFilters,
     fetchFabricLogs,
-    resetMessages,
   } = useFabricLogStore();
 
-  const [localFilters, setLocalFilters] = useState({
-    q: "",
-    action: "",
-    type: "",
-    startDate: "",
-    endDate: "",
-  });
+  const [searchText, setSearchText] = useState(filters.q || "");
 
   useEffect(() => {
-    fetchFabricLogs();
-  }, [fetchFabricLogs]);
+    fetchFabricLogs({ page: 1, limit: 30 });
+  }, []);
 
-  useEffect(() => {
-    setLocalFilters({
-      q: filters?.q || "",
-      action: filters?.action || "",
-      type: filters?.type || "",
-      startDate: filters?.startDate || "",
-      endDate: filters?.endDate || "",
-    });
-  }, [filters]);
-
-  const handleApplyFilters = async () => {
-    resetMessages?.();
-    setFilters({
-      ...filters,
-      ...localFilters,
-    });
-
-    await fetchFabricLogs({
-      ...localFilters,
-      page: 1,
-    });
+  const handleSearch = () => {
+    fetchFabricLogs({ q: searchText, page: 1 });
   };
 
-  const handleResetFilters = async () => {
-    const next = {
+  const handleFilter = (key, value) => {
+    const next = { [key]: value };
+    setFabricLogFilters(next);
+    fetchFabricLogs({ ...next, page: 1 });
+  };
+
+  const handleReset = () => {
+    setSearchText("");
+    resetFabricLogFilters();
+    fetchFabricLogs({
       q: "",
       action: "",
       type: "",
       startDate: "",
       endDate: "",
-      sortBy: "logDate",
-      sortOrder: "desc",
-    };
-
-    setLocalFilters({
-      q: "",
-      action: "",
-      type: "",
-      startDate: "",
-      endDate: "",
-    });
-
-    setFilters(next);
-    await fetchFabricLogs({
-      ...next,
       page: 1,
+      limit: 30,
     });
   };
 
-  const handlePageChange = async (page) => {
-    if (page < 1 || page > (pagination?.totalPages || 1)) return;
-    await fetchFabricLogs({
-      ...filters,
-      page,
-      limit: pagination?.limit || 20,
-    });
+  const handleExportExcel = () => {
+    const rows = fabricLogs.map((log) => ({
+      Date: formatDate(log.logDate),
+      Code: log.fabricCode,
+      Fabric: log.fabricName,
+      Unit: log.unit,
+      Action: log.action,
+      Type: log.type,
+      Quantity: log.quantity,
+      "Previous Stock": log.previousStock,
+      "New Stock": log.newStock,
+      Description: log.description,
+      Note: log.note,
+      Message: log.message,
+      By: log.createdBy,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Fabric Logs");
+    XLSX.writeFile(wb, `fabric-logs-${Date.now()}.xlsx`);
   };
-
-  const summary = useMemo(() => {
-    const addCount = logs.filter((item) => item.type === "add").length;
-    const subtractCount = logs.filter((item) => item.type === "subtract").length;
-    const adjustCount = logs.filter((item) => item.type === "adjust").length;
-
-    return {
-      addCount,
-      subtractCount,
-      adjustCount,
-      total: pagination?.total || 0,
-    };
-  }, [logs, pagination?.total]);
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <div className="w-full p-4 md:p-6">
-        <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="min-h-screen bg-neutral-50 p-4 text-neutral-950 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-5">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
+            <Link
+              href="/fabrics"
+              className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-neutral-500 hover:text-neutral-950"
+            >
+              <ArrowLeft size={16} />
+              Back to fabrics
+            </Link>
+
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
               Fabric Logs
             </h1>
             <p className="mt-1 text-sm text-neutral-500">
-              All fabric stock actions, notes, balances, and history in one place.
+              Track all fabric stock changes, status changes and system actions.
             </p>
           </div>
 
           <button
-            type="button"
-            onClick={() => fetchFabricLogs({ ...filters, page: 1 })}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-700 shadow-sm transition hover:bg-neutral-100"
+            onClick={handleExportExcel}
+            className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm font-medium hover:bg-neutral-100"
           >
-            <RefreshCcw className="h-4 w-4" />
-            Refresh
+            <Download size={16} />
+            Export Excel
           </button>
         </div>
 
-        <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-neutral-500">
-              <Package2 className="h-4 w-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">
-                Total Logs
-              </span>
-            </div>
-            <div className="mt-3 text-2xl font-semibold text-neutral-900">
-              {summary.total}
-            </div>
+        {fabricLogsError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {fabricLogsError}
           </div>
+        ) : null}
 
-          <div className="rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-emerald-600">
-              <Plus className="h-4 w-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">
-                Added
-              </span>
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-3 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto]">
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3">
+              <Search size={16} className="text-neutral-400" />
+              <input
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                placeholder="Search fabric code, name, note..."
+                className="h-11 w-full bg-transparent text-sm outline-none"
+              />
             </div>
-            <div className="mt-3 text-2xl font-semibold text-emerald-700">
-              {summary.addCount}
-            </div>
-          </div>
 
-          <div className="rounded-3xl border border-red-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-red-600">
-              <Minus className="h-4 w-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">
-                Subtracted
-              </span>
-            </div>
-            <div className="mt-3 text-2xl font-semibold text-red-700">
-              {summary.subtractCount}
-            </div>
-          </div>
+            <select
+              value={filters.action || ""}
+              onChange={(e) => handleFilter("action", e.target.value)}
+              className="h-11 rounded-xl border border-neutral-200 bg-white px-3 text-sm outline-none"
+            >
+              <option value="">All Actions</option>
+              {actionOptions.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
 
-          <div className="rounded-3xl border border-amber-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-amber-600">
-              <SlidersHorizontal className="h-4 w-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">
-                Adjusted
-              </span>
-            </div>
-            <div className="mt-3 text-2xl font-semibold text-amber-700">
-              {summary.adjustCount}
-            </div>
-          </div>
-        </div>
+            <select
+              value={filters.type || ""}
+              onChange={(e) => handleFilter("type", e.target.value)}
+              className="h-11 rounded-xl border border-neutral-200 bg-white px-3 text-sm outline-none"
+            >
+              <option value="">All Types</option>
+              {typeOptions.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
 
-        <div className="mb-5 rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm md:p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <Filter className="h-4 w-4 text-neutral-500" />
-            <h2 className="text-base font-semibold text-neutral-900">Filters</h2>
-          </div>
+            <input
+              type="date"
+              value={filters.startDate || ""}
+              onChange={(e) => handleFilter("startDate", e.target.value)}
+              className="h-11 rounded-xl border border-neutral-200 bg-white px-3 text-sm outline-none"
+            />
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <div className="xl:col-span-2">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <input
+              type="date"
+              value={filters.endDate || ""}
+              onChange={(e) => handleFilter("endDate", e.target.value)}
+              className="h-11 rounded-xl border border-neutral-200 bg-white px-3 text-sm outline-none"
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleSearch}
+                className="h-11 rounded-xl bg-neutral-950 px-4 text-sm font-medium text-white"
+              >
                 Search
-              </label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                <input
-                  type="text"
-                  value={localFilters.q}
-                  onChange={(e) =>
-                    setLocalFilters((prev) => ({ ...prev, q: e.target.value }))
-                  }
-                  placeholder="Search by code, fabric, description, note"
-                  className="w-full rounded-2xl border border-neutral-200 bg-white py-3 pl-10 pr-4 text-sm outline-none transition focus:border-neutral-400"
-                />
-              </div>
-            </div>
+              </button>
 
-            <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Action
-              </label>
-              <select
-                value={localFilters.action}
-                onChange={(e) =>
-                  setLocalFilters((prev) => ({
-                    ...prev,
-                    action: e.target.value,
-                  }))
-                }
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-400"
+              <button
+                onClick={handleReset}
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-neutral-200 bg-white px-3 text-sm hover:bg-neutral-100"
               >
-                {ACTION_OPTIONS.map((item) => (
-                  <option key={item.value || "all"} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+                <RefreshCw size={16} />
+              </button>
             </div>
-
-            <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Type
-              </label>
-              <select
-                value={localFilters.type}
-                onChange={(e) =>
-                  setLocalFilters((prev) => ({
-                    ...prev,
-                    type: e.target.value,
-                  }))
-                }
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-400"
-              >
-                {TYPE_OPTIONS.map((item) => (
-                  <option key={item.value || "all"} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Start Date
-              </label>
-              <input
-                type="date"
-                value={localFilters.startDate}
-                onChange={(e) =>
-                  setLocalFilters((prev) => ({
-                    ...prev,
-                    startDate: e.target.value,
-                  }))
-                }
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-400"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                End Date
-              </label>
-              <input
-                type="date"
-                value={localFilters.endDate}
-                onChange={(e) =>
-                  setLocalFilters((prev) => ({
-                    ...prev,
-                    endDate: e.target.value,
-                  }))
-                }
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-400"
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={handleApplyFilters}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
-            >
-              <Search className="h-4 w-4" />
-              Apply Filters
-            </button>
-
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-            >
-              <RefreshCcw className="h-4 w-4" />
-              Reset
-            </button>
           </div>
         </div>
 
-        {error && (
-          <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-neutral-200 p-4">
+            <div>
+              <h2 className="text-sm font-semibold">Activity Timeline</h2>
+              <p className="text-xs text-neutral-500">
+                {pagination.total} logs found
+              </p>
+            </div>
 
-        <div className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-sm">
+            <FileClock size={18} className="text-neutral-400" />
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse text-sm">
-              <thead className="bg-neutral-100 text-left text-neutral-600">
+            <table className="w-full min-w-[1100px] text-left text-sm">
+              <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Date</th>
-                  <th className="px-4 py-3 font-semibold">Fabric</th>
-                  <th className="px-4 py-3 font-semibold">Action</th>
-                  <th className="px-4 py-3 font-semibold">Qty</th>
-                  <th className="px-4 py-3 font-semibold">Previous</th>
-                  <th className="px-4 py-3 font-semibold">New</th>
-                  <th className="px-4 py-3 font-semibold">Description</th>
-                  <th className="px-4 py-3 font-semibold">Note</th>
-                  <th className="px-4 py-3 font-semibold">By</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Fabric</th>
+                  <th className="px-4 py-3">Action</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Qty</th>
+                  <th className="px-4 py-3">Previous</th>
+                  <th className="px-4 py-3">New</th>
+                  <th className="px-4 py-3">Note</th>
+                  <th className="px-4 py-3">By</th>
                 </tr>
               </thead>
 
-              <tbody>
-                {loading ? (
+              <tbody className="divide-y divide-neutral-100">
+                {fabricLogsLoading ? (
                   <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-10 text-center text-sm text-neutral-500"
-                    >
-                      Loading logs...
+                    <td colSpan={9} className="px-4 py-10 text-center text-neutral-500">
+                      Loading fabric logs...
                     </td>
                   </tr>
-                ) : logs.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-10 text-center text-sm text-neutral-500"
-                    >
-                      No fabric logs found.
-                    </td>
-                  </tr>
-                ) : (
-                  logs.map((log) => (
-                    <tr
-                      key={log._id}
-                      className="border-t border-neutral-200 align-top hover:bg-neutral-50"
-                    >
-                      <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
-                        <div className="flex items-start gap-2">
-                          <CalendarDays className="mt-0.5 h-4 w-4 text-neutral-400" />
-                          <span>{formatDate(log.logDate || log.createdAt)}</span>
-                        </div>
+                ) : fabricLogs.length ? (
+                  fabricLogs.map((log) => (
+                    <tr key={log._id} className="hover:bg-neutral-50">
+                      <td className="px-4 py-3 text-neutral-500">
+                        {formatDate(log.logDate)}
                       </td>
 
-                      <td className="px-4 py-4">
-                        <div className="font-semibold text-neutral-900">
-                          {log.fabricName || "—"}
-                        </div>
-                        <div className="mt-1 text-xs text-neutral-500">
-                          {log.fabricCode || "—"}
-                        </div>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold">{log.fabricName}</p>
+                        <p className="text-xs text-neutral-500">{log.fabricCode}</p>
                       </td>
 
-                      <td className="px-4 py-4">
-                        <div className="flex flex-col gap-2">
-                          <span
-                            className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-medium ${getActionBadge(
-                              log.action
-                            )}`}
-                          >
-                            {String(log.action || "—").replaceAll("_", " ")}
-                          </span>
-
-                          <span
-                            className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${getTypeBadge(
-                              log.type
-                            )}`}
-                          >
-                            {log.type || "info"}
-                          </span>
-                        </div>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium">
+                          {log.action}
+                        </span>
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-4 font-medium text-neutral-900">
-                        {formatQty(log.quantity)} {log.unit || ""}
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-neutral-950 px-3 py-1 text-xs font-medium text-white">
+                          {log.type}
+                        </span>
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
-                        {formatQty(log.previousStock)} {log.unit || ""}
+                      <td className="px-4 py-3">{log.quantity || 0}</td>
+                      <td className="px-4 py-3">{log.previousStock || 0}</td>
+                      <td className="px-4 py-3 font-semibold">{log.newStock || 0}</td>
+
+                      <td className="max-w-[260px] px-4 py-3 text-neutral-500">
+                        <p className="line-clamp-2">
+                          {log.note || log.description || log.message || "-"}
+                        </p>
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-4 font-semibold text-neutral-900">
-                        {formatQty(log.newStock)} {log.unit || ""}
-                      </td>
-
-                      <td className="min-w-[260px] px-4 py-4 text-neutral-700">
-                        <div className="flex items-start gap-2">
-                          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
-                          <span>{log.description || log.message || "—"}</span>
-                        </div>
-                      </td>
-
-                      <td className="min-w-[220px] px-4 py-4 text-neutral-600">
-                        {log.note || "—"}
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-4 text-neutral-700">
+                      <td className="px-4 py-3 text-neutral-500">
                         {log.createdBy || "system"}
                       </td>
                     </tr>
                   ))
+                ) : (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-10 text-center text-neutral-500">
+                      No fabric logs found.
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-neutral-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm text-neutral-500">
-              Showing <span className="font-semibold text-neutral-800">{logs.length}</span>{" "}
-              of <span className="font-semibold text-neutral-800">{pagination?.total || 0}</span> logs
-            </div>
+          <div className="flex flex-col items-center justify-between gap-3 border-t border-neutral-200 p-4 text-sm md:flex-row">
+            <p className="text-neutral-500">
+              Page {pagination.page} of {pagination.totalPages}
+            </p>
 
-            <div className="flex items-center gap-2">
+            <div className="flex gap-2">
               <button
-                type="button"
-                onClick={() => handlePageChange((pagination?.page || 1) - 1)}
-                disabled={(pagination?.page || 1) <= 1}
-                className="inline-flex items-center justify-center rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={pagination.page <= 1 || fabricLogsLoading}
+                onClick={() => fetchFabricLogs({ page: pagination.page - 1 })}
+                className="rounded-xl border border-neutral-200 px-4 py-2 disabled:opacity-40"
               >
-                <ChevronLeft className="h-4 w-4" />
+                Previous
               </button>
 
-              <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2 text-sm font-medium text-neutral-700">
-                Page {pagination?.page || 1} / {pagination?.totalPages || 1}
-              </div>
-
               <button
-                type="button"
-                onClick={() => handlePageChange((pagination?.page || 1) + 1)}
-                disabled={(pagination?.page || 1) >= (pagination?.totalPages || 1)}
-                className="inline-flex items-center justify-center rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={pagination.page >= pagination.totalPages || fabricLogsLoading}
+                onClick={() => fetchFabricLogs({ page: pagination.page + 1 })}
+                className="rounded-xl border border-neutral-200 px-4 py-2 disabled:opacity-40"
               >
-                <ChevronRight className="h-4 w-4" />
+                Next
               </button>
             </div>
           </div>

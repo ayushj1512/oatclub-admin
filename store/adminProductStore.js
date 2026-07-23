@@ -122,10 +122,8 @@ const normalizeProductPayload = (payload) => {
     out.availableForCollab = toBool(out.availableForCollab);
   }
   if (out.isDispatchReady !== undefined) {
-  out.isDispatchReady = toBool(
-    out.isDispatchReady,
-  );
-}
+    out.isDispatchReady = toBool(out.isDispatchReady);
+  }
   if (out.isSamplingDone !== undefined)
     out.isSamplingDone = toBool(out.isSamplingDone);
   if (out.isActive !== undefined) out.isActive = toBool(out.isActive);
@@ -356,10 +354,13 @@ export const useAdminProductStore = create((set, get) => ({
   ============================================================ */
   products: [],
   product: null,
+  /* Fabric assignment */
+  assignmentProducts: [],
+  assignmentProductsLoading: false,
   bulkSelectedIds: [],
   bulkPriceDraft: {},
   metadataPreview: null,
-   // { [id]: { price?, compareAtPrice? } }
+  // { [id]: { price?, compareAtPrice? } }
   page: 1,
   limit: 100,
   total: 0,
@@ -368,6 +369,11 @@ export const useAdminProductStore = create((set, get) => ({
   loading: false,
   saving: false,
   error: null,
+
+    /* Product Excel export */
+  excelColumns: [],
+  excelColumnsLoading: false,
+  excelExporting: false,
 
   /* ============================================================
     HELPERS
@@ -392,6 +398,332 @@ export const useAdminProductStore = create((set, get) => ({
         [id]: { ...(state.bulkPriceDraft[id] || {}), ...patch },
       },
     })),
+
+      /* ============================================================
+    PRODUCT EXCEL EXPORT
+  ============================================================ */
+
+  /**
+   * Fetch all columns allowed by backend.
+   *
+   * GET /api/products/export/excel/columns
+   */
+  fetchProductExcelColumns: async () => {
+    try {
+      set({
+        excelColumnsLoading: true,
+        error: null,
+      });
+
+      const res = await fetch(
+        `${API}/export/excel/columns`,
+        {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message ||
+            "Failed to fetch Excel columns",
+        );
+      }
+
+      const columns = Array.isArray(data?.columns)
+        ? data.columns
+        : [];
+
+      set({
+        excelColumns: columns,
+      });
+
+      return columns;
+    } catch (error) {
+      console.error(
+        "❌ fetchProductExcelColumns:",
+        error,
+      );
+
+      set({
+        error:
+          error?.message ||
+          "Failed to fetch Excel columns",
+      });
+
+      toast.error(
+        error?.message ||
+          "Failed to fetch Excel columns",
+      );
+
+      return [];
+    } finally {
+      set({
+        excelColumnsLoading: false,
+      });
+    }
+  },
+
+  /**
+   * Export products as an Excel file.
+   *
+   * POST /api/products/export/excel
+   *
+   * Payload:
+   * {
+   *   columns: [],
+   *   productIds: [],
+   *   filters: {},
+   *   variantMode: "single_row" | "separate_rows",
+   *   fileName: "products-export"
+   * }
+   */
+  exportProductsExcel: async ({
+    columns = [],
+    productIds = [],
+    filters = {},
+    variantMode = "single_row",
+    fileName = "oatclub-products",
+  } = {}) => {
+    try {
+      const selectedColumns = Array.from(
+        new Set(
+          (Array.isArray(columns) ? columns : [])
+            .map((column) =>
+              typeof column === "object"
+                ? String(column?.key || "").trim()
+                : String(column || "").trim(),
+            )
+            .filter(Boolean),
+        ),
+      );
+
+      if (!selectedColumns.length) {
+        toast.error(
+          "Select at least one Excel column",
+        );
+
+        return false;
+      }
+
+      const selectedProductIds = Array.from(
+        new Set(
+          (
+            Array.isArray(productIds)
+              ? productIds
+              : []
+          )
+            .map((item) =>
+              typeof item === "object"
+                ? String(item?._id || "").trim()
+                : String(item || "").trim(),
+            )
+            .filter(Boolean),
+        ),
+      );
+
+      const safeVariantMode = [
+        "single_row",
+        "separate_rows",
+      ].includes(variantMode)
+        ? variantMode
+        : "single_row";
+
+      set({
+        excelExporting: true,
+        error: null,
+      });
+
+      const res = await fetch(
+        `${API}/export/excel`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            columns: selectedColumns,
+            productIds: selectedProductIds,
+            filters:
+              filters &&
+              typeof filters === "object"
+                ? filters
+                : {},
+            variantMode: safeVariantMode,
+            fileName:
+              String(
+                fileName ||
+                  "oatclub-products",
+              ).trim() ||
+              "oatclub-products",
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        const contentType =
+          res.headers.get("content-type") || "";
+
+        let message =
+          "Failed to export products Excel";
+
+        if (
+          contentType.includes(
+            "application/json",
+          )
+        ) {
+          const errorData = await res.json();
+
+          message =
+            errorData?.message || message;
+        } else {
+          const errorText = await res.text();
+
+          if (errorText) {
+            message = errorText;
+          }
+        }
+
+        throw new Error(message);
+      }
+
+      const blob = await res.blob();
+
+      if (!blob?.size) {
+        throw new Error(
+          "Downloaded Excel file is empty",
+        );
+      }
+
+      const disposition =
+        res.headers.get(
+          "content-disposition",
+        ) || "";
+
+      const utfFileNameMatch =
+        disposition.match(
+          /filename\*=UTF-8''([^;]+)/i,
+        );
+
+      const normalFileNameMatch =
+        disposition.match(
+          /filename="?([^"]+)"?/i,
+        );
+
+      let downloadedFileName =
+        `${String(
+          fileName ||
+            "oatclub-products",
+        )
+          .trim()
+          .replace(
+            /[^a-zA-Z0-9-_]/g,
+            "-",
+          )}.xlsx`;
+
+      if (utfFileNameMatch?.[1]) {
+        downloadedFileName =
+          decodeURIComponent(
+            utfFileNameMatch[1],
+          );
+      } else if (
+        normalFileNameMatch?.[1]
+      ) {
+        downloadedFileName =
+          normalFileNameMatch[1].trim();
+      }
+
+      if (
+        !downloadedFileName
+          .toLowerCase()
+          .endsWith(".xlsx")
+      ) {
+        downloadedFileName += ".xlsx";
+      }
+
+      const objectUrl =
+        window.URL.createObjectURL(blob);
+
+      const link =
+        document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = downloadedFileName;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(
+        objectUrl,
+      );
+
+      toast.success(
+        "Products Excel downloaded ✅",
+      );
+
+      return true;
+    } catch (error) {
+      console.error(
+        "❌ exportProductsExcel:",
+        error,
+      );
+
+      set({
+        error:
+          error?.message ||
+          "Failed to export products Excel",
+      });
+
+      toast.error(
+        error?.message ||
+          "Failed to export products Excel",
+      );
+
+      return false;
+    } finally {
+      set({
+        excelExporting: false,
+      });
+    }
+  },
+
+  /**
+   * Export currently selected products.
+   * Uses bulkSelectedIds already present in this store.
+   */
+  exportSelectedProductsExcel: async ({
+    columns = [],
+    filters = {},
+    variantMode = "single_row",
+    fileName = "selected-products",
+  } = {}) => {
+    const selectedIds =
+      get().bulkSelectedIds || [];
+
+    if (!selectedIds.length) {
+      toast.error(
+        "Select at least one product",
+      );
+
+      return false;
+    }
+
+    return get().exportProductsExcel({
+      columns,
+      productIds: selectedIds,
+      filters,
+      variantMode,
+      fileName,
+    });
+  },
 
   /* ============================================================
     FETCH ALL PRODUCTS (ADMIN GRID)
@@ -418,8 +750,7 @@ export const useAdminProductStore = create((set, get) => ({
         isBestSeller: params.isBestSeller,
         isTrending: params.isTrending,
         isPrimaryProduct: params.isPrimaryProduct,
-        isDispatchReady:
-  params.isDispatchReady,
+        isDispatchReady: params.isDispatchReady,
         search: params.search,
         sort: params.sort,
         sku: params.sku,
@@ -2405,7 +2736,7 @@ export const useAdminProductStore = create((set, get) => ({
       set({ saving: false });
     }
   },
-    /* ============================================================
+  /* ============================================================
      DISPATCH READY — SINGLE + BULK
 
      Single:
@@ -2415,54 +2746,31 @@ export const useAdminProductStore = create((set, get) => ({
      setDispatchReady([id1, id2], false)
   ============================================================ */
 
-  setDispatchReady: async (
-    input,
-    isDispatchReady,
-  ) => {
+  setDispatchReady: async (input, isDispatchReady) => {
     try {
       const ids = Array.from(
         new Set(
-          (
-            Array.isArray(input)
-              ? input
-              : [input]
-          )
+          (Array.isArray(input) ? input : [input])
             .map((item) =>
-              item &&
-              typeof item === "object"
-                ? String(
-                    item._id || "",
-                  ).trim()
-                : String(
-                    item || "",
-                  ).trim(),
+              item && typeof item === "object"
+                ? String(item._id || "").trim()
+                : String(item || "").trim(),
             )
             .filter(Boolean),
         ),
       );
 
       if (!ids.length) {
-        toast.error(
-          "Select at least one product",
-        );
+        toast.error("Select at least one product");
 
         return null;
       }
 
       const nextValue =
-        typeof isDispatchReady ===
-        "boolean"
+        typeof isDispatchReady === "boolean"
           ? isDispatchReady
-          : [
-              "true",
-              "1",
-              "yes",
-            ].includes(
-              String(
-                isDispatchReady,
-              )
-                .trim()
-                .toLowerCase(),
+          : ["true", "1", "yes"].includes(
+              String(isDispatchReady).trim().toLowerCase(),
             );
 
       const isBulk = ids.length > 1;
@@ -2480,8 +2788,7 @@ export const useAdminProductStore = create((set, get) => ({
         method: "PATCH",
 
         headers: {
-          "Content-Type":
-            "application/json",
+          "Content-Type": "application/json",
         },
 
         credentials: "include",
@@ -2493,101 +2800,60 @@ export const useAdminProductStore = create((set, get) => ({
               }
             : {}),
 
-          isDispatchReady:
-            nextValue,
+          isDispatchReady: nextValue,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            "Dispatch-ready update failed",
-        );
+        throw new Error(data?.message || "Dispatch-ready update failed");
       }
 
-      const updatedProducts =
-        Array.isArray(data?.products)
-          ? data.products
-          : data?.product
-            ? [data.product]
-            : [];
+      const updatedProducts = Array.isArray(data?.products)
+        ? data.products
+        : data?.product
+          ? [data.product]
+          : [];
 
       const updatedMap = new Map(
-        updatedProducts.map(
-          (product) => [
-            String(
-              product?._id || "",
-            ),
-            product,
-          ],
-        ),
+        updatedProducts.map((product) => [String(product?._id || ""), product]),
       );
 
-      const selectedIds = new Set(
-        ids.map(String),
-      );
+      const selectedIds = new Set(ids.map(String));
 
       set((state) => ({
-        products: (
-          state.products || []
-        ).map((product) => {
-          const id = String(
-            product?._id || "",
-          );
+        products: (state.products || []).map((product) => {
+          const id = String(product?._id || "");
 
           if (!selectedIds.has(id)) {
             return product;
           }
 
-          const updated =
-            updatedMap.get(id);
+          const updated = updatedMap.get(id);
 
           return {
             ...product,
             ...(updated || {}),
 
-            isDispatchReady:
-              updated
-                ?.isDispatchReady ??
-              nextValue,
+            isDispatchReady: updated?.isDispatchReady ?? nextValue,
           };
         }),
 
         product:
-          state.product &&
-          selectedIds.has(
-            String(
-              state.product?._id ||
-                "",
-            ),
-          )
+          state.product && selectedIds.has(String(state.product?._id || ""))
             ? {
                 ...state.product,
 
-                ...(updatedMap.get(
-                  String(
-                    state.product
-                      ?._id || "",
-                  ),
-                ) || {}),
+                ...(updatedMap.get(String(state.product?._id || "")) || {}),
 
                 isDispatchReady:
-                  updatedMap.get(
-                    String(
-                      state.product
-                        ?._id || "",
-                    ),
-                  )
-                    ?.isDispatchReady ??
-                  nextValue,
+                  updatedMap.get(String(state.product?._id || ""))
+                    ?.isDispatchReady ?? nextValue,
               }
             : state.product,
 
-        bulkSelectedIds: isBulk
-          ? []
-          : state.bulkSelectedIds,
+        bulkSelectedIds: isBulk ? [] : state.bulkSelectedIds,
       }));
 
       toast.success(
@@ -2598,21 +2864,13 @@ export const useAdminProductStore = create((set, get) => ({
 
       return data;
     } catch (error) {
-      console.error(
-        "❌ setDispatchReady:",
-        error,
-      );
+      console.error("❌ setDispatchReady:", error);
 
       set({
-        error:
-          error?.message ||
-          "Dispatch-ready update failed",
+        error: error?.message || "Dispatch-ready update failed",
       });
 
-      toast.error(
-        error?.message ||
-          "Dispatch-ready update failed",
-      );
+      toast.error(error?.message || "Dispatch-ready update failed");
 
       throw error;
     } finally {
@@ -2635,17 +2893,10 @@ export const useAdminProductStore = create((set, get) => ({
      ])
   ============================================================ */
 
-  previewBulkMetadata: async (
-    products = [],
-  ) => {
+  previewBulkMetadata: async (products = []) => {
     try {
-      if (
-        !Array.isArray(products) ||
-        !products.length
-      ) {
-        toast.error(
-          "No metadata rows found",
-        );
+      if (!Array.isArray(products) || !products.length) {
+        toast.error("No metadata rows found");
 
         return null;
       }
@@ -2658,101 +2909,64 @@ export const useAdminProductStore = create((set, get) => ({
 
       const payload = products
         .map((row) => ({
-          productCode: String(
-            row?.productCode || "",
-          ).trim(),
+          productCode: String(row?.productCode || "").trim(),
 
-          metaTitle: String(
-            row?.metaTitle || "",
-          ).trim(),
+          metaTitle: String(row?.metaTitle || "").trim(),
 
-          metaDescription: String(
-            row?.metaDescription || "",
-          ).trim(),
+          metaDescription: String(row?.metaDescription || "").trim(),
 
-          keywords: Array.isArray(
-            row?.keywords,
-          )
+          keywords: Array.isArray(row?.keywords)
             ? row.keywords
-            : String(
-                row?.keywords || "",
-              )
+            : String(row?.keywords || "")
                 .split(",")
-                .map((item) =>
-                  item.trim(),
-                )
+                .map((item) => item.trim())
                 .filter(Boolean),
         }))
-        .filter(
-          (row) => row.productCode,
-        );
+        .filter((row) => row.productCode);
 
       if (!payload.length) {
-        throw new Error(
-          "No valid metadata rows found",
-        );
+        throw new Error("No valid metadata rows found");
       }
 
-      const res = await fetch(
-        `${API}/bulk/metadata/preview`,
-        {
-          method: "POST",
+      const res = await fetch(`${API}/bulk/metadata/preview`, {
+        method: "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          credentials: "include",
-
-          body: JSON.stringify({
-            products: payload,
-          }),
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+
+        credentials: "include",
+
+        body: JSON.stringify({
+          products: payload,
+        }),
+      });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            "Metadata preview failed",
-        );
+        throw new Error(data?.message || "Metadata preview failed");
       }
 
       set({
         metadataPreview: data,
       });
 
-      const changedCount =
-        Number(
-          data?.summary
-            ?.changedProducts,
-        ) || 0;
+      const changedCount = Number(data?.summary?.changedProducts) || 0;
 
-      toast.success(
-        `${changedCount} changed product(s) found ✅`,
-      );
+      toast.success(`${changedCount} changed product(s) found ✅`);
 
       return data;
     } catch (error) {
-      console.error(
-        "❌ previewBulkMetadata:",
-        error,
-      );
+      console.error("❌ previewBulkMetadata:", error);
 
       set({
-        error:
-          error?.message ||
-          "Metadata preview failed",
+        error: error?.message || "Metadata preview failed",
 
         metadataPreview: null,
       });
 
-      toast.error(
-        error?.message ||
-          "Metadata preview failed",
-      );
+      toast.error(error?.message || "Metadata preview failed");
 
       throw error;
     } finally {
@@ -2773,26 +2987,18 @@ export const useAdminProductStore = create((set, get) => ({
      confirmBulkMetadata(changes)
   ============================================================ */
 
-  confirmBulkMetadata: async (
-    changes,
-  ) => {
+  confirmBulkMetadata: async (changes) => {
     try {
-      const previewChanges =
-        get().metadataPreview?.changes;
+      const previewChanges = get().metadataPreview?.changes;
 
-      const selectedChanges =
-        Array.isArray(changes)
-          ? changes
-          : Array.isArray(
-                previewChanges,
-              )
-            ? previewChanges
-            : [];
+      const selectedChanges = Array.isArray(changes)
+        ? changes
+        : Array.isArray(previewChanges)
+          ? previewChanges
+          : [];
 
       if (!selectedChanges.length) {
-        toast.error(
-          "No metadata changes to update",
-        );
+        toast.error("No metadata changes to update");
 
         return null;
       }
@@ -2802,112 +3008,63 @@ export const useAdminProductStore = create((set, get) => ({
         error: null,
       });
 
-      const payload =
-        selectedChanges
-          .map((item) => {
-            const source =
-              item?.incoming &&
-              typeof item.incoming ===
-                "object"
-                ? item.incoming
-                : item;
+      const payload = selectedChanges
+        .map((item) => {
+          const source =
+            item?.incoming && typeof item.incoming === "object"
+              ? item.incoming
+              : item;
 
-            return {
-              productCode: String(
-                item?.productCode ||
-                  source
-                    ?.productCode ||
-                  "",
-              ).trim(),
+          return {
+            productCode: String(
+              item?.productCode || source?.productCode || "",
+            ).trim(),
 
-              metaTitle: String(
-                source?.metaTitle ||
-                  "",
-              ).trim(),
+            metaTitle: String(source?.metaTitle || "").trim(),
 
-              metaDescription:
-                String(
-                  source
-                    ?.metaDescription ||
-                    "",
-                ).trim(),
+            metaDescription: String(source?.metaDescription || "").trim(),
 
-              keywords:
-                Array.isArray(
-                  source?.keywords,
-                )
-                  ? source.keywords
-                  : String(
-                      source
-                        ?.keywords ||
-                        "",
-                    )
-                      .split(",")
-                      .map((value) =>
-                        value.trim(),
-                      )
-                      .filter(Boolean),
-            };
-          })
-          .filter(
-            (row) =>
-              row.productCode,
-          );
+            keywords: Array.isArray(source?.keywords)
+              ? source.keywords
+              : String(source?.keywords || "")
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean),
+          };
+        })
+        .filter((row) => row.productCode);
 
       if (!payload.length) {
-        throw new Error(
-          "No valid metadata changes found",
-        );
+        throw new Error("No valid metadata changes found");
       }
 
-      const res = await fetch(
-        `${API}/bulk/metadata/confirm`,
-        {
-          method: "PATCH",
+      const res = await fetch(`${API}/bulk/metadata/confirm`, {
+        method: "PATCH",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          credentials: "include",
-
-          body: JSON.stringify({
-            changes: payload,
-          }),
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+
+        credentials: "include",
+
+        body: JSON.stringify({
+          changes: payload,
+        }),
+      });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            "Metadata update failed",
-        );
+        throw new Error(data?.message || "Metadata update failed");
       }
 
       const updatedMap = new Map(
-        payload.map((item) => [
-          String(
-            item.productCode,
-          ),
-          item,
-        ]),
+        payload.map((item) => [String(item.productCode), item]),
       );
 
       set((state) => ({
-        products: (
-          state.products || []
-        ).map((product) => {
-          const update =
-            updatedMap.get(
-              String(
-                product
-                  ?.productCode ||
-                  "",
-              ),
-            );
+        products: (state.products || []).map((product) => {
+          const update = updatedMap.get(String(product?.productCode || ""));
 
           if (!update) {
             return product;
@@ -2915,36 +3072,21 @@ export const useAdminProductStore = create((set, get) => ({
 
           return {
             ...product,
-            metaTitle:
-              update.metaTitle,
+            metaTitle: update.metaTitle,
 
-            metaDescription:
-              update.metaDescription,
+            metaDescription: update.metaDescription,
 
-            keywords:
-              update.keywords,
+            keywords: update.keywords,
           };
         }),
 
         product:
           state.product &&
-          updatedMap.has(
-            String(
-              state.product
-                ?.productCode ||
-                "",
-            ),
-          )
+          updatedMap.has(String(state.product?.productCode || ""))
             ? {
                 ...state.product,
 
-                ...updatedMap.get(
-                  String(
-                    state.product
-                      ?.productCode ||
-                      "",
-                  ),
-                ),
+                ...updatedMap.get(String(state.product?.productCode || "")),
               }
             : state.product,
 
@@ -2957,21 +3099,13 @@ export const useAdminProductStore = create((set, get) => ({
 
       return data;
     } catch (error) {
-      console.error(
-        "❌ confirmBulkMetadata:",
-        error,
-      );
+      console.error("❌ confirmBulkMetadata:", error);
 
       set({
-        error:
-          error?.message ||
-          "Metadata update failed",
+        error: error?.message || "Metadata update failed",
       });
 
-      toast.error(
-        error?.message ||
-          "Metadata update failed",
-      );
+      toast.error(error?.message || "Metadata update failed");
 
       throw error;
     } finally {
@@ -2984,5 +3118,76 @@ export const useAdminProductStore = create((set, get) => ({
   clearMetadataPreview: () =>
     set({
       metadataPreview: null,
+    }),
+
+  /* ============================================================
+  FABRIC PRODUCT ASSIGNMENT
+============================================================ */
+
+  fetchFabricAssignmentProducts: async (params = {}) => {
+    try {
+      set({
+        assignmentProductsLoading: true,
+        error: null,
+      });
+
+      const query = buildProductQuery({
+        page: 1,
+        limit: 500,
+        isActive: params.isActive,
+        q: params.q,
+        search: params.search,
+      });
+
+      const res = await fetch(`${API}/card-search?${query}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message || "Failed to fetch fabric assignment products",
+        );
+      }
+
+      const products = Array.isArray(data?.products)
+        ? data.products
+        : Array.isArray(data?.data?.products)
+          ? data.data.products
+          : [];
+
+      set({
+        assignmentProducts: products,
+      });
+
+      return {
+        success: true,
+        products,
+      };
+    } catch (error) {
+      console.error("fetchFabricAssignmentProducts error:", error);
+
+      set({
+        assignmentProducts: [],
+        error: error?.message || "Failed to fetch fabric assignment products",
+      });
+
+      return {
+        success: false,
+        message: error?.message || "Failed to fetch fabric assignment products",
+      };
+    } finally {
+      set({
+        assignmentProductsLoading: false,
+      });
+    }
+  },
+
+  clearFabricAssignmentProducts: () =>
+    set({
+      assignmentProducts: [],
+      assignmentProductsLoading: false,
     }),
 }));

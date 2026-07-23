@@ -1,5 +1,5 @@
 /* =========================================================
-   PRINT SECTION
+   BARCODE PRINT SECTION
 ========================================================= */
 
 .barcode-print-section {
@@ -8,14 +8,14 @@
 
 .barcode-print-toolbar {
   margin-bottom: 18px;
-  padding: 18px;
+  padding: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 18px;
   background: #ffffff;
-  border: 1px solid #e6e6e3;
-  border-radius: 16px;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
 }
 
 .barcode-print-heading h2 {
@@ -23,11 +23,11 @@
   color: #111111;
   font-size: 18px;
   font-weight: 700;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
 }
 
 .barcode-print-heading p {
-  margin: 5px 0 0;
+  margin: 4px 0 0;
   color: #777777;
   font-size: 11px;
 }
@@ -40,7 +40,7 @@
 }
 
 .barcode-toolbar-button {
-  min-height: 40px;
+  min-height: 38px;
   padding: 0 13px;
   display: inline-flex;
   align-items: center;
@@ -48,31 +48,31 @@
   gap: 7px;
   color: #111111;
   background: #ffffff;
-  border: 1px solid #111111;
-  border-radius: 10px;
-  font-size: 10px;
+  border: 1px solid #d4d4d4;
+  border-radius: 8px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition:
-    background 180ms ease,
-    color 180ms ease,
-    opacity 180ms ease,
-    transform 180ms ease;
+    background 160ms ease,
+    border-color 160ms ease,
+    opacity 160ms ease;
 }
 
 .barcode-toolbar-button:hover:not(:disabled) {
-  transform: translateY(-1px);
   background: #f5f5f5;
+  border-color: #111111;
 }
 
 .barcode-toolbar-button:disabled {
   cursor: not-allowed;
-  opacity: 0.42;
+  opacity: 0.4;
 }
 
 .barcode-toolbar-primary {
   color: #ffffff;
   background: #111111;
+  border-color: #111111;
 }
 
 .barcode-toolbar-primary:hover:not(:disabled) {
@@ -87,33 +87,34 @@
 .barcode-print-grid {
   display: grid;
   grid-template-columns:
-    repeat(4, minmax(0, 1fr));
-  gap: 18px;
+    repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
   align-items: start;
 }
 
 .barcode-print-item {
   min-width: 0;
+  display: flex;
+  justify-content: center;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
+
+.barcode-print-hidden {
+  display: none;
+}
+
+/* =========================================================
+   TAG WRAPPER
+========================================================= */
 
 .barcode-tag-wrapper {
-  min-width: 0;
+  width: fit-content;
   position: relative;
-  padding: 11px;
-  background: #ffffff;
-  border: 1px solid #e1e1de;
-  border-radius: 17px;
-  transition:
-    border-color 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
-}
-
-.barcode-tag-wrapper:hover {
-  transform: translateY(-3px);
-  box-shadow:
-    0 16px 38px
-    rgba(0, 0, 0, 0.07);
+  padding: 10px;
+  background: #f7f7f7;
+  border: 1px solid #e4e4e4;
+  border-radius: 10px;
 }
 
 .barcode-tag-wrapper.selected {
@@ -126,17 +127,16 @@
 ========================================================= */
 
 .barcode-select {
-  width: 27px;
-  height: 27px;
+  width: 26px;
+  height: 26px;
   position: absolute;
   z-index: 20;
-  top: 18px;
-  right: 18px;
+  top: 16px;
+  right: 16px;
   display: grid;
   place-items: center;
   color: transparent;
-  background:
-    rgba(255, 255, 255, 0.96);
+  background: #ffffff;
   border: 1px solid #bdbdbd;
   border-radius: 50%;
   font-size: 12px;
@@ -155,92 +155,276 @@
 }
 
 /* =========================================================
-   TAG
+   PHYSICAL TAG SIZE
+   Exact size: 2.5 inch × 4 inch
 ========================================================= */
 
 .barcode-tag {
-  width: 100%;
-  aspect-ratio: 300 / 470;
+  width: 2.5in;
+  height: 4in;
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
   color: #111111;
   background: #ffffff;
-  border: 1px solid #d8d8d5;
-  border-radius: 14px;
-  isolation: isolate;
+  border: 1px solid #d9d9d9;
+  border-radius: 0;
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
 }
 
 .barcode-tag.compact {
-  max-width: 280px;
-}
-
-.minimal-lines-bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.038) 0,
-      rgba(0, 0, 0, 0.038) 1px,
-      transparent 1px,
-      transparent 15px
-    );
-}
-
-.minimal-lines-bg::before {
-  content: "";
-  position: absolute;
-  inset: 4%;
-  background: #ffffff;
-  border:
-    1px solid
-    rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
+  width: 2.5in;
+  height: 4in;
 }
 
 .barcode-inner {
+  width: 100%;
   height: 100%;
-  min-height: 0;
-  position: relative;
-  z-index: 2;
-  padding: 5% 8% 4%;
+  padding: 12px 15px 10px;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  box-sizing: border-box;
+  background: #ffffff;
 }
 
 /* =========================================================
-   TOP
+   TAG HOLE
 ========================================================= */
 
 .tag-hole {
   width: 11px;
   height: 11px;
-  margin: 0 auto 2.5%;
+  margin: 0 auto 8px;
   flex: 0 0 auto;
-  background: transparent;
-  border: 2px solid #bdbdbd;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid #9b9b9b;
   border-radius: 50%;
 }
 
-.logo-area {
-  height: 9.5%;
+/* =========================================================
+   HEADER
+========================================================= */
+
+.tag-header {
   flex: 0 0 auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  text-align: center;
 }
 
-.logo-area img {
-  width: 51%;
-  max-height: 100%;
+.tag-logo {
+  width: 118px;
+  max-width: 70%;
+  height: 30px;
   display: block;
   object-fit: contain;
 }
 
+.tag-brand-line {
+  margin-top: 3px;
+  color: #777777;
+  font-size: 6px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+}
+
+/* =========================================================
+   PRODUCT INFORMATION
+========================================================= */
+
+.tag-product-section {
+  margin-top: 11px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.tag-label {
+  color: #8a8a8a;
+  font-size: 6px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+}
+
+.product-id {
+  margin-top: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  color: #111111;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+}
+
+.serial {
+  margin-top: 3px;
+  color: #777777;
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* =========================================================
+   BARCODE
+
+   Important:
+   Never force barcode SVG to width: 100%.
+   It must retain its generated dimensions.
+========================================================= */
+
+.barcode-area {
+  width: 100%;
+  min-height: 78px;
+  margin-top: 8px;
+  padding: 4px 0;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: visible;
+  background: #ffffff;
+}
+
+.barcode-svg {
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: 70px !important;
+  display: block !important;
+  flex: 0 0 auto;
+  overflow: visible !important;
+  background: #ffffff !important;
+  transform: none !important;
+  shape-rendering: crispEdges;
+}
+
+.barcode-svg > rect:first-child {
+  fill: #ffffff !important;
+  stroke: none !important;
+}
+
+.barcode-svg > g {
+  fill: #000000 !important;
+}
+
+.barcode-svg > g rect,
+.barcode-svg > g path {
+  fill: #000000 !important;
+  stroke: none !important;
+  shape-rendering: crispEdges;
+}
+
+.barcode-svg rect,
+.barcode-svg path {
+  shape-rendering: crispEdges;
+}
+
+.barcode-error {
+  color: #777777;
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.scan-code {
+  width: 100%;
+  min-height: 11px;
+  margin-top: 1px;
+  flex: 0 0 auto;
+  overflow: visible;
+  color: #111111;
+  text-align: center;
+  white-space: nowrap;
+  font-family:
+    "Courier New",
+    Courier,
+    monospace;
+  font-size: 7px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+}
+
+/* =========================================================
+   DETAILS
+========================================================= */
+
+.details {
+  margin-top: 8px;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.35fr;
+  border-top: 1px solid #d5d5d5;
+  border-bottom: 1px solid #d5d5d5;
+}
+
+.detail-item {
+  min-width: 0;
+  min-height: 43px;
+  padding: 7px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-right: 1px solid #e0e0e0;
+  text-align: center;
+}
+
+.detail-item:last-child {
+  border-right: 0;
+}
+
+.detail-item span {
+  color: #888888;
+  font-size: 6px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.detail-item strong {
+  max-width: 100%;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #111111;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.detail-item-mrp strong {
+  font-size: 11px;
+}
+
+.tax {
+  margin: 4px 0 0;
+  flex: 0 0 auto;
+  color: #888888;
+  text-align: center;
+  font-size: 5.5px;
+  line-height: 1.3;
+}
+
+/* =========================================================
+   EXCHANGE INFORMATION
+========================================================= */
+
 .exchange {
-  margin-top: 2%;
+  margin-top: 8px;
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
@@ -249,198 +433,62 @@
 }
 
 .exchange strong {
-  color: #111111;
-  font-size:
-    clamp(7px, 0.68vw, 10px);
-  font-weight: 750;
+  color: #222222;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
 .exchange span {
-  max-width: 100%;
   margin-top: 2px;
-  color: #444444;
-  font-size:
-    clamp(5.3px, 0.5vw, 7px);
+  color: #555555;
+  font-size: 6px;
   line-height: 1.3;
-  overflow-wrap: anywhere;
-  text-decoration: underline;
 }
 
 .exchange p {
   margin: 3px 0 0;
-  color: #111111;
-  font-size:
-    clamp(5.3px, 0.5vw, 7px);
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: 0.025em;
+  max-width: 90%;
+  color: #888888;
+  font-size: 5.5px;
+  font-weight: 400;
+  line-height: 1.3;
 }
 
 /* =========================================================
-   BARCODE
-========================================================= */
-
-.barcode-area {
-  width: 100%;
-  height: 16%;
-  min-height: 64px;
-  margin-top: 3%;
-  padding: 3px 7px;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: #ffffff;
-}
-
-.barcode-svg {
-  width: auto !important;
-  max-width: 100%;
-  height: 62px !important;
-  display: block;
-  flex-shrink: 0;
-  overflow: visible;
-  shape-rendering: crispEdges;
-}
-
-.barcode-error {
-  color: #777777;
-  font-size: 8px;
-  font-weight: 600;
-}
-
-.scan-code {
-  min-height: 9px;
-  margin-top: 1px;
-  flex: 0 0 auto;
-  text-align: center;
-  color: #555555;
-  font-size:
-    clamp(5px, 0.49vw, 7px);
-  font-weight: 600;
-  letter-spacing: 0.13em;
-}
-
-/* =========================================================
-   PRODUCT DETAILS
-========================================================= */
-
-.product-id {
-  margin-top: 2%;
-  flex: 0 0 auto;
-  overflow-wrap: anywhere;
-  text-align: center;
-  color: #111111;
-  font-size:
-    clamp(9px, 1vw, 14px);
-  font-weight: 800;
-  letter-spacing: 0.045em;
-  line-height: 1.15;
-}
-
-.serial {
-  margin-top: 2px;
-  flex: 0 0 auto;
-  text-align: center;
-  color: #737373;
-  font-size:
-    clamp(6px, 0.56vw, 8px);
-  font-weight: 600;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.details {
-  margin-top: 4%;
-  padding: 3.5% 0;
-  flex: 0 0 auto;
-  border-top:
-    1px solid rgba(0, 0, 0, 0.16);
-  border-bottom:
-    1px solid rgba(0, 0, 0, 0.16);
-}
-
-.details > div {
-  min-height: 19px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size:
-    clamp(7px, 0.68vw, 10px);
-}
-
-.details span {
-  color: #777777;
-}
-
-.details strong {
-  color: #111111;
-  font-weight: 700;
-}
-
-.details > div:last-child strong {
-  font-size:
-    clamp(9px, 0.85vw, 12px);
-}
-
-.tax {
-  margin-top: 2%;
-  flex: 0 0 auto;
-  text-align: center;
-  color: #858585;
-  font-size:
-    clamp(5px, 0.5vw, 7px);
-  line-height: 1.35;
-}
-
-/* =========================================================
-   FIXED BOTTOM AREA
+   FOOTER
 ========================================================= */
 
 .tag-footer {
   margin-top: auto;
-  padding-top: 3%;
+  padding-top: 7px;
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
+  color: #777777;
   text-align: center;
-  color: #656565;
-  font-size:
-    clamp(5px, 0.49vw, 7px);
-  line-height: 1.4;
+  font-size: 5.5px;
+  line-height: 1.45;
+  border-top: 1px solid #eeeeee;
 }
 
 .tag-footer strong {
   color: #555555;
-  font-size: inherit;
+  font-size: 5.5px;
   font-weight: 600;
 }
 
 .tag-reference {
-  width: 100%;
-  min-height: 8px;
-  margin-top: 2px;
-  padding: 0 4px;
-  flex: 0 0 auto;
-  overflow: hidden;
-  color: #aaaaaa;
-  text-align: center;
-  font-size:
-    clamp(4px, 0.4vw, 5.5px);
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 /* =========================================================
-   EMPTY
+   EMPTY STATE
 ========================================================= */
 
 .barcode-empty-state {
-  min-height: 240px;
+  min-height: 220px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -449,8 +497,8 @@
   color: #777777;
   text-align: center;
   background: #ffffff;
-  border: 1px dashed #d8d8d5;
-  border-radius: 16px;
+  border: 1px dashed #d5d5d5;
+  border-radius: 12px;
 }
 
 .barcode-empty-state strong {
@@ -465,15 +513,8 @@
 }
 
 /* =========================================================
-   RESPONSIVE
+   RESPONSIVE PREVIEW
 ========================================================= */
-
-@media (max-width: 1150px) {
-  .barcode-print-grid {
-    grid-template-columns:
-      repeat(3, minmax(0, 1fr));
-  }
-}
 
 @media (max-width: 850px) {
   .barcode-print-toolbar {
@@ -491,13 +532,13 @@
 
   .barcode-print-grid {
     grid-template-columns:
-      repeat(2, minmax(0, 1fr));
+      repeat(auto-fill, minmax(240px, 1fr));
   }
 }
 
 @media (max-width: 560px) {
   .barcode-print-toolbar {
-    padding: 15px;
+    padding: 14px;
   }
 
   .barcode-print-actions {
@@ -510,47 +551,7 @@
   }
 
   .barcode-tag-wrapper {
-    width: min(100%, 390px);
     margin-inline: auto;
-  }
-
-  .barcode-svg {
-    height: 68px !important;
-  }
-
-  .barcode-area {
-    min-height: 70px;
-  }
-
-  .product-id {
-    font-size: 15px;
-  }
-
-  .serial {
-    font-size: 8px;
-  }
-
-  .details > div {
-    min-height: 22px;
-    font-size: 10px;
-  }
-
-  .exchange strong {
-    font-size: 10px;
-  }
-
-  .exchange span,
-  .exchange p {
-    font-size: 7px;
-  }
-
-  .tax,
-  .tag-footer {
-    font-size: 7px;
-  }
-
-  .tag-reference {
-    font-size: 5px;
   }
 }
 
@@ -561,7 +562,7 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 7mm;
+    margin: 0.25in;
   }
 
   html,
@@ -569,6 +570,7 @@
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
+    color: #000000 !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
@@ -586,6 +588,7 @@
     width: 100%;
     position: absolute;
     inset: 0;
+    background: #ffffff !important;
   }
 
   .no-print,
@@ -594,12 +597,18 @@
     display: none !important;
   }
 
+  /*
+   * Three 2.5 inch tags per A4 row.
+   */
   .barcode-print-grid {
     width: 100%;
     display: grid;
     grid-template-columns:
-      repeat(3, 1fr);
-    gap: 5mm;
+      repeat(3, 2.5in);
+    justify-content: center;
+    align-items: start;
+    column-gap: 0.04in;
+    row-gap: 0.12in;
   }
 
   body[data-barcode-print-mode="selected"]
@@ -609,9 +618,19 @@
     display: none !important;
   }
 
+  .barcode-print-item {
+    width: 2.5in;
+    min-width: 2.5in;
+    display: block;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
   .barcode-tag-wrapper {
+    width: 2.5in;
+    margin: 0;
     padding: 0;
-    background: #ffffff;
+    background: #ffffff !important;
     border: 0;
     border-radius: 0;
     box-shadow: none !important;
@@ -621,23 +640,92 @@
   }
 
   .barcode-tag {
-    border-radius: 2.5mm;
+    width: 2.5in !important;
+    height: 4in !important;
+    box-sizing: border-box;
+    overflow: hidden;
+    color: #000000 !important;
+    background: #ffffff !important;
+    border: 0.25mm solid #cfcfcf;
+    border-radius: 0;
+    transform: none !important;
+  }
+
+  .barcode-inner {
+    width: 100%;
+    height: 100%;
+    padding: 0.12in 0.15in 0.1in;
+    box-sizing: border-box;
+    color: #000000 !important;
+    background: #ffffff !important;
+  }
+
+  /*
+   * Barcode must keep the exact dimensions
+   * generated by JsBarcode.
+   *
+   * Do not use width: 100%.
+   */
+  .barcode-area {
+    width: 100%;
+    min-height: 0.8in;
+    margin-top: 0.08in;
+    padding: 0.04in 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    overflow: visible !important;
+    background: #ffffff !important;
   }
 
   .barcode-svg {
     width: auto !important;
-    max-width: 100%;
-    height: 16mm !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: 0.72in !important;
+    display: block !important;
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+    transform: none !important;
+    scale: none !important;
+    forced-color-adjust: none;
     shape-rendering: crispEdges;
   }
 
-  .barcode-area {
-    min-height: 17mm;
-    padding: 1mm 2mm;
+  .barcode-svg > rect:first-child {
+    fill: #ffffff !important;
+    stroke: none !important;
+  }
+
+  .barcode-svg > g {
+    fill: #000000 !important;
+  }
+
+  .barcode-svg > g rect,
+  .barcode-svg > g path {
+    fill: #000000 !important;
+    stroke: none !important;
+    shape-rendering: crispEdges;
+  }
+
+  .barcode-svg rect,
+  .barcode-svg path {
+    shape-rendering: crispEdges;
+  }
+
+  .scan-code {
+    color: #000000 !important;
     background: #ffffff !important;
+    font-size: 7pt;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.04em;
   }
 
   .tag-reference {
-    display: none;
+    display: none !important;
   }
 }

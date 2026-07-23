@@ -1,124 +1,174 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
 export default function BarcodeRenderer({
   value,
   format = "CODE128",
-  width = 1.8,
-  height = 62,
+  moduleWidth = 2,
+  barHeight = 95,
+  margin = 14,
   displayValue = false,
-  lineColor = "#000000",
-  background = "#ffffff",
-  margin = 10,
   className = "",
   ariaLabel,
 }) {
-  const svgRef = useRef(null);
+  const [barcodeUrl, setBarcodeUrl] =
+    useState("");
+
+  const barcodeValue = String(
+    value || ""
+  ).trim();
 
   useEffect(() => {
     let cancelled = false;
 
-    const renderBarcode = async () => {
-      const svg = svgRef.current;
-      const barcodeValue = String(value || "").trim();
+    const generateBarcode =
+      async () => {
+        setBarcodeUrl("");
 
-      if (!svg) return;
-
-      svg.innerHTML = "";
-      svg.removeAttribute("width");
-      svg.removeAttribute("height");
-      svg.removeAttribute("viewBox");
-
-      if (!barcodeValue) return;
-
-      try {
-        const module = await import("jsbarcode");
-        const JsBarcode = module.default;
-
-        if (cancelled || !svgRef.current) return;
-
-        JsBarcode(svgRef.current, barcodeValue, {
-          format,
-          width,
-          height,
-          displayValue,
-          lineColor,
-          background,
-
-          margin,
-          marginLeft: margin,
-          marginRight: margin,
-          marginTop: 3,
-          marginBottom: 3,
-
-          textAlign: "center",
-          textPosition: "bottom",
-          font: "monospace",
-          fontSize: 11,
-
-          valid: (isValid) => {
-            if (!isValid) {
-              console.error(
-                `Invalid barcode value: ${barcodeValue}`
-              );
-            }
-          },
-        });
-
-        svgRef.current?.setAttribute(
-          "preserveAspectRatio",
-          "xMidYMid meet"
-        );
-      } catch (error) {
-        if (svgRef.current) {
-          svgRef.current.innerHTML = "";
+        if (
+          typeof window === "undefined" ||
+          !barcodeValue
+        ) {
+          return;
         }
 
-        console.error(
-          `Unable to render barcode "${barcodeValue}":`,
-          error
-        );
-      }
-    };
+        try {
+          const module =
+            await import("jsbarcode");
 
-    renderBarcode();
+          const JsBarcode =
+            module.default || module;
+
+          const canvas =
+            document.createElement(
+              "canvas"
+            );
+
+          JsBarcode(
+            canvas,
+            barcodeValue,
+            {
+              format,
+
+              /*
+               * Keeps bars thick enough
+               * for physical scanning.
+               */
+              width: moduleWidth,
+              height: barHeight,
+
+              /*
+               * Small but safe white quiet
+               * zone on left and right.
+               */
+              margin: 0,
+              marginLeft: margin,
+              marginRight: margin,
+              marginTop: 5,
+              marginBottom: 5,
+
+              displayValue,
+              lineColor: "#000000",
+              background: "#ffffff",
+
+              valid: (isValid) => {
+                if (!isValid) {
+                  console.error(
+                    `Invalid barcode: ${barcodeValue}`
+                  );
+                }
+              },
+            }
+          );
+
+          if (cancelled) {
+            return;
+          }
+
+          setBarcodeUrl(
+            canvas.toDataURL(
+              "image/png",
+              1
+            )
+          );
+        } catch (error) {
+          console.error(
+            `Unable to generate barcode "${barcodeValue}":`,
+            error
+          );
+
+          if (!cancelled) {
+            setBarcodeUrl("");
+          }
+        }
+      };
+
+    generateBarcode();
 
     return () => {
       cancelled = true;
     };
   }, [
-    value,
+    barcodeValue,
     format,
-    width,
-    height,
-    displayValue,
-    lineColor,
-    background,
+    moduleWidth,
+    barHeight,
     margin,
+    displayValue,
   ]);
-
-  const barcodeValue = String(value || "").trim();
 
   if (!barcodeValue) {
     return (
       <div
-        className={className}
         role="img"
         aria-label="Barcode unavailable"
+        className={className}
       />
     );
   }
 
+  if (!barcodeUrl) {
+    return (
+      <div
+        role="status"
+        aria-label="Generating barcode"
+        className={[
+          "flex h-[58px] w-full",
+          "items-center justify-center",
+          "bg-white text-[8px]",
+          "text-neutral-400",
+          className,
+        ].join(" ")}
+      >
+        Generating barcode...
+      </div>
+    );
+  }
+
   return (
-    <svg
-      ref={svgRef}
-      className={className}
-      role="img"
-      aria-label={
-        ariaLabel || `Barcode ${barcodeValue}`
+    <img
+      src={barcodeUrl}
+      alt={
+        ariaLabel ||
+        `Barcode ${barcodeValue}`
       }
-      preserveAspectRatio="xMidYMid meet"
+      draggable={false}
+      className={[
+        /*
+         * Full available tag width.
+         * Height remains short.
+         */
+        "block h-[58px] w-full",
+        "object-fill",
+        "bg-white",
+        "print:h-[15mm]",
+        "print:w-full",
+        className,
+      ].join(" ")}
     />
   );
 }

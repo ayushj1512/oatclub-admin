@@ -1,528 +1,425 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { toast } from "react-hot-toast";
 import {
   ArrowLeft,
-  CheckCircle2,
-  Image as ImageIcon,
-  Package2,
+  ImagePlus,
+  Loader2,
   Save,
-  Scissors,
-  Tags,
-  X,
+  Trash2,
 } from "lucide-react";
-import { useFabricStore } from "@/store/fabricStore";
-import MediaPickerModal from "@/components/media/MediaPickerModal";
+
 import ProductPicker from "@/components/common/ProductPicker";
-
-const UNIT_OPTIONS = [
-  { label: "Meter", value: "meter" },
-  { label: "Kg", value: "kg" },
-];
-
-const STATUS_OPTIONS = [
-  { label: "Active", value: "active" },
-  { label: "Inactive", value: "inactive" },
-  { label: "Discontinued", value: "discontinued" },
-];
-
-const MOVEMENT_OPTIONS = [
-  { label: "Idle", value: "idle" },
-  { label: "Incoming", value: "incoming" },
-  { label: "In Use", value: "in_use" },
-  { label: "Outgoing", value: "outgoing" },
-];
+import MediaPickerModal from "@/components/media/MediaPickerModal";
+import { useAdminProductStore } from "@/store/adminProductStore";
+import useFabricStore from "@/store/fabricStore";
 
 const initialForm = {
   name: "",
   category: "",
   unit: "meter",
-  price: "",
+  imageLink: "",
+  imagePublicId: "",
   gsm: "",
   width: "",
+  currentStock: 0,
   status: "active",
   movementStatus: "idle",
   notes: "",
-  isActive: true,
 };
 
-const cn = (...classes) => classes.filter(Boolean).join(" ");
+const normalizeCode = (value) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
 
-function Card({ children, className = "" }) {
-  return (
-    <div
-      className={cn(
-        "rounded-3xl border border-slate-200 bg-white shadow-sm",
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
-}
+  return digits.slice(-5).padStart(5, "0");
+};
 
-function Label({ children, required = false }) {
-  return (
-    <label className="mb-1.5 block text-sm font-medium text-slate-700">
-      {children} {required ? <span className="text-rose-500">*</span> : null}
-    </label>
-  );
-}
-
-function Input(props) {
-  return (
-    <input
-      {...props}
-      className={cn(
-        "h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition",
-        "placeholder:text-slate-400 focus:border-violet-300 focus:ring-4 focus:ring-violet-100",
-        props.className
-      )}
-    />
-  );
-}
-
-function Textarea(props) {
-  return (
-    <textarea
-      {...props}
-      className={cn(
-        "min-h-[110px] w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition",
-        "placeholder:text-slate-400 focus:border-violet-300 focus:ring-4 focus:ring-violet-100",
-        props.className
-      )}
-    />
-  );
-}
-
-function Select(props) {
-  return (
-    <select
-      {...props}
-      className={cn(
-        "h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition",
-        "focus:border-violet-300 focus:ring-4 focus:ring-violet-100",
-        props.className
-      )}
-    />
-  );
-}
-
-function normalizeProductCode(code) {
-  const str = String(code || "").trim();
-  if (!str) return "";
-  return /^\d+$/.test(str) ? str.padStart(6, "0") : str;
-}
-
-function getProductCode(product) {
-  return normalizeProductCode(
+const getProductCode = (product) =>
+  normalizeCode(
     product?.productCode ||
-      product?.sku ||
       product?.styleCode ||
       product?.patternNumber ||
       product?.code ||
-      ""
+      product?.sku
   );
-}
 
 export default function AddFabricPage() {
   const router = useRouter();
-  const { createFabric, formLoading } = useFabricStore();
+
+  const { createFabric, formLoading, error } = useFabricStore();
+  const adminProducts = useAdminProductStore((state) => state.products || []);
 
   const [form, setForm] = useState(initialForm);
+  const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [mediaOpen, setMediaOpen] = useState(false);
-  const [selectedMedia, setSelectedMedia] = useState(null);
-  const [selectedProducts, setSelectedProducts] = useState([]);
 
-  const associatedProductCodes = useMemo(
-    () => [...new Set(selectedProducts.map(getProductCode).filter(Boolean))],
-    [selectedProducts]
-  );
+  const selectedProductCodes = useMemo(() => {
+    const selectedSet = new Set(selectedProductIds.map(String));
 
-  const handleChange = (key, value) => {
+    return Array.from(
+      new Set(
+        adminProducts
+          .filter((product) => selectedSet.has(String(product?._id)))
+          .map(getProductCode)
+          .filter(Boolean)
+      )
+    );
+  }, [adminProducts, selectedProductIds]);
+
+  const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const resetForm = () => {
-    setForm(initialForm);
-    setSelectedMedia(null);
-    setSelectedProducts([]);
+  const handleMediaSelect = (media) => {
+    if (!media) return;
+
+    setForm((prev) => ({
+      ...prev,
+      imageLink: media.url || "",
+      imagePublicId: media.publicId || "",
+    }));
+
+    setMediaOpen(false);
   };
 
-  const validate = () => {
-    if (!form.name.trim()) return "Fabric name is required";
-    if (!form.category.trim()) return "Category is required";
-    if (!form.unit) return "Unit is required";
-
-    const price = Number(form.price);
-    if (!Number.isFinite(price) || price < 0) return "Valid price is required";
-
-    if (form.gsm !== "") {
-      const gsm = Number(form.gsm);
-      if (!Number.isFinite(gsm) || gsm <= 0) return "GSM must be greater than 0";
-    }
-
-    return null;
+  const removeImage = () => {
+    setForm((prev) => ({
+      ...prev,
+      imageLink: "",
+      imagePublicId: "",
+    }));
   };
 
-  const buildPayload = () => ({
-    name: form.name.trim(),
-    category: form.category.trim(),
-    unit: form.unit,
-    price: Number(form.price) || 0,
-    imageLink: selectedMedia?.url || "",
-    imagePublicId: selectedMedia?.publicId || "",
-    gsm: form.gsm === "" ? null : Number(form.gsm),
-    width: form.width.trim() || null,
-    associatedProductCodes,
-    status: form.status,
-    movementStatus: form.movementStatus,
-    notes: form.notes.trim(),
-    isActive: !!form.isActive,
-  });
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+    const payload = {
+      name: form.name.trim(),
+      category: form.category.trim(),
+      unit: form.unit,
+      imageLink: form.imageLink,
+      imagePublicId: form.imagePublicId,
+      gsm: form.gsm ? Number(form.gsm) : null,
+      width: form.width.trim() || null,
+      currentStock: Number(form.currentStock || 0),
+      associatedProductCodes: selectedProductCodes,
+      status: form.status,
+      movementStatus: form.movementStatus,
+      notes: form.notes.trim(),
+      isActive: true,
+    };
 
-    const error = validate();
-    if (error) return toast.error(error);
+    const response = await createFabric(payload);
 
-    try {
-      await createFabric(buildPayload());
-      toast.success("Fabric added successfully");
-      router.push("/inventory/fabrics");
-    } catch (err) {
-      toast.error(err?.message || "Failed to add fabric");
+    if (response?.success) {
+      router.push("/fabrics");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-sky-50 px-4 py-5 md:px-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="mb-2 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
-          >
-            <ArrowLeft size={16} />
-            Back
-          </button>
-
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-            Add Fabric
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Create a new fabric using <span className="font-medium text-violet-700">/api/fabrics</span>
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={resetForm}
-            disabled={formLoading}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Reset
-          </button>
-
-          <button
-            type="submit"
-            form="add-fabric-form"
-            disabled={formLoading}
-            className="inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Save size={16} />
-            {formLoading ? "Saving..." : "Save Fabric"}
-          </button>
-        </div>
-      </div>
-
-      <form id="add-fabric-form" onSubmit={handleSubmit} className="space-y-4">
-        <Card className="p-4 md:p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <div className="rounded-xl bg-violet-100 p-2 text-violet-700">
-              <Scissors size={18} />
-            </div>
-            <h2 className="text-base font-semibold text-slate-900">Basic Details</h2>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div>
-              <Label required>Fabric Name</Label>
-              <Input
-                value={form.name}
-                onChange={(e) => handleChange("name", e.target.value)}
-                placeholder="Cotton Flex, Rayon Slub..."
-              />
-            </div>
-
-            <div>
-              <Label required>Category</Label>
-              <Input
-                value={form.category}
-                onChange={(e) => handleChange("category", e.target.value)}
-                placeholder="Cotton, Rayon, Linen..."
-              />
-            </div>
-
-            <div>
-              <Label required>Unit</Label>
-              <Select
-                value={form.unit}
-                onChange={(e) => handleChange("unit", e.target.value)}
-              >
-                {UNIT_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div>
-              <Label required>Price</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.price}
-                onChange={(e) => handleChange("price", e.target.value)}
-                placeholder="0"
-              />
-            </div>
-
-            <div>
-              <Label>GSM</Label>
-              <Input
-                type="number"
-                min="1"
-                value={form.gsm}
-                onChange={(e) => handleChange("gsm", e.target.value)}
-                placeholder="180"
-              />
-            </div>
-
-            <div>
-              <Label>Width</Label>
-              <Input
-                value={form.width}
-                onChange={(e) => handleChange("width", e.target.value)}
-                placeholder='44", 56", 60"...'
-              />
-            </div>
-
-            <div>
-              <Label>Status</Label>
-              <Select
-                value={form.status}
-                onChange={(e) => handleChange("status", e.target.value)}
-              >
-                {STATUS_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div>
-              <Label>Movement Status</Label>
-              <Select
-                value={form.movementStatus}
-                onChange={(e) => handleChange("movementStatus", e.target.value)}
-              >
-                {MOVEMENT_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-4 md:p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <div className="rounded-xl bg-sky-100 p-2 text-sky-700">
-              <ImageIcon size={18} />
-            </div>
-            <h2 className="text-base font-semibold text-slate-900">Fabric Image</h2>
-          </div>
-
-          {!selectedMedia ? (
-            <button
-              type="button"
-              onClick={() => setMediaOpen(true)}
-              className="flex min-h-[190px] w-full flex-col items-center justify-center rounded-3xl border border-dashed border-sky-200 bg-sky-50/60 p-6 text-center transition hover:bg-sky-50"
+    <>
+      <main className="min-h-screen bg-neutral-50 p-4 text-neutral-950 md:p-6">
+        <div className="mx-auto max-w-5xl space-y-5">
+          <header>
+            <Link
+              href="/fabrics"
+              className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-neutral-500 hover:text-neutral-950"
             >
-              <div className="mb-3 rounded-2xl bg-white p-3 text-sky-700 shadow-sm">
-                <ImageIcon size={28} />
-              </div>
-              <div className="text-sm font-semibold text-slate-800">Select Fabric Image</div>
-              <div className="mt-1 text-xs text-slate-500">
-                Open media library and choose image
-              </div>
-            </button>
-          ) : (
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
-              <div className="relative aspect-[16/7] w-full bg-white">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={selectedMedia.url}
-                  alt={selectedMedia.originalName || "Fabric"}
-                  className="h-full w-full object-contain"
-                />
-                <button
-                  type="button"
-                  onClick={() => setSelectedMedia(null)}
-                  className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-700 shadow ring-1 ring-slate-200"
-                >
-                  <X size={16} />
-                </button>
-              </div>
+              <ArrowLeft size={16} />
+              Back to fabrics
+            </Link>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-slate-900">
-                    {selectedMedia.originalName || "Selected Media"}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {selectedMedia.format || "—"} • {selectedMedia.resourceType || "image"}
-                  </div>
-                </div>
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+              Add Fabric
+            </h1>
 
-                <button
-                  type="button"
-                  onClick={() => setMediaOpen(true)}
-                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Change Image
-                </button>
-              </div>
+            <p className="mt-1 text-sm text-neutral-500">
+              Create a fabric master with stock and product mapping.
+            </p>
+          </header>
+
+          {error ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
             </div>
-          )}
-        </Card>
+          ) : null}
 
-        <Card className="p-4 md:p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <div className="rounded-xl bg-amber-100 p-2 text-amber-700">
-              <Tags size={18} />
-            </div>
-            <h2 className="text-base font-semibold text-slate-900">Product Mapping</h2>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
-            <ProductPicker
-              title="Select products for this fabric"
-              multiple
-              value={selectedProducts}
-              onChange={setSelectedProducts}
-            />
-          </div>
-
-          {associatedProductCodes.length > 0 ? (
-            <div className="mt-4">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Selected Product Codes
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {associatedProductCodes.map((code) => (
-                  <span
-                    key={code}
-                    className="rounded-full bg-violet-100 px-3 py-1 text-xs font-medium text-violet-700"
-                  >
-                    {code}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="mt-3 text-xs text-slate-500">No products selected yet.</p>
-          )}
-        </Card>
-
-        <Card className="p-4 md:p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <div className="rounded-xl bg-emerald-100 p-2 text-emerald-700">
-              <Package2 size={18} />
-            </div>
-            <h2 className="text-base font-semibold text-slate-900">Extra Details</h2>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <Label>Notes</Label>
-              <Textarea
-                value={form.notes}
-                onChange={(e) => handleChange("notes", e.target.value)}
-                placeholder="Optional notes about sourcing, usage, vendor..."
-              />
-            </div>
-
-            <div className="space-y-4">
-              <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-emerald-50 px-3 py-3 text-sm text-slate-800">
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm md:p-6"
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Fabric Name" required>
                 <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(e) => handleChange("isActive", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300"
+                  required
+                  value={form.name}
+                  onChange={(event) =>
+                    updateField("name", event.target.value)
+                  }
+                  placeholder="Cotton Lycra"
+                  className="input"
                 />
-                Keep this fabric active
-              </label>
+              </Field>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl bg-violet-50 p-3">
-                  <div className="text-xs text-slate-500">Name</div>
-                  <div className="mt-1 font-medium text-slate-900">
-                    {form.name.trim() || "—"}
-                  </div>
-                </div>
+              <Field label="Category" required>
+                <input
+                  required
+                  value={form.category}
+                  onChange={(event) =>
+                    updateField("category", event.target.value)
+                  }
+                  placeholder="Cotton / Rayon / Denim"
+                  className="input"
+                />
+              </Field>
 
-                <div className="rounded-2xl bg-sky-50 p-3">
-                  <div className="text-xs text-slate-500">Category</div>
-                  <div className="mt-1 font-medium text-slate-900">
-                    {form.category.trim() || "—"}
-                  </div>
-                </div>
+              <Field label="Unit" required>
+                <select
+                  value={form.unit}
+                  onChange={(event) =>
+                    updateField("unit", event.target.value)
+                  }
+                  className="input"
+                >
+                  <option value="meter">Meter</option>
+                  <option value="kg">Kilogram</option>
+                </select>
+              </Field>
 
-                <div className="rounded-2xl bg-amber-50 p-3">
-                  <div className="text-xs text-slate-500">Mapped Products</div>
-                  <div className="mt-1 font-medium text-slate-900">
-                    {associatedProductCodes.length}
+              <Field label="Opening Stock">
+                <input
+                  type="number"
+                  min="0"
+                  value={form.currentStock}
+                  onChange={(event) =>
+                    updateField("currentStock", event.target.value)
+                  }
+                  className="input"
+                />
+              </Field>
+
+              <Field label="GSM">
+                <input
+                  type="number"
+                  min="1"
+                  value={form.gsm}
+                  onChange={(event) =>
+                    updateField("gsm", event.target.value)
+                  }
+                  placeholder="180"
+                  className="input"
+                />
+              </Field>
+
+              <Field label="Width">
+                <input
+                  value={form.width}
+                  onChange={(event) =>
+                    updateField("width", event.target.value)
+                  }
+                  placeholder={'58" / 44"'}
+                  className="input"
+                />
+              </Field>
+
+              <Field label="Status">
+                <select
+                  value={form.status}
+                  onChange={(event) =>
+                    updateField("status", event.target.value)
+                  }
+                  className="input"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="discontinued">Discontinued</option>
+                </select>
+              </Field>
+
+              <Field label="Movement Status">
+                <select
+                  value={form.movementStatus}
+                  onChange={(event) =>
+                    updateField("movementStatus", event.target.value)
+                  }
+                  className="input"
+                >
+                  <option value="idle">Idle</option>
+                  <option value="incoming">Incoming</option>
+                  <option value="in_use">In Use</option>
+                  <option value="outgoing">Outgoing</option>
+                </select>
+              </Field>
+
+              <Field label="Fabric Image" className="md:col-span-2">
+                {form.imageLink ? (
+                  <div className="flex items-center gap-4 rounded-xl border border-neutral-200 p-3">
+                    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-neutral-100">
+                      <Image
+                        src={form.imageLink}
+                        alt={form.name || "Fabric"}
+                        fill
+                        sizes="96px"
+                        className="object-cover"
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">
+                        Fabric image selected
+                      </p>
+
+                      <p className="mt-1 truncate text-xs text-neutral-500">
+                        {form.imageLink}
+                      </p>
+
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMediaOpen(true)}
+                          className="small-button"
+                        >
+                          <ImagePlus size={15} />
+                          Replace
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          className="small-button text-red-600"
+                        >
+                          <Trash2 size={15} />
+                          Remove
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setMediaOpen(true)}
+                    className="flex min-h-28 w-full flex-col items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50 text-neutral-500 hover:border-neutral-950 hover:text-neutral-950"
+                  >
+                    <ImagePlus size={22} />
+                    <span className="mt-2 text-sm font-medium">
+                      Select fabric image
+                    </span>
+                  </button>
+                )}
+              </Field>
+
+              <div className="md:col-span-2">
+                <ProductPicker
+                  value={selectedProductIds}
+                  onChange={setSelectedProductIds}
+                  multiple
+                  title="Associated Products"
+                  initialLimit={20}
+                />
+
+                {selectedProductCodes.length ? (
+                  <p className="mt-2 text-xs text-neutral-500">
+                    Product codes: {selectedProductCodes.join(", ")}
+                  </p>
+                ) : null}
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
-                  <CheckCircle2 size={14} />
-                  Route: /api/fabrics
-                </span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                  Status: {form.status}
-                </span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                  Movement: {form.movementStatus}
-                </span>
-              </div>
+              <Field label="Notes" className="md:col-span-2">
+                <textarea
+                  value={form.notes}
+                  onChange={(event) =>
+                    updateField("notes", event.target.value)
+                  }
+                  placeholder="Internal notes..."
+                  rows={4}
+                  className="input min-h-28 resize-none py-3"
+                />
+              </Field>
             </div>
-          </div>
-        </Card>
-      </form>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 border-t border-neutral-100 pt-5 sm:flex-row sm:justify-end">
+              <Link
+                href="/fabrics"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-neutral-200 px-5 text-sm font-medium hover:bg-neutral-100"
+              >
+                Cancel
+              </Link>
+
+              <button
+                type="submit"
+                disabled={formLoading}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-60"
+              >
+                {formLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Save size={16} />
+                )}
+
+                Save Fabric
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <style jsx>{`
+          .input {
+            min-height: 44px;
+            width: 100%;
+            border-radius: 12px;
+            border: 1px solid #e5e5e5;
+            background: white;
+            padding: 0 12px;
+            font-size: 14px;
+            outline: none;
+          }
+
+          .input:focus {
+            border-color: #171717;
+          }
+
+          .small-button {
+            display: inline-flex;
+            height: 36px;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            border-radius: 10px;
+            border: 1px solid #e5e5e5;
+            padding: 0 12px;
+            font-size: 12px;
+            font-weight: 500;
+          }
+
+          .small-button:hover {
+            background: #f5f5f5;
+          }
+        `}</style>
+      </main>
 
       <MediaPickerModal
         open={mediaOpen}
         onClose={() => setMediaOpen(false)}
-        folder="oatclub/fabrics"
-        onSelect={(media) => {
-          setSelectedMedia(media);
-          setMediaOpen(false);
-        }}
+        onSelect={handleMediaSelect}
+        folder="miray/fabrics"
       />
-    </div>
+    </>
+  );
+}
+
+function Field({ label, required, children, className = "" }) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="mb-1.5 block text-sm font-medium text-neutral-700">
+        {label}
+        {required ? <span className="text-red-500"> *</span> : null}
+      </span>
+
+      {children}
+    </label>
   );
 }

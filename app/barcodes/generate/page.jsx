@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Barcode,
   CheckCircle2,
@@ -27,11 +27,44 @@ const SIZES = [
   "FREE",
 ];
 
+const SOURCES = [
+  {
+    label: "Production",
+    value: "production",
+  },
+  {
+    label: "Vendor",
+    value: "vendor",
+  },
+  {
+    label: "Return",
+    value: "return",
+  },
+  {
+    label: "Manual",
+    value: "manual",
+  },
+  {
+    label: "Opening Stock",
+    value: "opening-stock",
+  },
+  {
+    label: "Other",
+    value: "other",
+  },
+];
+
 const INITIAL_FORM = {
-  productId: "",
+  productCode: "",
+  product: "",
+  variantId: "",
   size: "XS",
-  price: "",
+  priceSnapshot: "",
+  mrpSnapshot: "",
   quantity: 1,
+  inwardBatchCode: "",
+  source: "production",
+  notes: "",
 };
 
 const normalizeProductCode = (value = "") => {
@@ -45,7 +78,49 @@ const normalizeProductCode = (value = "") => {
     return digits.padStart(5, "0");
   }
 
-  return raw.toUpperCase().replace(/\s+/g, "");
+  return raw
+    .toUpperCase()
+    .replace(/\s+/g, "");
+};
+
+const normalizeSize = (value = "") =>
+  String(value || "")
+    .trim()
+    .toUpperCase();
+
+const getVariantSize = (variant = {}) => {
+  const attributes = Array.isArray(
+    variant?.attributes
+  )
+    ? variant.attributes
+    : [];
+
+  const sizeAttribute = attributes.find(
+    (attribute) =>
+      String(attribute?.key || "")
+        .trim()
+        .toLowerCase() === "size"
+  );
+
+  return normalizeSize(
+    sizeAttribute?.value || ""
+  );
+};
+
+const formatMoney = (value) => {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return "—";
+  }
+
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
 };
 
 export default function GenerateBarcodePage() {
@@ -59,29 +134,143 @@ export default function GenerateBarcodePage() {
     clearMessages,
   } = useBarcodeStore();
 
-  const { searchProductForBarcode } = useAdminProductStore();
+  const {
+    searchProductForBarcode,
+  } = useAdminProductStore();
 
-  const [form, setForm] = useState(INITIAL_FORM);
-  const [generatedItems, setGeneratedItems] = useState([]);
-  const [matchedProduct, setMatchedProduct] = useState(null);
-  const [searchingProduct, setSearchingProduct] = useState(false);
-  const [productError, setProductError] = useState("");
+  const [form, setForm] =
+    useState(INITIAL_FORM);
 
-  const submitting = creating || batchCreating;
+  const [
+    generatedItems,
+    setGeneratedItems,
+  ] = useState([]);
 
-  const updateField = (field, value) => {
+  const [
+    matchedProduct,
+    setMatchedProduct,
+  ] = useState(null);
+
+  const [
+    searchingProduct,
+    setSearchingProduct,
+  ] = useState(false);
+
+  const [
+    productError,
+    setProductError,
+  ] = useState("");
+
+  const submitting =
+    creating || batchCreating;
+
+  const productVariants = useMemo(
+    () =>
+      Array.isArray(
+        matchedProduct?.variants
+      )
+        ? matchedProduct.variants
+        : [],
+    [matchedProduct]
+  );
+
+  const selectedVariant = useMemo(() => {
+    if (!form.variantId) return null;
+
+    return (
+      productVariants.find(
+        (variant) =>
+          String(variant?._id) ===
+          String(form.variantId)
+      ) || null
+    );
+  }, [
+    form.variantId,
+    productVariants,
+  ]);
+
+  const updateField = (
+    field,
+    value
+  ) => {
     setForm((current) => ({
       ...current,
       [field]: value,
     }));
   };
 
-  const findProduct = async (value) => {
-    const normalizedCode = normalizeProductCode(value);
+  const clearMatchedProduct = () => {
+    setMatchedProduct(null);
+    setProductError("");
+
+    setForm((current) => ({
+      ...current,
+      product: "",
+      variantId: "",
+    }));
+  };
+
+  const applyMatchedProduct = (
+    product,
+    normalizedCode
+  ) => {
+    const variants = Array.isArray(
+      product?.variants
+    )
+      ? product.variants
+      : [];
+
+    const matchingVariant =
+      variants.find(
+        (variant) =>
+          getVariantSize(variant) ===
+          normalizeSize(form.size)
+      ) || null;
+
+    setMatchedProduct(product);
+
+    setForm((current) => ({
+      ...current,
+
+      productCode: String(
+        product?.productCode ||
+          normalizedCode
+      ),
+
+      product: String(
+        product?._id || ""
+      ),
+
+      variantId: matchingVariant?._id
+        ? String(matchingVariant._id)
+        : "",
+
+      priceSnapshot:
+        product?.price !==
+          undefined &&
+        product?.price !== null
+          ? String(product.price)
+          : current.priceSnapshot,
+
+      mrpSnapshot:
+        product?.compareAtPrice !==
+          undefined &&
+        product?.compareAtPrice !== null
+          ? String(
+              product.compareAtPrice
+            )
+          : current.mrpSnapshot,
+    }));
+  };
+
+  const findProduct = async (
+    value
+  ) => {
+    const normalizedCode =
+      normalizeProductCode(value);
 
     if (!normalizedCode) {
-      setMatchedProduct(null);
-      setProductError("");
+      clearMatchedProduct();
       return;
     }
 
@@ -90,37 +279,41 @@ export default function GenerateBarcodePage() {
       setProductError("");
       setMatchedProduct(null);
 
-      const product = await searchProductForBarcode(normalizedCode);
+      const product =
+        await searchProductForBarcode(
+          normalizedCode
+        );
 
       if (!product) {
-        setProductError("No product found with this code");
+        setProductError(
+          "No product found with this code"
+        );
         return;
       }
 
-      setMatchedProduct(product);
-
-      setForm((current) => ({
-        ...current,
-        productId: String(product.productCode || normalizedCode),
-        price:
-          product.price !== undefined && product.price !== null
-            ? String(product.price)
-            : current.price,
-      }));
+      applyMatchedProduct(
+        product,
+        normalizedCode
+      );
     } catch (searchError) {
       console.error(searchError);
-      setProductError(searchError.message || "Failed to search product");
+
+      setProductError(
+        searchError?.message ||
+          "Failed to search product"
+      );
     } finally {
       setSearchingProduct(false);
     }
   };
 
   useEffect(() => {
-    const rawCode = String(form.productId || "").trim();
+    const rawCode = String(
+      form.productCode || ""
+    ).trim();
 
     if (!rawCode) {
-      setMatchedProduct(null);
-      setProductError("");
+      clearMatchedProduct();
       return;
     }
 
@@ -128,40 +321,108 @@ export default function GenerateBarcodePage() {
       findProduct(rawCode);
     }, 450);
 
-    return () => clearTimeout(timer);
-  }, [form.productId]);
+    return () =>
+      clearTimeout(timer);
+  }, [form.productCode]);
 
-  const handleProductCodeBlur = () => {
-    const normalizedCode = normalizeProductCode(form.productId);
+  useEffect(() => {
+    if (!matchedProduct) return;
 
-    if (!normalizedCode) return;
+    const matchingVariant =
+      productVariants.find(
+        (variant) =>
+          getVariantSize(variant) ===
+          normalizeSize(form.size)
+      );
 
     setForm((current) => ({
       ...current,
-      productId: normalizedCode,
+      variantId: matchingVariant?._id
+        ? String(matchingVariant._id)
+        : "",
     }));
-  };
+  }, [
+    form.size,
+    matchedProduct,
+    productVariants,
+  ]);
+
+  const handleProductCodeBlur =
+    () => {
+      const normalizedCode =
+        normalizeProductCode(
+          form.productCode
+        );
+
+      if (!normalizedCode) return;
+
+      setForm((current) => ({
+        ...current,
+        productCode: normalizedCode,
+      }));
+    };
 
   const validateForm = () => {
-    const productId = normalizeProductCode(form.productId);
-    const size = String(form.size || "").trim().toUpperCase();
-    const price = Number(form.price);
-    const quantity = Number(form.quantity);
+    const productCode =
+      normalizeProductCode(
+        form.productCode
+      );
 
-    if (!productId) {
-      throw new Error("Product ID is required");
+    const size =
+      normalizeSize(form.size);
+
+    const quantity = Number(
+      form.quantity
+    );
+
+    const priceSnapshot =
+      form.priceSnapshot === ""
+        ? null
+        : Number(form.priceSnapshot);
+
+    const mrpSnapshot =
+      form.mrpSnapshot === ""
+        ? null
+        : Number(form.mrpSnapshot);
+
+    if (!productCode) {
+      throw new Error(
+        "Product code is required"
+      );
     }
 
-    if (productId.includes("-")) {
-      throw new Error("Product ID must not contain '-'");
+    if (productCode.includes("-")) {
+      throw new Error(
+        "Product code must not contain '-'"
+      );
     }
 
     if (!SIZES.includes(size)) {
-      throw new Error("Select a valid size");
+      throw new Error(
+        "Select a valid size"
+      );
     }
 
-    if (!Number.isFinite(price) || price < 0) {
-      throw new Error("Enter a valid price");
+    if (
+      priceSnapshot !== null &&
+      (!Number.isFinite(
+        priceSnapshot
+      ) ||
+        priceSnapshot < 0)
+    ) {
+      throw new Error(
+        "Enter a valid price snapshot"
+      );
+    }
+
+    if (
+      mrpSnapshot !== null &&
+      (!Number.isFinite(mrpSnapshot) ||
+        mrpSnapshot < 0)
+    ) {
+      throw new Error(
+        "Enter a valid MRP snapshot"
+      );
     }
 
     if (
@@ -169,31 +430,64 @@ export default function GenerateBarcodePage() {
       quantity < 1 ||
       quantity > 5000
     ) {
-      throw new Error("Quantity must be between 1 and 5000");
+      throw new Error(
+        "Quantity must be between 1 and 5000"
+      );
     }
 
     return {
-      productId,
+      productCode,
+      product:
+        form.product || null,
+      variantId:
+        form.variantId || null,
       size,
-      price,
+      priceSnapshot,
+      mrpSnapshot,
       quantity,
+      inwardBatchCode: String(
+        form.inwardBatchCode || ""
+      )
+        .trim()
+        .toUpperCase(),
+      source:
+        form.source || "production",
+      notes: String(
+        form.notes || ""
+      ).trim(),
     };
   };
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = async (
+    event
+  ) => {
     event.preventDefault();
     clearMessages();
 
     try {
-      const payload = validateForm();
+      const payload =
+        validateForm();
 
       if (payload.quantity === 1) {
-        const item = await createBarcodeItem(payload);
+        const {
+          quantity,
+          ...singlePayload
+        } = payload;
+
+        const item =
+          await createBarcodeItem(
+            singlePayload
+          );
+
         setGeneratedItems([item]);
         return;
       }
 
-      const items = await createBarcodeBatch(payload);
+      const items =
+        await createBarcodeBatch(
+          payload
+        );
+
       setGeneratedItems(items);
     } catch (submitError) {
       console.error(submitError);
@@ -213,8 +507,10 @@ export default function GenerateBarcodePage() {
           </h1>
 
           <p className="mt-3 max-w-2xl text-sm leading-7 text-neutral-600">
-            Enter the product code and its MRP will be fetched automatically.
-            Every physical unit receives a unique Code 128 barcode.
+            Every physical unit receives a
+            unique barcode in the format
+            productCode-size-pieceId. Example:
+            00034-M-29.
           </p>
         </section>
 
@@ -230,7 +526,8 @@ export default function GenerateBarcodePage() {
               </h2>
 
               <p className="mt-1 text-xs leading-6 text-neutral-500">
-                Product code is normalized automatically. For example, 336
+                Product code is normalized
+                automatically. For example, 336
                 becomes 00336.
               </p>
             </div>
@@ -244,13 +541,24 @@ export default function GenerateBarcodePage() {
               <div className="relative">
                 <input
                   type="text"
-                  value={form.productId}
+                  value={
+                    form.productCode
+                  }
                   onChange={(event) => {
-                    updateField("productId", event.target.value);
-                    setMatchedProduct(null);
+                    updateField(
+                      "productCode",
+                      event.target.value
+                    );
+
+                    setMatchedProduct(
+                      null
+                    );
+
                     setProductError("");
                   }}
-                  onBlur={handleProductCodeBlur}
+                  onBlur={
+                    handleProductCodeBlur
+                  }
                   placeholder="Example: 336"
                   autoComplete="off"
                   className="field-control pr-10"
@@ -258,9 +566,15 @@ export default function GenerateBarcodePage() {
 
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400">
                   {searchingProduct ? (
-                    <Loader2 size={16} className="animate-spin" />
+                    <Loader2
+                      size={16}
+                      className="animate-spin"
+                    />
                   ) : matchedProduct ? (
-                    <CheckCircle2 size={16} className="text-emerald-600" />
+                    <CheckCircle2
+                      size={16}
+                      className="text-emerald-600"
+                    />
                   ) : (
                     <Search size={16} />
                   )}
@@ -270,12 +584,24 @@ export default function GenerateBarcodePage() {
               {matchedProduct && (
                 <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
                   <p className="truncate text-xs font-semibold text-emerald-900">
-                    {matchedProduct.title}
+                    {
+                      matchedProduct.title
+                    }
                   </p>
 
                   <p className="mt-0.5 text-[10px] text-emerald-700">
-                    Code: {matchedProduct.productCode} · MRP: ₹
-                    {Number(matchedProduct.price || 0).toLocaleString("en-IN")}
+                    Code:{" "}
+                    {
+                      matchedProduct.productCode
+                    }{" "}
+                    · Price:{" "}
+                    {formatMoney(
+                      matchedProduct.price
+                    )}{" "}
+                    · MRP:{" "}
+                    {formatMoney(
+                      matchedProduct.compareAtPrice
+                    )}
                   </p>
                 </div>
               )}
@@ -291,19 +617,35 @@ export default function GenerateBarcodePage() {
               <select
                 value={form.size}
                 onChange={(event) =>
-                  updateField("size", event.target.value)
+                  updateField(
+                    "size",
+                    event.target.value
+                  )
                 }
                 className="field-control"
               >
                 {SIZES.map((size) => (
-                  <option key={size} value={size}>
+                  <option
+                    key={size}
+                    value={size}
+                  >
                     {size}
                   </option>
                 ))}
               </select>
+
+              {matchedProduct &&
+                productVariants.length >
+                  0 && (
+                  <p className="text-[10px] text-neutral-500">
+                    {selectedVariant
+                      ? "Matching variant linked"
+                      : "No matching size variant found; item will use product-level reference only"}
+                  </p>
+                )}
             </Field>
 
-            <Field label="MRP">
+            <Field label="Price Snapshot">
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-neutral-500">
                   ₹
@@ -313,11 +655,41 @@ export default function GenerateBarcodePage() {
                   type="number"
                   min="0"
                   step="1"
-                  value={form.price}
+                  value={
+                    form.priceSnapshot
+                  }
                   onChange={(event) =>
-                    updateField("price", event.target.value)
+                    updateField(
+                      "priceSnapshot",
+                      event.target.value
+                    )
                   }
                   placeholder="Auto-filled"
+                  className="field-control pl-8"
+                />
+              </div>
+            </Field>
+
+            <Field label="MRP Snapshot">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-neutral-500">
+                  ₹
+                </span>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={
+                    form.mrpSnapshot
+                  }
+                  onChange={(event) =>
+                    updateField(
+                      "mrpSnapshot",
+                      event.target.value
+                    )
+                  }
+                  placeholder="Optional"
                   className="field-control pl-8"
                 />
               </div>
@@ -330,33 +702,101 @@ export default function GenerateBarcodePage() {
                 max="5000"
                 value={form.quantity}
                 onChange={(event) =>
-                  updateField("quantity", event.target.value)
+                  updateField(
+                    "quantity",
+                    event.target.value
+                  )
                 }
+                className="field-control"
+              />
+            </Field>
+
+            <Field label="Inward Batch Code">
+              <input
+                type="text"
+                value={
+                  form.inwardBatchCode
+                }
+                onChange={(event) =>
+                  updateField(
+                    "inwardBatchCode",
+                    event.target.value
+                  )
+                }
+                placeholder="Example: BATCH-001"
+                className="field-control"
+              />
+            </Field>
+
+            <Field label="Inventory Source">
+              <select
+                value={form.source}
+                onChange={(event) =>
+                  updateField(
+                    "source",
+                    event.target.value
+                  )
+                }
+                className="field-control"
+              >
+                {SOURCES.map(
+                  (source) => (
+                    <option
+                      key={source.value}
+                      value={source.value}
+                    >
+                      {source.label}
+                    </option>
+                  )
+                )}
+              </select>
+            </Field>
+
+            <Field label="Notes">
+              <input
+                type="text"
+                value={form.notes}
+                onChange={(event) =>
+                  updateField(
+                    "notes",
+                    event.target.value
+                  )
+                }
+                placeholder="Optional notes"
                 className="field-control"
               />
             </Field>
 
             <button
               type="submit"
-              disabled={submitting || searchingProduct}
-              className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 md:col-span-2 xl:col-span-4"
+              disabled={
+                submitting ||
+                searchingProduct
+              }
+              className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50 md:col-span-2 xl:col-span-4"
             >
               {submitting ? (
-                <Loader2 size={18} className="animate-spin" />
+                <Loader2
+                  size={18}
+                  className="animate-spin"
+                />
               ) : (
                 <Barcode size={18} />
               )}
 
               {submitting
                 ? "Generating..."
-                : Number(form.quantity) > 1
+                : Number(
+                      form.quantity
+                    ) > 1
                   ? `Generate ${form.quantity} Barcodes`
                   : "Generate Barcode"}
             </button>
           </form>
         </section>
 
-        {(error || successMessage) && (
+        {(error ||
+          successMessage) && (
           <div
             className={`flex items-center justify-between rounded-xl border px-4 py-3 text-xs ${
               error
@@ -364,9 +804,15 @@ export default function GenerateBarcodePage() {
                 : "border-emerald-200 bg-emerald-50 text-emerald-700"
             }`}
           >
-            <span>{error || successMessage}</span>
+            <span>
+              {error ||
+                successMessage}
+            </span>
 
-            <button type="button" onClick={clearMessages}>
+            <button
+              type="button"
+              onClick={clearMessages}
+            >
               <X size={16} />
             </button>
           </div>
@@ -402,7 +848,10 @@ export default function GenerateBarcodePage() {
   );
 }
 
-function Field({ label, children }) {
+function Field({
+  label,
+  children,
+}) {
   return (
     <label className="flex flex-col gap-2">
       <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-600">
