@@ -100,7 +100,7 @@ export default function WishlistSection({ firebaseUID, customerId }) {
     return `/category/${category}/${productName}/${id}`;
   };
 
-  const buildCanonicalUrl = (href) => `https://oatclub.com${href}`;
+  const buildCanonicalUrl = (href) => `https://oatclub.in${href}`;
 
   return (
     <div className={card}>
@@ -221,9 +221,9 @@ export default function WishlistSection({ firebaseUID, customerId }) {
                         target="_blank"
                         rel="noreferrer"
                         className="text-[11px] text-zinc-950 hover:text-zinc-700"
-                        title="Open on oatclub.com"
+                        title="Open on oatclub.in"
                       >
-                        oatclub.com
+                        oatclub.in
                       </a>
                     </div>
                   ) : (

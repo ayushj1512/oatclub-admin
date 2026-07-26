@@ -1096,6 +1096,66 @@ export const useOrderStore = create((set, get) => ({
     };
   },
 
+  /* ============================================================
+   APPLY COUPON AFTER ORDER PLACED
+============================================================ */
+
+  applyCouponAfterOrderPlaced: async (orderId, couponCode) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    const code = String(couponCode || "")
+      .trim()
+      .toUpperCase();
+
+    if (!code) {
+      throw new Error("Coupon code is required");
+    }
+
+    const data = await get()._post(
+      `/api/orders/${orderId}/apply-coupon-after-order`,
+      {
+        code,
+      },
+    );
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return data;
+  },
+
+  /* ============================================================
+   ADJUST FINAL PAYABLE
+============================================================ */
+
+  adjustOrderFinalPayable: async (orderId, payload = {}) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    const data = await get()._patch(
+      `/api/orders/${orderId}/adjust-final-payable`,
+      payload,
+    );
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return data;
+  },
+
   /* ---------------- DUPLICATE ORDER ALERTS ---------------- */
 
   // fetch only (no marking)

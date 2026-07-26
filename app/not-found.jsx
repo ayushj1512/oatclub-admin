@@ -37,10 +37,10 @@ export default function NotFound() {
                 <div className="mt-6 rounded-3xl border border-zinc-200 bg-oat-cream-soft p-4">
                   <p className="text-xs font-semibold text-oat-text">Need help?</p>
                   <a
-                    href="mailto:support@oatclub.com"
+                    href="mailto:support@oatclub.in"
                     className="text-sm text-oat-text hover:underline"
                   >
-                    support@oatclub.com
+                    support@oatclub.in
                   </a>
                 </div>
 

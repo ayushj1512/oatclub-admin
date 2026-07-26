@@ -29,8 +29,9 @@ import OrderConfirmationDetails from "@/components/orders/OrderConfirmationDetai
 import OrderSourceAttributionCard from "@/components/orders/OrderSourceAttributionCard";
 import OrderCouponDetails from "@/components/orders/OrderCouponDetails";
 import OrderPaymentDetails from "@/components/orders/OrderPaymentDetails";
+import OrderPayableAdjustmentCard from "@/components/orders/OrderPayableAdjustmentCard";
 const API = process.env.NEXT_PUBLIC_API_URL;
-const STORE_URL = "https://www.oatclub.com";
+const STORE_URL = "https://www.oatclub.in";
 
 const FULFILLMENT_OPTIONS = [
   { value: "processing", label: "Processing" },
@@ -166,13 +167,13 @@ export default function OrderDetailsClient({ id }) {
     setTrackingId(order.trackingDetails?.trackingId || "");
     setCourierName(order.trackingDetails?.courierName || "");
     setTrackingUrl(
-  order?.shipment?.shiprocket?.trackingUrl ||
-    order?.shipment?.xpressbees?.trackingUrl ||
-    order?.shipment?.bluedart?.trackingUrl ||
-    order?.shipment?.eshipz?.trackingUrl ||
-    order?.trackingDetails?.trackingUrl ||
-    ""
-);
+      order?.shipment?.shiprocket?.trackingUrl ||
+      order?.shipment?.xpressbees?.trackingUrl ||
+      order?.shipment?.bluedart?.trackingUrl ||
+      order?.shipment?.eshipz?.trackingUrl ||
+      order?.trackingDetails?.trackingUrl ||
+      ""
+    );
     setRemarks(order.adminRemarks || "");
   }, [order]);
 
@@ -412,7 +413,12 @@ export default function OrderDetailsClient({ id }) {
 
           <OrderCancellationDetails order={order} />
 
-       <OrderPaymentDetails order={order} />  
+          <OrderPaymentDetails order={order} />
+
+          <OrderPayableAdjustmentCard
+            order={order}
+            onRefresh={() => fetchOrderById(order._id)}
+          />
 
           <OrderCouponDetails order={order} />
 
@@ -503,13 +509,13 @@ export default function OrderDetailsClient({ id }) {
             trackingId={trackingId}
             courierName={courierName}
             trackingUrl={
-  order?.shipment?.shiprocket?.trackingUrl ||
-  order?.shipment?.xpressbees?.trackingUrl ||
-  order?.shipment?.bluedart?.trackingUrl ||
-  order?.shipment?.eshipz?.trackingUrl ||
-  order?.trackingDetails?.trackingUrl ||
-  ""
-}
+              order?.shipment?.shiprocket?.trackingUrl ||
+              order?.shipment?.xpressbees?.trackingUrl ||
+              order?.shipment?.bluedart?.trackingUrl ||
+              order?.shipment?.eshipz?.trackingUrl ||
+              order?.trackingDetails?.trackingUrl ||
+              ""
+            }
             onRefresh={() => fetchOrderById(order._id)}
           />
 
