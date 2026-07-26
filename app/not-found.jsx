@@ -40,7 +40,7 @@ export default function NotFound() {
                     href="mailto:support@oatclub.in"
                     className="text-sm text-oat-text hover:underline"
                   >
-                    support@oatclub.in
+                   hey@oatclub.in
                   </a>
                 </div>
 

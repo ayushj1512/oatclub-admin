@@ -318,4 +318,58 @@ fetchAddressesBoth: async ({ customerId, firebaseUID }) => {
   }
 },
 
+/* -------------------------------------------------------
+   FETCH ADDRESSES BY EMAIL
+   GET /api/addresses/email/:email
+------------------------------------------------------- */
+fetchAddressesByEmail: async (email) => {
+  const normalizedEmail = String(email || "")
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedEmail) return [];
+
+  set({ loading: true, error: "" });
+
+  try {
+    const res = await fetch(
+      `${API}/api/addresses/email/${encodeURIComponent(
+        normalizedEmail,
+      )}`,
+      {
+        cache: "no-store",
+      },
+    );
+
+    const data = await res.json();
+
+    if (!res.ok || data?.success === false) {
+      throw new Error(
+        data?.message || "Failed to fetch addresses",
+      );
+    }
+
+    const addresses = Array.isArray(data?.data)
+      ? data.data
+      : [];
+
+    set({ addresses });
+
+    return addresses;
+  } catch (err) {
+    console.error("❌ fetchAddressesByEmail:", err);
+
+    set({
+      addresses: [],
+      error:
+        err?.message ||
+        "Failed to load addresses",
+    });
+
+    return [];
+  } finally {
+    set({ loading: false });
+  }
+},
+
 }));

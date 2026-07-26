@@ -358,7 +358,7 @@ export default function BarcodeTag({
             </strong>
 
             <span>
-              support@oatclub.in · Made
+             hey@oatclub.in · Made
               in India
             </span>
           </footer>
