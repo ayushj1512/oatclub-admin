@@ -30,6 +30,8 @@ import OrderSourceAttributionCard from "@/components/orders/OrderSourceAttributi
 import OrderCouponDetails from "@/components/orders/OrderCouponDetails";
 import OrderPaymentDetails from "@/components/orders/OrderPaymentDetails";
 import OrderPayableAdjustmentCard from "@/components/orders/OrderPayableAdjustmentCard";
+import OrderCodPaymentCard from "@/components/orders/OrderCodPaymentCard";
+import OrderInfluencerCard from "@/components/orders/OrderInfluencerCard";
 const API = process.env.NEXT_PUBLIC_API_URL;
 const STORE_URL = "https://www.oatclub.in";
 
@@ -415,7 +417,16 @@ export default function OrderDetailsClient({ id }) {
 
           <OrderPaymentDetails order={order} />
 
+          <OrderCodPaymentCard
+            order={order}
+            onRefresh={() => fetchOrderById(order._id)}
+          />
           <OrderPayableAdjustmentCard
+            order={order}
+            onRefresh={() => fetchOrderById(order._id)}
+          />
+
+          <OrderInfluencerCard
             order={order}
             onRefresh={() => fetchOrderById(order._id)}
           />

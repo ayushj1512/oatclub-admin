@@ -30,7 +30,12 @@ const normalizePaymentMethod = (v) => {
   const pm = String(v ?? "")
     .trim()
     .toLowerCase();
-  return ["cod", "razorpay", "wallet", "exchange"].includes(pm) ? pm : "";
+
+  return ["cod", "razorpay", "wallet", "exchange", "manual_prepaid"].includes(
+    pm,
+  )
+    ? pm
+    : "";
 };
 
 const buildQueryString = (filters = {}) => {
@@ -629,6 +634,22 @@ export const useOrderStore = create((set, get) => ({
     });
   },
 
+  // ✅ INFLUENCER ORDERS
+  fetchInfluencerOrders: async (filters = {}) => {
+    return get().fetchAllOrders({
+      ...(filters || {}),
+      isInfluencerOrder: true,
+    });
+  },
+
+  // ✅ NORMAL / NON-INFLUENCER ORDERS
+  fetchNonInfluencerOrders: async (filters = {}) => {
+    return get().fetchAllOrders({
+      ...(filters || {}),
+      isInfluencerOrder: false,
+    });
+  },
+
   fetchNextOrdersPage: async (filters = {}) => {
     const currMeta = get().ordersMeta;
     const nextPage = Math.max(
@@ -818,6 +839,24 @@ export const useOrderStore = create((set, get) => ({
     return order;
   },
 
+  markCodOrderAsPaid: async (orderId) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    const data = await get()._patch(`/api/orders/${orderId}/mark-cod-paid`, {});
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return order;
+  },
+
   updateTracking: async (orderId, payload) => {
     if (!orderId) return null;
 
@@ -827,6 +866,30 @@ export const useOrderStore = create((set, get) => ({
     set({ order });
     get()._syncOrderInList(order);
     get()._syncCustomerSupportDetail(order);
+
+    return order;
+  },
+
+  markOrderAsInfluencer: async (orderId, isInfluencerOrder = true) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    if (typeof isInfluencerOrder !== "boolean") {
+      throw new Error("isInfluencerOrder must be a boolean");
+    }
+
+    const data = await get()._patch(`/api/orders/${orderId}/influencer-order`, {
+      isInfluencerOrder,
+    });
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
 
     return order;
   },

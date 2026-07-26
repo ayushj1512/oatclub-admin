@@ -168,6 +168,12 @@ function OrderRow({ order, onUpdated }) {
               </span>
             )}
 
+            {order?.isInfluencerOrder && (
+              <span className="inline-flex rounded-md border border-pink-200 bg-pink-50 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-pink-700">
+                Influencer
+              </span>
+            )}
+
             <OrderPriorityDropdown
               orderId={orderId}
               currentPriority={order?.priority}
@@ -293,16 +299,16 @@ function OrderRow({ order, onUpdated }) {
                       const variantText =
                         size || color
                           ? [
-                              size ? `Size: ${size}` : "",
-                              color ? `Color: ${color}` : "",
-                            ]
-                              .filter(Boolean)
-                              .join(" • ")
+                            size ? `Size: ${size}` : "",
+                            color ? `Color: ${color}` : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" • ")
                           : Array.isArray(variant?.attributes)
                             ? variant.attributes
-                                .map((a) => `${a?.key}:${a?.value}`)
-                                .filter(Boolean)
-                                .join(", ")
+                              .map((a) => `${a?.key}:${a?.value}`)
+                              .filter(Boolean)
+                              .join(", ")
                             : "";
 
                       return (

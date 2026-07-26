@@ -319,6 +319,7 @@ export const sidebarMenus = {
     },
     { label: "Confirmed Orders", href: "/orders/confirmed-orders" },
     { label: "Unconfirmed Orders", href: "/orders/unconfirmed-orders" },
+    { label: "Influencer Orders", href: "/orders/influencer-orders" },
     {
       label: "WhatsApp Confirmations",
       href: "/orders/unconfirmed-order-whatsappmessage",

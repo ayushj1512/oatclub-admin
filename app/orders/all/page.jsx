@@ -176,8 +176,8 @@ function PaginationBar({
             onClick={onRefresh}
             disabled={loading}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${loading
-                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
+              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+              : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
               }`}
           >
             {loading ? (
@@ -194,8 +194,8 @@ function PaginationBar({
             disabled={!canGoPrev || loading}
             onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoPrev || loading
-                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
+              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+              : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
               }`}
           >
             <ChevronLeft size={16} />
@@ -206,8 +206,8 @@ function PaginationBar({
             disabled={!canGoNext || loading}
             onClick={() => onPageChange(Math.min(currentPage + 1, totalPages))}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoNext || loading
-                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
+              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+              : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
               }`}
           >
             Next
@@ -231,10 +231,10 @@ function PaginationBar({
               onClick={() => onPageChange(item)}
               disabled={loading}
               className={`min-w-[42px] px-3 py-2 rounded-xl text-sm font-semibold transition ${currentPage === item
-                  ? "bg-black text-white shadow-sm"
-                  : loading
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
-                    : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                ? "bg-black text-white shadow-sm"
+                : loading
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                  : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
                 }`}
             >
               {item}
@@ -247,9 +247,15 @@ function PaginationBar({
 }
 
 
+// ============================================================
+// 9. OPTIONAL CLIENT FILTER SAFETY
+// Update applyClientFiltersToOrders arguments
+// ============================================================
+
 const applyClientFiltersToOrders = ({
   orders,
   confirmFilter,
+  influencerFilter,
   priority,
   search,
 }) => {
@@ -263,23 +269,44 @@ const applyClientFiltersToOrders = ({
     data = data.filter((o) => o?.isConfirmed !== true);
   }
 
+  if (influencerFilter === "true") {
+    data = data.filter((o) => o?.isInfluencerOrder === true);
+  }
+
+  if (influencerFilter === "false") {
+    data = data.filter((o) => o?.isInfluencerOrder !== true);
+  }
+
   if (priority) {
-    data = data.filter((o) => norm(o?.priority) === norm(priority));
+    data = data.filter(
+      (o) => norm(o?.priority) === norm(priority),
+    );
   }
 
   const q = String(search || "").trim().toLowerCase();
   if (!q) return data;
 
   return data.filter((o) => {
-    const orderNumber = String(o?.orderNumber || "").toLowerCase();
+    const orderNumber = String(
+      o?.orderNumber || "",
+    ).toLowerCase();
+
     const name = String(
-      o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
+      o?.customerId?.name ||
+      o?.shippingAddressSnapshot?.fullName ||
+      "",
     ).toLowerCase();
+
     const email = String(
-      o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
+      o?.customerId?.email ||
+      o?.shippingAddressSnapshot?.email ||
+      "",
     ).toLowerCase();
+
     const phone = String(
-      o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
+      o?.customerId?.phone ||
+      o?.shippingAddressSnapshot?.phone ||
+      "",
     ).toLowerCase();
 
     return (
@@ -322,12 +349,13 @@ export default function OrdersListPage() {
   // Priority + quick date
   const [priority, setPriority] = useState("");
   const [quickDate, setQuickDate] = useState("");
+  const [influencerFilter, setInfluencerFilter] = useState("");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 100;
 
-    // ✅ Update only changed order in list, avoid full page refresh feel
+  // ✅ Update only changed order in list, avoid full page refresh feel
   const handleOrderUpdated = useCallback(
     (updatedOrder) => {
       if (!updatedOrder?._id) return;
@@ -354,13 +382,14 @@ export default function OrdersListPage() {
     setPriority("");
     setQuickDate("");
     setCurrentPage(1);
+    setInfluencerFilter("");
   }, []);
 
   useEffect(() => {
     if (quickDate === "today") {
       const t = todayYMD_IST();
       setStartDate(t);
-    setEndDate(t);
+      setEndDate(t);
       return;
     }
 
@@ -401,6 +430,9 @@ export default function OrdersListPage() {
     if (status) f.fulfillmentStatus = status;
     if (confirmFilter) f.confirmFilter = confirmFilter;
     if (priority) f.priority = priority;
+    if (influencerFilter !== "") {
+      f.isInfluencerOrder = influencerFilter;
+    }
 
     f.page = currentPage;
     f.limit = pageSize;
@@ -415,19 +447,20 @@ export default function OrdersListPage() {
     paymentMethod,
     status,
     confirmFilter,
+    influencerFilter,
     priority,
     currentPage,
   ]);
 
- const loadOrders = useCallback(async () => {
-  try {
-    await fetchAllOrders(backendFilters);
-  } catch (e) {
-    console.log("Orders Fetch Error:", e);
-  } finally {
-    setHasLoadedOnce(true);
-  }
-}, [fetchAllOrders, backendFilters]);
+  const loadOrders = useCallback(async () => {
+    try {
+      await fetchAllOrders(backendFilters);
+    } catch (e) {
+      console.log("Orders Fetch Error:", e);
+    } finally {
+      setHasLoadedOnce(true);
+    }
+  }, [fetchAllOrders, backendFilters]);
 
   useEffect(() => {
     loadOrders();
@@ -437,10 +470,17 @@ export default function OrdersListPage() {
     return applyClientFiltersToOrders({
       orders,
       confirmFilter,
+      influencerFilter,
       priority,
       search,
     });
-  }, [orders, confirmFilter, priority, search]);
+  }, [
+    orders,
+    confirmFilter,
+    influencerFilter,
+    priority,
+    search,
+  ]);
 
   const totalRevenue = useMemo(() => {
     return filteredOrders.reduce((sum, order) => {
@@ -448,7 +488,7 @@ export default function OrdersListPage() {
     }, 0);
   }, [filteredOrders]);
 
-    // ✅ stable sorted list so table work stays neat
+  // ✅ stable sorted list so table work stays neat
   const sortedOrders = useMemo(() => {
     const getNum = (o) => {
       const m = String(o?.orderNumber || "").match(/(\d+)$/);
@@ -620,9 +660,15 @@ export default function OrdersListPage() {
 
       const uniqueOrders = Array.from(uniqueOrdersMap.values());
 
+      // ============================================================
+      // 11. CSV EXPORT CLIENT FILTER
+      // Add influencerFilter here too
+      // ============================================================
+
       const exportOrders = applyClientFiltersToOrders({
         orders: uniqueOrders,
         confirmFilter,
+        influencerFilter,
         priority,
         search,
       });
@@ -725,6 +771,7 @@ export default function OrdersListPage() {
     backendFilters,
     fetchAllOrders,
     confirmFilter,
+    influencerFilter,
     priority,
     search,
   ]);
@@ -755,6 +802,8 @@ export default function OrdersListPage() {
     { key: "high", label: "Priority: High", type: "priority" },
     { key: "today", label: "Today", type: "quickDate" },
     { key: "yesterday", label: "Yesterday", type: "quickDate" },
+    { key: "true", label: "Influencer Orders", type: "influencer" },
+    { key: "false", label: "Normal Orders", type: "influencer" }
   ];
 
   return (
@@ -816,8 +865,8 @@ export default function OrdersListPage() {
               onClick={exportToCSV}
               disabled={exportLoading || loading}
               className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold shadow-sm active:scale-[0.98] transition ${exportLoading || loading
-                  ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                  : "bg-black text-white hover:opacity-90"
+                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                : "bg-black text-white hover:opacity-90"
                 }`}
             >
               {exportLoading ? (
@@ -958,7 +1007,26 @@ export default function OrdersListPage() {
                 <option value="not_confirmed">Not Confirmed</option>
               </select>
             </div>
+                
 
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Influencer Order
+              </label>
+
+              <select
+                className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 outline-none transition focus:ring-2 focus:ring-black/10"
+                value={influencerFilter}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setInfluencerFilter(e.target.value);
+                }}
+              >
+                <option value="">All Orders</option>
+                <option value="true">Influencer Orders</option>
+                <option value="false">Normal Orders</option>
+              </select>
+            </div>
             <div>
               <label className="text-sm font-semibold text-gray-700">
                 Priority
@@ -996,19 +1064,27 @@ export default function OrdersListPage() {
 
           <div className="mt-6 flex flex-wrap gap-2">
             {chips.map((s) => {
+              // ============================================================
+              // 7. UPDATE isActive LOGIC
+              // Replace current isActive block with this
+              // ============================================================
+
               const isActive =
                 s.type === "status"
                   ? status === s.key
                   : s.type === "confirm"
                     ? confirmFilter === s.key
-                    : s.type === "priority"
-                      ? priority === s.key
-                      : s.type === "quickDate"
-                        ? quickDate === s.key
-                        : status === "" &&
-                        confirmFilter === "" &&
-                        priority === "" &&
-                        quickDate === "";
+                    : s.type === "influencer"
+                      ? influencerFilter === s.key
+                      : s.type === "priority"
+                        ? priority === s.key
+                        : s.type === "quickDate"
+                          ? quickDate === s.key
+                          : status === "" &&
+                          confirmFilter === "" &&
+                          influencerFilter === "" &&
+                          priority === "" &&
+                          quickDate === "";
 
               const onClick = () => {
                 setCurrentPage(1);
@@ -1028,7 +1104,11 @@ export default function OrdersListPage() {
                 if (s.type === "confirm") {
                   setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
                 }
-
+                if (s.type === "influencer") {
+                  setInfluencerFilter((prev) =>
+                    prev === s.key ? "" : s.key,
+                  );
+                }
                 if (s.type === "priority") {
                   setPriority((prev) => (prev === s.key ? "" : s.key));
                 }
@@ -1043,8 +1123,8 @@ export default function OrdersListPage() {
                   key={`${s.type}-${s.key || "all"}`}
                   onClick={onClick}
                   className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${isActive
-                      ? "bg-black text-white shadow-sm"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-black text-white shadow-sm"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                 >
                   {s.label}
@@ -1069,60 +1149,60 @@ export default function OrdersListPage() {
         </Card>
 
         {/* Table */}
-      {/* Table */}
-<div className="overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-black/[0.04]">
-  <div className="overflow-x-auto">
-    <table className="w-full min-w-[1180px] text-sm">
-      <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-        <tr>
-          <th className="px-5 py-4 text-left font-semibold">Order</th>
-          <th className="px-5 py-4 text-left font-semibold">Customer</th>
-          <th className="px-5 py-4 text-left font-semibold">Payment Status</th>
-          <th className="px-5 py-4 text-left font-semibold">Method</th>
-          <th className="px-5 py-4 text-left font-semibold">Fulfillment</th>
-          <th className="px-5 py-4 text-left font-semibold">Amount</th>
-          <th className="px-5 py-4 text-left font-semibold">Date</th>
-          <th className="px-5 py-4 text-right font-semibold">Actions</th>
-        </tr>
-      </thead>
+        {/* Table */}
+        <div className="overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-black/[0.04]">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1180px] text-sm">
+              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-5 py-4 text-left font-semibold">Order</th>
+                  <th className="px-5 py-4 text-left font-semibold">Customer</th>
+                  <th className="px-5 py-4 text-left font-semibold">Payment Status</th>
+                  <th className="px-5 py-4 text-left font-semibold">Method</th>
+                  <th className="px-5 py-4 text-left font-semibold">Fulfillment</th>
+                  <th className="px-5 py-4 text-left font-semibold">Amount</th>
+                  <th className="px-5 py-4 text-left font-semibold">Date</th>
+                  <th className="px-5 py-4 text-right font-semibold">Actions</th>
+                </tr>
+              </thead>
 
-      <tbody className="divide-y divide-gray-100">
-        {loading && !hasLoadedOnce ? (
-          <tr>
-            <td colSpan={8} className="py-14 text-center text-gray-500">
-              <div className="inline-flex items-center gap-2">
-                <Loader2 size={18} className="animate-spin" />
-                Loading orders...
-              </div>
-            </td>
-          </tr>
-        ) : sortedOrders.length ? (
-          sortedOrders.map((order, idx) => {
-            const rowKey =
-              order?._id ||
-              order?.id ||
-              order?.orderNumber ||
-              `order-${idx}`;
+              <tbody className="divide-y divide-gray-100">
+                {loading && !hasLoadedOnce ? (
+                  <tr>
+                    <td colSpan={8} className="py-14 text-center text-gray-500">
+                      <div className="inline-flex items-center gap-2">
+                        <Loader2 size={18} className="animate-spin" />
+                        Loading orders...
+                      </div>
+                    </td>
+                  </tr>
+                ) : sortedOrders.length ? (
+                  sortedOrders.map((order, idx) => {
+                    const rowKey =
+                      order?._id ||
+                      order?.id ||
+                      order?.orderNumber ||
+                      `order-${idx}`;
 
-            return (
-              <OrderRow
-                key={String(rowKey)}
-                order={order}
-                onUpdated={handleOrderUpdated}
-              />
-            );
-          })
-        ) : (
-          <tr>
-            <td colSpan={8} className="py-12 text-center text-gray-500">
-              No orders found for applied filters.
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  </div>
-</div>
+                    return (
+                      <OrderRow
+                        key={String(rowKey)}
+                        order={order}
+                        onUpdated={handleOrderUpdated}
+                      />
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-gray-500">
+                      No orders found for applied filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
         {/* Bottom Pagination */}
         <Card>
