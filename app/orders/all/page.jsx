@@ -1186,10 +1186,11 @@ export default function OrdersListPage() {
 
                     return (
                       <OrderRow
-                        key={String(rowKey)}
-                        order={order}
-                        onUpdated={handleOrderUpdated}
-                      />
+  key={String(rowKey)}
+  order={order}
+  onUpdated={handleOrderUpdated}
+  openActionsUp={idx >= sortedOrders.length - 2}
+/>
                     );
                   })
                 ) : (

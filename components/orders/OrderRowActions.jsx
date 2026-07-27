@@ -1,28 +1,53 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import {
   AlertCircle,
   BadgeCheck,
+  CheckCircle2,
+  Download,
   Loader2,
   Megaphone,
   MoreVertical,
+  PackageOpen,
   Printer,
   RefreshCw,
+  Truck,
 } from "lucide-react";
+
 import { toast } from "react-hot-toast";
 import { useReactToPrint } from "react-to-print";
 
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { useOrderStore } from "@/store/orderStore";
+import { useShiprocketStore } from "@/store/ShipRocketStore";
 
 const safe = (value) => String(value ?? "").trim();
+
+const getShippingLabelUrl = (order) =>
+  safe(
+    order?.shipment?.shiprocket?.labelUrl ||
+    order?.shipment?.shiprocket?.label_url ||
+    order?.shipment?.labelUrl ||
+    order?.shipment?.label_url ||
+    order?.shippingLabelUrl ||
+    order?.labelUrl ||
+    order?.trackingDetails?.labelUrl
+  );
 
 export default function OrderRowActions({
   order,
   courierName = "",
   trackingId = "",
   onRefresh,
+  onUpdated,
+  openUp = false,
 }) {
   const menuRef = useRef(null);
   const invoiceRef = useRef(null);
@@ -39,31 +64,65 @@ export default function OrderRowActions({
     (state) => state.markOrderAsInfluencer
   );
 
+  const confirmOrder = useOrderStore(
+    (state) => state.confirmOrder
+  );
+
+  const syncTracking = useShiprocketStore(
+    (state) => state.syncTracking
+  );
+
   const [open, setOpen] = useState(false);
   const [invoice, setInvoice] = useState(null);
+  const [error, setError] = useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [updatingInfluencer, setUpdatingInfluencer] =
+  const [invoiceLoading, setInvoiceLoading] =
     useState(false);
 
-  const [error, setError] = useState("");
-  const [pendingPrint, setPendingPrint] = useState(false);
+  const [confirmLoading, setConfirmLoading] =
+    useState(false);
 
-  const [isInfluencerOrder, setIsInfluencerOrder] = useState(
-    order?.isInfluencerOrder === true
+  const [
+    influencerLoading,
+    setInfluencerLoading,
+  ] = useState(false);
+
+  const [syncing, setSyncing] = useState(false);
+
+  const [pendingInvoiceAction, setPendingInvoiceAction] =
+    useState(null);
+
+  const [isConfirmed, setIsConfirmed] = useState(
+    order?.isConfirmed === true
   );
+
+  const [isInfluencerOrder, setIsInfluencerOrder] =
+    useState(order?.isInfluencerOrder === true);
 
   const orderId = safe(order?._id || order?.id);
   const orderNumber = safe(order?.orderNumber);
-  const printTitle = orderNumber || orderId || "order";
+
+  const invoiceTitle =
+    orderNumber || orderId || "order";
+
+  const shippingLabelUrl = getShippingLabelUrl(order);
+  const hasShippingLabel = Boolean(shippingLabelUrl);
 
   useEffect(() => {
-    setIsInfluencerOrder(order?.isInfluencerOrder === true);
+    setIsConfirmed(order?.isConfirmed === true);
+  }, [order?.isConfirmed]);
+
+  useEffect(() => {
+    setIsInfluencerOrder(
+      order?.isInfluencerOrder === true
+    );
   }, [order?.isInfluencerOrder]);
 
   const printInvoice = useReactToPrint({
     contentRef: invoiceRef,
-    documentTitle: `Invoice-${printTitle}`,
+
+    documentTitle: `Invoice-${invoiceTitle}`,
+
     pageStyle: `
       @page {
         size: A4;
@@ -75,7 +134,7 @@ export default function OrderRowActions({
         body {
           margin: 0;
           padding: 0;
-          background: white;
+          background: #ffffff;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
@@ -85,19 +144,26 @@ export default function OrderRowActions({
 
   const loadInvoice = useCallback(async () => {
     if (!orderNumber && !orderId) {
-      throw new Error("Order number or order ID is missing.");
+      throw new Error(
+        "Order number or order ID is missing."
+      );
     }
 
     const result = orderNumber
-      ? await fetchInvoiceByOrderNumber(orderNumber, {
+      ? await fetchInvoiceByOrderNumber(
+        orderNumber,
+        {
           silent: true,
-        })
+        }
+      )
       : await fetchInvoiceByOrderId(orderId, {
-          silent: true,
-        });
+        silent: true,
+      });
 
     if (!result) {
-      throw new Error("Backend did not return invoice data.");
+      throw new Error(
+        "Backend did not return invoice data."
+      );
     }
 
     return {
@@ -140,42 +206,127 @@ export default function OrderRowActions({
     fetchInvoiceByOrderId,
   ]);
 
-  const handlePrint = async () => {
+  const prepareInvoice = async (action) => {
+    if (invoiceLoading) return;
+
     setOpen(false);
-    setLoading(true);
     setError("");
+    setInvoiceLoading(true);
 
     try {
       const result = await loadInvoice();
 
       setInvoice(result);
-      setPendingPrint(true);
+      setPendingInvoiceAction(action);
     } catch (fetchError) {
       console.error(
         "OrderRowActions invoice error:",
         fetchError
       );
 
-      setError(
-        fetchError?.message || "Failed to load invoice."
+      const message =
+        fetchError?.message ||
+        "Failed to load invoice.";
+
+      setError(message);
+      toast.error(message);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
+  const handlePrintInvoice = () => {
+    prepareInvoice("print");
+  };
+
+  const handleDownloadInvoice = () => {
+    prepareInvoice("download");
+  };
+
+  useEffect(() => {
+    if (!invoice || !pendingInvoiceAction) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      printInvoice?.();
+
+      if (pendingInvoiceAction === "download") {
+        toast.success(
+          "Select “Save as PDF” to download the invoice"
+        );
+      }
+
+      setPendingInvoiceAction(null);
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    invoice,
+    pendingInvoiceAction,
+    printInvoice,
+  ]);
+
+  const handleConfirmOrder = async () => {
+    if (
+      !orderId ||
+      confirmLoading ||
+      isConfirmed
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Confirm order ${orderNumber || ""}?`
+    );
+
+    if (!confirmed) return;
+
+    setOpen(false);
+    setConfirmLoading(true);
+
+    const previousValue = isConfirmed;
+
+    setIsConfirmed(true);
+
+    try {
+      await confirmOrder(orderId);
+
+      toast.success("Order confirmed successfully");
+
+      await onRefresh?.();
+    } catch (confirmError) {
+      console.error(
+        "Order confirmation error:",
+        confirmError
+      );
+
+      setIsConfirmed(previousValue);
+
+      toast.error(
+        confirmError?.message ||
+        "Failed to confirm order"
       );
     } finally {
-      setLoading(false);
+      setConfirmLoading(false);
     }
   };
 
   const handleInfluencerToggle = async () => {
-    if (!orderId || updatingInfluencer) return;
+    if (!orderId || influencerLoading) return;
 
     const previousValue = isInfluencerOrder;
     const nextValue = !previousValue;
 
     setOpen(false);
-    setUpdatingInfluencer(true);
+    setInfluencerLoading(true);
     setIsInfluencerOrder(nextValue);
 
     try {
-      await markOrderAsInfluencer(orderId, nextValue);
+      await markOrderAsInfluencer(
+        orderId,
+        nextValue
+      );
 
       toast.success(
         nextValue
@@ -186,7 +337,7 @@ export default function OrderRowActions({
       await onRefresh?.();
     } catch (updateError) {
       console.error(
-        "OrderRowActions influencer update error:",
+        "Influencer order update error:",
         updateError
       );
 
@@ -194,23 +345,81 @@ export default function OrderRowActions({
 
       toast.error(
         updateError?.message ||
-          "Failed to update influencer order"
+        "Failed to update influencer order"
       );
     } finally {
-      setUpdatingInfluencer(false);
+      setInfluencerLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (!pendingPrint || !invoice) return undefined;
+  const handleSyncOrder = async () => {
+    if ((!orderId && !orderNumber) || syncing) return;
 
-    const timer = window.setTimeout(() => {
-      printInvoice?.();
-      setPendingPrint(false);
-    }, 120);
+    setOpen(false);
+    setSyncing(true);
 
-    return () => window.clearTimeout(timer);
-  }, [pendingPrint, invoice, printInvoice]);
+    try {
+      const result = await syncTracking({
+        orderId,
+        orderNumber,
+      });
+
+      const updatedOrder =
+        result?.order ||
+        result?.data?.order ||
+        result?.updatedOrder ||
+        null;
+
+      if (updatedOrder) {
+        onUpdated?.(updatedOrder);
+      }
+
+      toast.success("Order tracking synced");
+
+      await onRefresh?.();
+    } catch (syncError) {
+      console.error(
+        "Order tracking sync error:",
+        syncError
+      );
+
+      toast.error(
+        syncError?.message ||
+        "Failed to sync order tracking"
+      );
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handlePrintShippingLabel = () => {
+    if (!hasShippingLabel) return;
+
+    window.open(
+      shippingLabelUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+    setOpen(false);
+  };
+
+  const handleDownloadShippingLabel = () => {
+    if (!hasShippingLabel) return;
+
+    const anchor = document.createElement("a");
+    anchor.href = shippingLabelUrl;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.download = `Shipping-Label-${orderNumber || orderId || "order"
+      }.pdf`;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    setOpen(false);
+  };
 
   useEffect(() => {
     const handleOutsideClick = (event) => {
@@ -253,17 +462,26 @@ export default function OrderRowActions({
 
   if (!order) return null;
 
-  const isBusy = loading || updatingInfluencer;
+  const isBusy =
+    invoiceLoading ||
+    confirmLoading ||
+    influencerLoading ||
+    syncing;
 
   return (
     <>
-      <div ref={menuRef} className="relative">
+      <div
+        ref={menuRef}
+        className="relative"
+      >
         <button
           type="button"
-          onClick={() => setOpen((current) => !current)}
+          onClick={() =>
+            setOpen((current) => !current)
+          }
           disabled={isBusy}
           title="Order actions"
-          className="inline-flex items-center justify-center rounded-lg p-2 text-zinc-700 transition hover:bg-black/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isBusy ? (
             <Loader2
@@ -276,30 +494,248 @@ export default function OrderRowActions({
         </button>
 
         {open && (
-          <div className="absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg">
+          <div
+            className={`absolute right-0 z-50 w-64 overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-xl ${openUp
+                ? "bottom-full mb-2"
+                : "top-full mt-2"
+              }`}
+          >            {/* Confirm Order */}
+
             <button
               type="button"
-              onClick={handlePrint}
-              disabled={isBusy}
-              className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-xs font-bold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleConfirmOrder}
+              disabled={
+                isBusy ||
+                !orderId ||
+                isConfirmed
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? (
+              <div className="flex items-center gap-3">
+                {confirmLoading ? (
+                  <Loader2
+                    size={15}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <CheckCircle2
+                    size={15}
+                    className={
+                      isConfirmed
+                        ? "text-emerald-600"
+                        : "text-zinc-600"
+                    }
+                  />
+                )}
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    {isConfirmed
+                      ? "Order Confirmed"
+                      : "Confirm Order"}
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {isConfirmed
+                      ? "Customer order is confirmed"
+                      : "Approve order for processing"}
+                  </div>
+                </div>
+              </div>
+
+              {isConfirmed && (
+                <span className="rounded-full bg-emerald-100 px-2 py-1 text-[9px] font-bold text-emerald-700">
+                  DONE
+                </span>
+              )}
+            </button>
+
+            <MenuDivider />
+
+            {/* Print Invoice */}
+
+            <button
+              type="button"
+              onClick={handlePrintInvoice}
+              disabled={isBusy}
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {invoiceLoading &&
+                pendingInvoiceAction === "print" ? (
                 <Loader2
                   size={15}
                   className="animate-spin"
                 />
               ) : (
-                <Printer size={15} />
+                <Printer
+                  size={15}
+                  className="text-zinc-600"
+                />
               )}
 
-              <span>
-                {loading
-                  ? "Preparing..."
-                  : "Print Invoice"}
-              </span>
+              <div>
+                <div className="text-xs font-bold text-zinc-800">
+                  Print Invoice
+                </div>
+
+                <div className="mt-0.5 text-[10px] text-zinc-500">
+                  Open printable invoice
+                </div>
+              </div>
             </button>
 
-            <div className="h-px bg-zinc-100" />
+            {/* Download Invoice */}
+
+            <button
+              type="button"
+              onClick={handleDownloadInvoice}
+              disabled={isBusy}
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {invoiceLoading &&
+                pendingInvoiceAction ===
+                "download" ? (
+                <Loader2
+                  size={15}
+                  className="animate-spin"
+                />
+              ) : (
+                <Download
+                  size={15}
+                  className="text-zinc-600"
+                />
+              )}
+
+              <div>
+                <div className="text-xs font-bold text-zinc-800">
+                  Download Invoice
+                </div>
+
+                <div className="mt-0.5 text-[10px] text-zinc-500">
+                  Save invoice as PDF
+                </div>
+              </div>
+            </button>
+
+            <MenuDivider />
+
+            {/* Sync Order */}
+
+            <button
+              type="button"
+              onClick={handleSyncOrder}
+              disabled={
+                isBusy ||
+                (!orderId && !orderNumber)
+              }
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {syncing ? (
+                <Loader2
+                  size={15}
+                  className="animate-spin"
+                />
+              ) : (
+                <RefreshCw
+                  size={15}
+                  className="text-zinc-600"
+                />
+              )}
+
+              <div>
+                <div className="text-xs font-bold text-zinc-800">
+                  {syncing
+                    ? "Syncing Order..."
+                    : "Sync Order"}
+                </div>
+
+                <div className="mt-0.5 text-[10px] text-zinc-500">
+                  Refresh Shiprocket tracking
+                </div>
+              </div>
+            </button>
+
+            {/* Print Shipping Label */}
+
+            <button
+              type="button"
+              onClick={handlePrintShippingLabel}
+              disabled={isBusy || !hasShippingLabel}
+              title={
+                hasShippingLabel
+                  ? "Open shipping label for printing"
+                  : "Shipping label is not available"
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                <Truck
+                  size={15}
+                  className="text-zinc-600"
+                />
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    Print Shipping Label
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {hasShippingLabel
+                      ? "Open label in a new tab"
+                      : "Label not generated"}
+                  </div>
+                </div>
+              </div>
+
+              {!hasShippingLabel && (
+                <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
+                  UNAVAILABLE
+                </span>
+              )}
+            </button>
+
+            {/* Download Shipping Label */}
+
+            <button
+              type="button"
+              onClick={handleDownloadShippingLabel}
+              disabled={isBusy || !hasShippingLabel}
+              title={
+                hasShippingLabel
+                  ? "Download shipping label"
+                  : "Shipping label is not available"
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                <PackageOpen
+                  size={15}
+                  className="text-zinc-600"
+                />
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    Download Shipping Label
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {hasShippingLabel
+                      ? "Download courier label"
+                      : "Label not generated"}
+                  </div>
+                </div>
+              </div>
+
+              {!hasShippingLabel && (
+                <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
+                  UNAVAILABLE
+                </span>
+              )}
+            </button>
+
+            <MenuDivider />
+
+            {/* Influencer */}
 
             <button
               type="button"
@@ -308,15 +744,15 @@ export default function OrderRowActions({
               className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <div className="flex items-center gap-3">
-                {updatingInfluencer ? (
+                {influencerLoading ? (
                   <Loader2
                     size={15}
-                    className="animate-spin text-zinc-600"
+                    className="animate-spin"
                   />
                 ) : isInfluencerOrder ? (
                   <BadgeCheck
                     size={15}
-                    className="text-green-600"
+                    className="text-emerald-600"
                   />
                 ) : (
                   <Megaphone
@@ -332,7 +768,7 @@ export default function OrderRowActions({
                       : "Mark as Influencer"}
                   </div>
 
-                  <div className="mt-0.5 text-[10px] font-medium text-zinc-500">
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
                     {isInfluencerOrder
                       ? "Include in normal reports"
                       : "Exclude from reconciliation"}
@@ -341,20 +777,21 @@ export default function OrderRowActions({
               </div>
 
               <span
-                className={`rounded-full px-2 py-1 text-[9px] font-bold ${
-                  isInfluencerOrder
-                    ? "bg-black text-white"
-                    : "bg-zinc-100 text-zinc-500"
-                }`}
+                className={`rounded-full px-2 py-1 text-[9px] font-bold ${isInfluencerOrder
+                  ? "bg-black text-white"
+                  : "bg-zinc-100 text-zinc-500"
+                  }`}
               >
-                {isInfluencerOrder ? "ACTIVE" : "OFF"}
+                {isInfluencerOrder
+                  ? "ACTIVE"
+                  : "OFF"}
               </span>
             </button>
           </div>
         )}
 
         {error && (
-          <div className="absolute right-0 z-50 mt-2 w-64 rounded-xl border border-red-200 bg-red-50 p-3 shadow-lg">
+          <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-red-200 bg-red-50 p-3 shadow-lg">
             <div className="flex items-start gap-2 text-xs text-red-800">
               <AlertCircle
                 size={15}
@@ -364,31 +801,41 @@ export default function OrderRowActions({
               <div className="min-w-0 flex-1">
                 <div>{error}</div>
 
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="mt-2 inline-flex items-center gap-1 font-bold hover:underline"
-                >
-                  <RefreshCw size={12} />
-                  Retry
-                </button>
+                <div className="mt-2 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handlePrintInvoice}
+                    className="inline-flex items-center gap-1 font-bold hover:underline"
+                  >
+                    <RefreshCw size={12} />
+                    Retry
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setError("")}
+                    className="font-bold hover:underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         )}
       </div>
 
+      {/* Printable invoice */}
+
       <div
         aria-hidden="true"
         style={{
           position: "fixed",
-          left: "-200vw",
+          left: "-100000px",
           top: 0,
           width: "210mm",
-          height: 0,
-          overflow: "hidden",
-          pointerEvents: "none",
           background: "#ffffff",
+          pointerEvents: "none",
         }}
       >
         <div
@@ -404,5 +851,11 @@ export default function OrderRowActions({
         </div>
       </div>
     </>
+  );
+}
+
+function MenuDivider() {
+  return (
+    <div className="mx-3 my-1 h-px bg-zinc-100" />
   );
 }

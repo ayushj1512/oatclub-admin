@@ -73,7 +73,7 @@ const paymentMethodMeta = (method) => {
   };
 };
 
-function OrderRow({ order, onUpdated }) {
+function OrderRow({ order, onUpdated, openActionsUp = false, }) {
   const [open, setOpen] = useState(false);
 
   const items = useMemo(
@@ -259,6 +259,8 @@ function OrderRow({ order, onUpdated }) {
                 order?.trackingDetails?.trackingId ||
                 ""
               }
+              openUp={openActionsUp}
+              onUpdated={handleUpdated}
             />
           </div>
         </td>
@@ -401,5 +403,9 @@ function OrderRow({ order, onUpdated }) {
 }
 
 export default memo(OrderRow, (prev, next) => {
-  return prev.order === next.order && prev.onUpdated === next.onUpdated;
+  return (
+    prev.order === next.order &&
+    prev.onUpdated === next.onUpdated &&
+    prev.openActionsUp === next.openActionsUp
+  );
 });
