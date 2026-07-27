@@ -181,6 +181,9 @@ export default function InvoiceTemplate({ data }) {
             </p>
 
             {seller.address ? <p>{seller.address}</p> : null}
+            {seller.addressLine2 ? (
+              <p>{seller.addressLine2}</p>
+            ) : null}
 
             <p>
               {[seller.city, seller.state, seller.pincode]
