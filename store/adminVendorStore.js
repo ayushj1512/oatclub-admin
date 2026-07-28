@@ -3,8 +3,7 @@
 import axios from "axios";
 import { create } from "zustand";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 const DEFAULT_MODULES = {
   sampling: true,
@@ -27,94 +26,68 @@ const initialPagination = {
 ========================================================= */
 
 const getErrorMessage = (error, fallback) =>
-  error?.response?.data?.message ||
-  error?.message ||
-  fallback;
+  error?.response?.data?.message || error?.message || fallback;
 
-const normalizeList = (values = []) =>
-  [
-    ...new Set(
-      (Array.isArray(values) ? values : [values])
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-    ),
-  ];
+const normalizeList = (values = []) => [
+  ...new Set(
+    (Array.isArray(values) ? values : [values])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  ),
+];
 
-const normalizeProductIds = (values = []) =>
-  [
-    ...new Set(
-      (Array.isArray(values) ? values : [values])
-        .map((item) =>
-          String(
-            item?.product?._id ||
-              item?.product ||
-              item?._id ||
-              item ||
-              ""
-          ).trim()
-        )
-        .filter(Boolean)
-    ),
-  ];
+const normalizeProductIds = (values = []) => [
+  ...new Set(
+    (Array.isArray(values) ? values : [values])
+      .map((item) =>
+        String(
+          item?.product?._id || item?.product || item?._id || item || "",
+        ).trim(),
+      )
+      .filter(Boolean),
+  ),
+];
 
 const normalizeProductCode = (value = "") => {
-  const code = String(value)
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "");
+  const code = String(value).trim().toUpperCase().replace(/\s+/g, "");
 
-  return /^\d+$/.test(code)
-    ? code.padStart(5, "0")
-    : code;
+  return /^\d+$/.test(code) ? code.padStart(5, "0") : code;
 };
 
 const normalizeProductCodes = (values = []) => {
-  const list = Array.isArray(values)
-    ? values
-    : String(values || "").split(",");
+  const list = Array.isArray(values) ? values : String(values || "").split(",");
 
-  return [
-    ...new Set(
-      list
-        .map(normalizeProductCode)
-        .filter(Boolean)
-    ),
-  ];
+  return [...new Set(list.map(normalizeProductCode).filter(Boolean))];
 };
 
 const getAssignmentProductId = (assignment) =>
-  String(
-    assignment?.product?._id ||
-      assignment?.product ||
-      ""
-  );
+  String(assignment?.product?._id || assignment?.product || "");
 
 const buildPagination = (
   data = {},
   fallbackPage = 1,
   fallbackLimit = 20,
-  fallbackTotal = 0
+  fallbackTotal = 0,
 ) => {
   const page = Number(data.page || fallbackPage);
   const limit = Number(data.limit || fallbackLimit);
-  const total = Number(
-    data.total ?? data.count ?? fallbackTotal
-  );
-  const pages = Number(
-    data.pages || Math.max(Math.ceil(total / limit), 1)
-  );
+  const total = Number(data.total ?? data.count ?? fallbackTotal);
+  const pages = Number(data.pages || Math.max(Math.ceil(total / limit), 1));
 
   return {
     page,
     limit,
     total,
     pages,
-    hasNextPage:
-      data.hasNextPage ?? page < pages,
-    hasPrevPage:
-      data.hasPrevPage ?? page > 1,
+    hasNextPage: data.hasNextPage ?? page < pages,
+    hasPrevPage: data.hasPrevPage ?? page > 1,
   };
 };
+
+const normalizeRole = (role) =>
+  role === "superadmin" ? "superadmin" : "vendor";
+
+const isSuperAdminVendor = (vendor) => vendor?.role === "superadmin";
 
 /* =========================================================
    STORE
@@ -159,8 +132,10 @@ const useAdminVendorStore = create((set, get) => ({
   setSelectedVendor: (vendor) =>
     set({
       selectedVendor: vendor || null,
-      assignedProducts:
-        vendor?.assignedProducts || [],
+
+      assignedProducts: isSuperAdminVendor(vendor)
+        ? []
+        : vendor?.assignedProducts || [],
     }),
 
   clearSelectedVendor: () =>
@@ -197,32 +172,21 @@ const useAdminVendorStore = create((set, get) => ({
     });
 
     try {
-      const { data } = await axios.get(
-        `${API_URL}/api/vendor-users`,
-        {
-          params: {
-            page,
-            limit,
-            search: search || undefined,
-            isActive:
-              isActive === "" ||
-              isActive === "all"
-                ? undefined
-                : isActive,
-          },
-        }
-      );
+      const { data } = await axios.get(`${API_URL}/api/vendor-users`, {
+        params: {
+          page,
+          limit,
+          search: search || undefined,
+          isActive:
+            isActive === "" || isActive === "all" ? undefined : isActive,
+        },
+      });
 
       const vendors = data?.vendors || [];
 
       set({
         vendors,
-        vendorPagination: buildPagination(
-          data,
-          page,
-          limit,
-          vendors.length
-        ),
+        vendorPagination: buildPagination(data, page, limit, vendors.length),
       });
 
       return {
@@ -230,10 +194,7 @@ const useAdminVendorStore = create((set, get) => ({
         vendors,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Failed to fetch vendors"
-      );
+      const message = getErrorMessage(error, "Failed to fetch vendors");
 
       set({ error: message });
 
@@ -266,15 +227,17 @@ const useAdminVendorStore = create((set, get) => ({
 
     try {
       const { data } = await axios.get(
-        `${API_URL}/api/vendor-users/${vendorId}`
+        `${API_URL}/api/vendor-users/${vendorId}`,
       );
 
       const vendor = data?.vendor || null;
 
       set({
         selectedVendor: vendor,
-        assignedProducts:
-          vendor?.assignedProducts || [],
+
+        assignedProducts: isSuperAdminVendor(vendor)
+          ? []
+          : vendor?.assignedProducts || [],
       });
 
       return {
@@ -282,19 +245,20 @@ const useAdminVendorStore = create((set, get) => ({
         vendor,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Failed to fetch vendor"
-      );
+      const message = getErrorMessage(error, "Failed to fetch vendor");
 
-      set({ error: message });
+      set({
+        error: message,
+      });
 
       return {
         success: false,
         message,
       };
     } finally {
-      set({ loadingVendor: false });
+      set({
+        loadingVendor: false,
+      });
     }
   },
 
@@ -308,6 +272,7 @@ const useAdminVendorStore = create((set, get) => ({
     username,
     password,
     phone = "",
+    role = "vendor",
     modules = DEFAULT_MODULES,
   }) => {
     set({
@@ -317,39 +282,55 @@ const useAdminVendorStore = create((set, get) => ({
     });
 
     try {
-      const { data } = await axios.post(
-        `${API_URL}/api/vendor-users/create`,
-        {
-          name: String(name || "").trim(),
-          username: String(username || "")
-            .trim()
-            .toLowerCase(),
-          password,
-          phone: String(phone || "").trim(),
-          modules: {
-            ...DEFAULT_MODULES,
-            ...modules,
-          },
-        }
-      );
+      const normalizedRole = normalizeRole(role);
+
+      const { data } = await axios.post(`${API_URL}/api/vendor-users/create`, {
+        name: String(name || "").trim(),
+
+        username: String(username || "")
+          .trim()
+          .toLowerCase(),
+
+        password,
+
+        phone: String(phone || "").trim(),
+
+        role: normalizedRole,
+
+        modules:
+          normalizedRole === "superadmin"
+            ? {
+                ...DEFAULT_MODULES,
+              }
+            : {
+                ...DEFAULT_MODULES,
+                ...modules,
+              },
+      });
 
       const vendor = data?.vendor;
+
       const message =
         data?.message ||
-        "Vendor created successfully";
+        (normalizedRole === "superadmin"
+          ? "Vendor super admin created successfully"
+          : "Vendor created successfully");
 
       if (vendor) {
         set((state) => ({
           vendors: [vendor, ...state.vendors],
+
           vendorPagination: {
             ...state.vendorPagination,
-            total:
-              state.vendorPagination.total + 1,
+            total: state.vendorPagination.total + 1,
           },
+
           message,
         }));
       } else {
-        set({ message });
+        set({
+          message,
+        });
       }
 
       return {
@@ -358,19 +339,20 @@ const useAdminVendorStore = create((set, get) => ({
         message,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Failed to create vendor"
-      );
+      const message = getErrorMessage(error, "Failed to create vendor");
 
-      set({ error: message });
+      set({
+        error: message,
+      });
 
       return {
         success: false,
         message,
       };
     } finally {
-      set({ creatingVendor: false });
+      set({
+        creatingVendor: false,
+      });
     }
   },
 
@@ -379,10 +361,7 @@ const useAdminVendorStore = create((set, get) => ({
      PATCH /api/vendor-users/:id
   ======================================================= */
 
-  updateVendor: async (
-    vendorId,
-    updates = {}
-  ) => {
+  updateVendor: async (vendorId, updates = {}) => {
     if (!vendorId) {
       return {
         success: false,
@@ -400,67 +379,84 @@ const useAdminVendorStore = create((set, get) => ({
       const payload = {};
 
       if (updates.name !== undefined) {
-        payload.name = String(
-          updates.name || ""
-        ).trim();
+        payload.name = String(updates.name || "").trim();
       }
 
       if (updates.username !== undefined) {
-        payload.username = String(
-          updates.username || ""
-        )
+        payload.username = String(updates.username || "")
           .trim()
           .toLowerCase();
       }
 
       if (updates.phone !== undefined) {
-        payload.phone = String(
-          updates.phone || ""
-        ).trim();
+        payload.phone = String(updates.phone || "").trim();
       }
 
       if (updates.password) {
         payload.password = updates.password;
       }
 
-      if (updates.modules !== undefined) {
+      if (updates.role !== undefined) {
+        payload.role = normalizeRole(updates.role);
+      }
+
+      const currentVendor =
+        get().vendors.find((item) => String(item?._id) === String(vendorId)) ||
+        (String(get().selectedVendor?._id) === String(vendorId)
+          ? get().selectedVendor
+          : null);
+
+      const finalRole = normalizeRole(updates.role ?? currentVendor?.role);
+
+      if (updates.modules !== undefined && finalRole !== "superadmin") {
         payload.modules = updates.modules;
       }
 
       if (updates.isActive !== undefined) {
         payload.isActive =
-          updates.isActive === true ||
-          updates.isActive === "true";
+          updates.isActive === true || updates.isActive === "true";
       }
 
       const { data } = await axios.patch(
         `${API_URL}/api/vendor-users/${vendorId}`,
-        payload
+        payload,
       );
 
       const vendor = data?.vendor;
-      const message =
-        data?.message ||
-        "Vendor updated successfully";
 
-      set((state) => ({
-        vendors: state.vendors.map((item) =>
-          String(item._id) === String(vendorId)
-            ? { ...item, ...vendor }
-            : item
-        ),
+      const message = data?.message || "Vendor updated successfully";
 
-        selectedVendor:
-          String(state.selectedVendor?._id) ===
-          String(vendorId)
-            ? {
-                ...state.selectedVendor,
-                ...vendor,
-              }
-            : state.selectedVendor,
+      set((state) => {
+        const isSelected =
+          String(state.selectedVendor?._id) === String(vendorId);
 
-        message,
-      }));
+        const updatedSelectedVendor = isSelected
+          ? {
+              ...state.selectedVendor,
+              ...(vendor || {}),
+            }
+          : state.selectedVendor;
+
+        return {
+          vendors: state.vendors.map((item) =>
+            String(item?._id) === String(vendorId)
+              ? {
+                  ...item,
+                  ...(vendor || {}),
+                }
+              : item,
+          ),
+
+          selectedVendor: updatedSelectedVendor,
+
+          assignedProducts:
+            isSelected && isSuperAdminVendor(updatedSelectedVendor)
+              ? []
+              : state.assignedProducts,
+
+          message,
+        };
+      });
 
       return {
         success: true,
@@ -468,26 +464,24 @@ const useAdminVendorStore = create((set, get) => ({
         message,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Failed to update vendor"
-      );
+      const message = getErrorMessage(error, "Failed to update vendor");
 
-      set({ error: message });
+      set({
+        error: message,
+      });
 
       return {
         success: false,
         message,
       };
     } finally {
-      set({ updatingVendor: false });
+      set({
+        updatingVendor: false,
+      });
     }
   },
 
-  toggleVendorStatus: (
-    vendorId,
-    isActive
-  ) =>
+  toggleVendorStatus: (vendorId, isActive) =>
     get().updateVendor(vendorId, {
       isActive,
     }),
@@ -513,39 +507,27 @@ const useAdminVendorStore = create((set, get) => ({
 
     try {
       const { data } = await axios.delete(
-        `${API_URL}/api/vendor-users/${vendorId}`
+        `${API_URL}/api/vendor-users/${vendorId}`,
       );
 
-      const message =
-        data?.message ||
-        "Vendor deleted successfully";
+      const message = data?.message || "Vendor deleted successfully";
 
       set((state) => {
         const isSelected =
-          String(state.selectedVendor?._id) ===
-          String(vendorId);
+          String(state.selectedVendor?._id) === String(vendorId);
 
         return {
           vendors: state.vendors.filter(
-            (vendor) =>
-              String(vendor._id) !==
-              String(vendorId)
+            (vendor) => String(vendor._id) !== String(vendorId),
           ),
 
-          selectedVendor: isSelected
-            ? null
-            : state.selectedVendor,
+          selectedVendor: isSelected ? null : state.selectedVendor,
 
-          assignedProducts: isSelected
-            ? []
-            : state.assignedProducts,
+          assignedProducts: isSelected ? [] : state.assignedProducts,
 
           vendorPagination: {
             ...state.vendorPagination,
-            total: Math.max(
-              0,
-              state.vendorPagination.total - 1
-            ),
+            total: Math.max(0, state.vendorPagination.total - 1),
           },
 
           message,
@@ -557,10 +539,7 @@ const useAdminVendorStore = create((set, get) => ({
         message,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Failed to delete vendor"
-      );
+      const message = getErrorMessage(error, "Failed to delete vendor");
 
       set({ error: message });
 
@@ -591,26 +570,21 @@ const useAdminVendorStore = create((set, get) => ({
     });
 
     try {
-      const { data } = await axios.get(
-        `${API_URL}/api/products/card-search`,
-        {
-          params: {
-            page,
-            limit,
-            q: search || undefined,
-            productCode:
-              productCode || undefined,
-            category: category || undefined,
-            activeOnly: true,
-            excludeDrafts: true,
-            sortBy: "latest",
-          },
-        }
-      );
+      const { data } = await axios.get(`${API_URL}/api/products/card-search`, {
+        params: {
+          page,
+          limit,
+          q: search || undefined,
+          productCode: productCode || undefined,
+          category: category || undefined,
+          activeOnly: true,
+          excludeDrafts: true,
+          sortBy: "latest",
+        },
+      });
 
       const products = data?.products || [];
-      const pagination =
-        data?.pagination || data || {};
+      const pagination = data?.pagination || data || {};
 
       set({
         productResults: products,
@@ -618,7 +592,7 @@ const useAdminVendorStore = create((set, get) => ({
           pagination,
           page,
           limit,
-          products.length
+          products.length,
         ),
       });
 
@@ -627,10 +601,7 @@ const useAdminVendorStore = create((set, get) => ({
         products,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Failed to search products"
-      );
+      const message = getErrorMessage(error, "Failed to search products");
 
       set({ error: message });
 
@@ -650,13 +621,7 @@ const useAdminVendorStore = create((set, get) => ({
 
   fetchAssignedProducts: async (
     vendorId,
-    {
-      page = 1,
-      limit = 20,
-      search = "",
-      module = "",
-      status = "",
-    } = {}
+    { page = 1, limit = 20, search = "", module = "", status = "" } = {},
   ) => {
     if (!vendorId) {
       return {
@@ -681,35 +646,57 @@ const useAdminVendorStore = create((set, get) => ({
             module: module || undefined,
             status: status || undefined,
           },
-        }
+        },
       );
 
-      const products =
-        data?.products ||
-        data?.assignedProducts ||
-        [];
+      const products = data?.products || data?.assignedProducts || [];
 
-      set({
-        assignedProducts: products,
-        assignedPagination: buildPagination(
-          data,
-          page,
-          limit,
-          products.length
-        ),
+      set((state) => {
+        const isSelected =
+          String(state.selectedVendor?._id) === String(vendorId);
+
+        return {
+          assignedProducts: Array.isArray(products) ? products : [],
+
+          assignedPagination: buildPagination(
+            data,
+            page,
+            limit,
+            products.length,
+          ),
+
+          selectedVendor: isSelected
+            ? {
+                ...state.selectedVendor,
+
+                isSuperAdmin:
+                  data?.isSuperAdmin ??
+                  isSuperAdminVendor(state.selectedVendor),
+
+                hasAllProductAccess:
+                  data?.hasAllProductAccess ??
+                  isSuperAdminVendor(state.selectedVendor),
+              }
+            : state.selectedVendor,
+        };
       });
 
       return {
         success: true,
         products,
+        isSuperAdmin: data?.isSuperAdmin === true,
+        hasAllProductAccess: data?.hasAllProductAccess === true,
       };
     } catch (error) {
       const message = getErrorMessage(
         error,
-        "Failed to fetch assigned products"
+        "Failed to fetch assigned products",
       );
 
-      set({ error: message });
+      set({
+        assignedProducts: [],
+        error: message,
+      });
 
       return {
         success: false,
@@ -727,14 +714,21 @@ const useAdminVendorStore = create((set, get) => ({
      POST /api/vendor-users/:vendorId/products/assign
   ======================================================= */
 
-  assignProducts: async (
-    vendorId,
-    productIds,
-    modules = []
-  ) => {
-    const ids = normalizeProductIds(
-      productIds
-    );
+  assignProducts: async (vendorId, productIds, modules = []) => {
+    const ids = normalizeProductIds(productIds);
+
+    const vendor =
+      get().vendors.find((item) => String(item?._id) === String(vendorId)) ||
+      (String(get().selectedVendor?._id) === String(vendorId)
+        ? get().selectedVendor
+        : null);
+
+    if (isSuperAdminVendor(vendor)) {
+      return {
+        success: false,
+        message: "Super admin already has access to all products",
+      };
+    }
 
     if (!vendorId || !ids.length) {
       return {
@@ -756,57 +750,38 @@ const useAdminVendorStore = create((set, get) => ({
         `${API_URL}/api/vendor-users/${vendorId}/products/assign`,
         {
           productIds: ids,
-          modules: Array.isArray(modules)
-            ? normalizeList(modules)
-            : modules,
-        }
+
+          modules: Array.isArray(modules) ? normalizeList(modules) : modules,
+        },
       );
 
-      const products =
-        data?.products ||
-        data?.assignedProducts ||
-        [];
+      const products = data?.products || data?.assignedProducts || [];
 
-      const message =
-        data?.message ||
-        "Products assigned successfully";
+      const message = data?.message || "Products assigned successfully";
 
       set((state) => {
         const assignmentMap = new Map(
-          state.assignedProducts.map(
-            (assignment) => [
-              getAssignmentProductId(
-                assignment
-              ),
-              assignment,
-            ]
-          )
+          state.assignedProducts.map((assignment) => [
+            getAssignmentProductId(assignment),
+            assignment,
+          ]),
         );
 
         products.forEach((assignment) => {
-          const productId =
-            getAssignmentProductId(
-              assignment
-            );
+          const productId = getAssignmentProductId(assignment);
 
           if (productId) {
-            assignmentMap.set(
-              productId,
-              assignment
-            );
+            assignmentMap.set(productId, assignment);
           }
         });
 
         return {
-          assignedProducts: [
-            ...assignmentMap.values(),
-          ],
+          assignedProducts: [...assignmentMap.values()],
 
           assignedPagination: {
             ...state.assignedPagination,
-            total:
-              data?.total ??
-              assignmentMap.size,
+
+            total: data?.total ?? assignmentMap.size,
           },
 
           message,
@@ -819,19 +794,20 @@ const useAdminVendorStore = create((set, get) => ({
         message,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Failed to assign products"
-      );
+      const message = getErrorMessage(error, "Failed to assign products");
 
-      set({ error: message });
+      set({
+        error: message,
+      });
 
       return {
         success: false,
         message,
       };
     } finally {
-      set({ assigningProducts: false });
+      set({
+        assigningProducts: false,
+      });
     }
   },
 
@@ -839,17 +815,26 @@ const useAdminVendorStore = create((set, get) => ({
      ASSIGN PRODUCTS BY CODES
   ======================================================= */
 
-  assignProductsByCodes: async (
-    vendorId,
-    productCodes,
-    modules = []
-  ) => {
-    const codes =
-      normalizeProductCodes(productCodes);
+  assignProductsByCodes: async (vendorId, productCodes, modules = []) => {
+    const codes = normalizeProductCodes(productCodes);
+
+    const vendor =
+      get().vendors.find((item) => String(item?._id) === String(vendorId)) ||
+      (String(get().selectedVendor?._id) === String(vendorId)
+        ? get().selectedVendor
+        : null);
+
+    if (isSuperAdminVendor(vendor)) {
+      return {
+        success: false,
+        message: "Super admin already has access to all products",
+      };
+    }
 
     if (!vendorId || !codes.length) {
       return {
         success: false,
+
         message: !vendorId
           ? "Vendor ID is required"
           : "Enter at least one product code",
@@ -867,50 +852,45 @@ const useAdminVendorStore = create((set, get) => ({
         `${API_URL}/api/vendor-users/${vendorId}/products/assign`,
         {
           productCodes: codes,
-          modules: Array.isArray(modules)
-            ? normalizeList(modules)
-            : modules,
-        }
+
+          modules: Array.isArray(modules) ? normalizeList(modules) : modules,
+        },
       );
 
-      const message =
-        data?.message ||
-        "Products assigned successfully";
+      const message = data?.message || "Products assigned successfully";
 
-      set({ message });
+      set({
+        message,
+      });
 
-      await get().fetchAssignedProducts(
-        vendorId,
-        {
-          page: 1,
-          limit:
-            get().assignedPagination.limit ||
-            20,
-        }
-      );
+      await get().fetchAssignedProducts(vendorId, {
+        page: 1,
+
+        limit: get().assignedPagination.limit || 20,
+      });
 
       return {
         success: true,
-        products:
-          data?.products ||
-          data?.assignedProducts ||
-          [],
+
+        products: data?.products || data?.assignedProducts || [],
+
         message,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Failed to assign products"
-      );
+      const message = getErrorMessage(error, "Failed to assign products");
 
-      set({ error: message });
+      set({
+        error: message,
+      });
 
       return {
         success: false,
         message,
       };
     } finally {
-      set({ assigningProducts: false });
+      set({
+        assigningProducts: false,
+      });
     }
   },
 
@@ -919,16 +899,26 @@ const useAdminVendorStore = create((set, get) => ({
      DELETE /api/vendor-users/:vendorId/products
   ======================================================= */
 
-  removeAssignedProducts: async (
-    vendorId,
-    productIds
-  ) => {
-    const ids =
-      normalizeProductIds(productIds);
+  removeAssignedProducts: async (vendorId, productIds) => {
+    const ids = normalizeProductIds(productIds);
+
+    const vendor =
+      get().vendors.find((item) => String(item?._id) === String(vendorId)) ||
+      (String(get().selectedVendor?._id) === String(vendorId)
+        ? get().selectedVendor
+        : null);
+
+    if (isSuperAdminVendor(vendor)) {
+      return {
+        success: false,
+        message: "Products cannot be removed from a super admin",
+      };
+    }
 
     if (!vendorId || !ids.length) {
       return {
         success: false,
+
         message: !vendorId
           ? "Vendor ID is required"
           : "Select at least one product",
@@ -948,35 +938,24 @@ const useAdminVendorStore = create((set, get) => ({
           data: {
             productIds: ids,
           },
-        }
+        },
       );
 
       const removedIds = new Set(ids);
 
-      const message =
-        data?.message ||
-        "Products removed successfully";
+      const message = data?.message || "Products removed successfully";
 
       set((state) => ({
-        assignedProducts:
-          state.assignedProducts.filter(
-            (assignment) =>
-              !removedIds.has(
-                getAssignmentProductId(
-                  assignment
-                )
-              )
-          ),
+        assignedProducts: state.assignedProducts.filter(
+          (assignment) => !removedIds.has(getAssignmentProductId(assignment)),
+        ),
 
         assignedPagination: {
           ...state.assignedPagination,
+
           total:
             data?.total ??
-            Math.max(
-              0,
-              state.assignedPagination.total -
-                ids.length
-            ),
+            Math.max(0, state.assignedPagination.total - ids.length),
         },
 
         message,
@@ -988,19 +967,20 @@ const useAdminVendorStore = create((set, get) => ({
         message,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Failed to remove products"
-      );
+      const message = getErrorMessage(error, "Failed to remove products");
 
-      set({ error: message });
+      set({
+        error: message,
+      });
 
       return {
         success: false,
         message,
       };
     } finally {
-      set({ removingProducts: false });
+      set({
+        removingProducts: false,
+      });
     }
   },
 
@@ -1009,16 +989,24 @@ const useAdminVendorStore = create((set, get) => ({
      PATCH /api/vendor-users/:vendorId/products/:productId
   ======================================================= */
 
-  updateAssignedProductModules: async (
-    vendorId,
-    productId,
-    modules
-  ) => {
+  updateAssignedProductModules: async (vendorId, productId, modules) => {
     if (!vendorId || !productId) {
       return {
         success: false,
-        message:
-          "Vendor and product IDs are required",
+        message: "Vendor and product IDs are required",
+      };
+    }
+
+    const vendor =
+      get().vendors.find((item) => String(item?._id) === String(vendorId)) ||
+      (String(get().selectedVendor?._id) === String(vendorId)
+        ? get().selectedVendor
+        : null);
+
+    if (isSuperAdminVendor(vendor)) {
+      return {
+        success: false,
+        message: "Super admin already has all product permissions",
       };
     }
 
@@ -1031,29 +1019,25 @@ const useAdminVendorStore = create((set, get) => ({
     try {
       const { data } = await axios.patch(
         `${API_URL}/api/vendor-users/${vendorId}/products/${productId}`,
-        { modules }
+        {
+          modules,
+        },
       );
 
-      const assignment =
-        data?.assignment ||
-        data?.product;
+      const assignment = data?.assignment || data?.product;
 
       const message =
-        data?.message ||
-        "Product permissions updated successfully";
+        data?.message || "Product permissions updated successfully";
 
       set((state) => ({
-        assignedProducts:
-          state.assignedProducts.map(
-            (item) =>
-              getAssignmentProductId(item) ===
-              String(productId)
-                ? assignment || {
-                    ...item,
-                    modules,
-                  }
-                : item
-          ),
+        assignedProducts: state.assignedProducts.map((item) =>
+          getAssignmentProductId(item) === String(productId)
+            ? assignment || {
+                ...item,
+                modules,
+              }
+            : item,
+        ),
 
         message,
       }));
@@ -1066,10 +1050,12 @@ const useAdminVendorStore = create((set, get) => ({
     } catch (error) {
       const message = getErrorMessage(
         error,
-        "Failed to update product permissions"
+        "Failed to update product permissions",
       );
 
-      set({ error: message });
+      set({
+        error: message,
+      });
 
       return {
         success: false,
@@ -1081,6 +1067,11 @@ const useAdminVendorStore = create((set, get) => ({
       });
     }
   },
+
+  isSelectedVendorSuperAdmin: () => isSuperAdminVendor(get().selectedVendor),
+
+  canManageSelectedVendorProducts: () =>
+    !isSuperAdminVendor(get().selectedVendor),
 }));
 
 export default useAdminVendorStore;

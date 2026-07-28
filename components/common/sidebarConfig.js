@@ -395,6 +395,7 @@ export const sidebarMenus = {
     { label: "Customer Dashboard", href: "/customers/dashboard" },
     { label: "Customer List", href: "/customers" },
     { label: "Customer Search", href: "/customers/search" },
+    { label: "Customer Blacklist", href: "/customers/blacklist" },
 
     { label: "Customer Analytics", href: "/customers/analytics" },
     { label: "Segments Analytics", href: "/customers/analytics/segments" },

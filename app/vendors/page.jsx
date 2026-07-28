@@ -1,11 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Boxes,
-  Factory,
+  Crown,
   Loader2,
   Plus,
   RefreshCw,
@@ -28,10 +33,6 @@ const MODULE_LABELS = {
   cuttingList: "Cutting List",
 };
 
-/* =========================================================
-   HELPERS
-========================================================= */
-
 const formatDate = (value) => {
   if (!value) return "Never";
 
@@ -48,42 +49,46 @@ const formatDate = (value) => {
   });
 };
 
-const getAssignedProductCount = (vendor) =>
-  Number(
+const isSuperAdmin = (vendor) =>
+  vendor?.role === "superadmin";
+
+const getProductCount = (vendor) => {
+  if (isSuperAdmin(vendor)) {
+    return "All";
+  }
+
+  return Number(
     vendor?.assignedProductCount ??
       vendor?.productsCount ??
       vendor?.assignedProducts?.length ??
       0
   );
+};
 
-const getEnabledModules = (vendor) =>
-  Object.entries(vendor?.modules || {})
-    .filter(([, enabled]) => enabled === true)
-    .map(([module]) => module);
-
-/* =========================================================
-   COMPONENTS
-========================================================= */
-
-function StatCard({ label, value, icon: Icon, loading }) {
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  loading,
+}) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
             {label}
           </p>
 
           {loading ? (
             <Loader2 className="mt-3 h-6 w-6 animate-spin text-zinc-400" />
           ) : (
-            <p className="mt-2 text-2xl font-black tracking-tight text-zinc-950 sm:text-3xl">
+            <p className="mt-2 text-3xl font-black text-zinc-950">
               {value}
             </p>
           )}
         </div>
 
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-950 text-white">
           <Icon size={18} />
         </span>
       </div>
@@ -91,27 +96,57 @@ function StatCard({ label, value, icon: Icon, loading }) {
   );
 }
 
-function StatusBadge({ isActive }) {
+function StatusBadge({ active }) {
   return (
     <span
-      className={[
-        "inline-flex rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em]",
-        isActive
+      className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wider ${
+        active
           ? "bg-emerald-50 text-emerald-700"
-          : "bg-red-50 text-red-700",
-      ].join(" ")}
+          : "bg-red-50 text-red-700"
+      }`}
     >
-      {isActive ? "Active" : "Disabled"}
+      {active ? "Active" : "Disabled"}
+    </span>
+  );
+}
+
+function RoleBadge({ vendor }) {
+  const superAdmin = isSuperAdmin(vendor);
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wider ${
+        superAdmin
+          ? "bg-amber-50 text-amber-700"
+          : "bg-zinc-100 text-zinc-600"
+      }`}
+    >
+      {superAdmin && <Crown size={10} />}
+
+      {superAdmin ? "Super Admin" : "Vendor"}
     </span>
   );
 }
 
 function ModuleBadges({ vendor }) {
-  const modules = getEnabledModules(vendor);
+  if (isSuperAdmin(vendor)) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-zinc-950 px-2.5 py-1 text-[10px] font-semibold text-white">
+        <ShieldCheck size={11} />
+        All modules
+      </span>
+    );
+  }
+
+  const modules = Object.entries(
+    vendor?.modules || {}
+  )
+    .filter(([, enabled]) => enabled === true)
+    .map(([module]) => module);
 
   if (!modules.length) {
     return (
-      <span className="text-xs font-medium text-zinc-400">
+      <span className="text-xs text-zinc-400">
         No access
       </span>
     );
@@ -138,13 +173,11 @@ function ModuleBadges({ vendor }) {
 }
 
 function VendorRow({ vendor, onOpen }) {
-  const assignedCount = getAssignedProductCount(vendor);
-
   return (
     <button
       type="button"
-      onClick={() => onOpen(vendor._id)}
-      className="group grid w-full gap-4 border-b border-zinc-100 px-4 py-4 text-left transition last:border-b-0 hover:bg-zinc-50 md:grid-cols-[minmax(0,1.4fr)_minmax(160px,1fr)_110px_120px_36px] md:items-center"
+      onClick={() => onOpen(vendor?._id)}
+      className="group grid w-full gap-4 border-b border-zinc-100 px-4 py-4 text-left transition last:border-0 hover:bg-zinc-50 md:grid-cols-[minmax(0,1.4fr)_minmax(170px,1fr)_100px_120px_36px] md:items-center"
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
@@ -152,17 +185,23 @@ function VendorRow({ vendor, onOpen }) {
             {vendor?.name || "Unnamed Vendor"}
           </p>
 
-          <StatusBadge isActive={vendor?.isActive} />
+          <RoleBadge vendor={vendor} />
+
+          <StatusBadge
+            active={vendor?.isActive === true}
+          />
         </div>
 
         <p className="mt-1 truncate text-xs text-zinc-500">
           @{vendor?.username || "unknown"}
-          {vendor?.phone ? ` · ${vendor.phone}` : ""}
+          {vendor?.phone
+            ? ` · ${vendor.phone}`
+            : ""}
         </p>
       </div>
 
       <div>
-        <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-400 md:hidden">
+        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-zinc-400 md:hidden">
           Modules
         </p>
 
@@ -170,18 +209,18 @@ function VendorRow({ vendor, onOpen }) {
       </div>
 
       <div>
-        <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-400 md:hidden">
+        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-zinc-400 md:hidden">
           Products
         </p>
 
-        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-700">
-          <Boxes size={14} className="text-zinc-400 md:hidden" />
-          {assignedCount}
-        </div>
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+          <Boxes size={14} />
+          {getProductCount(vendor)}
+        </span>
       </div>
 
       <div>
-        <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-400 md:hidden">
+        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-zinc-400 md:hidden">
           Last login
         </p>
 
@@ -197,48 +236,6 @@ function VendorRow({ vendor, onOpen }) {
   );
 }
 
-function EmptyState({ hasFilters, onCreate, onReset }) {
-  return (
-    <div className="flex min-h-72 flex-col items-center justify-center px-6 py-12 text-center">
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500">
-        <Factory size={23} />
-      </span>
-
-      <h2 className="mt-4 text-lg font-bold text-zinc-950">
-        No vendors found
-      </h2>
-
-      <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-500">
-        {hasFilters
-          ? "No vendor matches the current search filters."
-          : "Create your first vendor account and assign product access."}
-      </p>
-
-      <button
-        type="button"
-        onClick={hasFilters ? onReset : onCreate}
-        className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
-      >
-        {hasFilters ? (
-          <>
-            <X size={16} />
-            Clear filters
-          </>
-        ) : (
-          <>
-            <Plus size={16} />
-            Create vendor
-          </>
-        )}
-      </button>
-    </div>
-  );
-}
-
-/* =========================================================
-   PAGE
-========================================================= */
-
 export default function VendorsPage() {
   const router = useRouter();
 
@@ -252,7 +249,8 @@ export default function VendorsPage() {
   } = useAdminVendorStore();
 
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] =
+    useState("all");
 
   const loadVendors = useCallback(
     async ({
@@ -264,7 +262,9 @@ export default function VendorsPage() {
 
       return fetchVendors({
         page,
-        limit: vendorPagination.limit || PAGE_LIMIT,
+        limit:
+          vendorPagination.limit ||
+          PAGE_LIMIT,
         search: currentSearch.trim(),
         isActive:
           currentStatus === "all"
@@ -294,47 +294,29 @@ export default function VendorsPage() {
     ).length;
 
     const disabled = vendors.filter(
-      (vendor) => vendor?.isActive === false
+      (vendor) => vendor?.isActive !== true
     ).length;
 
-    const withProducts = vendors.filter(
-      (vendor) => getAssignedProductCount(vendor) > 0
+    const superAdmins = vendors.filter(
+      isSuperAdmin
     ).length;
 
     return {
-      total: vendorPagination.total || vendors.length,
+      total:
+        vendorPagination.total ||
+        vendors.length,
       active,
       disabled,
-      withProducts,
+      superAdmins,
     };
   }, [vendors, vendorPagination.total]);
 
   const hasFilters =
-    search.trim().length > 0 || status !== "all";
-
-  const handleSearch = async (event) => {
-    event.preventDefault();
-
-    await loadVendors({
-      page: 1,
-    });
-  };
-
-  const handleStatusChange = async (event) => {
-    const nextStatus = event.target.value;
-
-    setStatus(nextStatus);
-
-    await loadVendors({
-      page: 1,
-      currentStatus: nextStatus,
-    });
-  };
+    search.trim() || status !== "all";
 
   const resetFilters = async () => {
     setSearch("");
     setStatus("all");
-
     clearMessages();
 
     await fetchVendors({
@@ -343,56 +325,46 @@ export default function VendorsPage() {
     });
   };
 
-  const refreshCurrentPage = async () => {
-    await loadVendors({
-      page: vendorPagination.page || 1,
-    });
-  };
-
-  const openVendor = (vendorId) => {
-    if (!vendorId) return;
-
-    router.push(`/vendors/${vendorId}`);
-  };
-
   return (
     <main className="min-h-screen bg-zinc-50 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        {/* Header */}
         <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-7">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-950 text-white">
-                  <Factory size={19} />
-                </span>
-
-                <span className="rounded-full bg-zinc-100 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-zinc-600">
-                  Vendor Management
-                </span>
-              </div>
+              <span className="inline-flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                <Users size={13} />
+                Vendor Management
+              </span>
 
               <h1 className="mt-4 text-3xl font-black tracking-tight text-zinc-950 sm:text-4xl">
                 Vendors
               </h1>
 
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
-                Manage vendor accounts, module permissions and assigned
-                OATCLUB products.
+              <p className="mt-2 text-sm text-zinc-500">
+                Manage vendors, super admins,
+                modules and product access.
               </p>
             </div>
 
-            <div className="flex w-full gap-2 sm:w-auto">
+            <div className="flex gap-2">
               <button
                 type="button"
-                onClick={refreshCurrentPage}
                 disabled={loadingVendors}
-                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                onClick={() =>
+                  loadVendors({
+                    page:
+                      vendorPagination.page ||
+                      1,
+                  })
+                }
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 disabled:opacity-50"
               >
                 <RefreshCw
                   size={16}
                   className={
-                    loadingVendors ? "animate-spin" : ""
+                    loadingVendors
+                      ? "animate-spin"
+                      : ""
                   }
                 />
                 Refresh
@@ -400,172 +372,197 @@ export default function VendorsPage() {
 
               <button
                 type="button"
-                onClick={() => router.push("/vendors/create")}
-                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 sm:flex-none"
+                onClick={() =>
+                  router.push("/vendors/create")
+                }
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white"
               >
                 <Plus size={17} />
-                Create vendor
+                Create
               </button>
             </div>
           </div>
         </section>
 
-        {/* Error */}
         {error && (
           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {error}
           </div>
         )}
 
-        {/* Statistics */}
         <section className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard
             label="Total vendors"
             value={stats.total}
             icon={Users}
-            loading={loadingVendors && !vendors.length}
+            loading={
+              loadingVendors &&
+              !vendors.length
+            }
           />
 
           <StatCard
-            label="Active on page"
+            label="Active"
             value={stats.active}
             icon={UserCheck}
-            loading={loadingVendors && !vendors.length}
+            loading={
+              loadingVendors &&
+              !vendors.length
+            }
           />
 
           <StatCard
-            label="Disabled on page"
+            label="Disabled"
             value={stats.disabled}
             icon={UserX}
-            loading={loadingVendors && !vendors.length}
+            loading={
+              loadingVendors &&
+              !vendors.length
+            }
           />
 
           <StatCard
-            label="With products"
-            value={stats.withProducts}
-            icon={ShieldCheck}
-            loading={loadingVendors && !vendors.length}
+            label="Super admins"
+            value={stats.superAdmins}
+            icon={Crown}
+            loading={
+              loadingVendors &&
+              !vendors.length
+            }
           />
         </section>
 
-        {/* Vendor List */}
-        <section className="relative mt-5 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
-          {loadingVendors && vendors.length > 0 && (
-            <div className="absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-zinc-100">
-              <div className="h-full w-1/3 animate-pulse bg-zinc-950" />
+        <section className="mt-5 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              loadVendors({ page: 1 });
+            }}
+            className="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row"
+          >
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+
+              <input
+                type="search"
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="Search vendor"
+                className="h-11 w-full rounded-xl border border-zinc-200 pl-10 pr-4 text-sm outline-none focus:border-zinc-950"
+              />
             </div>
-          )}
 
-          {/* Filters */}
-          <div className="border-b border-zinc-100 p-4 sm:p-5">
-            <form
-              onSubmit={handleSearch}
-              className="flex flex-col gap-3 lg:flex-row"
+            <select
+              value={status}
+              onChange={(event) => {
+                const value =
+                  event.target.value;
+
+                setStatus(value);
+
+                loadVendors({
+                  page: 1,
+                  currentStatus: value,
+                });
+              }}
+              className="h-11 rounded-xl border border-zinc-200 px-3 text-sm outline-none"
             >
-              <div className="relative flex-1">
-                <Search
-                  size={17}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+              <option value="all">
+                All status
+              </option>
+              <option value="active">
+                Active
+              </option>
+              <option value="disabled">
+                Disabled
+              </option>
+            </select>
+
+            <button
+              disabled={loadingVendors}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {loadingVendors ? (
+                <Loader2
+                  size={16}
+                  className="animate-spin"
                 />
-
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search name, username or phone"
-                  className="h-11 w-full rounded-xl border border-zinc-200 bg-white pl-10 pr-10 text-sm text-zinc-950 outline-none transition placeholder:text-zinc-400 focus:border-zinc-950"
-                />
-
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 transition hover:text-zinc-950"
-                    aria-label="Clear search"
-                  >
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
-
-              <select
-                value={status}
-                onChange={handleStatusChange}
-                disabled={loadingVendors}
-                className="h-11 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 outline-none transition focus:border-zinc-950 disabled:opacity-60 lg:w-44"
-              >
-                <option value="all">All vendors</option>
-                <option value="active">Active</option>
-                <option value="disabled">Disabled</option>
-              </select>
-
-              <button
-                type="submit"
-                disabled={loadingVendors}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loadingVendors ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Search size={16} />
-                )}
-                Search
-              </button>
-
-              {hasFilters && (
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  disabled={loadingVendors}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-600 transition hover:bg-zinc-50 disabled:opacity-50"
-                >
-                  <X size={15} />
-                  Reset
-                </button>
+              ) : (
+                <Search size={16} />
               )}
-            </form>
-          </div>
+              Search
+            </button>
 
-          {/* Content */}
-          {loadingVendors && !vendors.length ? (
-            <div className="flex min-h-72 flex-col items-center justify-center gap-3">
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 text-sm font-semibold"
+              >
+                <X size={15} />
+                Reset
+              </button>
+            )}
+          </form>
+
+          {loadingVendors &&
+          !vendors.length ? (
+            <div className="flex min-h-72 items-center justify-center">
               <Loader2 className="h-7 w-7 animate-spin text-zinc-400" />
-
-              <p className="text-sm font-medium text-zinc-500">
-                Loading vendors...
-              </p>
             </div>
           ) : vendors.length ? (
             <>
-              <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(160px,1fr)_110px_120px_36px] gap-4 border-b border-zinc-100 bg-zinc-50 px-4 py-3 text-[9px] font-bold uppercase tracking-[0.15em] text-zinc-400 md:grid">
+              <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(170px,1fr)_100px_120px_36px] gap-4 border-b border-zinc-100 bg-zinc-50 px-4 py-3 text-[9px] font-bold uppercase tracking-widest text-zinc-400 md:grid">
                 <span>Vendor</span>
-                <span>Modules</span>
+                <span>Access</span>
                 <span>Products</span>
                 <span>Last login</span>
                 <span />
               </div>
 
-              <div>
-                {vendors.map((vendor) => (
-                  <VendorRow
-                    key={vendor._id}
-                    vendor={vendor}
-                    onOpen={openVendor}
-                  />
-                ))}
-              </div>
+              {vendors.map((vendor) => (
+                <VendorRow
+                  key={vendor._id}
+                  vendor={vendor}
+                  onOpen={(id) =>
+                    router.push(
+                      `/vendors/${id}`
+                    )
+                  }
+                />
+              ))}
             </>
           ) : (
-            <EmptyState
-              hasFilters={hasFilters}
-              onCreate={() => router.push("/vendors/create")}
-              onReset={resetFilters}
-            />
+            <div className="flex min-h-72 flex-col items-center justify-center text-center">
+              <Users className="h-10 w-10 text-zinc-300" />
+
+              <p className="mt-3 font-bold text-zinc-950">
+                No vendors found
+              </p>
+
+              <button
+                type="button"
+                onClick={
+                  hasFilters
+                    ? resetFilters
+                    : () =>
+                        router.push(
+                          "/vendors/create"
+                        )
+                }
+                className="mt-4 rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white"
+              >
+                {hasFilters
+                  ? "Clear filters"
+                  : "Create vendor"}
+              </button>
+            </div>
           )}
 
-          {/* Pagination */}
           {vendorPagination.pages > 1 && (
-            <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-4 py-4">
+            <div className="flex items-center justify-between border-t border-zinc-100 p-4">
               <button
                 type="button"
                 disabled={
@@ -574,24 +571,20 @@ export default function VendorsPage() {
                 }
                 onClick={() =>
                   loadVendors({
-                    page: vendorPagination.page - 1,
+                    page:
+                      vendorPagination.page -
+                      1,
                   })
                 }
-                className="h-10 rounded-xl border border-zinc-200 px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:text-sm"
+                className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold disabled:opacity-40"
               >
                 Previous
               </button>
 
-              <div className="text-center">
-                <p className="text-xs font-semibold text-zinc-600">
-                  Page {vendorPagination.page} of{" "}
-                  {vendorPagination.pages}
-                </p>
-
-                <p className="mt-0.5 hidden text-[10px] text-zinc-400 sm:block">
-                  {vendorPagination.total} total vendors
-                </p>
-              </div>
+              <span className="text-xs font-semibold text-zinc-500">
+                Page {vendorPagination.page} of{" "}
+                {vendorPagination.pages}
+              </span>
 
               <button
                 type="button"
@@ -601,10 +594,12 @@ export default function VendorsPage() {
                 }
                 onClick={() =>
                   loadVendors({
-                    page: vendorPagination.page + 1,
+                    page:
+                      vendorPagination.page +
+                      1,
                   })
                 }
-                className="h-10 rounded-xl border border-zinc-200 px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:text-sm"
+                className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold disabled:opacity-40"
               >
                 Next
               </button>

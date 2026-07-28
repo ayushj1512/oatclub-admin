@@ -91,7 +91,7 @@ export const useCustomerStore = create((set, get) => ({
 
     set((state) => ({
       customers: state.customers.map((item) =>
-        item?._id === updatedCustomer._id ? updatedCustomer : item
+        item?._id === updatedCustomer._id ? updatedCustomer : item,
       ),
     }));
   },
@@ -258,7 +258,9 @@ export const useCustomerStore = create((set, get) => ({
       }
 
       const customer = data || null;
-      const cartAdds = Array.isArray(customer?.cartAdds) ? customer.cartAdds : [];
+      const cartAdds = Array.isArray(customer?.cartAdds)
+        ? customer.cartAdds
+        : [];
 
       set({ customer, cartAdds, cartAddsTotal: cartAdds.length });
       return customer;
@@ -714,8 +716,8 @@ export const useCustomerStore = create((set, get) => ({
 
           pageFetches.push(
             fetch(pageUrl, { cache: "no-store" }).then((r) =>
-              r.json().then((j) => ({ ok: r.ok, data: j }))
-            )
+              r.json().then((j) => ({ ok: r.ok, data: j })),
+            ),
           );
         }
 
@@ -741,6 +743,45 @@ export const useCustomerStore = create((set, get) => ({
       return [];
     } finally {
       set({ loadingList: false });
+    }
+  },
+
+  toggleCustomerBlacklist: async (id, isBlacklisted) => {
+    if (!API || !id) {
+      return { success: false, error: "Missing customer id" };
+    }
+
+    set({ saving: true, error: "" });
+
+    try {
+      const res = await fetch(`${API}/api/customers/${id}/blacklist`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isBlacklisted }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to update blacklist");
+      }
+
+      const updated = data?.customer;
+
+      if (updated?._id) {
+        set({ customer: updated });
+        get().updateCustomerInList(updated);
+      }
+
+      return { success: true, customer: updated };
+    } catch (err) {
+      const msg = err?.message || "Failed to update blacklist";
+      set({ error: msg });
+      return { success: false, error: msg };
+    } finally {
+      set({ saving: false });
     }
   },
 }));
