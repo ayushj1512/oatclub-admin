@@ -253,6 +253,25 @@ export const useOrderStore = create((set, get) => ({
     }
   },
 
+  _delete: async (path, payload = {}) => {
+    get()._start();
+
+    try {
+      const res = await fetch(`${API}${path}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(stripUndefinedDeep(payload || {})),
+      });
+
+      const data = await get()._json(res);
+      get()._success();
+      return data;
+    } catch (e) {
+      get()._fail(e);
+      throw e;
+    }
+  },
+
   createOrder: async (payload) => {
     const p = { ...(payload || {}) };
 
@@ -779,6 +798,115 @@ export const useOrderStore = create((set, get) => ({
           [String(order._id)]: order,
         },
       }));
+    }
+
+    return order;
+  },
+
+  /* ============================================================
+   ORDER ITEM EDITING
+============================================================ */
+
+  addProductToOrder: async (
+    orderId,
+    { productId, variantId = null, quantity = 1 } = {},
+  ) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    if (!productId) {
+      throw new Error("Product ID is required");
+    }
+
+    const qty = Number(quantity);
+
+    if (!Number.isInteger(qty) || qty < 1) {
+      throw new Error("Quantity must be at least 1");
+    }
+
+    const data = await get()._post(`/api/orders/${orderId}/items`, {
+      productId,
+      variantId: variantId || undefined,
+      quantity: qty,
+    });
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return order;
+  },
+
+  changeOrderItemSize: async (orderId, lineId, variantId) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    if (!lineId) {
+      throw new Error("Line ID is required");
+    }
+
+    if (!variantId) {
+      throw new Error("Variant ID is required");
+    }
+
+    const data = await get()._patch(
+      `/api/orders/${encodeURIComponent(orderId)}/items/${encodeURIComponent(
+        lineId,
+      )}/size`,
+      {
+        variantId,
+      },
+    );
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return order;
+  },
+
+  removeProductFromOrder: async (orderId, lineId, quantity = null) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    if (!lineId) {
+      throw new Error("Line ID is required");
+    }
+
+    const payload = {};
+
+    if (quantity !== null && quantity !== undefined) {
+      const qty = Number(quantity);
+
+      if (!Number.isInteger(qty) || qty < 1) {
+        throw new Error("Quantity must be at least 1");
+      }
+
+      payload.quantity = qty;
+    }
+
+    const data = await get()._delete(
+      `/api/orders/${orderId}/items/${lineId}`,
+      payload,
+    );
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
     }
 
     return order;
