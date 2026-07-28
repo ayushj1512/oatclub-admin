@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Building2, CreditCard, IndianRupee, Save, ShieldCheck } from "lucide-react";
 
 import CustomerSection from "@/components/customer/CustomerSection";
+import CustomerBlacklistSection from "@/components/customer/CustomerBlacklistSection";
 import CustomerCartAddsSection from "@/components/customer/CustomerCartAddsSection";
 // import AbandonedCartsSection from "@/components/customer/AbandonedCartsSection";
 import WishlistSection from "@/components/customer/WishlistSection";
@@ -136,6 +137,10 @@ export default function CustomerDetailPage() {
     <div className="p-6 md:p-8 space-y-8 bg-[#fafafa] min-h-screen">
       {/* Top sections */}
       <CustomerSection customerId={routeId} />
+      <CustomerBlacklistSection
+        customer={customer}
+        customerId={customerMongoId}
+      />
       <CustomerAnalyticsSection customer={customer} />
       <CustomerCreditsSection customerId={customerMongoId} customer={customer} />
 

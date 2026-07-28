@@ -3,6 +3,7 @@
 import OrderActionCenter from "@/components/orders/OrderActionCenter";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
   Loader2,
@@ -275,6 +276,14 @@ export default function OrderDetailsClient({ id }) {
   if (!order) return <p className="p-10 text-red-500">Order not found</p>;
 
   const items = Array.isArray(order.items) ? order.items : [];
+  const customerMongoId =
+    order?.customerId?._id ||
+    order?.customerId ||
+    "";
+
+  const customerProfileHref = customerMongoId
+    ? `/customers/${customerMongoId}`
+    : "";
 
   return (
     <>
@@ -304,108 +313,93 @@ export default function OrderDetailsClient({ id }) {
               </p>
             </div>
 
-            <span
-              className={`w-fit rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${statusBadgeStyle(
-                safeCurrentStatus
-              )}`}
-            >
-              {orderStatusLabel}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {customerProfileHref && (
+                <Link
+                  href={customerProfileHref}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:border-black hover:bg-gray-50"
+                >
+                  <User size={16} />
+                  View Customer
+                  <ExternalLink size={14} />
+                </Link>
+              )}
+
+              <span
+                className={`w-fit rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${statusBadgeStyle(
+                  safeCurrentStatus
+                )}`}
+              >
+                {orderStatusLabel}
+              </span>
+            </div>
           </div>
 
-          <Card>
-            <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
-              <Package size={18} /> Items in this Order
-            </h2>
+          <Card className="overflow-hidden">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50">
+                    <User size={18} className="text-gray-700" />
+                  </div>
 
-            {items.length === 0 ? (
-              <p className="text-sm text-gray-500">No items found.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-gray-100 text-gray-500">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Product</th>
-                      <th className="px-4 py-3 text-left font-semibold">Variant</th>
-                      <th className="px-4 py-3 text-left font-semibold">Qty</th>
-                      <th className="px-4 py-3 text-left font-semibold">Price</th>
-                      <th className="px-4 py-3 text-left font-semibold">Subtotal</th>
-                    </tr>
-                  </thead>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      Customer
+                    </p>
 
-                  <tbody className="divide-y divide-gray-100">
-                    {items.map((it, idx) => {
-                      const snap = it?.productSnapshot || {};
-                      const v = it?.variant || {};
-                      const productUrl = it?.productId?._id
-                        ? `${STORE_URL}/category/products/name/${it.productId._id}`
-                        : "";
+                    <h2 className="text-base font-semibold text-gray-900">
+                      {order?.customerId?.name || "Unknown Customer"}
+                    </h2>
+                  </div>
+                </div>
 
-                      const size = it?.selectedSize || "-";
-                      const color = it?.selectedColor || "-";
-                      const sku = v?.sku || snap?.sku || "-";
+                <div className="mt-4 grid gap-3 text-sm text-gray-600 sm:grid-cols-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Phone size={15} className="shrink-0 text-gray-400" />
 
-                      return (
-                        <tr key={idx} className="transition hover:bg-gray-50">
-                          <td className="px-4 py-4">
-                            <div className="flex items-center gap-3">
-                              <img
-                                src={snap.thumbnail || "/placeholder.png"}
-                                alt={snap.title || "Product"}
-                                className="h-12 w-12 rounded-xl border border-gray-100 object-cover"
-                              />
-                              <div>
-                                <p className="font-semibold text-gray-900">
-                                  {snap.title || "-"}
-                                </p>
+                    <span className="truncate">
+                      {order?.customerId?.phone || "Phone not available"}
+                    </span>
+                  </div>
 
-                                {productUrl && (
-                                  <a
-                                    href={productUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
-                                  >
-                                    View Product <ExternalLink size={13} />
-                                  </a>
-                                )}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Mail size={15} className="shrink-0 text-gray-400" />
 
-                                <p className="text-xs text-gray-500">
-                                  Code: {snap.productCode || "-"} • SKU: {sku}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
+                    <span className="truncate">
+                      {order?.customerId?.email || "Email not available"}
+                    </span>
+                  </div>
+                </div>
 
-                          <td className="px-4 py-4 text-gray-700">
-                            <div className="space-y-1 text-xs">
-                              <p>
-                                <span className="font-medium">Size:</span> {size}
-                              </p>
-                              <p>
-                                <span className="font-medium">Color:</span> {color}
-                              </p>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-4 font-semibold text-gray-900">
-                            {it.quantity}
-                          </td>
-
-                          <td className="px-4 py-4 text-gray-800">
-                            ₹{Number(it.price || 0)}
-                          </td>
-
-                          <td className="px-4 py-4 font-semibold text-gray-900">
-                            ₹{Number(it.subtotal || 0)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                {customerMongoId && (
+                  <p className="mt-3 text-xs text-gray-400">
+                    Customer ID:{" "}
+                    <span className="font-mono text-gray-600">
+                      {customerMongoId}
+                    </span>
+                  </p>
+                )}
               </div>
-            )}
+
+              {customerProfileHref ? (
+                <Link
+                  href={customerProfileHref}
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-black px-4 text-sm font-semibold text-white transition hover:bg-gray-800"
+                >
+                  View Customer
+                  <ExternalLink size={14} />
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center rounded-xl bg-gray-100 px-4 text-sm font-semibold text-gray-400"
+                >
+                  Customer unavailable
+                </button>
+              )}
+            </div>
           </Card>
 
           <OrderFulfillmentTimeline order={order} />
