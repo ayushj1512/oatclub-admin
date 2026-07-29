@@ -1007,7 +1007,7 @@ export default function OrdersListPage() {
                 <option value="not_confirmed">Not Confirmed</option>
               </select>
             </div>
-                
+
 
             <div>
               <label className="text-sm font-semibold text-gray-700">
@@ -1186,11 +1186,11 @@ export default function OrdersListPage() {
 
                     return (
                       <OrderRow
-  key={String(rowKey)}
-  order={order}
-  onUpdated={handleOrderUpdated}
-  openActionsUp={idx >= sortedOrders.length - 2}
-/>
+                        key={String(rowKey)}
+                        order={order}
+                        onUpdated={handleOrderUpdated}
+                        openActionsUp={idx >= sortedOrders.length - 2}
+                      />
                     );
                   })
                 ) : (

@@ -47,18 +47,18 @@ const formatIST = (value) => {
 const getCustomerName = (order = {}) =>
   String(
     order?.customerId?.name ||
-      order?.customer?.name ||
-      order?.shippingAddressSnapshot?.fullName ||
-      "Customer",
+    order?.customer?.name ||
+    order?.shippingAddressSnapshot?.fullName ||
+    "Customer",
   ).trim();
 
 const getRawPhone = (order = {}) =>
   String(
     order?.customerId?.phone ||
-      order?.customer?.phone ||
-      order?.shippingAddressSnapshot?.phone ||
-      order?.billingAddressSnapshot?.phone ||
-      "",
+    order?.customer?.phone ||
+    order?.shippingAddressSnapshot?.phone ||
+    order?.billingAddressSnapshot?.phone ||
+    "",
   ).trim();
 
 const normalizeWhatsAppPhone = (value) => {
@@ -76,12 +76,13 @@ const getOrderNumber = (order = {}) =>
 
 const getOrderTotal = (order = {}) =>
   Number(
+    order?.finalPayable ??
+    order?.pricing?.finalPayable ??
     order?.pricing?.grandTotal ??
-      order?.grandTotal ??
-      order?.finalPayable ??
-      order?.totalAmount ??
-      order?.total ??
-      0,
+    order?.grandTotal ??
+    order?.totalAmount ??
+    order?.total ??
+    0,
   );
 
 const getItems = (order = {}) =>
@@ -96,9 +97,9 @@ const getTotalQuantity = (order = {}) =>
 const getItemTitle = (item = {}) =>
   String(
     item?.productSnapshot?.title ||
-      item?.productId?.title ||
-      item?.title ||
-      "Product",
+    item?.productId?.title ||
+    item?.title ||
+    "Product",
   ).trim();
 
 const getItemSize = (item = {}) =>
@@ -169,40 +170,36 @@ const getItemSummary = (order = {}) => {
     const size = getItemSize(item);
     const quantity = Math.max(1, Number(item?.quantity || 1));
 
-    return `${title}${size ? ` (${size})` : ""}${
-      quantity > 1 ? ` × ${quantity}` : ""
-    }`;
+    return `${title}${size ? ` (${size})` : ""}${quantity > 1 ? ` × ${quantity}` : ""
+      }`;
   });
 
   const remaining = items.length - visibleItems.length;
 
   return remaining > 0
-    ? `${visibleItems.join(", ")} and ${remaining} more item${
-        remaining > 1 ? "s" : ""
-      }`
+    ? `${visibleItems.join(", ")} and ${remaining} more item${remaining > 1 ? "s" : ""
+    }`
     : visibleItems.join(", ");
 };
 
 const createConfirmationMessage = (order = {}) => `Hi ${getCustomerName(order)},
 
-Greetings from OATCLUB! 🖤
+Welcome to *OATCLUB* ✨
 
-Thank you for placing your order with us. Please confirm your order before we begin processing it.
+Before we process your order, please confirm the details below:
 
-*Order Summary*
-Order: *${getOrderNumber(order)}*
-Items: ${getItemSummary(order)}
-Amount: *${formatCurrency(getOrderTotal(order))}*
-Payment: *${getPaymentLabel(order)}*
+*Order:* #${getOrderNumber(order)}
+*Product:* ${getItemSummary(order)}
+*Final Payable:* ${formatCurrency(getOrderTotal(order))}
 
-Kindly reply with:
+Each order is carefully quality-checked before dispatch and will be shipped within *7 business days*.
 
-*YES* — Confirm my order
-*NO* — Cancel my order
+Please reply with:
 
-Our dispatch timeline is up to *7 days* after confirmation, as every order is carefully quality-checked before dispatch.
+ *YES* – Confirm my order
+ *NO* – Cancel my order
 
-Thank you for choosing OATCLUB.
+Thank you for choosing *OATCLUB*.
 
 *Team OATCLUB*
 Own All Trends`;
@@ -212,19 +209,14 @@ const createShippingMessage = (order = {}) => {
 
   return `Hi ${getCustomerName(order)},
 
-Great news! Your OATCLUB order has been shipped. 📦
+Great news! 🎉
 
-*Shipping Details*
-Order: *${getOrderNumber(order)}*
-Courier: *${courierName || "Assigned Courier"}*
-AWB: *${awb || "Available shortly"}*
+Your *OATCLUB* order *#${getOrderNumber(order)}* has been shipped and is on its way.
 
-Track your order:
+📦 *Track your order:*
 ${trackingUrl || "Tracking link will be updated shortly."}
 
-Please keep your phone available for courier and delivery updates.
-
-Thank you for choosing OATCLUB.
+Thank you for shopping with *OATCLUB*. We can't wait for you to receive your order!
 
 *Team OATCLUB*
 Own All Trends`;
@@ -542,21 +534,19 @@ export default function UnconfirmedOrderWhatsAppPage({
               <button
                 type="button"
                 onClick={() => setActiveTab("confirmation")}
-                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${
-                  activeTab === "confirmation"
-                    ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
-                    : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
-                }`}
+                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "confirmation"
+                  ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
+                  : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
+                  }`}
               >
                 <Clock3 size={15} />
                 Confirmation
 
                 <span
-                  className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    activeTab === "confirmation"
-                      ? "bg-gray-900 text-white"
-                      : "bg-white text-gray-600"
-                  }`}
+                  className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeTab === "confirmation"
+                    ? "bg-gray-900 text-white"
+                    : "bg-white text-gray-600"
+                    }`}
                 >
                   {confirmationOrders.length}
                 </span>
@@ -565,21 +555,19 @@ export default function UnconfirmedOrderWhatsAppPage({
               <button
                 type="button"
                 onClick={() => setActiveTab("shipping")}
-                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${
-                  activeTab === "shipping"
-                    ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
-                    : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
-                }`}
+                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "shipping"
+                  ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
+                  : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
+                  }`}
               >
                 <Truck size={15} />
                 Shipping
 
                 <span
-                  className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    activeTab === "shipping"
-                      ? "bg-gray-900 text-white"
-                      : "bg-white text-gray-600"
-                  }`}
+                  className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeTab === "shipping"
+                    ? "bg-gray-900 text-white"
+                    : "bg-white text-gray-600"
+                    }`}
                 >
                   {shippingOrders.length}
                 </span>
@@ -631,11 +619,10 @@ export default function UnconfirmedOrderWhatsAppPage({
                 onClick={() =>
                   setShowMobileOnly((value) => !value)
                 }
-                className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${
-                  showMobileOnly
-                    ? "border-gray-300 bg-gray-100 text-gray-950"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-                }`}
+                className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${showMobileOnly
+                  ? "border-gray-300 bg-gray-100 text-gray-950"
+                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
               >
                 <Smartphone size={15} />
                 WhatsApp Ready

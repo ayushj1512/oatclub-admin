@@ -19,6 +19,7 @@ import {
   Printer,
   RefreshCw,
   Truck,
+  MessageCircle,
 } from "lucide-react";
 
 import { toast } from "react-hot-toast";
@@ -30,6 +31,146 @@ import { useShiprocketStore } from "@/store/ShipRocketStore";
 
 const safe = (value) => String(value ?? "").trim();
 
+const formatCurrency = (value) =>
+  `₹${Number(value || 0).toLocaleString("en-IN")}`;
+
+const getCustomerName = (order = {}) =>
+  safe(
+    order?.customerId?.name ||
+    order?.customer?.name ||
+    order?.customerName ||
+    order?.shippingAddressSnapshot?.fullName ||
+    "Customer"
+  );
+
+const getCustomerPhone = (order = {}) =>
+  safe(
+    order?.customerId?.phone ||
+    order?.customer?.phone ||
+    order?.customerPhone ||
+    order?.shippingAddressSnapshot?.phone ||
+    order?.billingAddressSnapshot?.phone
+  );
+
+const normalizeWhatsAppPhone = (value) => {
+  let phone = safe(value)
+    .replace(/\D/g, "")
+    .replace(/^0+/, "");
+
+  if (phone.length === 10) {
+    phone = `91${phone}`;
+  }
+
+  return phone.startsWith("91") && phone.length === 12
+    ? phone
+    : "";
+};
+
+const getOrderNumber = (order = {}) =>
+  safe(order?.orderNumber || order?._id || "-");
+
+const getFinalPayable = (order = {}) =>
+  Number(
+    order?.finalPayable ??
+    order?.pricing?.finalPayable ??
+    order?.pricing?.grandTotal ??
+    order?.grandTotal ??
+    order?.totalAmount ??
+    order?.total ??
+    0
+  );
+
+const getPaymentLabel = (order = {}) => {
+  const method = safe(order?.paymentMethod).toLowerCase();
+
+  if (method === "cod") return "COD";
+  if (method === "razorpay") return "Online";
+  if (method === "wallet") return "Wallet";
+  if (method === "exchange") return "Exchange";
+
+  return method || "-";
+};
+
+const getItems = (order = {}) =>
+  Array.isArray(order?.items) ? order.items : [];
+
+const getItemTitle = (item = {}) =>
+  safe(
+    item?.productSnapshot?.title ||
+    item?.productId?.title ||
+    item?.title ||
+    "Product"
+  );
+
+const getItemSize = (item = {}) =>
+  safe(
+    item?.selectedSize ||
+    item?.variant?.size ||
+    item?.variant?.attributes?.find(
+      (attribute) =>
+        safe(attribute?.key).toLowerCase() === "size"
+    )?.value
+  );
+
+const getItemSummary = (order = {}) => {
+  const items = getItems(order);
+
+  if (!items.length) {
+    return "Your selected OATCLUB items";
+  }
+
+  const visibleItems = items.slice(0, 3).map((item) => {
+    const title = getItemTitle(item);
+    const size = getItemSize(item);
+    const quantity = Math.max(
+      1,
+      Number(item?.quantity || 1)
+    );
+
+    return `${title}${size ? ` (${size})` : ""}${quantity > 1 ? ` × ${quantity}` : ""
+      }`;
+  });
+
+  const remaining = items.length - visibleItems.length;
+
+  return remaining > 0
+    ? `${visibleItems.join(", ")} and ${remaining} more item${remaining > 1 ? "s" : ""
+    }`
+    : visibleItems.join(", ");
+};
+
+const getShippingDetails = (order = {}) => {
+  const shipment = order?.shipment || {};
+  const shiprocket = shipment?.shiprocket || {};
+  const xpressbees = shipment?.xpressbees || {};
+
+  return {
+    awb: safe(
+      shipment?.awb ||
+      shiprocket?.awb ||
+      xpressbees?.awb ||
+      order?.trackingId ||
+      order?.trackingDetails?.trackingId ||
+      order?.trackingDetails?.awb
+    ),
+
+    courierName: safe(
+      shipment?.courierName ||
+      shiprocket?.courierName ||
+      xpressbees?.courierName ||
+      order?.courierName ||
+      order?.trackingDetails?.courierName
+    ),
+
+    trackingUrl: safe(
+      shipment?.trackingUrl ||
+      shiprocket?.trackingUrl ||
+      xpressbees?.trackingUrl ||
+      order?.trackingUrl ||
+      order?.trackingDetails?.trackingUrl
+    ),
+  };
+};
 const getShippingLabelUrl = (order) =>
   safe(
     order?.shipment?.shiprocket?.labelUrl ||
@@ -40,6 +181,74 @@ const getShippingLabelUrl = (order) =>
     order?.labelUrl ||
     order?.trackingDetails?.labelUrl
   );
+
+const createConfirmationMessage = (order = {}) => `Hi ${getCustomerName(order)},
+
+Welcome to *OATCLUB* ✨
+
+Before we process your order, please confirm the details below:
+
+*Order:* #${getOrderNumber(order)}
+*Product:* ${getItemSummary(order)}
+*Final Payable:* ${formatCurrency(getFinalPayable(order))}
+*Payment:* ${getPaymentLabel(order)}
+
+Each order is carefully quality-checked before dispatch and will be shipped within *7 business days*.
+
+Please reply with:
+
+✅ *YES* – Confirm my order
+❌ *NO* – Cancel my order
+
+Thank you for choosing *OATCLUB*.
+
+*Team OATCLUB*
+Own All Trends`;
+
+const createShippingMessage = (order = {}) => {
+  const {
+    awb,
+    courierName,
+    trackingUrl,
+  } = getShippingDetails(order);
+
+  return `Hi ${getCustomerName(order)},
+
+Great news! 🎉
+
+Your *OATCLUB* order *#${getOrderNumber(order)}* has been shipped and is on its way.
+
+*Shipping Details*
+Courier: *${courierName || "Assigned Courier"}*
+AWB: *${awb || "Available shortly"}*
+
+📦 *Track your order:*
+${trackingUrl || "Tracking link will be updated shortly."}
+
+Please keep your phone available for courier and delivery updates.
+
+Thank you for shopping with *OATCLUB*. We can't wait for you to receive your order!
+
+*Team OATCLUB*
+Own All Trends`;
+};
+
+const createWhatsAppLink = (order, type) => {
+  const phone = normalizeWhatsAppPhone(
+    getCustomerPhone(order)
+  );
+
+  if (!phone) return "";
+
+  const message =
+    type === "shipping"
+      ? createShippingMessage(order)
+      : createConfirmationMessage(order);
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(
+    message
+  )}`;
+};
 
 export default function OrderRowActions({
   order,
@@ -107,6 +316,32 @@ export default function OrderRowActions({
 
   const shippingLabelUrl = getShippingLabelUrl(order);
   const hasShippingLabel = Boolean(shippingLabelUrl);
+
+  const whatsappPhone = normalizeWhatsAppPhone(
+    getCustomerPhone(order)
+  );
+
+  const hasWhatsAppPhone = Boolean(whatsappPhone);
+
+  const {
+    awb: shippingAwb,
+    trackingUrl: shippingTrackingUrl,
+  } = getShippingDetails(order);
+
+  const fulfillmentStatus = safe(
+    order?.fulfillmentStatus
+  ).toLowerCase();
+
+  const canSendShippingMessage =
+    hasWhatsAppPhone &&
+    Boolean(shippingAwb || shippingTrackingUrl) &&
+    [
+      "packed",
+      "picked",
+      "shipped",
+      "out_for_delivery",
+      "delivered",
+    ].includes(fulfillmentStatus);
 
   useEffect(() => {
     setIsConfirmed(order?.isConfirmed === true);
@@ -312,6 +547,52 @@ export default function OrderRowActions({
     }
   };
 
+  const handleWhatsAppConfirmation = () => {
+    const whatsappLink = createWhatsAppLink(
+      order,
+      "confirmation"
+    );
+
+    if (!whatsappLink) {
+      toast.error(
+        "Valid customer WhatsApp number is unavailable"
+      );
+      return;
+    }
+
+    window.open(
+      whatsappLink,
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+    setOpen(false);
+    toast.success("Confirmation message opened");
+  };
+
+  const handleWhatsAppShipping = () => {
+    const whatsappLink = createWhatsAppLink(
+      order,
+      "shipping"
+    );
+
+    if (!whatsappLink) {
+      toast.error(
+        "Valid customer WhatsApp number is unavailable"
+      );
+      return;
+    }
+
+    window.open(
+      whatsappLink,
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+    setOpen(false);
+    toast.success("Shipping message opened");
+  };
+
   const handleInfluencerToggle = async () => {
     if (!orderId || influencerLoading) return;
 
@@ -496,8 +777,8 @@ export default function OrderRowActions({
         {open && (
           <div
             className={`absolute right-0 z-50 w-64 overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-xl ${openUp
-                ? "bottom-full mb-2"
-                : "top-full mt-2"
+              ? "bottom-full mb-2"
+              : "top-full mt-2"
               }`}
           >            {/* Confirm Order */}
 
@@ -546,6 +827,84 @@ export default function OrderRowActions({
               {isConfirmed && (
                 <span className="rounded-full bg-emerald-100 px-2 py-1 text-[9px] font-bold text-emerald-700">
                   DONE
+                </span>
+              )}
+            </button>
+
+            {/* WhatsApp Confirmation */}
+
+            <button
+              type="button"
+              onClick={handleWhatsAppConfirmation}
+              disabled={isBusy || !hasWhatsAppPhone}
+              title={
+                hasWhatsAppPhone
+                  ? "Send order confirmation message"
+                  : "Customer WhatsApp number is unavailable"
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                <MessageCircle
+                  size={15}
+                  className="text-emerald-600"
+                />
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    WhatsApp Confirmation
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {hasWhatsAppPhone
+                      ? "Send order confirmation request"
+                      : "Phone number unavailable"}
+                  </div>
+                </div>
+              </div>
+
+              {!hasWhatsAppPhone && (
+                <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
+                  UNAVAILABLE
+                </span>
+              )}
+            </button>
+
+            {/* WhatsApp Shipped */}
+
+            <button
+              type="button"
+              onClick={handleWhatsAppShipping}
+              disabled={isBusy || !canSendShippingMessage}
+              title={
+                canSendShippingMessage
+                  ? "Send shipped order message"
+                  : "Shipping or tracking details are unavailable"
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                <Truck
+                  size={15}
+                  className="text-blue-600"
+                />
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    WhatsApp Shipped
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {canSendShippingMessage
+                      ? "Send courier and tracking details"
+                      : "Tracking details unavailable"}
+                  </div>
+                </div>
+              </div>
+
+              {!canSendShippingMessage && (
+                <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
+                  UNAVAILABLE
                 </span>
               )}
             </button>
