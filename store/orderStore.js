@@ -108,6 +108,8 @@ export const useOrderStore = create((set, get) => ({
   order: null,
   loading: false,
   error: null,
+  placing: false,
+
   /* ---------------- INVOICES ---------------- */
 
   invoices: [],
@@ -171,11 +173,24 @@ export const useOrderStore = create((set, get) => ({
     }));
   },
 
-  _json: async (res) => {
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || "Request failed");
-    return data;
-  },
+ _json: async (res) => {
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const error = new Error(
+      data?.message ||
+      `Request failed with status ${res.status}`,
+    );
+
+    error.status = res.status;
+    error.code = data?.code || "REQUEST_FAILED";
+    error.data = data;
+
+    throw error;
+  }
+
+  return data;
+},
 
   _normalizeInvoicesPayload: (data) => {
     const invoices = Array.isArray(data?.invoices)
@@ -215,24 +230,68 @@ export const useOrderStore = create((set, get) => ({
     }
   },
 
-  _post: async (path, payload) => {
+ _post: async (path, payload, { silent = false } = {}) => {
+  if (!silent) {
     get()._start();
+  }
+
+  if (!API) {
+    const error = new Error(
+      "Backend URL is not configured.",
+    );
+
+    error.code = "API_URL_MISSING";
+
+    if (!silent) {
+      get()._fail(error);
+    }
+
+    throw error;
+  }
+
+  try {
+    let res;
 
     try {
-      const res = await fetch(`${API}${path}`, {
+      res = await fetch(`${API}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(stripUndefinedDeep(payload || {})),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify(
+          stripUndefinedDeep(payload || {}),
+        ),
+      });
+    } catch (networkError) {
+      console.error("POST network error:", {
+        url: `${API}${path}`,
+        error: networkError,
       });
 
-      const data = await get()._json(res);
-      get()._success();
-      return data;
-    } catch (e) {
-      get()._fail(e);
-      throw e;
+      const error = new Error(
+        "Unable to connect to the server. Please try again.",
+      );
+
+      error.code = "NETWORK_ERROR";
+      throw error;
     }
-  },
+
+    const data = await get()._json(res);
+
+    if (!silent) {
+      get()._success();
+    }
+
+    return data;
+  } catch (error) {
+    if (!silent) {
+      get()._fail(error);
+    }
+
+    throw error;
+  }
+},
 
   _patch: async (path, payload) => {
     get()._start();
@@ -272,23 +331,30 @@ export const useOrderStore = create((set, get) => ({
     }
   },
 
-  createOrder: async (payload) => {
+ createOrder: async (payload) => {
+  set({
+    placing: true,
+    error: null,
+  });
+
+  try {
     const p = { ...(payload || {}) };
 
     if (p.priority != null) {
-      p.priority = normalizePriority(p.priority) || "normal";
+      p.priority =
+        normalizePriority(p.priority) || "normal";
     }
 
     if (p.paymentMethod != null) {
-      p.paymentMethod = normalizePaymentMethod(p.paymentMethod) || "cod";
+      p.paymentMethod =
+        normalizePaymentMethod(p.paymentMethod) || "cod";
     }
 
-    // ✅ wallet / customer credit support
     const walletAmount = Number(
       p.walletAmount ??
-        p.walletCredit?.amount ??
-        p.paymentBreakdown?.walletAmount ??
-        0,
+      p.walletCredit?.amount ??
+      p.paymentBreakdown?.walletAmount ??
+      0,
     );
 
     if (
@@ -311,16 +377,48 @@ export const useOrderStore = create((set, get) => ({
       };
     }
 
-    const data = await get()._post(`/api/orders`, p);
+    const data = await get()._post(
+      "/api/orders",
+      p,
+      { silent: true },
+    );
+
     const order = get()._normalizeOrder(data);
 
-    set((s) => ({
+    if (!order?._id && !order?.orderNumber) {
+      throw new Error(
+        "Order could not be created. Please try again.",
+      );
+    }
+
+    set((state) => ({
       order,
-      orders: order ? [order, ...(s.orders || [])] : s.orders,
+      orders: [
+        order,
+        ...(state.orders || []).filter(
+          (existingOrder) =>
+            String(existingOrder?._id) !==
+            String(order?._id),
+        ),
+      ],
+      placing: false,
+      loading: false,
+      error: null,
     }));
 
     return order;
-  },
+  } catch (error) {
+    set({
+      placing: false,
+      loading: false,
+      error:
+        error?.message ||
+        "Unable to place your order.",
+    });
+
+    throw error;
+  }
+},
 
   fetchOrderById: async (orderId) => {
     if (!orderId) return null;
