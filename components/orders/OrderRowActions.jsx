@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -24,6 +25,7 @@ import {
 
 import { toast } from "react-hot-toast";
 import { useReactToPrint } from "react-to-print";
+import { createPortal } from "react-dom";
 
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { useOrderStore } from "@/store/orderStore";
@@ -259,6 +261,8 @@ export default function OrderRowActions({
   openUp = false,
 }) {
   const menuRef = useRef(null);
+  const menuPanelRef = useRef(null);
+  const triggerRef = useRef(null);
   const invoiceRef = useRef(null);
 
   const fetchInvoiceByOrderNumber = useOrderStore(
@@ -282,6 +286,7 @@ export default function OrderRowActions({
   );
 
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [invoice, setInvoice] = useState(null);
   const [error, setError] = useState("");
 
@@ -815,12 +820,62 @@ export default function OrderRowActions({
     setOpen(false);
   };
 
+  const updateMenuPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger || typeof window === "undefined") return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 256;
+    const gap = 8;
+    const viewportPadding = 8;
+    const measuredHeight = menuPanelRef.current?.offsetHeight || 420;
+
+    const left = Math.min(
+      Math.max(viewportPadding, rect.right - menuWidth),
+      window.innerWidth - menuWidth - viewportPadding
+    );
+
+    const spaceBelow = window.innerHeight - rect.bottom - gap;
+    const spaceAbove = rect.top - gap;
+    const shouldOpenUp =
+      openUp || (spaceBelow < Math.min(measuredHeight, 420) && spaceAbove > spaceBelow);
+
+    const preferredTop = shouldOpenUp
+      ? rect.top - measuredHeight - gap
+      : rect.bottom + gap;
+
+    const top = Math.min(
+      Math.max(viewportPadding, preferredTop),
+      Math.max(viewportPadding, window.innerHeight - measuredHeight - viewportPadding)
+    );
+
+    setMenuPosition({ top, left });
+  }, [openUp]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updateMenuPosition();
+  }, [open, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const reposition = () => updateMenuPosition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open, updateMenuPosition]);
+
   useEffect(() => {
     const handleOutsideClick = (event) => {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(event.target)
-      ) {
+      const clickedTrigger = menuRef.current?.contains(event.target);
+      const clickedMenu = menuPanelRef.current?.contains(event.target);
+
+      if (!clickedTrigger && !clickedMenu) {
         setOpen(false);
       }
     };
@@ -870,6 +925,7 @@ export default function OrderRowActions({
         className="relative"
       >
         <button
+          ref={triggerRef}
           type="button"
           onClick={() =>
             setOpen((current) => !current)
@@ -888,12 +944,14 @@ export default function OrderRowActions({
           )}
         </button>
 
-        {open && (
+        {open && typeof document !== "undefined" && createPortal(
           <div
-            className={`absolute right-0 z-50 w-64 overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-xl ${openUp
-              ? "bottom-full mb-2"
-              : "top-full mt-2"
-              }`}
+            ref={menuPanelRef}
+            className="fixed z-[9999] w-64 max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-2xl"
+            style={{
+              top: menuPosition.top,
+              left: menuPosition.left,
+            }}
           >            {/* Confirm Order */}
 
             <button
@@ -1259,7 +1317,8 @@ export default function OrderRowActions({
                   : "OFF"}
               </span>
             </button>
-          </div>
+          </div>,
+          document.body
         )}
 
         {error && (
