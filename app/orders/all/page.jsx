@@ -55,6 +55,8 @@ const istEndISO = (ymd) => (ymd ? `${ymd}T23:59:59.999${IST_OFFSET}` : "");
 
 const norm = (v) => String(v ?? "").trim().toLowerCase();
 
+
+
 /* ---------------------------------------------
    ✅ CSV helpers
 --------------------------------------------- */
@@ -482,8 +484,27 @@ export default function OrdersListPage() {
     search,
   ]);
 
+  const REVENUE_STATUSES = new Set([
+    "processing",
+    "packed",
+    "picked",
+    "shipped",
+    "out_for_delivery",
+    "delivered",
+  ]);
+
   const totalRevenue = useMemo(() => {
     return filteredOrders.reduce((sum, order) => {
+      const status = String(order?.fulfillmentStatus || "").toLowerCase();
+
+      if (order?.isConfirmed !== true) {
+        return sum;
+      }
+
+      if (!REVENUE_STATUSES.has(status)) {
+        return sum;
+      }
+
       return sum + getOrderRevenue(order);
     }, 0);
   }, [filteredOrders]);
