@@ -151,6 +151,7 @@ function PaginationBar({
   onRefresh,
   onPageChange,
   totalRevenue,
+  validRevenue,
 }) {
   const canGoPrev = currentPage > 1;
   const canGoNext = currentPage < totalPages;
@@ -169,52 +170,65 @@ function PaginationBar({
             </>
           ) : null}
           {" • "}
-          Revenue <span className="font-semibold">{formatINR(totalRevenue)}</span>
-          <span className="text-gray-400"> • {pageSize} per page</span>
-        </div>
+          Revenue{" "}
+          <span className="font-semibold">
+            {formatINR(totalRevenue)}
+          </span>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={onRefresh}
-            disabled={loading}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${loading
-              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-              : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
-              }`}
-          >
-            {loading ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 size={16} className="animate-spin" />
-                Refreshing...
-              </span>
-            ) : (
-              "Refresh"
-            )}
-          </button>
+          {" • "}
+          Valid Revenue{" "}
+          <span className="font-semibold text-emerald-700">
+            {formatINR(validRevenue)}
+          </span>
 
-          <button
-            disabled={!canGoPrev || loading}
-            onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoPrev || loading
-              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-              : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
-              }`}
-          >
-            <ChevronLeft size={16} />
-            Prev
-          </button>
+          <span className="text-gray-400">
+            {" • "}
+            {pageSize} per page
+          </span>
 
-          <button
-            disabled={!canGoNext || loading}
-            onClick={() => onPageChange(Math.min(currentPage + 1, totalPages))}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoNext || loading
-              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-              : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
-              }`}
-          >
-            Next
-            <ChevronRight size={16} />
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${loading
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
+                }`}
+            >
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin" />
+                  Refreshing...
+                </span>
+              ) : (
+                "Refresh"
+              )}
+            </button>
+
+            <button
+              disabled={!canGoPrev || loading}
+              onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoPrev || loading
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98]"
+                }`}
+            >
+              <ChevronLeft size={16} />
+              Prev
+            </button>
+
+            <button
+              disabled={!canGoNext || loading}
+              onClick={() => onPageChange(Math.min(currentPage + 1, totalPages))}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoNext || loading
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
+                }`}
+            >
+              Next
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -407,7 +421,7 @@ export default function OrdersListPage() {
       setEndDate("");
     }
   }, [quickDate]);
-  
+
 
   const backendFilters = useMemo(() => {
     const f = {};
@@ -494,9 +508,21 @@ export default function OrdersListPage() {
     "delivered",
   ]);
 
+  // All filtered orders revenue
   const totalRevenue = useMemo(() => {
+    return filteredOrders.reduce(
+      (sum, order) =>
+        sum + getOrderRevenue(order),
+      0
+    );
+  }, [filteredOrders]);
+
+  // Confirmed + valid fulfillment status revenue
+  const validRevenue = useMemo(() => {
     return filteredOrders.reduce((sum, order) => {
-      const status = String(order?.fulfillmentStatus || "").toLowerCase();
+      const status = String(
+        order?.fulfillmentStatus || ""
+      ).toLowerCase();
 
       if (order?.isConfirmed !== true) {
         return sum;
@@ -846,8 +872,12 @@ export default function OrdersListPage() {
                 {totalCount || filteredOrders.length} Orders
               </span>
 
-              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
+              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
                 Revenue: {formatINR(totalRevenue)}
+              </span>
+
+              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
+                Valid Revenue: {formatINR(validRevenue)}
               </span>
 
               <span className="px-3 py-1 rounded-full bg-violet-50 text-violet-700 font-semibold">
@@ -1166,6 +1196,7 @@ export default function OrdersListPage() {
               onRefresh={loadOrders}
               onPageChange={setCurrentPage}
               totalRevenue={totalRevenue}
+              validRevenue={validRevenue}
             />
           </div>
         </Card>
