@@ -197,8 +197,8 @@ Each order is carefully quality-checked before dispatch and will be shipped with
 
 Please reply with:
 
-✅ *YES* – Confirm my order
-❌ *NO* – Cancel my order
+*YES* – Confirm my order
+*NO* – Cancel my order
 
 Thank you for choosing *OATCLUB*.
 
@@ -222,7 +222,7 @@ Your *OATCLUB* order *#${getOrderNumber(order)}* has been shipped and is on its 
 Courier: *${courierName || "Assigned Courier"}*
 AWB: *${awb || "Available shortly"}*
 
-📦 *Track your order:*
+*Track your order:*
 ${trackingUrl || "Tracking link will be updated shortly."}
 
 Please keep your phone available for courier and delivery updates.
