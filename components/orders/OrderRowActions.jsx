@@ -447,12 +447,11 @@ export default function OrderRowActions({
     setOpen(false);
     setError("");
     setInvoiceLoading(true);
+    setPendingInvoiceAction(action);
 
     try {
       const result = await loadInvoice();
-
       setInvoice(result);
-      setPendingInvoiceAction(action);
     } catch (fetchError) {
       console.error(
         "OrderRowActions invoice error:",
@@ -464,6 +463,7 @@ export default function OrderRowActions({
         "Failed to load invoice.";
 
       setError(message);
+      setPendingInvoiceAction(null);
       toast.error(message);
     } finally {
       setInvoiceLoading(false);
@@ -483,25 +483,138 @@ export default function OrderRowActions({
       return undefined;
     }
 
-    const timer = window.setTimeout(() => {
-      printInvoice?.();
+    const timer = window.setTimeout(async () => {
+      try {
+        // Print Invoice
+        if (pendingInvoiceAction === "print") {
+          printInvoice?.();
+          return;
+        }
 
-      if (pendingInvoiceAction === "download") {
-        toast.success(
-          "Select “Save as PDF” to download the invoice"
+        // Direct Download Invoice
+        if (pendingInvoiceAction === "download") {
+          const element = invoiceRef.current;
+
+          if (!element) {
+            throw new Error("Invoice content is not ready.");
+          }
+
+          const [canvasModule, pdfModule] =
+            await Promise.all([
+              import("html2canvas-pro"),
+              import("jspdf"),
+            ]);
+
+          const html2canvas =
+            canvasModule.default || canvasModule;
+
+          const jsPDF =
+            pdfModule.jsPDF ||
+            pdfModule.default?.jsPDF ||
+            pdfModule.default;
+
+          const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: false,
+            backgroundColor: "#ffffff",
+            logging: false,
+          });
+
+          const imageData = canvas.toDataURL(
+            "image/jpeg",
+            0.98
+          );
+
+          const pdf = new jsPDF({
+            orientation: "portrait",
+            unit: "mm",
+            format: "a4",
+            compress: true,
+          });
+
+          const pageWidth =
+            pdf.internal.pageSize.getWidth();
+
+          const pageHeight =
+            pdf.internal.pageSize.getHeight();
+
+          const margin = 8;
+          const usableWidth =
+            pageWidth - margin * 2;
+
+          const renderedHeight =
+            (canvas.height * usableWidth) /
+            canvas.width;
+
+          const usablePageHeight =
+            pageHeight - margin * 2;
+
+          let remainingHeight = renderedHeight;
+          let position = margin;
+
+          pdf.addImage(
+            imageData,
+            "JPEG",
+            margin,
+            position,
+            usableWidth,
+            renderedHeight,
+            undefined,
+            "FAST"
+          );
+
+          remainingHeight -= usablePageHeight;
+
+          while (remainingHeight > 0) {
+            pdf.addPage();
+
+            position =
+              margin -
+              (renderedHeight - remainingHeight);
+
+            pdf.addImage(
+              imageData,
+              "JPEG",
+              margin,
+              position,
+              usableWidth,
+              renderedHeight,
+              undefined,
+              "FAST"
+            );
+
+            remainingHeight -= usablePageHeight;
+          }
+
+          pdf.save(`Invoice-${invoiceTitle}.pdf`);
+
+          toast.success(
+            "Invoice downloaded successfully"
+          );
+        }
+      } catch (invoiceError) {
+        console.error(
+          "Invoice action error:",
+          invoiceError
         );
-      }
 
-      setPendingInvoiceAction(null);
-    }, 150);
+        toast.error(
+          invoiceError?.message ||
+          "Failed to download invoice"
+        );
+      } finally {
+        setPendingInvoiceAction(null);
+      }
+    }, 250);
 
     return () => window.clearTimeout(timer);
   }, [
     invoice,
+    invoiceTitle,
     pendingInvoiceAction,
     printInvoice,
   ]);
-
   const handleConfirmOrder = async () => {
     if (
       !orderId ||
@@ -745,6 +858,7 @@ export default function OrderRowActions({
 
   const isBusy =
     invoiceLoading ||
+    Boolean(pendingInvoiceAction) ||
     confirmLoading ||
     influencerLoading ||
     syncing;
@@ -971,8 +1085,7 @@ export default function OrderRowActions({
                 </div>
 
                 <div className="mt-0.5 text-[10px] text-zinc-500">
-                  Save invoice as PDF
-                </div>
+                  Download Invoice (PDF)                </div>
               </div>
             </button>
 
