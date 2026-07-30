@@ -186,7 +186,7 @@ const getShippingLabelUrl = (order) =>
 
 const createConfirmationMessage = (order = {}) => `Hi ${getCustomerName(order)},
 
-Welcome to *OATCLUB* ✨
+Welcome to *OATCLUB* 
 
 Before we process your order, please confirm the details below:
 
