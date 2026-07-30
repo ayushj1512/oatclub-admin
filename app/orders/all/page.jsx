@@ -1,18 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
+  Bell,
   Download,
   Loader2,
   Search,
+  X,
 } from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 import { useOrderStore } from "@/store/orderStore";
 
 const IST_TZ = "Asia/Kolkata";
 const IST_OFFSET = "+05:30";
+const API = (process.env.NEXT_PUBLIC_API_URL || "").trim();
+const NEW_ORDER_POLL_MS = 15_000;
 
 /* ---------------------------------------------
    ✅ Small UI helpers
@@ -24,6 +28,57 @@ const Card = ({ children, className = "" }) => (
     {children}
   </div>
 );
+
+function NewOrdersNotification({ orders, onView, onDismiss }) {
+  if (!orders.length) return null;
+
+  const latest = orders[0];
+  const customerName =
+    latest?.customerId?.name ||
+    latest?.shippingAddressSnapshot?.fullName ||
+    "Customer";
+
+  return (
+    <div className="fixed right-4 top-4 z-[100] w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl sm:right-6 sm:top-6">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black text-white">
+          <Bell size={18} />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-gray-900">
+            {orders.length} New {orders.length === 1 ? "Order" : "Orders"}
+          </p>
+          <p className="mt-1 truncate text-sm text-gray-600">
+            #{latest?.orderNumber || "New"} · {customerName} · {formatINR(getOrderRevenue(latest))}
+          </p>
+          {orders.length > 1 ? (
+            <p className="mt-1 text-xs font-medium text-gray-400">
+              +{orders.length - 1} more waiting
+            </p>
+          ) : null}
+        </div>
+
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          aria-label="Dismiss new order notification"
+        >
+          <X size={17} />
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={onView}
+        className="mt-4 w-full rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.98]"
+      >
+        View New Orders
+      </button>
+    </div>
+  );
+}
 
 /* ---------------------------------------------
    ✅ IST-safe date helpers
@@ -350,6 +405,10 @@ export default function OrdersListPage() {
   const [search, setSearch] = useState("");
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [newOrders, setNewOrders] = useState([]);
+  const knownOrderIdsRef = useRef(new Set());
+  const pollingRef = useRef(false);
+  const baselineReadyRef = useRef(false);
 
   // Filters
   const [startDate, setStartDate] = useState("");
@@ -482,6 +541,122 @@ export default function OrdersListPage() {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  // Build a clean baseline from the actual latest orders. This prevents
+  // old orders from appearing as new when the page has active filters.
+  useEffect(() => {
+    if (!hasLoadedOnce || !API || baselineReadyRef.current) return;
+
+    let cancelled = false;
+
+    const initializePollingBaseline = async () => {
+      try {
+        const response = await fetch(`${API}/api/orders?page=1&limit=10`, {
+          cache: "no-store",
+        });
+
+        if (!response.ok || cancelled) return;
+
+        const payload = await response.json().catch(() => ({}));
+        const latestOrders = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.orders)
+            ? payload.orders
+            : Array.isArray(payload?.data)
+              ? payload.data
+              : [];
+
+        for (const order of latestOrders) {
+          if (order?._id) knownOrderIdsRef.current.add(String(order._id));
+        }
+
+        baselineReadyRef.current = true;
+      } catch (error) {
+        console.error("New order baseline failed:", error);
+      }
+    };
+
+    initializePollingBaseline();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasLoadedOnce]);
+
+  const checkForNewOrders = useCallback(async () => {
+    if (!API || !baselineReadyRef.current || pollingRef.current) return;
+
+    pollingRef.current = true;
+
+    try {
+      const response = await fetch(`${API}/api/orders?page=1&limit=10`, {
+        cache: "no-store",
+      });
+
+      if (!response.ok) return;
+
+      const payload = await response.json().catch(() => ({}));
+      const latestOrders = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.orders)
+          ? payload.orders
+          : Array.isArray(payload?.data)
+            ? payload.data
+            : [];
+
+      const unseenOrders = latestOrders.filter((order) => {
+        if (!order?._id) return false;
+        return !knownOrderIdsRef.current.has(String(order._id));
+      });
+
+      // Mark every received order as known so the same notification never repeats.
+      for (const order of latestOrders) {
+        if (order?._id) knownOrderIdsRef.current.add(String(order._id));
+      }
+
+      if (unseenOrders.length) {
+        setNewOrders((current) => {
+          const merged = [...unseenOrders, ...current];
+          const unique = new Map();
+
+          for (const order of merged) {
+            const key = String(order?._id || order?.orderNumber || "");
+            if (key && !unique.has(key)) unique.set(key, order);
+          }
+
+          return Array.from(unique.values()).slice(0, 10);
+        });
+      }
+    } catch (error) {
+      console.error("New order polling failed:", error);
+    } finally {
+      pollingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedOnce) return;
+
+    const intervalId = window.setInterval(
+      checkForNewOrders,
+      NEW_ORDER_POLL_MS,
+    );
+
+    return () => window.clearInterval(intervalId);
+  }, [hasLoadedOnce, checkForNewOrders]);
+
+  const viewNewOrders = useCallback(async () => {
+    setNewOrders([]);
+    setCurrentPage(1);
+
+    await fetchAllOrders({
+      ...backendFilters,
+      page: 1,
+      limit: pageSize,
+    });
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [backendFilters, fetchAllOrders]);
 
   const filteredOrders = useMemo(() => {
     return applyClientFiltersToOrders({
@@ -856,6 +1031,12 @@ export default function OrdersListPage() {
 
   return (
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
+      <NewOrdersNotification
+        orders={newOrders}
+        onView={viewNewOrders}
+        onDismiss={() => setNewOrders([])}
+      />
+
       <div className="mx-auto space-y-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
