@@ -275,41 +275,91 @@ export default function PackedOrdersPage() {
     return () => window.clearTimeout(timer);
   }, [bulkAction, bulkInvoices]);
 
-  const runBulkLabelDownload = async () => {
+  const runBulkLabelDownload = () => {
     if (!selectedOrders.length || bulkAction) return;
+
+    const labels = selectedOrders
+      .map((order) => ({
+        url: getShippingLabelUrl(order),
+        name: order?.orderNumber || getOrderId(order),
+      }))
+      .filter((item) => item.url);
+
+    if (!labels.length) {
+      toast.error("Selected orders have no shipping labels");
+      return;
+    }
+
     setBulkAction("label");
 
     try {
-      const labels = selectedOrders
-        .map((order) => ({
-          url: getShippingLabelUrl(order),
-          name: order?.orderNumber || getOrderId(order),
-        }))
-        .filter((item) => item.url);
+      // Must run directly inside the button click. Delayed clicks are blocked by Chrome.
+      const blockedLabels = [];
 
-      if (!labels.length) throw new Error("Selected orders have no shipping labels");
+      labels.forEach((label) => {
+        const labelWindow = window.open(
+          label.url,
+          "_blank",
+          "noopener,noreferrer"
+        );
 
-      labels.forEach((label, index) => {
-        window.setTimeout(() => {
-          const anchor = document.createElement("a");
-          anchor.href = label.url;
-          anchor.target = "_blank";
-          anchor.rel = "noopener noreferrer";
-          anchor.download = `Shipping-Label-${label.name}.pdf`;
-          document.body.appendChild(anchor);
-          anchor.click();
-          anchor.remove();
-        }, index * 250);
+        if (!labelWindow) blockedLabels.push(label);
       });
 
+      // When Chrome blocks multiple tabs, open one fallback page containing
+      // direct links so no selected label is lost.
+      if (blockedLabels.length) {
+        const launcher = window.open("", "_blank");
+
+        if (launcher) {
+          const links = blockedLabels
+            .map(
+              (label) => `
+                <a href="${label.url}" target="_blank" rel="noopener noreferrer">
+                  Open Shipping Label — ${label.name}
+                </a>
+              `
+            )
+            .join("");
+
+          launcher.document.write(`
+            <!doctype html>
+            <html>
+              <head>
+                <title>OATCLUB Shipping Labels</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <style>
+                  body { font-family: Arial, sans-serif; padding: 24px; background: #f6f7fb; }
+                  h1 { margin: 0 0 8px; font-size: 22px; }
+                  p { color: #666; margin-bottom: 20px; }
+                  a { display: block; margin: 10px 0; padding: 14px 16px; color: #fff;
+                      background: #111; border-radius: 10px; text-decoration: none; font-weight: 700; }
+                </style>
+              </head>
+              <body>
+                <h1>Shipping Labels</h1>
+                <p>Your browser blocked multiple tabs. Open the remaining labels below.</p>
+                ${links}
+              </body>
+            </html>
+          `);
+          launcher.document.close();
+        }
+
+        toast.error(
+          `${blockedLabels.length} label tab${blockedLabels.length === 1 ? " was" : "s were"} blocked. Allow pop-ups for localhost.`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success(
+          `${labels.length} shipping label${labels.length === 1 ? "" : "s"} opened`
+        );
+      }
+
       const skipped = selectedOrders.length - labels.length;
-      toast.success(
-        `${labels.length} label${labels.length === 1 ? "" : "s"} started${
-          skipped ? ` • ${skipped} skipped` : ""
-        }`
-      );
+      if (skipped) toast(`${skipped} order${skipped === 1 ? "" : "s"} had no label`);
     } catch (error) {
-      toast.error(error?.message || "Failed to download labels");
+      toast.error(error?.message || "Failed to open labels");
     } finally {
       setBulkAction("");
     }
