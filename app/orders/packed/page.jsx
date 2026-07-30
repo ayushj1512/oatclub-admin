@@ -1,10 +1,13 @@
 // app/orders/packed/page.jsx
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CheckSquare2, Download, FileText, Loader2, RefreshCw, Search, Tags } from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
+import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { useOrderStore } from "@/store/orderStore";
+import { useShiprocketStore } from "@/store/ShipRocketStore";
+import { toast } from "react-hot-toast";
 
 /* ---------------------------------------------
    ✅ Small UI helpers
@@ -38,6 +41,20 @@ const money = (n) => {
 };
 
 const safe = (v) => (v === null || v === undefined ? "" : v);
+const getOrderId = (order) => String(order?._id || order?.id || "");
+
+const getShippingLabelUrl = (order) =>
+  String(
+    order?.shipment?.shiprocket?.labelUrl ||
+      order?.shipment?.shiprocket?.label_url ||
+      order?.shipment?.labelUrl ||
+      order?.shipment?.label_url ||
+      order?.shippingLabelUrl ||
+      order?.labelUrl ||
+      order?.trackingDetails?.labelUrl ||
+      ""
+  ).trim();
+
 
 /* ---------------------------------------------
    Page: Packed Orders
@@ -52,6 +69,14 @@ export default function PackedOrdersPage() {
   const fetchAllOrders = useOrderStore((s) => s.fetchAllOrders);
   const fetchNextOrdersPage = useOrderStore((s) => s.fetchNextOrdersPage);
   const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
+  const fetchInvoiceByOrderNumber = useOrderStore((s) => s.fetchInvoiceByOrderNumber);
+  const fetchInvoiceByOrderId = useOrderStore((s) => s.fetchInvoiceByOrderId);
+  const syncTracking = useShiprocketStore((s) => s.syncTracking);
+
+  const invoiceBatchRef = useRef(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkInvoices, setBulkInvoices] = useState([]);
 
   // Search (button based)
   const [searchInput, setSearchInput] = useState("");
@@ -128,6 +153,167 @@ export default function PackedOrdersPage() {
       );
     });
   }, [orders, search]);
+
+  const selectedOrders = useMemo(() => {
+    const selected = new Set(selectedIds);
+    return filteredOrders.filter((order) => selected.has(getOrderId(order)));
+  }, [filteredOrders, selectedIds]);
+
+  const allVisibleSelected =
+    filteredOrders.length > 0 &&
+    filteredOrders.every((order) => selectedIds.includes(getOrderId(order)));
+
+  const toggleOrder = useCallback((orderId, checked) => {
+    if (!orderId) return;
+    setSelectedIds((current) =>
+      checked
+        ? Array.from(new Set([...current, orderId]))
+        : current.filter((id) => id !== orderId)
+    );
+  }, []);
+
+  const toggleAllVisible = useCallback(() => {
+    const visibleIds = filteredOrders.map(getOrderId).filter(Boolean);
+    setSelectedIds((current) => {
+      const currentSet = new Set(current);
+      const shouldClear = visibleIds.every((id) => currentSet.has(id));
+      return shouldClear
+        ? current.filter((id) => !visibleIds.includes(id))
+        : Array.from(new Set([...current, ...visibleIds]));
+    });
+  }, [filteredOrders]);
+
+  const runBulkSync = async () => {
+    if (!selectedOrders.length || bulkAction) return;
+    setBulkAction("sync");
+
+    let success = 0;
+    try {
+      for (const order of selectedOrders) {
+        const result = await syncTracking({
+          orderId: getOrderId(order),
+          orderNumber: order?.orderNumber,
+        });
+        const updatedOrder =
+          result?.order || result?.data?.order || result?.updatedOrder;
+        if (updatedOrder) syncOrderInList(updatedOrder);
+        success += 1;
+      }
+      toast.success(`${success} order${success === 1 ? "" : "s"} synced`);
+      await loadOrders();
+    } catch (error) {
+      toast.error(error?.message || `Bulk sync stopped after ${success} orders`);
+    } finally {
+      setBulkAction("");
+    }
+  };
+
+  const runBulkInvoiceDownload = async () => {
+    if (!selectedOrders.length || bulkAction) return;
+    setBulkAction("invoice");
+
+    try {
+      const invoices = [];
+      for (const order of selectedOrders) {
+        const orderNumber = String(order?.orderNumber || "").trim();
+        const orderId = getOrderId(order);
+        const invoice = orderNumber
+          ? await fetchInvoiceByOrderNumber(orderNumber, { silent: true })
+          : await fetchInvoiceByOrderId(orderId, { silent: true });
+        if (invoice) invoices.push(invoice);
+      }
+
+      if (!invoices.length) throw new Error("No invoice data received");
+      setBulkInvoices(invoices);
+    } catch (error) {
+      setBulkAction("");
+      toast.error(error?.message || "Failed to prepare invoices");
+    }
+  };
+
+  useEffect(() => {
+    if (bulkAction !== "invoice" || !bulkInvoices.length) return;
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const element = invoiceBatchRef.current;
+        if (!element) throw new Error("Invoice content is not ready");
+
+        const [{ default: html2canvas }, pdfModule] = await Promise.all([
+          import("html2canvas-pro"),
+          import("jspdf"),
+        ]);
+        const jsPDF =
+          pdfModule.jsPDF || pdfModule.default?.jsPDF || pdfModule.default;
+        const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+        const pages = Array.from(element.children);
+
+        for (let index = 0; index < pages.length; index += 1) {
+          const canvas = await html2canvas(pages[index], {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            logging: false,
+          });
+          const image = canvas.toDataURL("image/jpeg", 0.96);
+          const width = pdf.internal.pageSize.getWidth();
+          const height = (canvas.height * width) / canvas.width;
+          if (index > 0) pdf.addPage();
+          pdf.addImage(image, "JPEG", 0, 0, width, height, undefined, "FAST");
+        }
+
+        pdf.save(`Packed-Invoices-${Date.now()}.pdf`);
+        toast.success(`${bulkInvoices.length} invoices downloaded`);
+      } catch (error) {
+        toast.error(error?.message || "Failed to download invoices");
+      } finally {
+        setBulkInvoices([]);
+        setBulkAction("");
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [bulkAction, bulkInvoices]);
+
+  const runBulkLabelDownload = async () => {
+    if (!selectedOrders.length || bulkAction) return;
+    setBulkAction("label");
+
+    try {
+      const labels = selectedOrders
+        .map((order) => ({
+          url: getShippingLabelUrl(order),
+          name: order?.orderNumber || getOrderId(order),
+        }))
+        .filter((item) => item.url);
+
+      if (!labels.length) throw new Error("Selected orders have no shipping labels");
+
+      labels.forEach((label, index) => {
+        window.setTimeout(() => {
+          const anchor = document.createElement("a");
+          anchor.href = label.url;
+          anchor.target = "_blank";
+          anchor.rel = "noopener noreferrer";
+          anchor.download = `Shipping-Label-${label.name}.pdf`;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+        }, index * 250);
+      });
+
+      const skipped = selectedOrders.length - labels.length;
+      toast.success(
+        `${labels.length} label${labels.length === 1 ? "" : "s"} started${
+          skipped ? ` • ${skipped} skipped` : ""
+        }`
+      );
+    } catch (error) {
+      toast.error(error?.message || "Failed to download labels");
+    } finally {
+      setBulkAction("");
+    }
+  };
 
   /* ---------------------------------------------
      ✅ CSV export
@@ -404,6 +590,47 @@ export default function PackedOrdersPage() {
           </div>
         </div>
 
+        <Card className="!p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleAllVisible}
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50"
+              >
+                <CheckSquare2 size={16} />
+                {allVisibleSelected ? "Clear visible" : "Select visible"}
+              </button>
+              <span className="text-sm font-semibold text-gray-700">
+                {selectedOrders.length} selected
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {[
+                ["sync", "Bulk Sync", RefreshCw, runBulkSync],
+                ["invoice", "Invoices", FileText, runBulkInvoiceDownload],
+                ["label", "Labels", Tags, runBulkLabelDownload],
+              ].map(([key, label, Icon, handler]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={handler}
+                  disabled={!selectedOrders.length || Boolean(bulkAction)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {bulkAction === key ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Icon size={16} />
+                  )}
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Card>
+
         {/* Load More / Refresh */}
         <Card>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -450,9 +677,19 @@ export default function PackedOrdersPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
                 <tr>
+                  <th className="w-12 px-4 py-4 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleAllVisible}
+                      aria-label="Select all visible packed orders"
+                      className="h-4 w-4 rounded border-gray-300 accent-black"
+                    />
+                  </th>
                   <th className="py-4 px-5 text-left font-semibold">Order #</th>
                   <th className="py-4 px-5 text-left font-semibold">Customer</th>
                   <th className="py-4 px-5 text-left font-semibold">Payment</th>
+                  <th className="py-4 px-5 text-left font-semibold">Method</th>
                   <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
                   <th className="py-4 px-5 text-left font-semibold">Amount</th>
                   <th className="py-4 px-5 text-left font-semibold">Date</th>
@@ -483,6 +720,9 @@ export default function PackedOrdersPage() {
                         <OrderRow
                           key={String(rowKey)}
                           order={order}
+                          selectable
+                          selected={selectedIds.includes(getOrderId(order))}
+                          onSelect={toggleOrder}
                           onUpdated={(updatedOrder) => {
                             if (updatedOrder?._id) syncOrderInList(updatedOrder);
                           }}
@@ -491,7 +731,7 @@ export default function PackedOrdersPage() {
                     })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">
+                    <td colSpan={9} className="py-12 text-center text-gray-500">
                       No packed orders found.
                     </td>
                   </tr>
@@ -501,6 +741,18 @@ export default function PackedOrdersPage() {
           </div>
         </div>
       </div>
+
+      {bulkInvoices.length ? (
+        <div className="fixed left-[-100000px] top-0 w-[794px] bg-white">
+          <div ref={invoiceBatchRef}>
+            {bulkInvoices.map((invoice, index) => (
+              <div key={invoice?._id || invoice?.orderNumber || index} className="w-[794px] bg-white">
+                <InvoiceTemplate data={invoice} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Global loading overlay */}
       {loading ? (

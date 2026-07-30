@@ -73,7 +73,14 @@ const paymentMethodMeta = (method) => {
   };
 };
 
-function OrderRow({ order, onUpdated, openActionsUp = false, }) {
+function OrderRow({
+  order,
+  onUpdated,
+  openActionsUp = false,
+  selectable = false,
+  selected = false,
+  onSelect,
+}) {
   const [open, setOpen] = useState(false);
 
   const items = useMemo(
@@ -127,6 +134,18 @@ function OrderRow({ order, onUpdated, openActionsUp = false, }) {
   return (
     <>
       <tr className="border-b border-black/[0.06] bg-white transition hover:bg-gray-50/80">
+        {selectable ? (
+          <td className="w-12 px-4 py-4 align-top">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(event) => onSelect?.(orderId, event.target.checked)}
+              aria-label={`Select order ${order?.orderNumber || orderId || ""}`}
+              className="h-4 w-4 rounded border-gray-300 accent-black"
+            />
+          </td>
+        ) : null}
+
         <td className="px-5 py-4 font-semibold text-gray-900">
           <div className="flex items-center gap-2">
             <button
@@ -268,7 +287,7 @@ function OrderRow({ order, onUpdated, openActionsUp = false, }) {
 
       {open ? (
         <tr className="border-b border-black/[0.06] bg-gray-50">
-          <td colSpan={8} className="px-5 pb-4">
+          <td colSpan={selectable ? 9 : 8} className="px-5 pb-4">
             <div className="mt-3 space-y-4 rounded-lg border border-black/[0.06] bg-white px-4 py-4 shadow-sm">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -406,6 +425,9 @@ export default memo(OrderRow, (prev, next) => {
   return (
     prev.order === next.order &&
     prev.onUpdated === next.onUpdated &&
-    prev.openActionsUp === next.openActionsUp
+    prev.openActionsUp === next.openActionsUp &&
+    prev.selectable === next.selectable &&
+    prev.selected === next.selected &&
+    prev.onSelect === next.onSelect
   );
 });
