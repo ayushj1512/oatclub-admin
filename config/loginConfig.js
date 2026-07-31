@@ -5,7 +5,7 @@ export const DOMAIN_PERMISSIONS = {
   design_lab: "manageDesignLab",
   production: "manageProduction",
   vendors: "manageVendors",
-
+dispatching: "manageDispatching",
   accounts: "manageAccounts",
   products: "manageProducts",
   barcode: "manageBarcode",

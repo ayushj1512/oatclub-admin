@@ -30,6 +30,7 @@ import {
   Barcode,
   Factory,
   KeyRound,
+  Truck,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -71,6 +72,12 @@ const DOMAIN_LIST = [
     name: "Accounts",
     icon: Calculator,
     route: "/accounts",
+  },
+  {
+    id: "dispatching",
+    name: "Dispatching",
+    icon: Truck,
+    route: "/dispatching",
   },
   {
     id: "products",
@@ -220,6 +227,8 @@ const CARD_HINTS = {
   fabrics: "Manage fabric records and mappings",
   email: "Preview all brand emails, subjects and template states",
   affiliate: "Manage affiliates, referrals, commissions and payouts",
+    dispatching: "Pack, verify and dispatch ready orders",
+
 };
 
 const FOCUS_QUOTES = [

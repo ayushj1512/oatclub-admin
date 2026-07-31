@@ -184,7 +184,7 @@ const getItemSummary = (order = {}) => {
 
 const createConfirmationMessage = (order = {}) => `Hi ${getCustomerName(order)},
 
-Welcome to *OATCLUB* ✨
+Welcome to *OATCLUB*.
 
 Before we process your order, please confirm the details below:
 
@@ -196,27 +196,29 @@ Each order is carefully quality-checked before dispatch and will be shipped with
 
 Please reply with:
 
- *YES* – Confirm my order
- *NO* – Cancel my order
+*YES* – Confirm my order
+*NO* – Cancel my order
 
 Thank you for choosing *OATCLUB*.
+
+www.oatclub.in
 
 *Team OATCLUB*
 Own All Trends`;
 
 const createShippingMessage = (order = {}) => {
-  const { awb, courierName, trackingUrl } = getShippingDetails(order);
+  const { trackingUrl } = getShippingDetails(order);
 
   return `Hi ${getCustomerName(order)},
 
-Great news! 🎉
-
 Your *OATCLUB* order *#${getOrderNumber(order)}* has been shipped and is on its way.
 
-📦 *Track your order:*
+*Track your order:*
 ${trackingUrl || "Tracking link will be updated shortly."}
 
-Thank you for shopping with *OATCLUB*. We can't wait for you to receive your order!
+Thank you for shopping with *OATCLUB*.
+
+www.oatclub.in
 
 *Team OATCLUB*
 Own All Trends`;

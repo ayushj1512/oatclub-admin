@@ -227,79 +227,107 @@ export const sidebarMenus = {
     { label: "Analytics", href: "/blogs/analytics" },
   ],
 
-  products: [
-    { label: "Product Dashboard", href: "/products" },
-    { label: "Add New Product", href: "/products/add" },
-    { label: "Manage Products", href: "/products/manage" },
-    { label: "Search Product", href: "/products/search" },
+ products: [
+  { label: "Product Dashboard", href: "/products" },
+  { label: "Add New Product", href: "/products/add" },
+  { label: "Manage Products", href: "/products/manage" },
 
-    { label: "Product Group Builder", href: "/products/product-groups" },
-    {
-      label: "Existing Product Groups",
-      href: "/products/product-groups/all",
-    },
+  {
+    label: "Production Lifecycle",
+    href: "/products/product-production-lifecycle",
+  },
 
-    {
-      label: "Products RMA Insights",
-      href: "/products/products-rma-insights",
-    },
-    { label: "Analytics", href: "/products/analytics" },
+  { label: "Search Product", href: "/products/search" },
 
-    { label: "Categories", href: "/products/category" },
-    {
-      label: "Category Analytics",
-      href: "/products/category-analytics",
-    },
+  { label: "Product Group Builder", href: "/products/product-groups" },
+  {
+    label: "Existing Product Groups",
+    href: "/products/product-groups/all",
+  },
 
-    { label: "Bestsellers", href: "/products/bestseller" },
-    {
-      label: "Collab Ready Products",
-      href: "/products/collab-ready",
-    },
-    {
-      label: "Dispatch Ready Products",
-      href: "/products/dispatch-ready",
-    },
-    {
-      label: "Excel Export Builder",
-      href: "/products/import-excel",
-    },
-    { label: "Coming Soon", href: "/products/comingsoon" },
-    { label: "Size Charts", href: "/products/size-charts" },
-    {
-      label: "Secondary Products",
-      href: "/products/secondary-products",
-    },
+  {
+    label: "Products RMA Insights",
+    href: "/products/products-rma-insights",
+  },
+  { label: "Analytics", href: "/products/analytics" },
 
-    { label: "Attributes", href: "/products/attributes" },
-    { label: "Variants", href: "/products/variants" },
-    { label: "Collections", href: "/products/collections" },
-    { label: "Fabric", href: "/products/fabric" },
-    { label: "Product Colors", href: "/products/colors" },
+  { label: "Categories", href: "/products/category" },
+  {
+    label: "Category Analytics",
+    href: "/products/category-analytics",
+  },
 
-    { label: "Name Edit", href: "/products/name-edit" },
-    { label: "Bulk Import", href: "/products/bulk-import" },
-    { label: "Bulk Export", href: "/products/bulk-export" },
-    {
-      label: "Bulk Price Editor",
-      href: "/products/bulkPriceEditor",
-    },
+  { label: "Bestsellers", href: "/products/bestseller" },
+  {
+    label: "Collab Ready Products",
+    href: "/products/collab-ready",
+  },
+  {
+    label: "Dispatch Ready Products",
+    href: "/products/dispatch-ready",
+  },
+  {
+    label: "Excel Export Builder",
+    href: "/products/import-excel",
+  },
+  { label: "Coming Soon", href: "/products/comingsoon" },
+  { label: "Size Charts", href: "/products/size-charts" },
+  {
+    label: "Secondary Products",
+    href: "/products/secondary-products",
+  },
 
-    {
-      label: "Inventory Sync",
-      href: "/products/inventory-sync",
-    },
-    { label: "Price Updates", href: "/products/pricing" },
-    { label: "Offers & Discounts", href: "/products/offers" },
-    {
-      label: "Product Meta Editor",
-      href: "/products/product-meta-editor",
-    },
-    { label: "SEO Manager", href: "/products/seo" },
-    { label: "Reviews & Ratings", href: "/products/reviews" },
-    { label: "Media Library", href: "/media" },
-  ],
+  { label: "Attributes", href: "/products/attributes" },
+  { label: "Variants", href: "/products/variants" },
+  { label: "Collections", href: "/products/collections" },
+  { label: "Fabric", href: "/products/fabric" },
+  { label: "Product Colors", href: "/products/colors" },
 
+  { label: "Name Edit", href: "/products/name-edit" },
+  { label: "Bulk Import", href: "/products/bulk-import" },
+  { label: "Bulk Export", href: "/products/bulk-export" },
+  {
+    label: "Bulk Price Editor",
+    href: "/products/bulkPriceEditor",
+  },
+
+  {
+    label: "Inventory Sync",
+    href: "/products/inventory-sync",
+  },
+  { label: "Price Updates", href: "/products/pricing" },
+  { label: "Offers & Discounts", href: "/products/offers" },
+  {
+    label: "Product Meta Editor",
+    href: "/products/product-meta-editor",
+  },
+  { label: "SEO Manager", href: "/products/seo" },
+  { label: "Reviews & Ratings", href: "/products/reviews" },
+  { label: "Media Library", href: "/media" },
+],
+
+dispatching: [
+  {
+    label: "Dispatching Dashboard",
+    href: "/dispatching",
+  },
+  {
+    label: "On Demand Inventory",
+    href: "/dispatching/on-demand-inventory",
+  },
+  {
+    label: "Production",
+    href: "/dispatching/production",
+  },
+  {
+    label: "Packed Orders",
+    href: "/dispatching/packed",
+  },
+  {
+    label: "Shipped Orders",
+    href: "/dispatching/shipped",
+  },
+],
   orders: [
     { label: "Orders Dashboard", href: "/orders" },
     { label: "All Orders", href: "/orders/all" },
@@ -603,4 +631,5 @@ export const routeSidebarMap = [
   { prefix: "/vendors", key: "vendors" },
   { prefix: "/fast2sms", key: "fast2sms" },
   { prefix: "/affiliate", key: "affiliate" },
+  { prefix: "/dispatching", key: "dispatching" },
 ];

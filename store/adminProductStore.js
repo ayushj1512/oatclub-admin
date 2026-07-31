@@ -4,6 +4,45 @@ import { toast } from "react-hot-toast";
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const API = `${BASE_URL}/api/products`;
 
+export const PRODUCT_LIFECYCLE_STAGES = [
+  "pattern_in_making",
+  "sampling",
+  "sample_approval",
+  "pattern_grading",
+  "cutting",
+  "stitching",
+  "finishing",
+  "completed",
+];
+
+const normalizeLifecycleProduct = (product) => {
+  if (!product) return null;
+
+  return {
+    ...product,
+    manufacturingLifecycle: {
+      currentStage:
+        product?.manufacturingLifecycle?.currentStage || "pattern_in_making",
+      status: product?.manufacturingLifecycle?.status || "not_started",
+      startedAt: product?.manufacturingLifecycle?.startedAt || null,
+      completedAt: product?.manufacturingLifecycle?.completedAt || null,
+      stages: Array.isArray(product?.manufacturingLifecycle?.stages)
+        ? product.manufacturingLifecycle.stages
+        : [],
+    },
+  };
+};
+
+const mergeLifecycleProduct = (existingProduct, responseData) =>
+  normalizeLifecycleProduct({
+    ...existingProduct,
+    ...(responseData?.product || {}),
+    manufacturingLifecycle:
+      responseData?.manufacturingLifecycle ||
+      responseData?.product?.manufacturingLifecycle ||
+      existingProduct?.manufacturingLifecycle,
+  });
+
 const buildProductQuery = (params = {}) => {
   const query = new URLSearchParams();
 
@@ -370,7 +409,12 @@ export const useAdminProductStore = create((set, get) => ({
   saving: false,
   error: null,
 
-    /* Product Excel export */
+  lifecycleLoading: false,
+  lifecycleActionLoading: false,
+  lifecycleActionProductId: null,
+  lifecycleActionType: null,
+
+  /* Product Excel export */
   excelColumns: [],
   excelColumnsLoading: false,
   excelExporting: false,
@@ -399,7 +443,7 @@ export const useAdminProductStore = create((set, get) => ({
       },
     })),
 
-      /* ============================================================
+  /* ============================================================
     PRODUCT EXCEL EXPORT
   ============================================================ */
 
@@ -415,27 +459,19 @@ export const useAdminProductStore = create((set, get) => ({
         error: null,
       });
 
-      const res = await fetch(
-        `${API}/export/excel/columns`,
-        {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        },
-      );
+      const res = await fetch(`${API}/export/excel/columns`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            "Failed to fetch Excel columns",
-        );
+        throw new Error(data?.message || "Failed to fetch Excel columns");
       }
 
-      const columns = Array.isArray(data?.columns)
-        ? data.columns
-        : [];
+      const columns = Array.isArray(data?.columns) ? data.columns : [];
 
       set({
         excelColumns: columns,
@@ -443,21 +479,13 @@ export const useAdminProductStore = create((set, get) => ({
 
       return columns;
     } catch (error) {
-      console.error(
-        "❌ fetchProductExcelColumns:",
-        error,
-      );
+      console.error("❌ fetchProductExcelColumns:", error);
 
       set({
-        error:
-          error?.message ||
-          "Failed to fetch Excel columns",
+        error: error?.message || "Failed to fetch Excel columns",
       });
 
-      toast.error(
-        error?.message ||
-          "Failed to fetch Excel columns",
-      );
+      toast.error(error?.message || "Failed to fetch Excel columns");
 
       return [];
     } finally {
@@ -502,20 +530,14 @@ export const useAdminProductStore = create((set, get) => ({
       );
 
       if (!selectedColumns.length) {
-        toast.error(
-          "Select at least one Excel column",
-        );
+        toast.error("Select at least one Excel column");
 
         return false;
       }
 
       const selectedProductIds = Array.from(
         new Set(
-          (
-            Array.isArray(productIds)
-              ? productIds
-              : []
-          )
+          (Array.isArray(productIds) ? productIds : [])
             .map((item) =>
               typeof item === "object"
                 ? String(item?._id || "").trim()
@@ -525,10 +547,9 @@ export const useAdminProductStore = create((set, get) => ({
         ),
       );
 
-      const safeVariantMode = [
-        "single_row",
-        "separate_rows",
-      ].includes(variantMode)
+      const safeVariantMode = ["single_row", "separate_rows"].includes(
+        variantMode,
+      )
         ? variantMode
         : "single_row";
 
@@ -537,52 +558,34 @@ export const useAdminProductStore = create((set, get) => ({
         error: null,
       });
 
-      const res = await fetch(
-        `${API}/export/excel`,
-        {
-          method: "POST",
+      const res = await fetch(`${API}/export/excel`, {
+        method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
-          },
-
-          credentials: "include",
-
-          body: JSON.stringify({
-            columns: selectedColumns,
-            productIds: selectedProductIds,
-            filters:
-              filters &&
-              typeof filters === "object"
-                ? filters
-                : {},
-            variantMode: safeVariantMode,
-            fileName:
-              String(
-                fileName ||
-                  "oatclub-products",
-              ).trim() ||
-              "oatclub-products",
-          }),
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+
+        credentials: "include",
+
+        body: JSON.stringify({
+          columns: selectedColumns,
+          productIds: selectedProductIds,
+          filters: filters && typeof filters === "object" ? filters : {},
+          variantMode: safeVariantMode,
+          fileName:
+            String(fileName || "oatclub-products").trim() || "oatclub-products",
+        }),
+      });
 
       if (!res.ok) {
-        const contentType =
-          res.headers.get("content-type") || "";
+        const contentType = res.headers.get("content-type") || "";
 
-        let message =
-          "Failed to export products Excel";
+        let message = "Failed to export products Excel";
 
-        if (
-          contentType.includes(
-            "application/json",
-          )
-        ) {
+        if (contentType.includes("application/json")) {
           const errorData = await res.json();
 
-          message =
-            errorData?.message || message;
+          message = errorData?.message || message;
         } else {
           const errorText = await res.text();
 
@@ -597,62 +600,32 @@ export const useAdminProductStore = create((set, get) => ({
       const blob = await res.blob();
 
       if (!blob?.size) {
-        throw new Error(
-          "Downloaded Excel file is empty",
-        );
+        throw new Error("Downloaded Excel file is empty");
       }
 
-      const disposition =
-        res.headers.get(
-          "content-disposition",
-        ) || "";
+      const disposition = res.headers.get("content-disposition") || "";
 
-      const utfFileNameMatch =
-        disposition.match(
-          /filename\*=UTF-8''([^;]+)/i,
-        );
+      const utfFileNameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
 
-      const normalFileNameMatch =
-        disposition.match(
-          /filename="?([^"]+)"?/i,
-        );
+      const normalFileNameMatch = disposition.match(/filename="?([^"]+)"?/i);
 
-      let downloadedFileName =
-        `${String(
-          fileName ||
-            "oatclub-products",
-        )
-          .trim()
-          .replace(
-            /[^a-zA-Z0-9-_]/g,
-            "-",
-          )}.xlsx`;
+      let downloadedFileName = `${String(fileName || "oatclub-products")
+        .trim()
+        .replace(/[^a-zA-Z0-9-_]/g, "-")}.xlsx`;
 
       if (utfFileNameMatch?.[1]) {
-        downloadedFileName =
-          decodeURIComponent(
-            utfFileNameMatch[1],
-          );
-      } else if (
-        normalFileNameMatch?.[1]
-      ) {
-        downloadedFileName =
-          normalFileNameMatch[1].trim();
+        downloadedFileName = decodeURIComponent(utfFileNameMatch[1]);
+      } else if (normalFileNameMatch?.[1]) {
+        downloadedFileName = normalFileNameMatch[1].trim();
       }
 
-      if (
-        !downloadedFileName
-          .toLowerCase()
-          .endsWith(".xlsx")
-      ) {
+      if (!downloadedFileName.toLowerCase().endsWith(".xlsx")) {
         downloadedFileName += ".xlsx";
       }
 
-      const objectUrl =
-        window.URL.createObjectURL(blob);
+      const objectUrl = window.URL.createObjectURL(blob);
 
-      const link =
-        document.createElement("a");
+      const link = document.createElement("a");
 
       link.href = objectUrl;
       link.download = downloadedFileName;
@@ -661,31 +634,19 @@ export const useAdminProductStore = create((set, get) => ({
       link.click();
       link.remove();
 
-      window.URL.revokeObjectURL(
-        objectUrl,
-      );
+      window.URL.revokeObjectURL(objectUrl);
 
-      toast.success(
-        "Products Excel downloaded ✅",
-      );
+      toast.success("Products Excel downloaded ✅");
 
       return true;
     } catch (error) {
-      console.error(
-        "❌ exportProductsExcel:",
-        error,
-      );
+      console.error("❌ exportProductsExcel:", error);
 
       set({
-        error:
-          error?.message ||
-          "Failed to export products Excel",
+        error: error?.message || "Failed to export products Excel",
       });
 
-      toast.error(
-        error?.message ||
-          "Failed to export products Excel",
-      );
+      toast.error(error?.message || "Failed to export products Excel");
 
       return false;
     } finally {
@@ -705,13 +666,10 @@ export const useAdminProductStore = create((set, get) => ({
     variantMode = "single_row",
     fileName = "selected-products",
   } = {}) => {
-    const selectedIds =
-      get().bulkSelectedIds || [];
+    const selectedIds = get().bulkSelectedIds || [];
 
     if (!selectedIds.length) {
-      toast.error(
-        "Select at least one product",
-      );
+      toast.error("Select at least one product");
 
       return false;
     }
@@ -758,7 +716,7 @@ export const useAdminProductStore = create((set, get) => ({
         title: params.title,
         productCode: params.productCode,
         code: params.code,
-
+        manufacturingStage: params.manufacturingStage || params.stage,
         // new filters
         isFeatured: params.isFeatured,
         isPatternReady: params.isPatternReady,
@@ -3190,4 +3148,287 @@ export const useAdminProductStore = create((set, get) => ({
       assignmentProducts: [],
       assignmentProductsLoading: false,
     }),
+
+  fetchLifecycleProducts: async ({
+    page = 1,
+    limit = 20,
+    search = "",
+    stage = "all",
+  } = {}) => {
+    try {
+      set({
+        lifecycleLoading: true,
+        error: null,
+      });
+
+      const query = buildProductQuery({
+        page,
+        limit,
+        search,
+        manufacturingStage: stage && stage !== "all" ? stage : undefined,
+      });
+
+      const res = await fetch(`${API}?${query}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to fetch lifecycle products");
+      }
+
+      const products = Array.isArray(data?.products)
+        ? data.products.map(normalizeLifecycleProduct).filter(Boolean)
+        : [];
+
+      set({
+        products,
+        page: Number(data?.page || page),
+        limit: Number(data?.limit || limit),
+        total: Number(data?.total || products.length),
+        pages: Number(data?.pages || 1),
+      });
+
+      return {
+        success: true,
+        products,
+        pagination: {
+          page: Number(data?.page || page),
+          limit: Number(data?.limit || limit),
+          total: Number(data?.total || products.length),
+          pages: Number(data?.pages || 1),
+          hasNextPage: Number(data?.page || page) < Number(data?.pages || 1),
+          hasPrevPage: Number(data?.page || page) > 1,
+        },
+      };
+    } catch (error) {
+      console.error("fetchLifecycleProducts:", error);
+
+      set({
+        error: error.message,
+      });
+
+      toast.error(error.message);
+
+      return {
+        success: false,
+        message: error.message,
+        products: [],
+      };
+    } finally {
+      set({
+        lifecycleLoading: false,
+      });
+    }
+  },
+
+  advanceLifecycle: async (productId, payload = {}) => {
+    try {
+      if (!productId) {
+        throw new Error("Product ID is required");
+      }
+
+      const state = get();
+
+      if (
+        state.lifecycleActionLoading &&
+        String(state.lifecycleActionProductId) === String(productId)
+      ) {
+        return {
+          success: false,
+          message: "Lifecycle update already in progress",
+        };
+      }
+
+      const requestPayload =
+        typeof payload === "string"
+          ? { note: payload }
+          : { ...(payload || {}) };
+
+      requestPayload.note = String(requestPayload.note || "").trim();
+
+      if (requestPayload.passcode !== undefined) {
+        requestPayload.passcode = String(requestPayload.passcode || "").trim();
+      }
+
+      set({
+        lifecycleActionLoading: true,
+        lifecycleActionProductId: productId,
+        lifecycleActionType: "advance",
+        error: null,
+      });
+
+      const res = await fetch(
+        `${API}/${productId}/manufacturing-lifecycle/advance`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(requestPayload),
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.message || "Failed to advance lifecycle");
+      }
+
+      const existingProduct =
+        get().products.find(
+          (product) => String(product?._id) === String(productId),
+        ) ||
+        (String(get().product?._id) === String(productId)
+          ? get().product
+          : null);
+
+      const updatedProduct = mergeLifecycleProduct(existingProduct, data);
+
+      set((state) => ({
+        products: state.products.map((product) =>
+          String(product?._id) === String(productId) ? updatedProduct : product,
+        ),
+
+        product:
+          String(state.product?._id) === String(productId)
+            ? updatedProduct
+            : state.product,
+      }));
+
+      toast.success(data.message || "Lifecycle advanced successfully");
+
+      return {
+        success: true,
+        product: updatedProduct,
+        manufacturingLifecycle: updatedProduct?.manufacturingLifecycle,
+        message: data.message || "Lifecycle advanced successfully",
+      };
+    } catch (error) {
+      console.error("advanceLifecycle:", error);
+
+      set({
+        error: error.message,
+      });
+
+      toast.error(error.message);
+
+      return {
+        success: false,
+        message: error.message,
+      };
+    } finally {
+      set({
+        lifecycleActionLoading: false,
+        lifecycleActionProductId: null,
+        lifecycleActionType: null,
+      });
+    }
+  },
+
+  completeLifecycle: async (productId, payload = {}) => {
+    try {
+      if (!productId) {
+        throw new Error("Product ID is required");
+      }
+
+      const state = get();
+
+      if (
+        state.lifecycleActionLoading &&
+        String(state.lifecycleActionProductId) === String(productId)
+      ) {
+        return {
+          success: false,
+          message: "Lifecycle update already in progress",
+        };
+      }
+
+      const requestPayload =
+        typeof payload === "string"
+          ? { note: payload }
+          : { ...(payload || {}) };
+
+      requestPayload.note = String(
+        requestPayload.note || "Remaining stages were not applicable",
+      ).trim();
+
+      set({
+        lifecycleActionLoading: true,
+        lifecycleActionProductId: productId,
+        lifecycleActionType: "complete",
+        error: null,
+      });
+
+      const res = await fetch(
+        `${API}/${productId}/manufacturing-lifecycle/complete`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(requestPayload),
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.message || "Failed to complete lifecycle");
+      }
+
+      const existingProduct =
+        get().products.find(
+          (product) => String(product?._id) === String(productId),
+        ) ||
+        (String(get().product?._id) === String(productId)
+          ? get().product
+          : null);
+
+      const updatedProduct = mergeLifecycleProduct(existingProduct, data);
+
+      set((state) => ({
+        products: state.products.map((product) =>
+          String(product?._id) === String(productId) ? updatedProduct : product,
+        ),
+
+        product:
+          String(state.product?._id) === String(productId)
+            ? updatedProduct
+            : state.product,
+      }));
+
+      toast.success(data.message || "Lifecycle completed successfully");
+
+      return {
+        success: true,
+        product: updatedProduct,
+        manufacturingLifecycle: updatedProduct?.manufacturingLifecycle,
+        message: data.message || "Lifecycle completed successfully",
+      };
+    } catch (error) {
+      console.error("completeLifecycle:", error);
+
+      set({
+        error: error.message,
+      });
+
+      toast.error(error.message);
+
+      return {
+        success: false,
+        message: error.message,
+      };
+    } finally {
+      set({
+        lifecycleActionLoading: false,
+        lifecycleActionProductId: null,
+        lifecycleActionType: null,
+      });
+    }
+  },
 }));

@@ -1,0 +1,1 @@
+export { default } from "../../inventory/on-demand-inventory/page";

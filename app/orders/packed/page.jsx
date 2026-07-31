@@ -2,8 +2,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckSquare2, Download, FileText, Loader2, RefreshCw, Search, Tags } from "lucide-react";
-import OrderRow from "@/components/orders/OrderRow";
+import {
+  CheckSquare2,
+  Download,
+  FileText,
+  Loader2,
+  RefreshCw,
+  Search,
+  Tags,
+  Truck,
+} from "lucide-react";import OrderRow from "@/components/orders/OrderRow";
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { useOrderStore } from "@/store/orderStore";
 import { useShiprocketStore } from "@/store/ShipRocketStore";
@@ -71,6 +79,9 @@ export default function PackedOrdersPage() {
   const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
   const fetchInvoiceByOrderNumber = useOrderStore((s) => s.fetchInvoiceByOrderNumber);
   const fetchInvoiceByOrderId = useOrderStore((s) => s.fetchInvoiceByOrderId);
+  const updateOrderStatus = useOrderStore(
+  (s) => s.updateOrderStatus
+);
   const syncTracking = useShiprocketStore((s) => s.syncTracking);
 
   const invoiceBatchRef = useRef(null);
@@ -207,6 +218,84 @@ export default function PackedOrdersPage() {
       setBulkAction("");
     }
   };
+
+  const runBulkMarkAsShipped = async () => {
+  if (!selectedOrders.length || bulkAction) return;
+
+  const confirmed = window.confirm(
+    `Mark ${selectedOrders.length} selected order${
+      selectedOrders.length === 1 ? "" : "s"
+    } as shipped?`
+  );
+
+  if (!confirmed) return;
+
+  setBulkAction("shipped");
+
+  let successCount = 0;
+  let failedCount = 0;
+
+  try {
+    for (const order of selectedOrders) {
+      const orderId = getOrderId(order);
+
+      if (!orderId) {
+        failedCount += 1;
+        continue;
+      }
+
+      try {
+        const result = await updateOrderStatus(orderId, {
+          fulfillmentStatus: "shipped",
+        });
+
+        const updatedOrder =
+          result?.order ||
+          result?.data?.order ||
+          result?.updatedOrder ||
+          result?.data;
+
+        if (updatedOrder?._id) {
+          syncOrderInList(updatedOrder);
+        }
+
+        successCount += 1;
+      } catch (error) {
+        console.error(
+          `Failed to mark ${order?.orderNumber || orderId} as shipped:`,
+          error
+        );
+
+        failedCount += 1;
+      }
+    }
+
+    if (successCount) {
+      toast.success(
+        `${successCount} order${
+          successCount === 1 ? "" : "s"
+        } marked as shipped`
+      );
+    }
+
+    if (failedCount) {
+      toast.error(
+        `${failedCount} order${
+          failedCount === 1 ? "" : "s"
+        } failed to update`
+      );
+    }
+
+    setSelectedIds([]);
+    await loadOrders();
+  } catch (error) {
+    toast.error(
+      error?.message || "Failed to mark selected orders as shipped"
+    );
+  } finally {
+    setBulkAction("");
+  }
+};
 
   const runBulkInvoiceDownload = async () => {
     if (!selectedOrders.length || bulkAction) return;
@@ -657,18 +746,21 @@ export default function PackedOrdersPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {[
-                ["sync", "Bulk Sync", RefreshCw, runBulkSync],
-                ["invoice", "Invoices", FileText, runBulkInvoiceDownload],
-                ["label", "Labels", Tags, runBulkLabelDownload],
-              ].map(([key, label, Icon, handler]) => (
+             {[
+  ["shipped", "Mark as Shipped", Truck, runBulkMarkAsShipped],
+  ["sync", "Bulk Sync", RefreshCw, runBulkSync],
+  ["invoice", "Invoices", FileText, runBulkInvoiceDownload],
+  ["label", "Labels", Tags, runBulkLabelDownload],
+].map(([key, label, Icon, handler]) => (
                 <button
                   key={key}
                   type="button"
                   onClick={handler}
                   disabled={!selectedOrders.length || Boolean(bulkAction)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                >
+className={[
+  "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40",
+  key === "shipped" ? "bg-emerald-600" : "bg-black",
+].join(" ")}                >
                   {bulkAction === key ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
