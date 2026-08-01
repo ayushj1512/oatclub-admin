@@ -15,6 +15,7 @@ import CrossSellSelector from "@/components/product/CrossSellSelector";
 import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
 import FabricAdd from "@/components/product/FabricAdd"; // ✅ NEW (replaces ProductFabricAssignment)
 import OriginalProductLinkField from "@/components/product/OriginalProductLinkField";
+import ProductReviewManager from "@/components/product/ProductReviewManager";
 
 const BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
 
@@ -568,6 +569,17 @@ productSpotlight: [],
             onChange={(next) => setForm((p) => ({ ...p, fabrics: next }))}
           />
         </div>
+
+        {editing ? (
+  <ProductReviewManager
+    productId={product?._id}
+    productCode={product?.productCode}
+    productTitle={product?.title}
+    onCreated={(review) => {
+      console.log("Review created:", review);
+    }}
+  />
+) : null}
 
         {/* Attributes */}
         <AttributeSelector
