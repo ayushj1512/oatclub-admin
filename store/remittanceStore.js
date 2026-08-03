@@ -2,7 +2,7 @@
 import axios from "axios";
 import { create } from "zustand";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6001";
 
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message ||

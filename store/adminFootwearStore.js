@@ -5,7 +5,7 @@ import { create } from "zustand";
 /**
  * ✅ Admin Footwear Store (ALL-IN-ONE)
  * Uses .env:
- *   NEXT_PUBLIC_BACKEND_URL=http://localhost:6000
+ *   NEXT_PUBLIC_BACKEND_URL=http://localhost:6001
  *
  * Covers:
  * - list/get/create/update/delete
@@ -15,7 +15,7 @@ import { create } from "zustand";
 export const useAdminFootwearStore = create((set, get) => {
   /* ---------------- axios client (inside store) ---------------- */
   const http = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000",
+    baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6001",
     withCredentials: true,
     headers: { "Content-Type": "application/json" },
   });

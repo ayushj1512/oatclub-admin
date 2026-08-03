@@ -193,6 +193,19 @@ function OrderRow({
               </span>
             )}
 
+            {order?.isTestingOrder === true && (
+              <span
+                style={{
+                  background: "#fef2f2",
+                  color: "#b91c1c",
+                  border: "1px solid #fecaca",
+                }}
+                className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+              >
+                Test Order
+              </span>
+            )}
+
             <OrderPriorityDropdown
               orderId={orderId}
               currentPriority={order?.priority}

@@ -3,7 +3,7 @@
 import { create } from "zustand";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:6001";
 
 const getAdminToken = () => {
   if (typeof window === "undefined") return "";
@@ -746,3 +746,4 @@ export {
   defaultFilters,
   defaultOrderFilters
 };
+

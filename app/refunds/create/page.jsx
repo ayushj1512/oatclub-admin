@@ -2,13 +2,13 @@
 
 import axios from "axios";
 import {
-  ArrowLeft,
-  FileImage,
-  Loader2,
-  Plus,
-  Search,
-  ShieldAlert,
-  X,
+    ArrowLeft,
+    FileImage,
+    Loader2,
+    Plus,
+    Search,
+    ShieldAlert,
+    X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -18,7 +18,7 @@ import MediaPickerModal from "@/components/media/MediaPickerModal";
 const API =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:6000";
+  "http://localhost:6001";
 
 const REFUND_API = `${API}/api/order-refunds`;
 

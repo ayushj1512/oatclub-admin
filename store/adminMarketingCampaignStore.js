@@ -1,7 +1,7 @@
 import axios from "axios";
 import { create } from "zustand";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6001";
 
 const MARKETING_API = `${API_URL}/api/marketing-campaigns`;
 

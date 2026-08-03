@@ -1120,6 +1120,33 @@ export const useOrderStore = create((set, get) => ({
     return order;
   },
 
+  markOrderAsTesting: async (orderId, isTestingOrder = true) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    if (typeof isTestingOrder !== "boolean") {
+      throw new Error("isTestingOrder must be a boolean");
+    }
+
+    const data = await get()._patch(
+      `/api/orders/${orderId}/toggle-testing`,
+      {
+        isTestingOrder,
+      },
+    );
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return order;
+  },
+
   updateOrderAddress: async (orderId, payload) => {
     if (!orderId) return null;
 
@@ -1195,6 +1222,47 @@ export const useOrderStore = create((set, get) => ({
     }
 
     return order;
+  },
+
+  splitOrderIntoShipments: async (orderId, shipments = []) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    if (!Array.isArray(shipments) || shipments.length < 2) {
+      throw new Error("At least 2 shipments are required");
+    }
+
+    const data = await get()._post(`/api/orders/${orderId}/split`, {
+      shipments,
+    });
+
+    const parent = data?.parent || null;
+    const children = Array.isArray(data?.children) ? data.children : [];
+
+    set((state) => ({
+      order: parent || state.order,
+
+      orders: [
+        ...children,
+        ...(state.orders || []).map((existingOrder) =>
+          parent &&
+            String(existingOrder?._id) === String(parent?._id)
+            ? { ...existingOrder, ...parent }
+            : existingOrder,
+        ),
+      ],
+    }));
+
+    if (parent?._id) {
+      get()._syncCustomerSupportDetail(parent);
+    }
+
+    return {
+      parent,
+      children,
+      data,
+    };
   },
 
   fetchOrderConfirmationDetails: async (orderId) => {

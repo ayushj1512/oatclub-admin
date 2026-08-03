@@ -1,13 +1,13 @@
 "use client";
 
 import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
+    createColumnHelper,
+    flexRender,
+    getCoreRowModel,
+    getFilteredRowModel,
+    getPaginationRowModel,
+    getSortedRowModel,
+    useReactTable,
 } from "@tanstack/react-table";
 import { motion } from "framer-motion";
 import { Download, Plus, Search, X } from "lucide-react";
@@ -20,7 +20,7 @@ import { useNewsletterAdminStore } from "@/store/newsletterStore";
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "http://localhost:6000";
+  "http://localhost:6001";
 
 /* ✅ API BASE */
 const API_BASE = `${BASE_URL}/api/newsletters`;

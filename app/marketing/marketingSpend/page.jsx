@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 import MarketingSpendModal from "@/components/marketing/MarketingSpendModal";
 import { useAdminMarketingSpendStore } from "@/store/adminMarketingSpendStore";
 
-const API = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000")
+const API = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6001")
   .trim()
   .replace(/\/+$/, "");
 

@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 
 export default function ProfilePage() {
   const BASE_URL =
-    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000";
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6001";
 
   const { admin, token } = useLoginStore();
 

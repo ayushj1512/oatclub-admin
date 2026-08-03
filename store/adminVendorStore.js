@@ -3,7 +3,7 @@
 import axios from "axios";
 import { create } from "zustand";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6001/api";
 
 const DEFAULT_MODULES = {
   sampling: true,

@@ -2,22 +2,22 @@
 
 import { useAdminMarketingCampaignStore } from "@/store/adminMarketingCampaignStore";
 import {
-  ArrowLeft,
-  Check,
-  Copy,
-  ExternalLink,
-  Link2,
-  MousePointerClick,
-  Plus,
-  Search,
-  ShoppingBag,
-  User,
+    ArrowLeft,
+    Check,
+    Copy,
+    ExternalLink,
+    Link2,
+    MousePointerClick,
+    Plus,
+    Search,
+    ShoppingBag,
+    User,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6001";
 
 const API_ORIGIN = API_URL.endsWith("/api")
   ? API_URL.replace(/\/api$/, "")

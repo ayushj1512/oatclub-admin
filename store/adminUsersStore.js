@@ -2,7 +2,7 @@ import axios from "axios";
 import { create } from "zustand";
 import useLoginStore from "./useLoginStore";
 
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6001";
 
 export const useAdminUsersVerifyStore = create((set, get) => ({
   users: [],

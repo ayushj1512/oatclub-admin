@@ -1,7 +1,7 @@
 // src/store/fabricStore.js
 import { create } from "zustand";
 
-const API_BASE_URL = `${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000").replace(/\/+$/, "")}/api`;
+const API_BASE_URL = `${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:6001").replace(/\/+$/, "")}/api`;
 
 const getErrorMessage = (error, fallback = "Something went wrong") => {
   return (

@@ -5,17 +5,17 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
-  BadgeCheck,
-  Crown,
-  Eye,
-  EyeOff,
-  Fingerprint,
-  KeyRound,
-  Loader2,
-  Lock,
-  LogIn,
-  ShieldCheck,
-  User,
+    BadgeCheck,
+    Crown,
+    Eye,
+    EyeOff,
+    Fingerprint,
+    KeyRound,
+    Loader2,
+    Lock,
+    LogIn,
+    ShieldCheck,
+    User,
 } from "lucide-react";
 import useLoginStore from "../../store/useLoginStore";
 
@@ -26,7 +26,7 @@ export default function LoginScreen() {
   const router = useRouter();
 
   const BASE_URL =
-    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000";
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6001";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

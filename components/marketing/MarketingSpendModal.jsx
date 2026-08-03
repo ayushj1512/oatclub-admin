@@ -37,7 +37,7 @@ const getTodayYMD = () => {
 
 export default function MarketingSpendModal({ open, onClose, onSaved, apiBase }) {
   const API =
-    (apiBase || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000")
+    (apiBase || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6001")
       .trim()
       .replace(/\/+$/, "");
 

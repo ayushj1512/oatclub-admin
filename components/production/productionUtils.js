@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6001";
 
 export const STATUS_OPTIONS = [
   { label: "Processing", value: "processing" },

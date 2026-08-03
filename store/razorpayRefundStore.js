@@ -6,7 +6,7 @@ import { create } from "zustand";
 const API =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:6000";
+  "http://localhost:6001";
 
 const BASE = `${API}/api/razorpay/admin/refunds`;
 

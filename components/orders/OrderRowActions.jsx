@@ -21,7 +21,15 @@ import {
   RefreshCw,
   Truck,
   MessageCircle,
+  Split,
+
 } from "lucide-react";
+
+import {
+  buildTwoWayOrderSplit,
+  canSplitOrder,
+  canMarkAsTestingOrder,
+} from "@/services/order.service";
 
 import { toast } from "react-hot-toast";
 import { useReactToPrint } from "react-to-print";
@@ -186,7 +194,7 @@ const getShippingLabelUrl = (order) =>
 
 const createConfirmationMessage = (order = {}) => `Hi ${getCustomerName(order)},
 
-Welcome to *OATCLUB* 
+Welcome to *OATCLUB*
 
 Before we process your order, please confirm the details below:
 
@@ -277,8 +285,16 @@ export default function OrderRowActions({
     (state) => state.markOrderAsInfluencer
   );
 
+  const markOrderAsTesting = useOrderStore(
+    (state) => state.markOrderAsTesting,
+  );
+
   const confirmOrder = useOrderStore(
     (state) => state.confirmOrder
+  );
+
+  const splitOrderIntoShipments = useOrderStore(
+    (state) => state.splitOrderIntoShipments,
   );
 
   const syncTracking = useShiprocketStore(
@@ -289,7 +305,7 @@ export default function OrderRowActions({
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [invoice, setInvoice] = useState(null);
   const [error, setError] = useState("");
-
+  const [splitLoading, setSplitLoading] = useState(false);
   const [invoiceLoading, setInvoiceLoading] =
     useState(false);
 
@@ -312,6 +328,12 @@ export default function OrderRowActions({
 
   const [isInfluencerOrder, setIsInfluencerOrder] =
     useState(order?.isInfluencerOrder === true);
+
+  const [testingLoading, setTestingLoading] = useState(false);
+
+  const [isTestingOrder, setIsTestingOrder] = useState(
+    order?.isTestingOrder === true,
+  );
 
   const orderId = safe(order?._id || order?.id);
   const orderNumber = safe(order?.orderNumber);
@@ -337,6 +359,11 @@ export default function OrderRowActions({
     order?.fulfillmentStatus
   ).toLowerCase();
 
+  const splitAvailable = canSplitOrder(order);
+  const testingAvailable = canMarkAsTestingOrder(order);
+  const isSplitParent =
+    safe(order?.orderType).toLowerCase() === "parent";
+
   const canSendShippingMessage =
     hasWhatsAppPhone &&
     Boolean(shippingAwb || shippingTrackingUrl) &&
@@ -357,6 +384,10 @@ export default function OrderRowActions({
       order?.isInfluencerOrder === true
     );
   }, [order?.isInfluencerOrder]);
+
+  useEffect(() => {
+    setIsTestingOrder(order?.isTestingOrder === true);
+  }, [order?.isTestingOrder]);
 
   const printInvoice = useReactToPrint({
     contentRef: invoiceRef,
@@ -665,6 +696,116 @@ export default function OrderRowActions({
     }
   };
 
+  const handleTestingOrderToggle = async () => {
+    if (!orderId || testingLoading || !testingAvailable) return;
+
+    const previousValue = isTestingOrder;
+    const nextValue = !previousValue;
+
+    setOpen(false);
+    setTestingLoading(true);
+    setIsTestingOrder(nextValue);
+
+    try {
+      const updatedOrder = await markOrderAsTesting(orderId, nextValue);
+
+      if (updatedOrder) {
+        onUpdated?.(updatedOrder);
+      }
+      toast.success(
+        nextValue
+          ? "Marked as testing order"
+          : "Removed from testing orders",
+      );
+
+      await onRefresh?.();
+    } catch (error) {
+      console.error("Testing order update error:", error);
+
+      setIsTestingOrder(previousValue);
+
+      toast.error(
+        error?.message || "Failed to update testing order",
+      );
+    } finally {
+      setTestingLoading(false);
+    }
+  };
+
+  const handleSplitOrder = async () => {
+    if (!orderId || splitLoading || !splitAvailable) {
+      return;
+    }
+
+    let shipments;
+
+    try {
+      shipments = buildTwoWayOrderSplit(order);
+    } catch (splitError) {
+      toast.error(splitError?.message || "Order cannot be split");
+      return;
+    }
+
+    const shipmentASummary = shipments[0]?.items
+      ?.map((item) => {
+        const orderItem = getItems(order).find(
+          (currentItem) =>
+            safe(currentItem?.lineId) === safe(item?.lineId),
+        );
+
+        return `${getItemTitle(orderItem)} × ${item.quantity}`;
+      })
+      .join(", ");
+
+    const shipmentBSummary = shipments[1]?.items
+      ?.map((item) => {
+        const orderItem = getItems(order).find(
+          (currentItem) =>
+            safe(currentItem?.lineId) === safe(item?.lineId),
+        );
+
+        return `${getItemTitle(orderItem)} × ${item.quantity}`;
+      })
+      .join(", ");
+
+    const confirmed = window.confirm(
+      `Split order ${orderNumber}?\n\n` +
+      `${orderNumber}-A: ${shipmentASummary}\n` +
+      `${orderNumber}-B: ${shipmentBSummary}\n\n` +
+      `The original order will become the parent order.`,
+    );
+
+    if (!confirmed) return;
+
+    setOpen(false);
+    setSplitLoading(true);
+
+    try {
+      const result = await splitOrderIntoShipments(
+        orderId,
+        shipments,
+      );
+
+      toast.success(
+        `Order split into ${orderNumber}-A and ${orderNumber}-B`,
+      );
+
+      if (result?.parent) {
+        onUpdated?.(result.parent);
+      }
+
+      await onRefresh?.();
+    } catch (splitError) {
+      console.error("Split order error:", splitError);
+
+      toast.error(
+        splitError?.message || "Failed to split order",
+      );
+    } finally {
+      setSplitLoading(false);
+    }
+  };
+
   const handleWhatsAppConfirmation = () => {
     const whatsappLink = createWhatsAppLink(
       order,
@@ -915,7 +1056,9 @@ export default function OrderRowActions({
     invoiceLoading ||
     Boolean(pendingInvoiceAction) ||
     confirmLoading ||
+    splitLoading ||
     influencerLoading ||
+    testingLoading ||
     syncing;
 
   return (
@@ -998,6 +1141,63 @@ export default function OrderRowActions({
 
               {isConfirmed && (
                 <span className="rounded-full bg-emerald-100 px-2 py-1 text-[9px] font-bold text-emerald-700">
+                  DONE
+                </span>
+              )}
+            </button>
+
+            {/* Split Order */}
+
+            <button
+              type="button"
+              onClick={handleSplitOrder}
+              disabled={
+                isBusy ||
+                !orderId ||
+                !splitAvailable ||
+                isSplitParent
+              }
+              title={
+                isSplitParent
+                  ? "Order is already split"
+                  : splitAvailable
+                    ? "Split order into A and B shipments"
+                    : "Order cannot be split"
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                {splitLoading ? (
+                  <Loader2
+                    size={15}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Split
+                    size={15}
+                    className="text-violet-600"
+                  />
+                )}
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    {splitLoading
+                      ? "Splitting Order..."
+                      : isSplitParent
+                        ? "Order Split"
+                        : "Split Order"}
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {isSplitParent
+                      ? "Ship child orders separately"
+                      : "Create A and B shipments"}
+                  </div>
+                </div>
+              </div>
+
+              {isSplitParent && (
+                <span className="rounded-full bg-violet-100 px-2 py-1 text-[9px] font-bold text-violet-700">
                   DONE
                 </span>
               )}
@@ -1315,6 +1515,48 @@ export default function OrderRowActions({
                 {isInfluencerOrder
                   ? "ACTIVE"
                   : "OFF"}
+              </span>
+            </button>
+
+            {/* Testing Order */}
+
+            <button
+              type="button"
+              onClick={handleTestingOrderToggle}
+              disabled={isBusy || !orderId || !testingAvailable}
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3">
+                {testingLoading ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : isTestingOrder ? (
+                  <BadgeCheck size={15} className="text-amber-600" />
+                ) : (
+                  <AlertCircle size={15} className="text-zinc-600" />
+                )}
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    {isTestingOrder
+                      ? "Remove Testing Order"
+                      : "Mark as Testing Order"}
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {isTestingOrder
+                      ? "Treat as a normal order"
+                      : "Exclude from reports and operations"}
+                  </div>
+                </div>
+              </div>
+
+              <span
+                className={`rounded-full px-2 py-1 text-[9px] font-bold ${isTestingOrder
+                  ? "bg-amber-500 text-white"
+                  : "bg-zinc-100 text-zinc-500"
+                  }`}
+              >
+                {isTestingOrder ? "TESTING" : "NORMAL"}
               </span>
             </button>
           </div>,
