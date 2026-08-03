@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000";
 
 export const STATUS_OPTIONS = [
   { label: "Processing", value: "processing" },
@@ -88,9 +88,9 @@ export const proxifyImage = (url) => {
 export const resolveItemImage = (item) =>
   proxifyImage(
     item?.variant?.image ||
-      item?.productSnapshot?.thumbnail ||
-      (item?.productSnapshot?.images || [])[0] ||
-      ""
+    item?.productSnapshot?.thumbnail ||
+    (item?.productSnapshot?.images || [])[0] ||
+    ""
   );
 
 export const safeId = (v) => String(v?._id || v || "").trim();

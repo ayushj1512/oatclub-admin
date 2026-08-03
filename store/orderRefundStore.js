@@ -5,7 +5,7 @@ import { create } from "zustand";
 const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5000";
+  "http://localhost:6000";
 
 const REFUND_BASE = "/api/order-refunds";
 const ORDER_BASE = "/api/orders";
@@ -128,9 +128,9 @@ const makePagination = (data, fallback = 0, filters = {}) => ({
 const getRefundAmountFromOrder = (order = {}) =>
   Number(
     order?.refundSummary?.pendingAmount ||
-      order?.refundSummary?.eligibleAmount ||
-      order?.finalPayable ||
-      0
+    order?.refundSummary?.eligibleAmount ||
+    order?.finalPayable ||
+    0
   );
 
 export const useOrderRefundStore = create((set, get) => {
@@ -228,30 +228,30 @@ export const useOrderRefundStore = create((set, get) => {
 
       refunds: refund
         ? [
-            refund,
-            ...state.refunds.filter(
-              (r) => String(getId(r)) !== String(getId(refund))
-            ),
-          ]
+          refund,
+          ...state.refunds.filter(
+            (r) => String(getId(r)) !== String(getId(refund))
+          ),
+        ]
         : state.refunds,
 
       refundsByOrderId:
         refund && orderId
           ? {
-              ...state.refundsByOrderId,
-              [orderId]: [
-                refund,
-                ...(state.refundsByOrderId[orderId] || []).filter(
-                  (r) => String(getId(r)) !== String(getId(refund))
-                ),
-              ],
-            }
+            ...state.refundsByOrderId,
+            [orderId]: [
+              refund,
+              ...(state.refundsByOrderId[orderId] || []).filter(
+                (r) => String(getId(r)) !== String(getId(refund))
+              ),
+            ],
+          }
           : state.refundsByOrderId,
 
       orders: order
         ? state.orders.map((item) =>
-            String(getId(item)) === String(getId(order)) ? order : item
-          )
+          String(getId(item)) === String(getId(order)) ? order : item
+        )
         : state.orders,
     }));
   };
@@ -425,40 +425,40 @@ export const useOrderRefundStore = create((set, get) => {
     createRazorpayRefundFromOrder: (orderId, payload = {}) =>
       orderId
         ? refundAction(
-            `${REFUND_BASE}/razorpay/order/${orderId}/create`,
-            "Failed to create Razorpay refund",
-            "POST",
-            payload
-          )
+          `${REFUND_BASE}/razorpay/order/${orderId}/create`,
+          "Failed to create Razorpay refund",
+          "POST",
+          payload
+        )
         : null,
 
     createManualRefundFromOrder: (orderId, payload = {}) =>
       orderId
         ? refundAction(
-            `${REFUND_BASE}/manual/order/${orderId}/create`,
-            "Failed to create manual refund",
-            "POST",
-            payload
-          )
+          `${REFUND_BASE}/manual/order/${orderId}/create`,
+          "Failed to create manual refund",
+          "POST",
+          payload
+        )
         : null,
 
     processRazorpayRefund: (refundId, payload = {}) =>
       refundId
         ? refundAction(
-            `${REFUND_BASE}/razorpay/${refundId}/process`,
-            "Failed to process Razorpay refund",
-            "POST",
-            payload
-          )
+          `${REFUND_BASE}/razorpay/${refundId}/process`,
+          "Failed to process Razorpay refund",
+          "POST",
+          payload
+        )
         : null,
 
     fetchRazorpayRefundStatus: (refundId) =>
       refundId
         ? refundAction(
-            `${REFUND_BASE}/razorpay/${refundId}/status`,
-            "Failed to fetch Razorpay refund status",
-            "GET"
-          )
+          `${REFUND_BASE}/razorpay/${refundId}/status`,
+          "Failed to fetch Razorpay refund status",
+          "GET"
+        )
         : null,
 
     createAndProcessRazorpayRefund: async (orderId, payload = {}) => {
@@ -539,31 +539,31 @@ export const useOrderRefundStore = create((set, get) => {
     markManualRefundProcessed: (refundId, payload = {}) =>
       refundId
         ? refundAction(
-            `${REFUND_BASE}/${refundId}/manual-processed`,
-            "Failed to complete manual refund",
-            "PATCH",
-            payload
-          )
+          `${REFUND_BASE}/${refundId}/manual-processed`,
+          "Failed to complete manual refund",
+          "PATCH",
+          payload
+        )
         : null,
 
     markManualRefundFailed: (refundId, payload = {}) =>
       refundId
         ? refundAction(
-            `${REFUND_BASE}/${refundId}/manual-failed`,
-            "Failed to mark manual refund failed",
-            "PATCH",
-            payload
-          )
+          `${REFUND_BASE}/${refundId}/manual-failed`,
+          "Failed to mark manual refund failed",
+          "PATCH",
+          payload
+        )
         : null,
 
     addRefundProof: (refundId, payload = {}) =>
       refundId
         ? refundAction(
-            `${REFUND_BASE}/${refundId}/proofs`,
-            "Failed to add refund proof",
-            "POST",
-            payload
-          )
+          `${REFUND_BASE}/${refundId}/proofs`,
+          "Failed to add refund proof",
+          "POST",
+          payload
+        )
         : null,
 
     goToPage: (page) =>

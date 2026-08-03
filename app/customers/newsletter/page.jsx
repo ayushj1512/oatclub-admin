@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getPaginationRowModel,
-  getFilteredRowModel,
-  flexRender,
   createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
 } from "@tanstack/react-table";
 import { motion } from "framer-motion";
-import { Search, Download, Plus, X } from "lucide-react";
+import { Download, Plus, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 
 import { useNewsletterAdminStore } from "@/store/newsletterStore";
@@ -20,7 +20,7 @@ import { useNewsletterAdminStore } from "@/store/newsletterStore";
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "http://localhost:5000";
+  "http://localhost:6000";
 
 /* ✅ API BASE */
 const API_BASE = `${BASE_URL}/api/newsletters`;

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import axios from "axios";
 import useLoginStore from "@/store/useLoginStore";
-import { Loader2, Save, KeyRound, UserRound } from "lucide-react";
+import axios from "axios";
+import { KeyRound, Loader2, Save, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export default function ProfilePage() {
   const BASE_URL =
-    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000";
 
   const { admin, token } = useLoginStore();
 
@@ -91,8 +91,8 @@ export default function ProfilePage() {
     } catch (err) {
       setError(
         err?.response?.data?.message ||
-          err.message ||
-          "Failed to update profile"
+        err.message ||
+        "Failed to update profile"
       );
     } finally {
       setSavingProfile(false);
@@ -126,8 +126,8 @@ export default function ProfilePage() {
     } catch (err) {
       setError(
         err?.response?.data?.message ||
-          err.message ||
-          "Failed to update password"
+        err.message ||
+        "Failed to update password"
       );
     } finally {
       setChangingPass(false);
@@ -166,11 +166,10 @@ export default function ProfilePage() {
 
         {(error || success) && (
           <div
-            className={`mb-5 rounded-2xl border p-3 text-sm ${
-              error
+            className={`mb-5 rounded-2xl border p-3 text-sm ${error
                 ? "border-red-200 bg-red-50 text-red-700"
                 : "border-emerald-200 bg-emerald-50 text-emerald-700"
-            }`}
+              }`}
           >
             {error || success}
           </div>

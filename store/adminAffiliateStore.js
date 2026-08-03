@@ -3,7 +3,7 @@
 import { create } from "zustand";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000";
 
 const getAdminToken = () => {
   if (typeof window === "undefined") return "";
@@ -195,13 +195,13 @@ export const useAdminAffiliateStore = create(
             values.page !== undefined
               ? values.page
               : values.q !== undefined ||
-                  values.status !== undefined ||
-                  values.platform !== undefined ||
-                  values.state !== undefined ||
-                  values.couponCode !== undefined ||
-                  values.isActive !== undefined ||
-                  values.from !== undefined ||
-                  values.to !== undefined
+                values.status !== undefined ||
+                values.platform !== undefined ||
+                values.state !== undefined ||
+                values.couponCode !== undefined ||
+                values.isActive !== undefined ||
+                values.from !== undefined ||
+                values.to !== undefined
                 ? 1
                 : state.filters.page,
         },
@@ -221,13 +221,13 @@ export const useAdminAffiliateStore = create(
             values.page !== undefined
               ? values.page
               : values.q !== undefined ||
-                  values.paymentStatus !== undefined ||
-                  values.paymentMethod !== undefined ||
-                  values.fulfillmentStatus !== undefined ||
-                  values.commissionStatus !== undefined ||
-                  values.isConfirmed !== undefined ||
-                  values.from !== undefined ||
-                  values.to !== undefined
+                values.paymentStatus !== undefined ||
+                values.paymentMethod !== undefined ||
+                values.fulfillmentStatus !== undefined ||
+                values.commissionStatus !== undefined ||
+                values.isConfirmed !== undefined ||
+                values.from !== undefined ||
+                values.to !== undefined
                 ? 1
                 : state.orderFilters.page,
         },
@@ -396,7 +396,7 @@ export const useAdminAffiliateStore = create(
 
           affiliate:
             String(state.affiliate?._id) ===
-            String(affiliateId)
+              String(affiliateId)
               ? updatedAffiliate
               : state.affiliate,
 
@@ -453,7 +453,7 @@ export const useAdminAffiliateStore = create(
 
           affiliate:
             String(state.affiliate?._id) ===
-            String(affiliateId)
+              String(affiliateId)
               ? updatedAffiliate
               : state.affiliate,
 
@@ -654,7 +654,7 @@ export const useAdminAffiliateStore = create(
 
           affiliate:
             String(state.affiliate?._id) ===
-            String(affiliateId)
+              String(affiliateId)
               ? updatedAffiliate
               : state.affiliate,
 
@@ -711,7 +711,7 @@ export const useAdminAffiliateStore = create(
 
           affiliate:
             String(state.affiliate?._id) ===
-            String(affiliateId)
+              String(affiliateId)
               ? null
               : state.affiliate,
         }));
@@ -744,5 +744,5 @@ export const useAdminAffiliateStore = create(
 export {
   defaultAffiliateForm,
   defaultFilters,
-  defaultOrderFilters,
+  defaultOrderFilters
 };

@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000";
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000";
 
 const BARCODE_PREFIX = "OATCLUB";
 
@@ -564,8 +564,8 @@ export default function InventoryBarcodePage() {
               </label>
 
               {selectedProduct &&
-              Array.isArray(selectedProduct.variants) &&
-              selectedProduct.variants.length > 0 ? (
+                Array.isArray(selectedProduct.variants) &&
+                selectedProduct.variants.length > 0 ? (
                 <label style={styles.label}>
                   <span style={styles.labelTxt}>Variant</span>
                   <select

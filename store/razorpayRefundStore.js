@@ -1,12 +1,12 @@
 // store/razorpayRefundStore.js
 
-import { create } from "zustand";
 import axios from "axios";
+import { create } from "zustand";
 
 const API =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5000";
+  "http://localhost:6000";
 
 const BASE = `${API}/api/razorpay/admin/refunds`;
 
@@ -75,9 +75,9 @@ const useRazorpayRefundStore = create((set, get) => ({
           sum +
           Number(
             order?.refundSummary?.pendingAmount ||
-              order?.refundSummary?.eligibleAmount ||
-              order?.finalPayable ||
-              0
+            order?.refundSummary?.eligibleAmount ||
+            order?.finalPayable ||
+            0
           )
         );
       }, 0);

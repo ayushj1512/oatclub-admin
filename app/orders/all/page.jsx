@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import OrderRow from "@/components/orders/OrderRow";
 import { useOrderStore } from "@/store/orderStore";
+import OrderAdvancedFilters from "@/components/orders/OrderAdvancedFilters";
 
 const IST_TZ = "Asia/Kolkata";
 const IST_OFFSET = "+05:30";
@@ -389,16 +390,87 @@ const applyClientFiltersToOrders = ({
   });
 };
 
+const INITIAL_ORDER_FILTERS = {
+  quickDate: "",
+  startDate: "",
+  endDate: "",
+
+  minAmount: "",
+  maxAmount: "",
+  minDiscount: "",
+  maxDiscount: "",
+
+  confirmFilter: "",
+  isInfluencerOrder: "",
+
+  paymentStatus: "",
+  excludePaymentStatus: "",
+
+  paymentMethod: "",
+  excludePaymentMethod: "",
+
+  fulfillmentStatus: "",
+  excludeFulfillmentStatus: "",
+
+  priority: "",
+  excludePriority: "",
+
+  productCode: "",
+  excludeProductCode: "",
+
+  sku: "",
+  excludeSku: "",
+
+  size: "",
+  excludeSize: "",
+
+  color: "",
+  excludeColor: "",
+
+  city: "",
+  excludeCity: "",
+
+  state: "",
+  excludeState: "",
+
+  pincode: "",
+  excludePincode: "",
+
+  courier: "",
+  excludeCourier: "",
+
+  hasAwb: "",
+  hasTracking: "",
+  hasLabel: "",
+
+  hasCoupon: "",
+  couponCode: "",
+  excludeCouponCode: "",
+
+  attributionSource: "",
+  excludeAttributionSource: "",
+
+  attributionCampaign: "",
+  excludeAttributionCampaign: "",
+};
+
 /* ---------------------------------------------
    Page
 --------------------------------------------- */
 export default function OrdersListPage() {
-  const orders = useOrderStore((s) => s.orders);
-  const loading = useOrderStore((s) => s.loading);
-  const ordersMeta = useOrderStore((s) => s.ordersMeta);
-
-  const fetchAllOrders = useOrderStore((s) => s.fetchAllOrders);
   const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
+
+  const [orders, setOrders] = useState([]);
+  const [filters, setFilters] = useState(INITIAL_ORDER_FILTERS);
+  const [loading, setLoading] = useState(false);
+  const [ordersMeta, setOrdersMeta] = useState({
+    page: 1,
+    limit: 100,
+    totalCount: 0,
+    totalPages: 1,
+    totalSum: null,
+  });
+
   const [exportLoading, setExportLoading] = useState(false);
   // Search
   const [searchInput, setSearchInput] = useState("");
@@ -410,22 +482,6 @@ export default function OrdersListPage() {
   const pollingRef = useRef(false);
   const baselineReadyRef = useRef(false);
 
-  // Filters
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [minAmount, setMinAmount] = useState("");
-  const [maxAmount, setMaxAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("");
-
-  // Status + confirmation
-  const [status, setStatus] = useState("");
-  const [confirmFilter, setConfirmFilter] = useState("");
-
-  // Priority + quick date
-  const [priority, setPriority] = useState("");
-  const [quickDate, setQuickDate] = useState("");
-  const [influencerFilter, setInfluencerFilter] = useState("");
-
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 100;
@@ -434,10 +490,34 @@ export default function OrdersListPage() {
   const handleOrderUpdated = useCallback(
     (updatedOrder) => {
       if (!updatedOrder?._id) return;
+
       syncOrderInList(updatedOrder);
+      setOrders((current) =>
+        current.map((order) =>
+          String(order?._id) === String(updatedOrder._id)
+            ? { ...order, ...updatedOrder }
+            : order,
+        ),
+      );
     },
     [syncOrderInList]
   );
+
+  const setFilter = useCallback((key, value) => {
+    setCurrentPage(1);
+
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setSearchInput("");
+    setSearch("");
+    setFilters(INITIAL_ORDER_FILTERS);
+    setCurrentPage(1);
+  }, []);
 
   const applySearch = useCallback(() => {
     setCurrentPage(1);
@@ -445,98 +525,111 @@ export default function OrdersListPage() {
   }, [searchInput]);
 
   const clearSearch = useCallback(() => {
-    setSearchInput("");
-    setSearch("");
-    setStartDate("");
-    setEndDate("");
-    setMinAmount("");
-    setMaxAmount("");
-    setPaymentMethod("");
-    setStatus("");
-    setConfirmFilter("");
-    setPriority("");
-    setQuickDate("");
-    setCurrentPage(1);
-    setInfluencerFilter("");
-  }, []);
-
-  useEffect(() => {
-    if (quickDate === "today") {
-      const t = todayYMD_IST();
-      setStartDate(t);
-      setEndDate(t);
-      return;
-    }
-
-    if (quickDate === "yesterday") {
-      const y = yesterdayYMD_IST();
-      setStartDate(y);
-      setEndDate(y);
-      return;
-    }
-
-    if (quickDate === "") {
-      setStartDate("");
-      setEndDate("");
-    }
-  }, [quickDate]);
+    clearFilters();
+  }, [clearFilters]);
 
 
   const backendFilters = useMemo(() => {
-    const f = {};
+    const payload = {
+      ...filters,
+      page: currentPage,
+      limit: pageSize,
+      includeSum: "true",
+    };
 
-    if (search) f.customerName = search;
+    if (search) payload.search = search;
 
-    if (startDate) {
-      f.startDate = startDate;
-      f.startAt = istStartISO(startDate);
-      f.tz = IST_TZ;
+    if (filters.startDate) {
+      payload.startDate = filters.startDate;
+      payload.startAt = istStartISO(filters.startDate);
     }
 
-    if (endDate) {
-      f.endDate = endDate;
-      f.endAt = istEndISO(endDate);
-      f.tz = IST_TZ;
+    if (filters.endDate) {
+      payload.endDate = filters.endDate;
+      payload.endAt = istEndISO(filters.endDate);
     }
 
-    if (minAmount) f.minAmount = minAmount;
-    if (maxAmount) f.maxAmount = maxAmount;
-    if (paymentMethod) f.paymentMethod = paymentMethod;
+    delete payload.quickDate;
 
-    if (status) f.fulfillmentStatus = status;
-    if (confirmFilter) f.confirmFilter = confirmFilter;
-    if (priority) f.priority = priority;
-    if (influencerFilter !== "") {
-      f.isInfluencerOrder = influencerFilter;
+    return Object.fromEntries(
+      Object.entries(payload).filter(
+        ([, value]) =>
+          value !== "" && value !== null && value !== undefined,
+      ),
+    );
+  }, [filters, search, currentPage, pageSize]);
+
+  const requestAdvancedOrders = useCallback(async (filters) => {
+    if (!API) {
+      throw new Error("NEXT_PUBLIC_API_URL is missing.");
     }
 
-    f.page = currentPage;
-    f.limit = pageSize;
+    const params = new URLSearchParams();
 
-    return f;
-  }, [
-    search,
-    startDate,
-    endDate,
-    minAmount,
-    maxAmount,
-    paymentMethod,
-    status,
-    confirmFilter,
-    influencerFilter,
-    priority,
-    currentPage,
-  ]);
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value === "" || value === null || value === undefined) return;
+      params.set(key, String(value));
+    });
+
+    const response = await fetch(
+      `${API}/api/orders/advanced-filter?${params.toString()}`,
+      {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      },
+    );
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        payload?.message ||
+          payload?.error ||
+          "Unable to fetch advanced filtered orders.",
+      );
+    }
+
+    return {
+      orders: Array.isArray(payload?.orders) ? payload.orders : [],
+      meta: payload?.meta && typeof payload.meta === "object"
+        ? payload.meta
+        : {},
+    };
+  }, []);
 
   const loadOrders = useCallback(async () => {
+    setLoading(true);
+
     try {
-      await fetchAllOrders(backendFilters);
-    } catch (e) {
-      console.log("Orders Fetch Error:", e);
+      const result = await requestAdvancedOrders(backendFilters);
+
+      setOrders(result.orders);
+      setOrdersMeta({
+        page: toNumber(result.meta?.page) || currentPage,
+        limit: toNumber(result.meta?.limit) || pageSize,
+        totalCount: toNumber(result.meta?.totalCount),
+        totalPages: Math.max(1, toNumber(result.meta?.totalPages) || 1),
+        totalSum:
+          result.meta?.totalSum === null || result.meta?.totalSum === undefined
+            ? null
+            : toNumber(result.meta.totalSum),
+      });
+    } catch (error) {
+      console.error("Orders Fetch Error:", error);
+      setOrders([]);
+      setOrdersMeta({
+        page: currentPage,
+        limit: pageSize,
+        totalCount: 0,
+        totalPages: 1,
+        totalSum: null,
+      });
     } finally {
+      setLoading(false);
       setHasLoadedOnce(true);
     }
-  }, [fetchAllOrders, backendFilters]);
+  }, [backendFilters, currentPage, requestAdvancedOrders]);
 
   useEffect(() => {
     loadOrders();
@@ -645,34 +738,106 @@ export default function OrdersListPage() {
     return () => window.clearInterval(intervalId);
   }, [hasLoadedOnce, checkForNewOrders]);
 
+  useEffect(() => {
+    const getPreviousDate = (daysBack) => {
+      const date = new Date();
+      date.setDate(date.getDate() - daysBack);
+      return ymdInTZ(date, IST_TZ);
+    };
+
+    if (filters.quickDate === "today") {
+      const today = todayYMD_IST();
+
+      setFilters((current) => ({
+        ...current,
+        startDate: today,
+        endDate: today,
+      }));
+
+      return;
+    }
+
+    if (filters.quickDate === "yesterday") {
+      const yesterday = yesterdayYMD_IST();
+
+      setFilters((current) => ({
+        ...current,
+        startDate: yesterday,
+        endDate: yesterday,
+      }));
+
+      return;
+    }
+
+    if (filters.quickDate === "last_7_days") {
+      setFilters((current) => ({
+        ...current,
+        startDate: getPreviousDate(6),
+        endDate: todayYMD_IST(),
+      }));
+
+      return;
+    }
+
+    if (filters.quickDate === "last_30_days") {
+      setFilters((current) => ({
+        ...current,
+        startDate: getPreviousDate(29),
+        endDate: todayYMD_IST(),
+      }));
+
+      return;
+    }
+
+    if (filters.quickDate === "this_month") {
+      const today = todayYMD_IST();
+      const [year, month] = today.split("-");
+
+      setFilters((current) => ({
+        ...current,
+        startDate: `${year}-${month}-01`,
+        endDate: today,
+      }));
+
+      return;
+    }
+
+    setFilters((current) => {
+      if (!current.startDate && !current.endDate) {
+        return current;
+      }
+
+      return {
+        ...current,
+        startDate: "",
+        endDate: "",
+      };
+    });
+  }, [filters.quickDate]);
+
   const viewNewOrders = useCallback(async () => {
     setNewOrders([]);
     setCurrentPage(1);
-
-    await fetchAllOrders({
-      ...backendFilters,
-      page: 1,
-      limit: pageSize,
-    });
-
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [backendFilters, fetchAllOrders]);
+  }, []);
 
   const filteredOrders = useMemo(() => {
     return applyClientFiltersToOrders({
       orders,
-      confirmFilter,
-      influencerFilter,
-      priority,
+      confirmFilter: filters.confirmFilter,
+      influencerFilter: filters.isInfluencerOrder,
+      priority: filters.priority,
       search,
     });
   }, [
     orders,
-    confirmFilter,
-    influencerFilter,
-    priority,
+    filters.confirmFilter,
+    filters.isInfluencerOrder,
+    filters.priority,
     search,
   ]);
+
+
 
   const REVENUE_STATUSES = new Set([
     "processing",
@@ -835,40 +1000,31 @@ export default function OrdersListPage() {
   const exportToCSV = useCallback(async () => {
     if (exportLoading || loading) return;
 
-    let originalFilters = null;
     setExportLoading(true);
 
     try {
-      originalFilters = { ...backendFilters };
       const exportLimit = 500;
-
       const baseFilters = { ...backendFilters };
       delete baseFilters.page;
       delete baseFilters.limit;
 
       let page = 1;
       let totalPagesToFetch = 1;
-      let allOrders = [];
+      const allOrders = [];
 
       do {
-        await fetchAllOrders({
+        const result = await requestAdvancedOrders({
           ...baseFilters,
           page,
           limit: exportLimit,
+          includeSum: "false",
         });
 
-        const state = useOrderStore.getState();
-        const pageOrders = Array.isArray(state.orders) ? state.orders : [];
-        const meta = state.ordersMeta || {};
-
-        allOrders.push(...pageOrders);
-
-        const totalCountFromMeta = toNumber(meta?.totalCount);
-        const totalPagesFromMeta =
-          toNumber(meta?.totalPages) ||
-          Math.max(1, Math.ceil(totalCountFromMeta / exportLimit));
-
-        totalPagesToFetch = totalPagesFromMeta;
+        allOrders.push(...result.orders);
+        totalPagesToFetch = Math.max(
+          1,
+          toNumber(result.meta?.totalPages) || 1,
+        );
         page += 1;
       } while (page <= totalPagesToFetch);
 
@@ -876,25 +1032,12 @@ export default function OrdersListPage() {
 
       for (const order of allOrders) {
         const key = order?._id || order?.id || order?.orderNumber;
-        if (key && !uniqueOrdersMap.has(key)) {
-          uniqueOrdersMap.set(key, order);
+        if (key && !uniqueOrdersMap.has(String(key))) {
+          uniqueOrdersMap.set(String(key), order);
         }
       }
 
-      const uniqueOrders = Array.from(uniqueOrdersMap.values());
-
-      // ============================================================
-      // 11. CSV EXPORT CLIENT FILTER
-      // Add influencerFilter here too
-      // ============================================================
-
-      const exportOrders = applyClientFiltersToOrders({
-        orders: uniqueOrders,
-        confirmFilter,
-        influencerFilter,
-        priority,
-        search,
-      });
+      const exportOrders = Array.from(uniqueOrdersMap.values());
 
       if (!exportOrders.length) {
         alert("No orders found to export for the applied filters.");
@@ -929,32 +1072,32 @@ export default function OrdersListPage() {
 
       const csvLines = [
         headers.map(escapeCSV).join(","),
-        ...rows.map((r) =>
+        ...rows.map((row) =>
           [
-            r.orderId,
-            r.orderNumber,
-            r.orderDate,
-            r.customerName,
-            r.customerEmail,
-            r.customerPhone,
-            r.isConfirmed,
-            r.fulfillmentStatus,
-            r.subtotal,
-            r.discount,
-            r.shippingFee,
-            r.tax,
-            r.totalAmount,
-            r.finalPayable,
-            r.itemIndex,
-            r.itemTitle,
-            r.itemProductCode,
-            r.itemSku,
-            r.itemSize,
-            r.itemQuantity,
-            r.itemPrice,
+            row.orderId,
+            row.orderNumber,
+            row.orderDate,
+            row.customerName,
+            row.customerEmail,
+            row.customerPhone,
+            row.isConfirmed,
+            row.fulfillmentStatus,
+            row.subtotal,
+            row.discount,
+            row.shippingFee,
+            row.tax,
+            row.totalAmount,
+            row.finalPayable,
+            row.itemIndex,
+            row.itemTitle,
+            row.itemProductCode,
+            row.itemSku,
+            row.itemSize,
+            row.itemQuantity,
+            row.itemPrice,
           ]
             .map(escapeCSV)
-            .join(",")
+            .join(","),
         ),
       ];
 
@@ -964,70 +1107,43 @@ export default function OrdersListPage() {
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      const timestamp = new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/[:T]/g, "-");
 
       link.href = url;
-      link.setAttribute("download", `orders-all-pages-${ts}.csv`);
+      link.setAttribute(
+        "download",
+        `orders-advanced-filter-${timestamp}.csv`,
+      );
+
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error("CSV export failed:", error);
-      alert("Failed to export all orders.");
+      alert(error?.message || "Failed to export filtered orders.");
     } finally {
-      if (originalFilters) {
-        try {
-          await fetchAllOrders(originalFilters);
-        } catch (restoreError) {
-          console.error(
-            "Failed to restore current page after export:",
-            restoreError
-          );
-        }
-      }
       setExportLoading(false);
     }
   }, [
     exportLoading,
     loading,
     backendFilters,
-    fetchAllOrders,
-    confirmFilter,
-    influencerFilter,
-    priority,
-    search,
+    requestAdvancedOrders,
   ]);
 
   const totalCount = toNumber(ordersMeta?.totalCount);
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const totalPages = Math.max(
+    1,
+    toNumber(ordersMeta?.totalPages) ||
+      Math.ceil(totalCount / pageSize),
+  );
   const currentMetaPage = toNumber(ordersMeta?.page) || currentPage;
 
-  const chips = [
-    { key: "", label: "All", type: "all" },
-    { key: "processing", label: "Processing", type: "status" },
-    { key: "packed", label: "Packed", type: "status" },
-    { key: "picked", label: "Picked", type: "status" },
-    { key: "shipped", label: "Shipped", type: "status" },
-    { key: "out_for_delivery", label: "Out for Delivery", type: "status" },
-    { key: "delivered", label: "Delivered", type: "status" },
-    { key: "return_requested", label: "Return Requested", type: "status" },
-    { key: "exchange_requested", label: "Exchange Requested", type: "status" },
-    { key: "pickup_initiated", label: "Pickup Initiated", type: "status" },
-    { key: "returned", label: "Returned", type: "status" },
-    { key: "rto", label: "RTO", type: "status" },
-    { key: "cancelled", label: "Cancelled", type: "status" },
-    { key: "refunded", label: "Refunded", type: "status" },
-    { key: "confirmed", label: "Confirmed", type: "confirm" },
-    { key: "not_confirmed", label: "Not Confirmed", type: "confirm" },
-    { key: "normal", label: "Priority: Normal", type: "priority" },
-    { key: "medium", label: "Priority: Medium", type: "priority" },
-    { key: "high", label: "Priority: High", type: "priority" },
-    { key: "today", label: "Today", type: "quickDate" },
-    { key: "yesterday", label: "Yesterday", type: "quickDate" },
-    { key: "true", label: "Influencer Orders", type: "influencer" },
-    { key: "false", label: "Normal Orders", type: "influencer" }
-  ];
+
 
   return (
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
@@ -1054,7 +1170,7 @@ export default function OrdersListPage() {
               </span>
 
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-                Revenue: {formatINR(totalRevenue)}
+                Revenue: {formatINR(ordersMeta?.totalSum ?? totalRevenue)}
               </span>
 
               <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
@@ -1117,269 +1233,26 @@ export default function OrdersListPage() {
         </div>
 
         {/* Filters */}
+        <OrderAdvancedFilters
+          filters={filters}
+          setFilter={setFilter}
+          onClear={clearFilters}
+          currentPageSize={pageSize}
+        />
+
+        {/* Top Pagination */}
         <Card>
-          <div className="grid md:grid-cols-4 gap-5">
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Quick Date
-              </label>
-              <select
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-                value={quickDate}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setQuickDate(e.target.value);
-                }}
-              >
-                <option value="">All</option>
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-              </select>
-              <p className="mt-1 text-xs text-gray-500">
-                Selecting this auto-fills start/end date (IST).
-              </p>
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Start Date
-              </label>
-              <input
-                type="date"
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-                value={startDate}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setQuickDate("");
-                  setStartDate(e.target.value);
-                }}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                End Date
-              </label>
-              <input
-                type="date"
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-                value={endDate}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setQuickDate("");
-                  setEndDate(e.target.value);
-                }}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Min Amount
-              </label>
-              <input
-                type="number"
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-                placeholder="₹0"
-                value={minAmount}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setMinAmount(e.target.value);
-                }}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Max Amount
-              </label>
-              <input
-                type="number"
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-                placeholder="₹5000"
-                value={maxAmount}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setMaxAmount(e.target.value);
-                }}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Payment Method
-              </label>
-              <select
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-                value={paymentMethod}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setPaymentMethod(e.target.value);
-                }}
-              >
-                <option value="">All</option>
-                <option value="cod">Cash on Delivery</option>
-                <option value="razorpay">Razorpay</option>
-                <option value="exchange">Exchange</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Confirmation
-              </label>
-              <select
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-                value={confirmFilter}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setConfirmFilter(e.target.value);
-                }}
-              >
-                <option value="">All</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="not_confirmed">Not Confirmed</option>
-              </select>
-            </div>
-
-
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Influencer Order
-              </label>
-
-              <select
-                className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 outline-none transition focus:ring-2 focus:ring-black/10"
-                value={influencerFilter}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setInfluencerFilter(e.target.value);
-                }}
-              >
-                <option value="">All Orders</option>
-                <option value="true">Influencer Orders</option>
-                <option value="false">Normal Orders</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Priority
-              </label>
-              <select
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-black/10 transition"
-                value={priority}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setPriority(e.target.value);
-                }}
-              >
-                <option value="">All</option>
-                <option value="normal">Normal</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-700">
-                Per Page
-              </label>
-              <input
-                type="text"
-                value="100"
-                disabled
-                className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-100 border border-gray-200 outline-none text-gray-500 cursor-not-allowed"
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Fixed to 100 orders per page for better performance.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-2">
-            {chips.map((s) => {
-              // ============================================================
-              // 7. UPDATE isActive LOGIC
-              // Replace current isActive block with this
-              // ============================================================
-
-              const isActive =
-                s.type === "status"
-                  ? status === s.key
-                  : s.type === "confirm"
-                    ? confirmFilter === s.key
-                    : s.type === "influencer"
-                      ? influencerFilter === s.key
-                      : s.type === "priority"
-                        ? priority === s.key
-                        : s.type === "quickDate"
-                          ? quickDate === s.key
-                          : status === "" &&
-                          confirmFilter === "" &&
-                          influencerFilter === "" &&
-                          priority === "" &&
-                          quickDate === "";
-
-              const onClick = () => {
-                setCurrentPage(1);
-
-                if (s.type === "all") {
-                  setStatus("");
-                  setConfirmFilter("");
-                  setPriority("");
-                  setQuickDate("");
-                  return;
-                }
-
-                if (s.type === "status") {
-                  setStatus((prev) => (prev === s.key ? "" : s.key));
-                }
-
-                if (s.type === "confirm") {
-                  setConfirmFilter((prev) => (prev === s.key ? "" : s.key));
-                }
-                if (s.type === "influencer") {
-                  setInfluencerFilter((prev) =>
-                    prev === s.key ? "" : s.key,
-                  );
-                }
-                if (s.type === "priority") {
-                  setPriority((prev) => (prev === s.key ? "" : s.key));
-                }
-
-                if (s.type === "quickDate") {
-                  setQuickDate((prev) => (prev === s.key ? "" : s.key));
-                }
-              };
-
-              return (
-                <button
-                  key={`${s.type}-${s.key || "all"}`}
-                  onClick={onClick}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${isActive
-                    ? "bg-black text-white shadow-sm"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Top Pagination */}
-          <div className="mt-6">
-            <PaginationBar
-              currentPage={currentMetaPage}
-              totalPages={totalPages}
-              totalCount={totalCount}
-              pageSize={pageSize}
-              loading={loading}
-              onRefresh={loadOrders}
-              onPageChange={setCurrentPage}
-              totalRevenue={totalRevenue}
-              validRevenue={validRevenue}
-            />
-          </div>
+          <PaginationBar
+            currentPage={currentMetaPage}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            pageSize={pageSize}
+            loading={loading}
+            onRefresh={loadOrders}
+            onPageChange={setCurrentPage}
+            totalRevenue={totalRevenue}
+            validRevenue={validRevenue}
+          />
         </Card>
 
         {/* Table */}

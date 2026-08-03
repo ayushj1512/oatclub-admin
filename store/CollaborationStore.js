@@ -1,14 +1,14 @@
-import { create } from "zustand";
 import axios from "axios";
+import { create } from "zustand";
 
 /**
  * Admin Panel Store for Collaborations (CRU - No Delete)
  * Backend base comes from .env:
- * NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
+ * NEXT_PUBLIC_BACKEND_URL=http://localhost:6000
  */
 
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000";
 
 const API_BASE = `${BACKEND_URL}/api/collaborations`;
 

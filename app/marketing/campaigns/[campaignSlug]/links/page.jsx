@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useAdminMarketingCampaignStore } from "@/store/adminMarketingCampaignStore";
 import {
   ArrowLeft,
   Check,
@@ -15,9 +13,11 @@ import {
   ShoppingBag,
   User,
 } from "lucide-react";
-import { useAdminMarketingCampaignStore } from "@/store/adminMarketingCampaignStore";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000";
 
 const API_ORIGIN = API_URL.endsWith("/api")
   ? API_URL.replace(/\/api$/, "")
@@ -354,11 +354,10 @@ export default function CampaignLinksPage() {
 
               {(error || successMessage) && (
                 <div
-                  className={`rounded-xl px-3 py-2.5 text-sm ${
-                    error
+                  className={`rounded-xl px-3 py-2.5 text-sm ${error
                       ? "bg-red-50 text-red-600"
                       : "bg-emerald-50 text-emerald-700"
-                  }`}
+                    }`}
                 >
                   {error || successMessage}
                 </div>
@@ -502,11 +501,10 @@ export default function CampaignLinksPage() {
 
                             <td className="px-4 py-4">
                               <span
-                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
-                                  link.converted
+                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${link.converted
                                     ? "bg-emerald-50 text-emerald-700"
                                     : "bg-gray-100 text-gray-600"
-                                }`}
+                                  }`}
                               >
                                 {link.converted ? (
                                   <ShoppingBag size={13} />

@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import axios from "axios";
 import {
   ArrowLeft,
   FileImage,
@@ -11,14 +10,15 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import axios from "axios";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 
 import MediaPickerModal from "@/components/media/MediaPickerModal";
 
 const API =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5000";
+  "http://localhost:6000";
 
 const REFUND_API = `${API}/api/order-refunds`;
 

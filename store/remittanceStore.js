@@ -1,8 +1,8 @@
 // store/remittanceStore.js
-import { create } from "zustand";
 import axios from "axios";
+import { create } from "zustand";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000";
 
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message ||
@@ -432,47 +432,47 @@ export const useRemittanceStore = create((set, get) => ({
 
 
   exportPendingCsv: async (customParams = {}) => {
-  try {
-    set({ exportLoading: true, actionError: "" });
+    try {
+      set({ exportLoading: true, actionError: "" });
 
-    const params = cleanParams({
-      ...get().pendingFilters,
-      ...customParams,
-    });
+      const params = cleanParams({
+        ...get().pendingFilters,
+        ...customParams,
+      });
 
-    const response = await axios.get(
-      `${API}/api/remittance/pending/export/csv`,
-      {
-        params,
-        responseType: "blob",
-      }
-    );
+      const response = await axios.get(
+        `${API}/api/remittance/pending/export/csv`,
+        {
+          params,
+          responseType: "blob",
+        }
+      );
 
-    const blob = new Blob([response.data], {
-      type: "text/csv;charset=utf-8;",
-    });
+      const blob = new Blob([response.data], {
+        type: "text/csv;charset=utf-8;",
+      });
 
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pending_remittance_${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pending_remittance_${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
 
-    set({ exportLoading: false });
-    return true;
-  } catch (error) {
-    const message =
-      error?.response?.data?.message ||
-      error?.message ||
-      "Failed to export pending CSV";
+      set({ exportLoading: false });
+      return true;
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to export pending CSV";
 
-    set({ exportLoading: false, actionError: message });
-    throw error;
-  }
-},
+      set({ exportLoading: false, actionError: message });
+      throw error;
+    }
+  },
 
   // -----------------------------
   // quick reload

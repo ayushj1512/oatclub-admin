@@ -3,7 +3,7 @@
 import axios from "axios";
 import { create } from "zustand";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000/api";
 
 const DEFAULT_MODULES = {
   sampling: true,
@@ -300,12 +300,12 @@ const useAdminVendorStore = create((set, get) => ({
         modules:
           normalizedRole === "superadmin"
             ? {
-                ...DEFAULT_MODULES,
-              }
+              ...DEFAULT_MODULES,
+            }
             : {
-                ...DEFAULT_MODULES,
-                ...modules,
-              },
+              ...DEFAULT_MODULES,
+              ...modules,
+            },
       });
 
       const vendor = data?.vendor;
@@ -432,18 +432,18 @@ const useAdminVendorStore = create((set, get) => ({
 
         const updatedSelectedVendor = isSelected
           ? {
-              ...state.selectedVendor,
-              ...(vendor || {}),
-            }
+            ...state.selectedVendor,
+            ...(vendor || {}),
+          }
           : state.selectedVendor;
 
         return {
           vendors: state.vendors.map((item) =>
             String(item?._id) === String(vendorId)
               ? {
-                  ...item,
-                  ...(vendor || {}),
-                }
+                ...item,
+                ...(vendor || {}),
+              }
               : item,
           ),
 
@@ -667,16 +667,16 @@ const useAdminVendorStore = create((set, get) => ({
 
           selectedVendor: isSelected
             ? {
-                ...state.selectedVendor,
+              ...state.selectedVendor,
 
-                isSuperAdmin:
-                  data?.isSuperAdmin ??
-                  isSuperAdminVendor(state.selectedVendor),
+              isSuperAdmin:
+                data?.isSuperAdmin ??
+                isSuperAdminVendor(state.selectedVendor),
 
-                hasAllProductAccess:
-                  data?.hasAllProductAccess ??
-                  isSuperAdminVendor(state.selectedVendor),
-              }
+              hasAllProductAccess:
+                data?.hasAllProductAccess ??
+                isSuperAdminVendor(state.selectedVendor),
+            }
             : state.selectedVendor,
         };
       });
@@ -1033,9 +1033,9 @@ const useAdminVendorStore = create((set, get) => ({
         assignedProducts: state.assignedProducts.map((item) =>
           getAssignmentProductId(item) === String(productId)
             ? assignment || {
-                ...item,
-                modules,
-              }
+              ...item,
+              modules,
+            }
             : item,
         ),
 

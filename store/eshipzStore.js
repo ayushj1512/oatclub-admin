@@ -1,10 +1,10 @@
 // store/eshipzStore.js
 
-import { create } from "zustand";
 import axios from "axios";
+import { create } from "zustand";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:6000";
 
 export const useEshipzStore = create((set) => ({
   loading: false,

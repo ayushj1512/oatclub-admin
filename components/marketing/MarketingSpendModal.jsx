@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { X, Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 const DEFAULT_SOURCES = [
   "Meta Ads",
@@ -37,7 +37,7 @@ const getTodayYMD = () => {
 
 export default function MarketingSpendModal({ open, onClose, onSaved, apiBase }) {
   const API =
-    (apiBase || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000")
+    (apiBase || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000")
       .trim()
       .replace(/\/+$/, "");
 

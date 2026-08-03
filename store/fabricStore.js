@@ -1,7 +1,7 @@
 // src/store/fabricStore.js
 import { create } from "zustand";
 
-const API_BASE_URL = `${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/+$/, "")}/api`;
+const API_BASE_URL = `${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:6000").replace(/\/+$/, "")}/api`;
 
 const getErrorMessage = (error, fallback = "Something went wrong") => {
   return (
@@ -272,7 +272,7 @@ const useFabricStore = create((set, get) => ({
     }
   },
 
-    searchFabrics: async (params = {}) => {
+  searchFabrics: async (params = {}) => {
     try {
       set({
         loading: true,
@@ -737,8 +737,8 @@ const useFabricStore = create((set, get) => ({
 
       fabricOptions: [],
       fabricStats: null,
-selectedFabric: null,
-searchResults: [],      loading: false,
+      selectedFabric: null,
+      searchResults: [], loading: false,
       formLoading: false,
       error: null,
       filters: defaultFilters,

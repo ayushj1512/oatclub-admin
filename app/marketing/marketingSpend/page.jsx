@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { Trash2, RefreshCcw, Sparkles, CalendarDays, Download } from "lucide-react";
+import { CalendarDays, Download, RefreshCcw, Sparkles, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
-import { useAdminMarketingSpendStore } from "@/store/adminMarketingSpendStore";
 import MarketingSpendModal from "@/components/marketing/MarketingSpendModal";
+import { useAdminMarketingSpendStore } from "@/store/adminMarketingSpendStore";
 
-const API = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000")
+const API = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000")
   .trim()
   .replace(/\/+$/, "");
 
@@ -416,82 +416,82 @@ export default function MarketingSpendPage() {
 
       {/* TABLE */}
       <div className="rounded-3xl border border-black/10 bg-white overflow-hidden shadow-[0_14px_40px_rgba(0,0,0,0.05)]">
-  <div className="px-5 py-4 bg-gray-50 border-b border-black/10 flex items-center justify-between">
-    <div>
-      <div className="font-semibold text-black">Spend Table</div>
-      <div className="text-xs text-gray-500">
-        {from} → {to} {source ? `• ${source}` : "• All sources"}
+        <div className="px-5 py-4 bg-gray-50 border-b border-black/10 flex items-center justify-between">
+          <div>
+            <div className="font-semibold text-black">Spend Table</div>
+            <div className="text-xs text-gray-500">
+              {from} → {to} {source ? `• ${source}` : "• All sources"}
+            </div>
+          </div>
+
+          <div className="text-right">
+            <div className="text-xs text-gray-500">Filtered total</div>
+            <div className="font-semibold text-black">₹{money(rangeTotal)}</div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-5 text-sm text-gray-500">Loading...</div>
+        ) : rows.length === 0 ? (
+          <div className="p-5 text-sm text-gray-500">
+            No spends found for selected filters.
+          </div>
+        ) : (
+          <div className="w-full overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white border-b border-black/10">
+                <tr className="text-left text-xs text-gray-500">
+                  <th className="px-5 py-3 font-medium">Date</th>
+                  <th className="px-5 py-3 font-medium">Source</th>
+                  <th className="px-5 py-3 font-medium text-right">Amount</th>
+                  <th className="px-5 py-3 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-black/5">
+                {rows.map((s) => {
+                  const ymd = toYMD(s?.spentAt || s?.createdAt);
+                  return (
+                    <tr key={s._id} className="hover:bg-gray-50/70 transition">
+                      <td className="px-5 py-3">
+                        <div className="font-medium text-black">
+                          {prettyDate(ymd)}
+                        </div>
+                        <div className="text-xs text-gray-500">{ymd}</div>
+                      </td>
+
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center rounded-full border border-black/10 bg-white px-2.5 py-1 text-xs text-gray-700">
+                          {safe(s.source)}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-3 text-right">
+                        <div className="font-semibold text-black whitespace-nowrap">
+                          ₹{money(s.amount)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {safe(s.currency || "INR")}
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          onClick={() => onDelete(s._id)}
+                          className="inline-flex items-center justify-center p-2.5 rounded-2xl border border-black/10 bg-white hover:bg-red-50 hover:border-red-200 transition"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-    </div>
-
-    <div className="text-right">
-      <div className="text-xs text-gray-500">Filtered total</div>
-      <div className="font-semibold text-black">₹{money(rangeTotal)}</div>
-    </div>
-  </div>
-
-  {loading ? (
-    <div className="p-5 text-sm text-gray-500">Loading...</div>
-  ) : rows.length === 0 ? (
-    <div className="p-5 text-sm text-gray-500">
-      No spends found for selected filters.
-    </div>
-  ) : (
-    <div className="w-full overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-white border-b border-black/10">
-          <tr className="text-left text-xs text-gray-500">
-            <th className="px-5 py-3 font-medium">Date</th>
-            <th className="px-5 py-3 font-medium">Source</th>
-            <th className="px-5 py-3 font-medium text-right">Amount</th>
-            <th className="px-5 py-3 font-medium text-right">Action</th>
-          </tr>
-        </thead>
-
-        <tbody className="divide-y divide-black/5">
-          {rows.map((s) => {
-            const ymd = toYMD(s?.spentAt || s?.createdAt);
-            return (
-              <tr key={s._id} className="hover:bg-gray-50/70 transition">
-                <td className="px-5 py-3">
-                  <div className="font-medium text-black">
-                    {prettyDate(ymd)}
-                  </div>
-                  <div className="text-xs text-gray-500">{ymd}</div>
-                </td>
-
-                <td className="px-5 py-3">
-                  <span className="inline-flex items-center rounded-full border border-black/10 bg-white px-2.5 py-1 text-xs text-gray-700">
-                    {safe(s.source)}
-                  </span>
-                </td>
-
-                <td className="px-5 py-3 text-right">
-                  <div className="font-semibold text-black whitespace-nowrap">
-                    ₹{money(s.amount)}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {safe(s.currency || "INR")}
-                  </div>
-                </td>
-
-                <td className="px-5 py-3 text-right">
-                  <button
-                    onClick={() => onDelete(s._id)}
-                    className="inline-flex items-center justify-center p-2.5 rounded-2xl border border-black/10 bg-white hover:bg-red-50 hover:border-red-200 transition"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  )}
-</div>
 
       {/* Modal */}
       <MarketingSpendModal

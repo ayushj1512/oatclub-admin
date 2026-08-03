@@ -3,7 +3,7 @@ import { create } from "zustand";
 
 /* ============================================================
    CONFIG
-   ✅ Use: NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
+   ✅ Use: NEXT_PUBLIC_BACKEND_URL=http://localhost:6000
 ============================================================ */
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 

@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import axios from "axios";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
-import useLoginStore from "../../store/useLoginStore";
 import {
   BadgeCheck,
   Crown,
@@ -18,6 +17,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
+import useLoginStore from "../../store/useLoginStore";
 
 const OATCLUB_LOGO_URL =
   "https://res.cloudinary.com/dpsvrt4sd/image/upload/v1780338447/qavpt44lsxsy3wrvuwi8.png";
@@ -26,7 +26,7 @@ export default function LoginScreen() {
   const router = useRouter();
 
   const BASE_URL =
-    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6000";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
