@@ -11,7 +11,7 @@ import {
   Search,
   Tags,
   Truck,
-} from "lucide-react";import OrderRow from "@/components/orders/OrderRow";
+} from "lucide-react"; import OrderRow from "@/components/orders/OrderRow";
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { useOrderStore } from "@/store/orderStore";
 import { useShiprocketStore } from "@/store/ShipRocketStore";
@@ -50,17 +50,32 @@ const money = (n) => {
 
 const safe = (v) => (v === null || v === undefined ? "" : v);
 const getOrderId = (order) => String(order?._id || order?.id || "");
+const getPackedTime = (order) => {
+  const packedAt = order?.fulfillmentDates?.packedAt;
+
+  if (packedAt) {
+    const time = new Date(packedAt).getTime();
+    if (Number.isFinite(time)) return time;
+  }
+
+  // Old orders fallback
+  const fallback = new Date(
+    order?.updatedAt || order?.createdAt || order?.orderDate || 0
+  ).getTime();
+
+  return Number.isFinite(fallback) ? fallback : 0;
+};
 
 const getShippingLabelUrl = (order) =>
   String(
     order?.shipment?.shiprocket?.labelUrl ||
-      order?.shipment?.shiprocket?.label_url ||
-      order?.shipment?.labelUrl ||
-      order?.shipment?.label_url ||
-      order?.shippingLabelUrl ||
-      order?.labelUrl ||
-      order?.trackingDetails?.labelUrl ||
-      ""
+    order?.shipment?.shiprocket?.label_url ||
+    order?.shipment?.labelUrl ||
+    order?.shipment?.label_url ||
+    order?.shippingLabelUrl ||
+    order?.labelUrl ||
+    order?.trackingDetails?.labelUrl ||
+    ""
   ).trim();
 
 
@@ -80,8 +95,8 @@ export default function PackedOrdersPage() {
   const fetchInvoiceByOrderNumber = useOrderStore((s) => s.fetchInvoiceByOrderNumber);
   const fetchInvoiceByOrderId = useOrderStore((s) => s.fetchInvoiceByOrderId);
   const updateOrderStatus = useOrderStore(
-  (s) => s.updateOrderStatus
-);
+    (s) => s.updateOrderStatus
+  );
   const syncTracking = useShiprocketStore((s) => s.syncTracking);
 
   const invoiceBatchRef = useRef(null);
@@ -165,14 +180,37 @@ export default function PackedOrdersPage() {
     });
   }, [orders, search]);
 
+  const sortedOrders = useMemo(() => {
+    return [...filteredOrders].sort((a, b) => {
+      // Oldest packed order first
+      const timeDifference = getPackedTime(a) - getPackedTime(b);
+
+      if (timeDifference !== 0) {
+        return timeDifference;
+      }
+
+      // Same packed time fallback
+      return String(a?.orderNumber || "").localeCompare(
+        String(b?.orderNumber || ""),
+        undefined,
+        { numeric: true }
+      );
+    });
+  }, [filteredOrders]);
+
   const selectedOrders = useMemo(() => {
     const selected = new Set(selectedIds);
-    return filteredOrders.filter((order) => selected.has(getOrderId(order)));
-  }, [filteredOrders, selectedIds]);
+
+    return sortedOrders.filter((order) =>
+      selected.has(getOrderId(order))
+    );
+  }, [sortedOrders, selectedIds]);
 
   const allVisibleSelected =
-    filteredOrders.length > 0 &&
-    filteredOrders.every((order) => selectedIds.includes(getOrderId(order)));
+    sortedOrders.length > 0 &&
+    sortedOrders.every((order) =>
+      selectedIds.includes(getOrderId(order))
+    );
 
   const toggleOrder = useCallback((orderId, checked) => {
     if (!orderId) return;
@@ -220,82 +258,79 @@ export default function PackedOrdersPage() {
   };
 
   const runBulkMarkAsShipped = async () => {
-  if (!selectedOrders.length || bulkAction) return;
+    if (!selectedOrders.length || bulkAction) return;
 
-  const confirmed = window.confirm(
-    `Mark ${selectedOrders.length} selected order${
-      selectedOrders.length === 1 ? "" : "s"
-    } as shipped?`
-  );
+    const confirmed = window.confirm(
+      `Mark ${selectedOrders.length} selected order${selectedOrders.length === 1 ? "" : "s"
+      } as shipped?`
+    );
 
-  if (!confirmed) return;
+    if (!confirmed) return;
 
-  setBulkAction("shipped");
+    setBulkAction("shipped");
 
-  let successCount = 0;
-  let failedCount = 0;
+    let successCount = 0;
+    let failedCount = 0;
 
-  try {
-    for (const order of selectedOrders) {
-      const orderId = getOrderId(order);
+    try {
+      for (const order of selectedOrders) {
+        const orderId = getOrderId(order);
 
-      if (!orderId) {
-        failedCount += 1;
-        continue;
-      }
-
-      try {
-        const result = await updateOrderStatus(orderId, {
-          fulfillmentStatus: "shipped",
-        });
-
-        const updatedOrder =
-          result?.order ||
-          result?.data?.order ||
-          result?.updatedOrder ||
-          result?.data;
-
-        if (updatedOrder?._id) {
-          syncOrderInList(updatedOrder);
+        if (!orderId) {
+          failedCount += 1;
+          continue;
         }
 
-        successCount += 1;
-      } catch (error) {
-        console.error(
-          `Failed to mark ${order?.orderNumber || orderId} as shipped:`,
-          error
-        );
+        try {
+          const result = await updateOrderStatus(orderId, {
+            fulfillmentStatus: "shipped",
+          });
 
-        failedCount += 1;
+          const updatedOrder =
+            result?.order ||
+            result?.data?.order ||
+            result?.updatedOrder ||
+            result?.data;
+
+          if (updatedOrder?._id) {
+            syncOrderInList(updatedOrder);
+          }
+
+          successCount += 1;
+        } catch (error) {
+          console.error(
+            `Failed to mark ${order?.orderNumber || orderId} as shipped:`,
+            error
+          );
+
+          failedCount += 1;
+        }
       }
-    }
 
-    if (successCount) {
-      toast.success(
-        `${successCount} order${
-          successCount === 1 ? "" : "s"
-        } marked as shipped`
-      );
-    }
+      if (successCount) {
+        toast.success(
+          `${successCount} order${successCount === 1 ? "" : "s"
+          } marked as shipped`
+        );
+      }
 
-    if (failedCount) {
+      if (failedCount) {
+        toast.error(
+          `${failedCount} order${failedCount === 1 ? "" : "s"
+          } failed to update`
+        );
+      }
+
+      setSelectedIds([]);
+      await loadOrders();
+    } catch (error) {
       toast.error(
-        `${failedCount} order${
-          failedCount === 1 ? "" : "s"
-        } failed to update`
+        error?.message || "Failed to mark selected orders as shipped"
       );
+    } finally {
+      setBulkAction("");
     }
-
-    setSelectedIds([]);
-    await loadOrders();
-  } catch (error) {
-    toast.error(
-      error?.message || "Failed to mark selected orders as shipped"
-    );
-  } finally {
-    setBulkAction("");
-  }
-};
+  };
 
   const runBulkInvoiceDownload = async () => {
     if (!selectedOrders.length || bulkAction) return;
@@ -746,21 +781,21 @@ export default function PackedOrdersPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-             {[
-  ["shipped", "Mark as Shipped", Truck, runBulkMarkAsShipped],
-  ["sync", "Bulk Sync", RefreshCw, runBulkSync],
-  ["invoice", "Invoices", FileText, runBulkInvoiceDownload],
-  ["label", "Labels", Tags, runBulkLabelDownload],
-].map(([key, label, Icon, handler]) => (
+              {[
+                ["shipped", "Mark as Shipped", Truck, runBulkMarkAsShipped],
+                ["sync", "Bulk Sync", RefreshCw, runBulkSync],
+                ["invoice", "Invoices", FileText, runBulkInvoiceDownload],
+                ["label", "Labels", Tags, runBulkLabelDownload],
+              ].map(([key, label, Icon, handler]) => (
                 <button
                   key={key}
                   type="button"
                   onClick={handler}
                   disabled={!selectedOrders.length || Boolean(bulkAction)}
-className={[
-  "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40",
-  key === "shipped" ? "bg-emerald-600" : "bg-black",
-].join(" ")}                >
+                  className={[
+                    "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40",
+                    key === "shipped" ? "bg-emerald-600" : "bg-black",
+                  ].join(" ")}                >
                   {bulkAction === key ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
@@ -793,11 +828,10 @@ className={[
               <button
                 disabled={!hasMore || loadingMore}
                 onClick={loadMore}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  !hasMore || loadingMore
-                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                    : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
-                }`}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${!hasMore || loadingMore
+                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                  : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
+                  }`}
               >
                 {loadingMore ? (
                   <span className="inline-flex items-center gap-2">
@@ -843,20 +877,41 @@ className={[
                 {filteredOrders.length ? (
                   [...filteredOrders]
                     .sort((a, b) => {
-                      const getNum = (o) => {
-                        const m = String(o?.orderNumber || "").match(/(\d+)$/);
-                        return m ? Number(m[1]) : 0;
+                      const packedTimeA = new Date(
+                        a?.fulfillmentDates?.packedAt ||
+                        a?.updatedAt ||
+                        a?.createdAt ||
+                        a?.orderDate ||
+                        0
+                      ).getTime();
+
+                      const packedTimeB = new Date(
+                        b?.fulfillmentDates?.packedAt ||
+                        b?.updatedAt ||
+                        b?.createdAt ||
+                        b?.orderDate ||
+                        0
+                      ).getTime();
+
+                      // Oldest packed first
+                      if (packedTimeA !== packedTimeB) {
+                        return packedTimeA - packedTimeB;
+                      }
+
+                      // Same packed time: smaller order number first
+                      const getNum = (order) => {
+                        const match = String(order?.orderNumber || "").match(/(\d+)$/);
+                        return match ? Number(match[1]) : 0;
                       };
-                      const an = getNum(a);
-                      const bn = getNum(b);
-                      if (bn !== an) return bn - an;
-                      const ad = new Date(a?.createdAt || a?.orderDate || 0).getTime();
-                      const bd = new Date(b?.createdAt || b?.orderDate || 0).getTime();
-                      return bd - ad;
+
+                      return getNum(a) - getNum(b);
                     })
                     .map((order, idx) => {
                       const rowKey =
-                        order?._id || order?.id || order?.orderNumber || `order-${idx}`;
+                        order?._id ||
+                        order?.id ||
+                        order?.orderNumber ||
+                        `order-${idx}`;
 
                       return (
                         <OrderRow
@@ -866,7 +921,9 @@ className={[
                           selected={selectedIds.includes(getOrderId(order))}
                           onSelect={toggleOrder}
                           onUpdated={(updatedOrder) => {
-                            if (updatedOrder?._id) syncOrderInList(updatedOrder);
+                            if (updatedOrder?._id) {
+                              syncOrderInList(updatedOrder);
+                            }
                           }}
                         />
                       );
