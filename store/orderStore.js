@@ -126,6 +126,9 @@ export const useOrderStore = create((set, get) => ({
   confirmationDetailsLoading: false,
   orderDashboard: null,
   orderDashboardLoading: false,
+  paymentRecoveryLoading: false,
+  paymentRecoveryError: null,
+  paymentRecoveryResult: null,
 
   _start: () => set({ loading: true, error: null }),
   _success: () => set({ loading: false }),
@@ -329,6 +332,54 @@ export const useOrderStore = create((set, get) => ({
       get()._fail(e);
       throw e;
     }
+  },
+
+  canSendPaymentRecoveryEmail: (
+    order = null,
+  ) => {
+    const currentOrder =
+      order || get().order || {};
+
+    const paymentMethod = String(
+      currentOrder?.paymentMethod || "",
+    )
+      .trim()
+      .toLowerCase();
+
+    const paymentStatus = String(
+      currentOrder?.paymentStatus || "",
+    )
+      .trim()
+      .toLowerCase();
+
+    const fulfillmentStatus = String(
+      currentOrder?.fulfillmentStatus || "",
+    )
+      .trim()
+      .toLowerCase();
+
+    const isCancelled =
+      currentOrder?.cancellation
+        ?.isCancelled === true ||
+      fulfillmentStatus === "cancelled";
+
+    const hasPaymentId = Boolean(
+      currentOrder?.razorpay
+        ?.paymentId,
+    );
+
+    return (
+      !isCancelled &&
+      !hasPaymentId &&
+      [
+        "razorpay",
+        "manual_prepaid",
+      ].includes(paymentMethod) &&
+      [
+        "pending",
+        "failed",
+      ].includes(paymentStatus)
+    );
   },
 
  createOrder: async (payload) => {
@@ -1064,6 +1115,142 @@ export const useOrderStore = create((set, get) => ({
 
     return order;
   },
+
+  /* ============================================================
+   PAYMENT RECOVERY EMAIL
+============================================================ */
+
+  sendOrderPaymentRecoveryEmail: async (
+    orderId,
+    {
+      paymentLink,
+      expiresAt,
+    } = {},
+  ) => {
+    const id = String(orderId || "").trim();
+
+    if (!id) {
+      throw new Error("Order ID is required");
+    }
+
+    set({
+      paymentRecoveryLoading: true,
+      paymentRecoveryError: null,
+      paymentRecoveryResult: null,
+    });
+
+    try {
+      const data = await get()._post(
+        `/api/orders/${encodeURIComponent(
+          id,
+        )}/send-payment-recovery-email`,
+        {
+          paymentLink:
+            paymentLink ||
+            undefined,
+
+          expiresAt:
+            expiresAt ||
+            undefined,
+        },
+        {
+          silent: true,
+        },
+      );
+
+      set({
+        paymentRecoveryLoading: false,
+        paymentRecoveryError: null,
+        paymentRecoveryResult: data,
+      });
+
+      return data;
+    } catch (error) {
+      set({
+        paymentRecoveryLoading: false,
+        paymentRecoveryError:
+          error?.message ||
+          "Failed to send payment recovery email",
+        paymentRecoveryResult: null,
+      });
+
+      throw error;
+    }
+  },
+
+  sendBulkOrderPaymentRecoveryEmails: async (
+    orderIds = [],
+  ) => {
+    const normalizedOrderIds = [
+      ...new Set(
+        (
+          Array.isArray(orderIds)
+            ? orderIds
+            : []
+        )
+          .map((id) =>
+            String(id || "").trim(),
+          )
+          .filter(Boolean),
+      ),
+    ];
+
+    if (!normalizedOrderIds.length) {
+      throw new Error(
+        "Select at least one order",
+      );
+    }
+
+    if (normalizedOrderIds.length > 100) {
+      throw new Error(
+        "Maximum 100 orders can be processed at once",
+      );
+    }
+
+    set({
+      paymentRecoveryLoading: true,
+      paymentRecoveryError: null,
+      paymentRecoveryResult: null,
+    });
+
+    try {
+      const data = await get()._post(
+        "/api/orders/send-payment-recovery-emails",
+        {
+          orderIds:
+            normalizedOrderIds,
+        },
+        {
+          silent: true,
+        },
+      );
+
+      set({
+        paymentRecoveryLoading: false,
+        paymentRecoveryError: null,
+        paymentRecoveryResult: data,
+      });
+
+      return data;
+    } catch (error) {
+      set({
+        paymentRecoveryLoading: false,
+        paymentRecoveryError:
+          error?.message ||
+          "Failed to send payment recovery emails",
+        paymentRecoveryResult: null,
+      });
+
+      throw error;
+    }
+  },
+
+  clearPaymentRecoveryResult: () =>
+    set({
+      paymentRecoveryLoading: false,
+      paymentRecoveryError: null,
+      paymentRecoveryResult: null,
+    }),
 
   markCodOrderAsPaid: async (orderId) => {
     if (!orderId) {

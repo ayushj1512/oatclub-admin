@@ -20,15 +20,16 @@ import {
   Printer,
   RefreshCw,
   Truck,
-  MessageCircle,
+  MessageCircle,  
   Split,
-
+  Mail,
 } from "lucide-react";
 
 import {
   buildTwoWayOrderSplit,
   canSplitOrder,
   canMarkAsTestingOrder,
+  canSendPaymentRecoveryEmail,
 } from "@/services/order.service";
 
 import { toast } from "react-hot-toast";
@@ -297,6 +298,10 @@ export default function OrderRowActions({
     (state) => state.splitOrderIntoShipments,
   );
 
+  const sendOrderPaymentRecoveryEmail = useOrderStore(
+    (state) => state.sendOrderPaymentRecoveryEmail,
+  );
+
   const syncTracking = useShiprocketStore(
     (state) => state.syncTracking
   );
@@ -330,6 +335,8 @@ export default function OrderRowActions({
     useState(order?.isInfluencerOrder === true);
 
   const [testingLoading, setTestingLoading] = useState(false);
+  const [paymentRecoveryLoading, setPaymentRecoveryLoading] =
+    useState(false);
 
   const [isTestingOrder, setIsTestingOrder] = useState(
     order?.isTestingOrder === true,
@@ -361,6 +368,9 @@ export default function OrderRowActions({
 
   const splitAvailable = canSplitOrder(order);
   const testingAvailable = canMarkAsTestingOrder(order);
+  const paymentRecoveryAvailable =
+    canSendPaymentRecoveryEmail(order);
+
   const isSplitParent =
     safe(order?.orderType).toLowerCase() === "parent";
 
@@ -806,6 +816,48 @@ export default function OrderRowActions({
     }
   };
 
+  const handlePaymentRecoveryEmail = async () => {
+    if (
+      !orderId ||
+      paymentRecoveryLoading ||
+      !paymentRecoveryAvailable
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Send payment recovery email for order ${orderNumber || orderId
+      }?`,
+    );
+
+    if (!confirmed) return;
+
+    setOpen(false);
+    setPaymentRecoveryLoading(true);
+
+    try {
+      const result =
+        await sendOrderPaymentRecoveryEmail(orderId);
+
+      toast.success(
+        result?.message ||
+        "Payment recovery email sent successfully",
+      );
+    } catch (error) {
+      console.error(
+        "Payment recovery email error:",
+        error,
+      );
+
+      toast.error(
+        error?.message ||
+        "Failed to send payment recovery email",
+      );
+    } finally {
+      setPaymentRecoveryLoading(false);
+    }
+  };
+
   const handleWhatsAppConfirmation = () => {
     const whatsappLink = createWhatsAppLink(
       order,
@@ -1059,6 +1111,7 @@ export default function OrderRowActions({
     splitLoading ||
     influencerLoading ||
     testingLoading ||
+    paymentRecoveryLoading ||
     syncing;
 
   return (
@@ -1275,6 +1328,58 @@ export default function OrderRowActions({
               </div>
 
               {!canSendShippingMessage && (
+                <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
+                  UNAVAILABLE
+                </span>
+              )}
+            </button>
+
+            {/* Payment Recovery Email */}
+
+            <button
+              type="button"
+              onClick={handlePaymentRecoveryEmail}
+              disabled={
+                isBusy ||
+                !orderId ||
+                !paymentRecoveryAvailable
+              }
+              title={
+                paymentRecoveryAvailable
+                  ? "Send payment recovery email"
+                  : "Only pending or failed online-payment orders are eligible"
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                {paymentRecoveryLoading ? (
+                  <Loader2
+                    size={15}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Mail
+                    size={15}
+                    className="text-amber-600"
+                  />
+                )}
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    {paymentRecoveryLoading
+                      ? "Sending Recovery Email..."
+                      : "Payment Recovery Email"}
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {paymentRecoveryAvailable
+                      ? "Help customer complete online payment"
+                      : "Not eligible for payment recovery"}
+                  </div>
+                </div>
+              </div>
+
+              {!paymentRecoveryAvailable && (
                 <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
                   UNAVAILABLE
                 </span>

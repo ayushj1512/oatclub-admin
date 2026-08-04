@@ -145,3 +145,63 @@ export const canMarkAsTestingOrder = (order = {}) => {
 
   return true;
 };
+
+/**
+ * Checks whether a payment recovery email can be sent.
+ *
+ * Eligible:
+ * - Razorpay or manual prepaid order
+ * - Payment status pending or failed
+ * - No successful Razorpay payment ID
+ * - Order is not cancelled
+ * - Order is not a split child order
+ */
+export const canSendPaymentRecoveryEmail = (order = {}) => {
+  const paymentMethod = String(order?.paymentMethod || "")
+    .trim()
+    .toLowerCase();
+
+  const paymentStatus = String(order?.paymentStatus || "")
+    .trim()
+    .toLowerCase();
+
+  const fulfillmentStatus = String(order?.fulfillmentStatus || "")
+    .trim()
+    .toLowerCase();
+
+  const orderType = String(order?.orderType || "shipment")
+    .trim()
+    .toLowerCase();
+
+  const isCancelled =
+    order?.cancellation?.isCancelled === true ||
+    fulfillmentStatus === "cancelled";
+
+  const hasSuccessfulPayment = Boolean(
+    String(order?.razorpay?.paymentId || "").trim(),
+  );
+
+  const eligiblePaymentMethods = ["razorpay", "manual_prepaid"];
+  const eligiblePaymentStatuses = ["pending", "failed"];
+
+  if (isCancelled) return false;
+  if (hasSuccessfulPayment) return false;
+
+  if (!eligiblePaymentMethods.includes(paymentMethod)) {
+    return false;
+  }
+
+  if (!eligiblePaymentStatuses.includes(paymentStatus)) {
+    return false;
+  }
+
+  // Avoid sending from split child orders.
+  if (order?.parentOrderId) return false;
+
+  // Parent order can be used as the original payment order.
+  if (!["shipment", "parent"].includes(orderType)) {
+    return false;
+  }
+
+  return true;
+};
