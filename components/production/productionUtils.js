@@ -1,4 +1,8 @@
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6001";
+const BASE_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:6001";
+
+const STOREFRONT_URL =
+  process.env.NEXT_PUBLIC_STOREFRONT_URL || "https://oatclub.in";
 
 export const STATUS_OPTIONS = [
   { label: "Processing", value: "processing" },
@@ -22,24 +26,30 @@ export const DATE_PRESETS = [
   { key: "all", label: "All" },
 ];
 
-export const startOfDay = (d) => {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+export const startOfDay = (date) => {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  return value;
 };
 
-export const endOfDay = (d) => {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
+export const endOfDay = (date) => {
+  const value = new Date(date);
+  value.setHours(23, 59, 59, 999);
+  return value;
 };
 
-export const toYYYYMMDD = (d) => {
-  const x = new Date(d);
-  const y = x.getFullYear();
-  const m = String(x.getMonth() + 1).padStart(2, "0");
-  const day = String(x.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+export const toYYYYMMDD = (date) => {
+  const value = new Date(date);
+
+  if (Number.isNaN(value.getTime())) {
+    return "";
+  }
+
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 };
 
 export const getPresetRange = (key) => {
@@ -47,58 +57,224 @@ export const getPresetRange = (key) => {
   const todayStart = startOfDay(now);
   const todayEnd = endOfDay(now);
 
-  if (key === "today") return { from: todayStart, to: todayEnd };
+  if (key === "today") {
+    return {
+      from: todayStart,
+      to: todayEnd,
+    };
+  }
 
   if (key === "yesterday") {
-    const y = new Date(todayStart);
-    y.setDate(y.getDate() - 1);
-    return { from: startOfDay(y), to: endOfDay(y) };
+    const yesterday = new Date(todayStart);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    return {
+      from: startOfDay(yesterday),
+      to: endOfDay(yesterday),
+    };
   }
 
   if (key === "7d") {
     const from = new Date(todayStart);
     from.setDate(from.getDate() - 6);
-    return { from: startOfDay(from), to: todayEnd };
+
+    return {
+      from: startOfDay(from),
+      to: todayEnd,
+    };
   }
 
   if (key === "30d") {
     const from = new Date(todayStart);
     from.setDate(from.getDate() - 29);
-    return { from: startOfDay(from), to: todayEnd };
+
+    return {
+      from: startOfDay(from),
+      to: todayEnd,
+    };
   }
 
-  return { from: null, to: null };
+  return {
+    from: null,
+    to: null,
+  };
 };
 
-export const toAbsoluteUrl = (url) => {
-  const u = String(url || "").trim();
-  if (!u) return "";
-  if (u.startsWith("http://") || u.startsWith("https://")) return u;
-  if (u.startsWith("//")) return `https:${u}`;
-  if (u.startsWith("/")) return `https://oatclub.in${u}`;
-  return `https://oatclub.in/${u}`;
+const normalizeBaseUrl = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
+
+const extractImageUrl = (value) => {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const resolved = extractImageUrl(entry);
+
+      if (resolved) {
+        return resolved;
+      }
+    }
+
+    return "";
+  }
+
+  if (typeof value === "object") {
+    return extractImageUrl(
+      value?.secure_url ||
+      value?.secureUrl ||
+      value?.url ||
+      value?.src ||
+      value?.image ||
+      value?.imageUrl ||
+      value?.imageURL ||
+      value?.thumbnail ||
+      value?.thumbnailUrl ||
+      value?.featuredImage ||
+      value?.path ||
+      value?.original ||
+      value?.large ||
+      value?.medium ||
+      value?.small ||
+      ""
+    );
+  }
+
+  return "";
 };
 
-export const proxifyImage = (url) => {
-  const abs = toAbsoluteUrl(url);
-  if (!abs) return "";
-  return `${BASE_URL}/api/proxy-image?url=${encodeURIComponent(abs)}`;
+export const toAbsoluteUrl = (value) => {
+  const url = extractImageUrl(value);
+
+  if (!url) return "";
+
+  if (
+    url.startsWith("http://") ||
+    url.startsWith("https://") ||
+    url.startsWith("data:image/") ||
+    url.startsWith("blob:")
+  ) {
+    return url;
+  }
+
+  if (url.startsWith("//")) {
+    return `https:${url}`;
+  }
+
+  if (url.startsWith("res.cloudinary.com")) {
+    return `https://${url}`;
+  }
+
+  const backendUrl = normalizeBaseUrl(BASE_URL);
+  const storefrontUrl = normalizeBaseUrl(STOREFRONT_URL);
+
+  if (
+    url.startsWith("/uploads/") ||
+    url.startsWith("/public/") ||
+    url.startsWith("/media/") ||
+    url.startsWith("/storage/")
+  ) {
+    return `${backendUrl}${url}`;
+  }
+
+  if (
+    url.startsWith("uploads/") ||
+    url.startsWith("public/") ||
+    url.startsWith("media/") ||
+    url.startsWith("storage/")
+  ) {
+    return `${backendUrl}/${url}`;
+  }
+
+  if (url.startsWith("/")) {
+    return `${storefrontUrl}${url}`;
+  }
+
+  return `${storefrontUrl}/${url}`;
 };
 
-export const resolveItemImage = (item) =>
-  proxifyImage(
-    item?.variant?.image ||
-    item?.productSnapshot?.thumbnail ||
-    (item?.productSnapshot?.images || [])[0] ||
+/*
+ * Proxy intentionally bypassed.
+ * Images are loaded directly from Cloudinary/storefront/backend.
+ */
+export const proxifyImage = (value) => toAbsoluteUrl(value);
+
+export const resolveItemImage = (item = {}) => {
+  const candidates = [
+    item?.image,
+    item?.imageUrl,
+    item?.imageURL,
+    item?.thumbnail,
+    item?.thumbnailUrl,
+
+    item?.variant?.image,
+    item?.variant?.imageUrl,
+    item?.variant?.imageURL,
+    item?.variant?.thumbnail,
+    item?.variant?.thumbnailUrl,
+    item?.variant?.featuredImage,
+    item?.variant?.images?.[0],
+    item?.variant?.images,
+
+    item?.productSnapshot?.thumbnail,
+    item?.productSnapshot?.thumbnailUrl,
+    item?.productSnapshot?.image,
+    item?.productSnapshot?.imageUrl,
+    item?.productSnapshot?.imageURL,
+    item?.productSnapshot?.featuredImage,
+    item?.productSnapshot?.images?.[0],
+    item?.productSnapshot?.images,
+
+    item?.productId?.thumbnail,
+    item?.productId?.thumbnailUrl,
+    item?.productId?.image,
+    item?.productId?.imageUrl,
+    item?.productId?.imageURL,
+    item?.productId?.featuredImage,
+    item?.productId?.images?.[0],
+    item?.productId?.images,
+
+    item?.product?.thumbnail,
+    item?.product?.thumbnailUrl,
+    item?.product?.image,
+    item?.product?.imageUrl,
+    item?.product?.imageURL,
+    item?.product?.featuredImage,
+    item?.product?.images?.[0],
+    item?.product?.images,
+  ];
+
+  for (const candidate of candidates) {
+    const imageUrl = extractImageUrl(candidate);
+
+    if (imageUrl) {
+      return toAbsoluteUrl(imageUrl);
+    }
+  }
+
+  return "";
+};
+
+export const safeId = (value) =>
+  String(value?._id || value || "").trim();
+
+export const getVariantIdFromItem = (item) =>
+  String(
+    item?.variant?.variantId ||
+    item?.variantId ||
+    item?.variant?._id ||
     ""
   );
 
-export const safeId = (v) => String(v?._id || v || "").trim();
-
-export const getVariantIdFromItem = (item) =>
-  String(item?.variant?.variantId || item?.variantId || item?.variant?._id || "");
-
-export async function exportProductionXLSX(orders, filename = "production.xlsx") {
+export async function exportProductionXLSX(
+  orders,
+  filename = "production.xlsx"
+) {
   if (!orders?.length) return;
 
   const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
@@ -107,6 +283,7 @@ export async function exportProductionXLSX(orders, filename = "production.xlsx")
   ]);
 
   const workbook = new ExcelJS.Workbook();
+
   const sheet = workbook.addWorksheet("Production", {
     views: [{ state: "frozen", ySplit: 1 }],
   });
@@ -124,13 +301,25 @@ export async function exportProductionXLSX(orders, filename = "production.xlsx")
     { header: "Qty", key: "qty", width: 8 },
   ];
 
-  sheet.getRow(1).font = { bold: true };
+  sheet.getRow(1).font = {
+    bold: true,
+  };
 
   for (const order of orders) {
     const orderNumber = order?.orderNumber || "";
-    const customer = order?.shippingAddressSnapshot?.fullName || "";
-    const phone = order?.shippingAddressSnapshot?.phone || "";
-    const date = new Date(order?.createdAt || order?.orderDate || Date.now()).toLocaleString();
+
+    const customer =
+      order?.shippingAddressSnapshot?.fullName || "";
+
+    const phone =
+      order?.shippingAddressSnapshot?.phone || "";
+
+    const date = new Date(
+      order?.createdAt ||
+      order?.orderDate ||
+      Date.now()
+    ).toLocaleString();
+
     const isPackable = order?.isPackable ? "Yes" : "No";
 
     for (const item of order?.items || []) {
@@ -140,18 +329,41 @@ export async function exportProductionXLSX(orders, filename = "production.xlsx")
         customer,
         phone,
         isPackable,
-        productName: item?.productSnapshot?.title || "Item",
-        size: item?.selectedSize || "",
-        color: item?.selectedColor || "",
-        sku: item?.variant?.sku || item?.productSnapshot?.sku || "",
+
+        productName:
+          item?.productSnapshot?.title ||
+          item?.productId?.title ||
+          item?.product?.title ||
+          "Item",
+
+        size:
+          item?.selectedSize ||
+          item?.variant?.size ||
+          item?.size ||
+          "",
+
+        color:
+          item?.selectedColor ||
+          item?.variant?.color ||
+          item?.color ||
+          "",
+
+        sku:
+          item?.variant?.sku ||
+          item?.productSnapshot?.sku ||
+          item?.productId?.sku ||
+          item?.product?.sku ||
+          "",
+
         qty: Number(item?.quantity || 1),
       });
     }
   }
 
-  const buf = await workbook.xlsx.writeBuffer();
+  const buffer = await workbook.xlsx.writeBuffer();
+
   saveAs(
-    new Blob([buf], {
+    new Blob([buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }),
     filename

@@ -119,6 +119,10 @@ export const sidebarMenus = {
 
   inventory: [
     { label: "Inventory Dashboard", href: "/inventory" },
+    {
+      label: "Available Inventory",
+      href: "/inventory/available-inventory",
+    },
     { label: "Modify Inventory", href: "/inventory/modify-inventory" },
     { label: "Stock Update", href: "/inventory/stock-update" },
     { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
@@ -227,107 +231,111 @@ export const sidebarMenus = {
     { label: "Analytics", href: "/blogs/analytics" },
   ],
 
- products: [
-  { label: "Product Dashboard", href: "/products" },
-  { label: "Add New Product", href: "/products/add" },
-  { label: "Manage Products", href: "/products/manage" },
+  products: [
+    { label: "Product Dashboard", href: "/products" },
+    { label: "Add New Product", href: "/products/add" },
+    { label: "Manage Products", href: "/products/manage" },
 
-  {
-    label: "Production Lifecycle",
-    href: "/products/product-production-lifecycle",
-  },
+    {
+      label: "Production Lifecycle",
+      href: "/products/product-production-lifecycle",
+    },
 
-  { label: "Search Product", href: "/products/search" },
+    { label: "Search Product", href: "/products/search" },
 
-  { label: "Product Group Builder", href: "/products/product-groups" },
-  {
-    label: "Existing Product Groups",
-    href: "/products/product-groups/all",
-  },
+    { label: "Product Group Builder", href: "/products/product-groups" },
+    {
+      label: "Existing Product Groups",
+      href: "/products/product-groups/all",
+    },
 
-  {
-    label: "Products RMA Insights",
-    href: "/products/products-rma-insights",
-  },
-  { label: "Analytics", href: "/products/analytics" },
+    {
+      label: "Products RMA Insights",
+      href: "/products/products-rma-insights",
+    },
+    { label: "Analytics", href: "/products/analytics" },
 
-  { label: "Categories", href: "/products/category" },
-  {
-    label: "Category Analytics",
-    href: "/products/category-analytics",
-  },
+    { label: "Categories", href: "/products/category" },
+    {
+      label: "Category Analytics",
+      href: "/products/category-analytics",
+    },
 
-  { label: "Bestsellers", href: "/products/bestseller" },
-  {
-    label: "Collab Ready Products",
-    href: "/products/collab-ready",
-  },
-  {
-    label: "Dispatch Ready Products",
-    href: "/products/dispatch-ready",
-  },
-  {
-    label: "Excel Export Builder",
-    href: "/products/import-excel",
-  },
-  { label: "Coming Soon", href: "/products/comingsoon" },
-  { label: "Size Charts", href: "/products/size-charts" },
-  {
-    label: "Secondary Products",
-    href: "/products/secondary-products",
-  },
+    { label: "Bestsellers", href: "/products/bestseller" },
+    {
+      label: "Collab Ready Products",
+      href: "/products/collab-ready",
+    },
+    {
+      label: "Dispatch Ready Products",
+      href: "/products/dispatch-ready",
+    },
+    {
+      label: "Excel Export Builder",
+      href: "/products/import-excel",
+    },
+    { label: "Coming Soon", href: "/products/comingsoon" },
+    { label: "Size Charts", href: "/products/size-charts" },
+    {
+      label: "Secondary Products",
+      href: "/products/secondary-products",
+    },
 
-  { label: "Attributes", href: "/products/attributes" },
-  { label: "Variants", href: "/products/variants" },
-  { label: "Collections", href: "/products/collections" },
-  { label: "Fabric", href: "/products/fabric" },
-  { label: "Product Colors", href: "/products/colors" },
+    { label: "Attributes", href: "/products/attributes" },
+    { label: "Variants", href: "/products/variants" },
+    { label: "Collections", href: "/products/collections" },
+    { label: "Fabric", href: "/products/fabric" },
+    { label: "Product Colors", href: "/products/colors" },
 
-  { label: "Name Edit", href: "/products/name-edit" },
-  { label: "Bulk Import", href: "/products/bulk-import" },
-  { label: "Bulk Export", href: "/products/bulk-export" },
-  {
-    label: "Bulk Price Editor",
-    href: "/products/bulkPriceEditor",
-  },
+    { label: "Name Edit", href: "/products/name-edit" },
+    { label: "Bulk Import", href: "/products/bulk-import" },
+    { label: "Bulk Export", href: "/products/bulk-export" },
+    {
+      label: "Bulk Price Editor",
+      href: "/products/bulkPriceEditor",
+    },
 
-  {
-    label: "Inventory Sync",
-    href: "/products/inventory-sync",
-  },
-  { label: "Price Updates", href: "/products/pricing" },
-  { label: "Offers & Discounts", href: "/products/offers" },
-  {
-    label: "Product Meta Editor",
-    href: "/products/product-meta-editor",
-  },
-  { label: "SEO Manager", href: "/products/seo" },
-  { label: "Reviews & Ratings", href: "/products/reviews" },
-  { label: "Media Library", href: "/media" },
-],
+    {
+      label: "Inventory Sync",
+      href: "/products/inventory-sync",
+    },
+    { label: "Price Updates", href: "/products/pricing" },
+    { label: "Offers & Discounts", href: "/products/offers" },
+    {
+      label: "Product Meta Editor",
+      href: "/products/product-meta-editor",
+    },
+    { label: "SEO Manager", href: "/products/seo" },
+    { label: "Reviews & Ratings", href: "/products/reviews" },
+    { label: "Media Library", href: "/media" },
+  ],
 
-dispatching: [
-  {
-    label: "Dispatching Dashboard",
-    href: "/dispatching",
-  },
-  {
-    label: "On Demand Inventory",
-    href: "/dispatching/on-demand-inventory",
-  },
-  {
-    label: "Production",
-    href: "/dispatching/production",
-  },
-  {
-    label: "Packed Orders",
-    href: "/dispatching/packed",
-  },
-  {
-    label: "Shipped Orders",
-    href: "/dispatching/shipped",
-  },
-],
+  dispatching: [
+    {
+      label: "Dispatching Dashboard",
+      href: "/dispatching",
+    },
+    {
+      label: "On Demand Inventory",
+      href: "/dispatching/on-demand-inventory",
+    },
+    {
+      label: "Production",
+      href: "/dispatching/production",
+    },
+    {
+      label: "Ready to Ship",
+      href: "/dispatching/ready-to-ship",
+    },
+    {
+      label: "Packed Orders",
+      href: "/dispatching/packed",
+    },
+    {
+      label: "Shipped Orders",
+      href: "/dispatching/shipped",
+    },
+  ],
   orders: [
     { label: "Orders Dashboard", href: "/orders" },
     { label: "All Orders", href: "/orders/all" },
@@ -482,6 +490,18 @@ dispatching: [
     { label: "Not Deliverables", href: "/shiprocket/not-deliverables" },
   ],
 
+  delhivery: [
+    { label: "Delhivery Dashboard", href: "/delhivery" },
+    { label: "Create Shipment", href: "/delhivery/create" },
+    { label: "Tracking", href: "/delhivery/tracking" },
+    { label: "Labels", href: "/delhivery/labels" },
+    { label: "Pickup Requests", href: "/delhivery/pickups" },
+    { label: "Serviceability", href: "/delhivery/serviceability" },
+    { label: "NDR", href: "/delhivery/ndr" },
+    { label: "Logs", href: "/delhivery/logs" },
+    { label: "Settings", href: "/delhivery/settings" },
+  ],
+
   bluedart: [
     { label: "BlueDart Dashboard", href: "/bluedart" },
 
@@ -549,6 +569,17 @@ dispatching: [
     { label: "Change Password", href: "/account/password" },
     { label: "Logout", href: "/logout" },
   ],
+
+  admin_user_tasks: [
+    {
+      label: "Task Dashboard",
+      href: "/admin-user-tasks",
+    },
+    {
+      label: "Create Task",
+      href: "/admin-user-tasks/create",
+    },
+  ],
   superadmin: [
     { label: "Vault", href: "/superadmin" },
     { label: "Manage Users", href: "/superadmin/manage" },
@@ -602,6 +633,7 @@ export const routeSidebarMap = [
     prefix: "/barcodes",
     key: "barcodes",
   },
+  { prefix: "/delhivery", key: "delhivery" },
   { prefix: "/email", key: "email" },
   { prefix: "/reels", key: "reels" },
   { prefix: "/marketing", key: "marketing" },
@@ -632,4 +664,8 @@ export const routeSidebarMap = [
   { prefix: "/fast2sms", key: "fast2sms" },
   { prefix: "/affiliate", key: "affiliate" },
   { prefix: "/dispatching", key: "dispatching" },
+  {
+    prefix: "/admin-user-tasks",
+    key: "admin_user_tasks",
+  },
 ];

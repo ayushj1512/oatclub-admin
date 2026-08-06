@@ -20,7 +20,7 @@ import {
   Printer,
   RefreshCw,
   Truck,
-  MessageCircle,  
+  MessageCircle,
   Split,
   Mail,
 } from "lucide-react";
@@ -30,6 +30,7 @@ import {
   canSplitOrder,
   canMarkAsTestingOrder,
   canSendPaymentRecoveryEmail,
+  canSendPaymentRecoveryWhatsApp,
 } from "@/services/order.service";
 
 import { toast } from "react-hot-toast";
@@ -216,6 +217,50 @@ Thank you for choosing *OATCLUB*.
 *Team OATCLUB*
 Own All Trends`;
 
+
+const createPaymentRecoveryMessage = (order = {}) => {
+  const items = getItems(order);
+
+  const totalQuantity = items.reduce(
+    (sum, item) => sum + Math.max(1, Number(item?.quantity || 1)),
+    0,
+  );
+
+  const itemLabel = totalQuantity > 1 ? "items are" : "item is";
+
+  return `Hi ${getCustomerName(order)},
+
+Welcome to *OATCLUB*.
+
+We noticed that your payment for the order below was not successful, so your order is currently not confirmed.
+
+*Order:* #${getOrderNumber(order)}
+*Product:* ${getItemSummary(order)}
+
+*Amount Payable:* ${formatCurrency(getFinalPayable(order))}
+*Payment Status:* ❌ Failed
+
+Your selected ${itemLabel} currently reserved for a limited time.
+
+If you would still like to place this order, please visit *https://oatclub.in* and complete your purchase.
+
+Once your payment is received, your order will be carefully quality-checked and dispatched within *7 business days*.
+
+Please reply with:
+
+*YES* – I want to complete the payment and confirm my order.
+*NO* – Cancel my order.
+
+Website: https://oatclub.in
+
+Thank you for choosing *OATCLUB*.
+
+*Team OATCLUB*
+Own All Trends`;
+};
+
+
+
 const createShippingMessage = (order = {}) => {
   const {
     awb,
@@ -245,20 +290,21 @@ Own All Trends`;
 };
 
 const createWhatsAppLink = (order, type) => {
-  const phone = normalizeWhatsAppPhone(
-    getCustomerPhone(order)
-  );
+  const phone = normalizeWhatsAppPhone(getCustomerPhone(order));
 
   if (!phone) return "";
 
-  const message =
-    type === "shipping"
-      ? createShippingMessage(order)
-      : createConfirmationMessage(order);
+  let message;
 
-  return `https://wa.me/${phone}?text=${encodeURIComponent(
-    message
-  )}`;
+  if (type === "shipping") {
+    message = createShippingMessage(order);
+  } else if (type === "payment_recovery") {
+    message = createPaymentRecoveryMessage(order);
+  } else {
+    message = createConfirmationMessage(order);
+  }
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 };
 
 export default function OrderRowActions({
@@ -368,8 +414,11 @@ export default function OrderRowActions({
 
   const splitAvailable = canSplitOrder(order);
   const testingAvailable = canMarkAsTestingOrder(order);
-  const paymentRecoveryAvailable =
+  const paymentRecoveryEmailAvailable =
     canSendPaymentRecoveryEmail(order);
+
+  const paymentRecoveryWhatsAppAvailable =
+    canSendPaymentRecoveryWhatsApp(order);
 
   const isSplitParent =
     safe(order?.orderType).toLowerCase() === "parent";
@@ -820,7 +869,7 @@ export default function OrderRowActions({
     if (
       !orderId ||
       paymentRecoveryLoading ||
-      !paymentRecoveryAvailable
+      !paymentRecoveryEmailAvailable
     ) {
       return;
     }
@@ -879,6 +928,36 @@ export default function OrderRowActions({
 
     setOpen(false);
     toast.success("Confirmation message opened");
+  };
+
+  const handleWhatsAppPaymentRecovery = () => {
+    if (!paymentRecoveryWhatsAppAvailable) {
+      toast.error(
+        "This order is not eligible for WhatsApp payment recovery",
+      );
+      return;
+    }
+
+    const whatsappLink = createWhatsAppLink(
+      order,
+      "payment_recovery",
+    );
+
+    if (!whatsappLink) {
+      toast.error(
+        "Valid customer WhatsApp number is unavailable",
+      );
+      return;
+    }
+
+    window.open(
+      whatsappLink,
+      "_blank",
+      "noopener,noreferrer",
+    );
+
+    setOpen(false);
+    toast.success("Payment recovery message opened");
   };
 
   const handleWhatsAppShipping = () => {
@@ -1295,6 +1374,49 @@ export default function OrderRowActions({
               )}
             </button>
 
+            {/* WhatsApp Payment Recovery */}
+
+            <button
+              type="button"
+              onClick={handleWhatsAppPaymentRecovery}
+              disabled={
+                isBusy ||
+                !hasWhatsAppPhone ||
+                !paymentRecoveryWhatsAppAvailable
+              }
+              title={
+                paymentRecoveryWhatsAppAvailable
+                  ? "Send failed payment recovery message"
+                  : "Only pending or failed prepaid orders are eligible"
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                <MessageCircle
+                  size={15}
+                  className="text-amber-600"
+                />
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    WhatsApp Payment Recovery
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {paymentRecoveryWhatsAppAvailable
+                      ? "Help customer complete failed payment"
+                      : "Not eligible for payment recovery"}
+                  </div>
+                </div>
+              </div>
+
+              {!paymentRecoveryWhatsAppAvailable && (
+                <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
+                  UNAVAILABLE
+                </span>
+              )}
+            </button>
+
             {/* WhatsApp Shipped */}
 
             <button
@@ -1342,10 +1464,10 @@ export default function OrderRowActions({
               disabled={
                 isBusy ||
                 !orderId ||
-                !paymentRecoveryAvailable
+                !paymentRecoveryEmailAvailable
               }
               title={
-                paymentRecoveryAvailable
+                paymentRecoveryEmailAvailable
                   ? "Send payment recovery email"
                   : "Only pending or failed online-payment orders are eligible"
               }
@@ -1372,14 +1494,14 @@ export default function OrderRowActions({
                   </div>
 
                   <div className="mt-0.5 text-[10px] text-zinc-500">
-                    {paymentRecoveryAvailable
+                    {paymentRecoveryEmailAvailable
                       ? "Help customer complete online payment"
                       : "Not eligible for payment recovery"}
                   </div>
                 </div>
               </div>
 
-              {!paymentRecoveryAvailable && (
+              {!paymentRecoveryEmailAvailable && (
                 <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
                   UNAVAILABLE
                 </span>

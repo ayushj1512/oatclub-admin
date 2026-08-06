@@ -118,6 +118,9 @@ export const useOrderStore = create((set, get) => ({
   invoiceError: null,
   invoiceMissingOrderNumbers: [],
   productOrderCount: null,
+  productOrderSearchResult: null,
+  productOrderSearchLoading: false,
+  productOrderSearchError: null,
   ordersMeta: null,
   customerSupportOrderDetails: {},
   duplicateAlerts: [],
@@ -129,6 +132,8 @@ export const useOrderStore = create((set, get) => ({
   paymentRecoveryLoading: false,
   paymentRecoveryError: null,
   paymentRecoveryResult: null,
+  shippingOrders: [],
+  shippingOrdersMeta: null,
 
   _start: () => set({ loading: true, error: null }),
   _success: () => set({ loading: false }),
@@ -176,24 +181,24 @@ export const useOrderStore = create((set, get) => ({
     }));
   },
 
- _json: async (res) => {
-  const data = await res.json().catch(() => ({}));
+  _json: async (res) => {
+    const data = await res.json().catch(() => ({}));
 
-  if (!res.ok) {
-    const error = new Error(
-      data?.message ||
-      `Request failed with status ${res.status}`,
-    );
+    if (!res.ok) {
+      const error = new Error(
+        data?.message ||
+        `Request failed with status ${res.status}`,
+      );
 
-    error.status = res.status;
-    error.code = data?.code || "REQUEST_FAILED";
-    error.data = data;
+      error.status = res.status;
+      error.code = data?.code || "REQUEST_FAILED";
+      error.data = data;
 
-    throw error;
-  }
+      throw error;
+    }
 
-  return data;
-},
+    return data;
+  },
 
   _normalizeInvoicesPayload: (data) => {
     const invoices = Array.isArray(data?.invoices)
@@ -233,68 +238,68 @@ export const useOrderStore = create((set, get) => ({
     }
   },
 
- _post: async (path, payload, { silent = false } = {}) => {
-  if (!silent) {
-    get()._start();
-  }
-
-  if (!API) {
-    const error = new Error(
-      "Backend URL is not configured.",
-    );
-
-    error.code = "API_URL_MISSING";
-
+  _post: async (path, payload, { silent = false } = {}) => {
     if (!silent) {
-      get()._fail(error);
+      get()._start();
     }
 
-    throw error;
-  }
-
-  try {
-    let res;
-
-    try {
-      res = await fetch(`${API}${path}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-        body: JSON.stringify(
-          stripUndefinedDeep(payload || {}),
-        ),
-      });
-    } catch (networkError) {
-      console.error("POST network error:", {
-        url: `${API}${path}`,
-        error: networkError,
-      });
-
+    if (!API) {
       const error = new Error(
-        "Unable to connect to the server. Please try again.",
+        "Backend URL is not configured.",
       );
 
-      error.code = "NETWORK_ERROR";
+      error.code = "API_URL_MISSING";
+
+      if (!silent) {
+        get()._fail(error);
+      }
+
       throw error;
     }
 
-    const data = await get()._json(res);
+    try {
+      let res;
 
-    if (!silent) {
-      get()._success();
+      try {
+        res = await fetch(`${API}${path}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+          body: JSON.stringify(
+            stripUndefinedDeep(payload || {}),
+          ),
+        });
+      } catch (networkError) {
+        console.error("POST network error:", {
+          url: `${API}${path}`,
+          error: networkError,
+        });
+
+        const error = new Error(
+          "Unable to connect to the server. Please try again.",
+        );
+
+        error.code = "NETWORK_ERROR";
+        throw error;
+      }
+
+      const data = await get()._json(res);
+
+      if (!silent) {
+        get()._success();
+      }
+
+      return data;
+    } catch (error) {
+      if (!silent) {
+        get()._fail(error);
+      }
+
+      throw error;
     }
-
-    return data;
-  } catch (error) {
-    if (!silent) {
-      get()._fail(error);
-    }
-
-    throw error;
-  }
-},
+  },
 
   _patch: async (path, payload) => {
     get()._start();
@@ -382,94 +387,94 @@ export const useOrderStore = create((set, get) => ({
     );
   },
 
- createOrder: async (payload) => {
-  set({
-    placing: true,
-    error: null,
-  });
-
-  try {
-    const p = { ...(payload || {}) };
-
-    if (p.priority != null) {
-      p.priority =
-        normalizePriority(p.priority) || "normal";
-    }
-
-    if (p.paymentMethod != null) {
-      p.paymentMethod =
-        normalizePaymentMethod(p.paymentMethod) || "cod";
-    }
-
-    const walletAmount = Number(
-      p.walletAmount ??
-      p.walletCredit?.amount ??
-      p.paymentBreakdown?.walletAmount ??
-      0,
-    );
-
-    if (
-      walletAmount > 0 ||
-      p.useWallet === true ||
-      p.paymentMethod === "wallet"
-    ) {
-      p.useWallet = true;
-      p.walletAmount = Math.max(0, walletAmount);
-
-      p.walletCredit = {
-        ...(p.walletCredit || {}),
-        used: true,
-        amount: Math.max(0, walletAmount),
-      };
-
-      p.paymentBreakdown = {
-        ...(p.paymentBreakdown || {}),
-        walletAmount: Math.max(0, walletAmount),
-      };
-    }
-
-    const data = await get()._post(
-      "/api/orders",
-      p,
-      { silent: true },
-    );
-
-    const order = get()._normalizeOrder(data);
-
-    if (!order?._id && !order?.orderNumber) {
-      throw new Error(
-        "Order could not be created. Please try again.",
-      );
-    }
-
-    set((state) => ({
-      order,
-      orders: [
-        order,
-        ...(state.orders || []).filter(
-          (existingOrder) =>
-            String(existingOrder?._id) !==
-            String(order?._id),
-        ),
-      ],
-      placing: false,
-      loading: false,
-      error: null,
-    }));
-
-    return order;
-  } catch (error) {
+  createOrder: async (payload) => {
     set({
-      placing: false,
-      loading: false,
-      error:
-        error?.message ||
-        "Unable to place your order.",
+      placing: true,
+      error: null,
     });
 
-    throw error;
-  }
-},
+    try {
+      const p = { ...(payload || {}) };
+
+      if (p.priority != null) {
+        p.priority =
+          normalizePriority(p.priority) || "normal";
+      }
+
+      if (p.paymentMethod != null) {
+        p.paymentMethod =
+          normalizePaymentMethod(p.paymentMethod) || "cod";
+      }
+
+      const walletAmount = Number(
+        p.walletAmount ??
+        p.walletCredit?.amount ??
+        p.paymentBreakdown?.walletAmount ??
+        0,
+      );
+
+      if (
+        walletAmount > 0 ||
+        p.useWallet === true ||
+        p.paymentMethod === "wallet"
+      ) {
+        p.useWallet = true;
+        p.walletAmount = Math.max(0, walletAmount);
+
+        p.walletCredit = {
+          ...(p.walletCredit || {}),
+          used: true,
+          amount: Math.max(0, walletAmount),
+        };
+
+        p.paymentBreakdown = {
+          ...(p.paymentBreakdown || {}),
+          walletAmount: Math.max(0, walletAmount),
+        };
+      }
+
+      const data = await get()._post(
+        "/api/orders",
+        p,
+        { silent: true },
+      );
+
+      const order = get()._normalizeOrder(data);
+
+      if (!order?._id && !order?.orderNumber) {
+        throw new Error(
+          "Order could not be created. Please try again.",
+        );
+      }
+
+      set((state) => ({
+        order,
+        orders: [
+          order,
+          ...(state.orders || []).filter(
+            (existingOrder) =>
+              String(existingOrder?._id) !==
+              String(order?._id),
+          ),
+        ],
+        placing: false,
+        loading: false,
+        error: null,
+      }));
+
+      return order;
+    } catch (error) {
+      set({
+        placing: false,
+        loading: false,
+        error:
+          error?.message ||
+          "Unable to place your order.",
+      });
+
+      throw error;
+    }
+  },
 
   fetchOrderById: async (orderId) => {
     if (!orderId) return null;
@@ -1499,6 +1504,88 @@ export const useOrderStore = create((set, get) => ({
     return newOrder;
   },
 
+  /* ============================================================
+   READY TO SHIP
+============================================================ */
+
+  fetchPackedOrdersForShipping: async (filters = {}) => {
+    const qs = buildQueryString(filters);
+
+    const data = await get()._get(
+      `/api/orders/shipping/packed${qs}`,
+    );
+
+    set({
+      shippingOrders: data?.orders || [],
+      shippingOrdersMeta: data?.meta || null,
+    });
+
+    return data;
+  },
+
+  assignCourierToOrder: async (orderId, provider) => {
+    if (!orderId) throw new Error("Order ID is required");
+
+    const data = await get()._patch(
+      `/api/orders/${orderId}/courier`,
+      {
+        provider,
+      },
+    );
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+
+      set((state) => ({
+        shippingOrders: (state.shippingOrders || []).map((o) =>
+          String(o._id) === String(order._id)
+            ? {
+              ...o,
+              shipment: order.shipment,
+            }
+            : o,
+        ),
+      }));
+    }
+
+    return data;
+  },
+
+  fetchShiprocketRatesForOrder: async (
+    orderId,
+    { silent = true } = {},
+  ) => {
+    const id = String(orderId || "").trim();
+
+    if (!id) {
+      throw new Error("Order ID is required");
+    }
+
+    return get()._get(
+      `/api/orders/${encodeURIComponent(id)}/shiprocket/rates`,
+      { silent },
+    );
+  },
+
+  fetchDelhiveryRateForOrder: async (
+    orderId,
+    { silent = true } = {},
+  ) => {
+    const id = String(orderId || "").trim();
+
+    if (!id) {
+      throw new Error("Order ID is required");
+    }
+
+    return get()._get(
+      `/api/orders/${encodeURIComponent(id)}/delhivery/rate`,
+      { silent },
+    );
+  },
+
   bookShiprocketIfMissing: async (orderId) => {
     if (!orderId) return null;
 
@@ -1555,6 +1642,76 @@ export const useOrderStore = create((set, get) => ({
     return result;
   },
 
+  searchProductOrders: async (q) => {
+    const search = String(q ?? "").trim();
+
+    if (!search) {
+      set({
+        productOrderSearchResult: null,
+        productOrderSearchLoading: false,
+        productOrderSearchError: "Product name or code is required",
+      });
+
+      return null;
+    }
+
+    set({
+      productOrderSearchLoading: true,
+      productOrderSearchError: null,
+    });
+
+    try {
+      const data = await get()._get(
+        `/api/orders/product-order-search?q=${encodeURIComponent(search)}`,
+        { silent: true },
+      );
+
+      const result = {
+        success: Boolean(data?.success),
+        query: data?.query || search,
+
+        totalOrders: Number(data?.totalOrders || 0),
+
+        orderNumbers: Array.isArray(data?.orderNumbers)
+          ? data.orderNumbers
+          : [],
+
+        orders: Array.isArray(data?.orders)
+          ? data.orders
+          : [],
+
+        summary: Array.isArray(data?.summary)
+          ? data.summary
+          : [],
+
+        groupedOrders:
+          data?.groupedOrders &&
+            typeof data.groupedOrders === "object"
+            ? data.groupedOrders
+            : {},
+      };
+
+      set({
+        productOrderSearchResult: result,
+        productOrderSearchLoading: false,
+        productOrderSearchError: null,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("searchProductOrders error:", error);
+
+      set({
+        productOrderSearchResult: null,
+        productOrderSearchLoading: false,
+        productOrderSearchError:
+          error?.message || "Failed to search product orders",
+      });
+
+      throw error;
+    }
+  },
+
   // ✅ NEW FUNCTION ONLY
   searchOrdersByLocation: async (params = {}) => {
     get()._start();
@@ -1596,21 +1753,21 @@ export const useOrderStore = create((set, get) => ({
         orders: Array.isArray(data?.orders) ? data.orders : [],
         ordersMeta: data?.pagination
           ? {
-              page: Number(data.pagination.page || 1),
-              limit: Number(data.pagination.limit || 100),
-              totalCount: Number(data.pagination.total || 0),
-              totalPages: Number(data.pagination.totalPages || 1),
-              hasMore: Boolean(data.pagination.hasNextPage),
-              hasPrevPage: Boolean(data.pagination.hasPrevPage),
-            }
+            page: Number(data.pagination.page || 1),
+            limit: Number(data.pagination.limit || 100),
+            totalCount: Number(data.pagination.total || 0),
+            totalPages: Number(data.pagination.totalPages || 1),
+            hasMore: Boolean(data.pagination.hasNextPage),
+            hasPrevPage: Boolean(data.pagination.hasPrevPage),
+          }
           : {
-              page: 1,
-              limit: Number(params.limit || 100),
-              totalCount: 0,
-              totalPages: 1,
-              hasMore: false,
-              hasPrevPage: false,
-            },
+            page: 1,
+            limit: Number(params.limit || 100),
+            totalCount: 0,
+            totalPages: 1,
+            hasMore: false,
+            hasPrevPage: false,
+          },
         loading: false,
         error: null,
       });
@@ -1716,6 +1873,12 @@ export const useOrderStore = create((set, get) => ({
 
   clearOrder: () => set({ order: null }),
   clearProductOrderCount: () => set({ productOrderCount: null }),
+  clearProductOrderSearch: () =>
+    set({
+      productOrderSearchResult: null,
+      productOrderSearchLoading: false,
+      productOrderSearchError: null,
+    }),
 
   clearOrders: () =>
     set({
@@ -1747,5 +1910,7 @@ export const useOrderStore = create((set, get) => ({
       invoiceLoading: false,
       invoiceError: null,
       invoiceMissingOrderNumbers: [],
+      shippingOrders: [],
+      shippingOrdersMeta: null,
     }),
 }));

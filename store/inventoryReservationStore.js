@@ -99,7 +99,7 @@ export const useInventoryReservationStore = create((set, get) => ({
 
       set({
         reservations: data?.data || [],
-        total: Number(data?.count || data?.total || 0),
+        total: Number(data?.total || 0),
         loading: false,
       });
 
@@ -230,6 +230,164 @@ export const useInventoryReservationStore = create((set, get) => ({
       const m = msg(e, "Failed to expire reservation");
       set({ actionLoading: false, error: m });
       invLog("expireReservation ERROR", m);
+      throw e;
+    }
+  },
+
+  moveReservationToPending: async (
+    id,
+    reason = "Moved to pending by admin"
+  ) => {
+    if (!id) throw new Error("Reservation id required");
+
+    set({ actionLoading: true, error: null });
+    invLog("moveReservationToPending ->", { id, reason });
+
+    try {
+      const { data } = await api.post(
+        `/api/inventory-reservations/${id}/move-to-pending`,
+        {
+          reason,
+          reconcile: true,
+        }
+      );
+
+      set({ actionLoading: false });
+
+      // Reconciliation can update multiple rows,
+      // so refresh complete list instead of updating one row only.
+      await get().fetchReservations();
+
+      invLog("moveReservationToPending <-", data);
+      return data?.summary;
+    } catch (e) {
+      const m = msg(e, "Failed to move reservation to pending");
+
+      set({
+        actionLoading: false,
+        error: m,
+      });
+
+      invLog("moveReservationToPending ERROR", m);
+      throw e;
+    }
+  },
+
+  transferReservation: async ({
+    id,
+    targetOrderNumber,
+    qty = "",
+    reason = "",
+  }) => {
+    if (!id) {
+      throw new Error("Source reservation id required");
+    }
+
+    if (!String(targetOrderNumber || "").trim()) {
+      throw new Error("Target order number required");
+    }
+
+    set({
+      actionLoading: true,
+      error: null,
+    });
+
+    invLog("transferReservation ->", {
+      id,
+      targetOrderNumber,
+      qty,
+      reason,
+    });
+
+    try {
+      const payload = {
+        targetOrderNumber: String(
+          targetOrderNumber
+        ).trim(),
+
+        reason:
+          String(reason || "").trim() ||
+          "Reservation transferred by admin",
+      };
+
+      if (
+        qty !== "" &&
+        qty !== null &&
+        qty !== undefined
+      ) {
+        payload.qty = Number(qty);
+      }
+
+      const { data } = await api.post(
+        `/api/inventory-reservations/${id}/transfer`,
+        payload
+      );
+
+      set({
+        actionLoading: false,
+      });
+
+      await get().fetchReservations();
+
+      invLog("transferReservation <-", data);
+
+      return data?.summary;
+    } catch (error) {
+      const message = msg(
+        error,
+        "Failed to transfer reservation"
+      );
+
+      set({
+        actionLoading: false,
+        error: message,
+      });
+
+      invLog(
+        "transferReservation ERROR",
+        message
+      );
+
+      throw error;
+    }
+  },
+
+  deleteReservation: async (
+    id,
+    reason = "Deleted by admin"
+  ) => {
+    if (!id) throw new Error("Reservation id required");
+
+    set({ actionLoading: true, error: null });
+    invLog("deleteReservation ->", { id, reason });
+
+    try {
+      const { data } = await api.delete(
+        `/api/inventory-reservations/${id}`,
+        {
+          data: {
+            reason,
+            reconcile: true,
+          },
+        }
+      );
+
+      set({ actionLoading: false });
+
+      // Deleted row + possibly promoted pending rows.
+      await get().fetchReservations();
+
+      invLog("deleteReservation <-", data);
+      return data?.summary;
+    } catch (e) {
+      const m = msg(e, "Failed to delete reservation");
+
+      set({
+        actionLoading: false,
+        error: m,
+      });
+
+      invLog("deleteReservation ERROR", m);
       throw e;
     }
   },

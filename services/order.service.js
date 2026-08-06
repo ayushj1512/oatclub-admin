@@ -3,8 +3,31 @@ const safeNumber = (value, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
+const safeString = (value) => String(value ?? "").trim();
+
+const normalizePhoneNumber = (value) => {
+  let phone = safeString(value)
+    .replace(/\D/g, "")
+    .replace(/^0+/, "");
+
+  if (phone.length === 10) {
+    phone = `91${phone}`;
+  }
+
+  return phone.startsWith("91") && phone.length === 12 ? phone : "";
+};
+
+const getCustomerPhone = (order = {}) =>
+  safeString(
+    order?.customerId?.phone ||
+    order?.customer?.phone ||
+    order?.customerPhone ||
+    order?.shippingAddressSnapshot?.phone ||
+    order?.billingAddressSnapshot?.phone,
+  );
+
 const normalizeItem = (item = {}) => ({
-  lineId: String(item?.lineId || "").trim(),
+  lineId: safeString(item?.lineId),
   quantity: Math.max(1, safeNumber(item?.quantity, 1)),
 });
 
@@ -33,7 +56,7 @@ export const buildTwoWayOrderSplit = (order = {}) => {
     throw new Error("Order has no items to split");
   }
 
-  // One product line but quantity is 2 or more
+  // One product line but quantity is 2 or more.
   if (items.length === 1) {
     const item = items[0];
 
@@ -88,9 +111,9 @@ export const buildTwoWayOrderSplit = (order = {}) => {
 };
 
 export const canSplitOrder = (order = {}) => {
-  const orderType = String(order?.orderType || "shipment").toLowerCase();
+  const orderType = safeString(order?.orderType || "shipment").toLowerCase();
 
-  const fulfillmentStatus = String(
+  const fulfillmentStatus = safeString(
     order?.fulfillmentStatus || "processing",
   ).toLowerCase();
 
@@ -122,9 +145,9 @@ export const canSplitOrder = (order = {}) => {
 };
 
 export const canMarkAsTestingOrder = (order = {}) => {
-  const orderType = String(order?.orderType || "shipment").toLowerCase();
+  const orderType = safeString(order?.orderType || "shipment").toLowerCase();
 
-  const fulfillmentStatus = String(
+  const fulfillmentStatus = safeString(
     order?.fulfillmentStatus || "processing",
   ).toLowerCase();
 
@@ -147,7 +170,7 @@ export const canMarkAsTestingOrder = (order = {}) => {
 };
 
 /**
- * Checks whether a payment recovery email can be sent.
+ * Common payment recovery eligibility.
  *
  * Eligible:
  * - Razorpay or manual prepaid order
@@ -156,29 +179,29 @@ export const canMarkAsTestingOrder = (order = {}) => {
  * - Order is not cancelled
  * - Order is not a split child order
  */
-export const canSendPaymentRecoveryEmail = (order = {}) => {
-  const paymentMethod = String(order?.paymentMethod || "")
-    .trim()
-    .toLowerCase();
+export const canSendPaymentRecovery = (order = {}) => {
+  const paymentMethod = safeString(order?.paymentMethod).toLowerCase();
 
-  const paymentStatus = String(order?.paymentStatus || "")
-    .trim()
-    .toLowerCase();
+  const paymentStatus = safeString(order?.paymentStatus).toLowerCase();
 
-  const fulfillmentStatus = String(order?.fulfillmentStatus || "")
-    .trim()
-    .toLowerCase();
+  const fulfillmentStatus = safeString(
+    order?.fulfillmentStatus,
+  ).toLowerCase();
 
-  const orderType = String(order?.orderType || "shipment")
-    .trim()
-    .toLowerCase();
+  const orderType = safeString(
+    order?.orderType || "shipment",
+  ).toLowerCase();
 
   const isCancelled =
     order?.cancellation?.isCancelled === true ||
     fulfillmentStatus === "cancelled";
 
   const hasSuccessfulPayment = Boolean(
-    String(order?.razorpay?.paymentId || "").trim(),
+    safeString(
+      order?.razorpay?.paymentId ||
+      order?.payment?.razorpayPaymentId ||
+      order?.paymentId,
+    ),
   );
 
   const eligiblePaymentMethods = ["razorpay", "manual_prepaid"];
@@ -186,6 +209,7 @@ export const canSendPaymentRecoveryEmail = (order = {}) => {
 
   if (isCancelled) return false;
   if (hasSuccessfulPayment) return false;
+  if (order?.parentOrderId) return false;
 
   if (!eligiblePaymentMethods.includes(paymentMethod)) {
     return false;
@@ -195,13 +219,46 @@ export const canSendPaymentRecoveryEmail = (order = {}) => {
     return false;
   }
 
-  // Avoid sending from split child orders.
-  if (order?.parentOrderId) return false;
-
-  // Parent order can be used as the original payment order.
+  // Original shipment or split parent can be used for recovery.
   if (!["shipment", "parent"].includes(orderType)) {
     return false;
   }
 
   return true;
+};
+
+/**
+ * Checks whether a payment recovery email can be sent.
+ */
+export const canSendPaymentRecoveryEmail = (order = {}) => {
+  if (!canSendPaymentRecovery(order)) {
+    return false;
+  }
+
+  const email = safeString(
+    order?.customerId?.email ||
+    order?.customer?.email ||
+    order?.customerEmail ||
+    order?.shippingAddressSnapshot?.email ||
+    order?.billingAddressSnapshot?.email,
+  );
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+/**
+ * Checks whether a payment recovery WhatsApp message can be sent.
+ *
+ * Requires:
+ * - Order to be eligible for payment recovery
+ * - Valid Indian WhatsApp phone number
+ */
+export const canSendPaymentRecoveryWhatsApp = (order = {}) => {
+  if (!canSendPaymentRecovery(order)) {
+    return false;
+  }
+
+  const phone = normalizePhoneNumber(getCustomerPhone(order));
+
+  return Boolean(phone);
 };

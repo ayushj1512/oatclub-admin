@@ -4,6 +4,86 @@ import { toast } from "react-hot-toast";
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const API = `${BASE_URL}/api/products`;
 
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+const safeJson = async (response) => {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+};
+
+const buildInventoryUrl = (params = {}) => {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+
+    query.set(
+      key,
+      Array.isArray(value) ? value.join(",") : String(value),
+    );
+  });
+
+  return `${BACKEND}/api/products/admin/inventory?${query.toString()}`;
+};
+
+const normalizeInventoryProduct = (product = {}) => {
+  const images = Array.isArray(product.images) ? product.images : [];
+
+  const totalInventory = Number(
+    product.totalInventory ?? product.stock ?? 0,
+  );
+
+  const reservedInventory = Number(
+    product.reservedInventory ?? product.reservedStock ?? 0,
+  );
+
+  const availableInventory = Number(
+    product.availableInventory ??
+    product.availableStock ??
+    Math.max(0, totalInventory - reservedInventory),
+  );
+
+  return {
+    ...product,
+
+    id: String(product._id || product.id || ""),
+
+    name: product.name || product.title || "",
+    title: product.title || product.name || "",
+
+    image:
+      product.image ||
+      product.thumbnail ||
+      images[0] ||
+      "/placeholder.png",
+
+    thumbnail:
+      product.thumbnail ||
+      product.image ||
+      images[0] ||
+      "/placeholder.png",
+
+    images,
+
+    totalInventory,
+    reservedInventory,
+    availableInventory,
+
+    stock: totalInventory,
+    reservedStock: reservedInventory,
+    availableStock: availableInventory,
+
+    isInStock: availableInventory > 0,
+
+    variants: Array.isArray(product.variants)
+      ? product.variants
+      : [],
+  };
+};
+
 export const PRODUCT_LIFECYCLE_STAGES = [
   "pattern_in_making",
   "sampling",
@@ -418,6 +498,28 @@ export const useAdminProductStore = create((set, get) => ({
   excelColumns: [],
   excelColumnsLoading: false,
   excelExporting: false,
+
+  // Available Inventory
+  inventoryProducts: [],
+
+  inventorySummary: {
+    totalProducts: 0,
+    totalInventory: 0,
+    reservedInventory: 0,
+    availableInventory: 0,
+    inStockProducts: 0,
+    outOfStockProducts: 0,
+  },
+
+  inventoryPage: 1,
+  inventoryLimit: 70,
+  inventoryTotal: 0,
+  inventoryPages: 1,
+  inventoryHasMore: false,
+
+  inventoryLoading: false,
+  inventoryError: null,
+  inventoryLastParams: {},
 
   /* ============================================================
     HELPERS
@@ -1885,7 +1987,7 @@ export const useAdminProductStore = create((set, get) => ({
   },
 
   /* ============================================================
-    ✅ ADD COLOUR 
+    ✅ ADD COLOUR
   ============================================================ */
   updateProductColorsOnly: async (productId, colors) => {
     try {
@@ -3431,4 +3533,123 @@ export const useAdminProductStore = create((set, get) => ({
       });
     }
   },
+
+  fetchInventoryProducts: async (params = {}) => {
+    if (!BACKEND) {
+      set({
+        inventoryError: "NEXT_PUBLIC_BACKEND_URL missing",
+        inventoryLoading: false,
+      });
+
+      return null;
+    }
+
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(
+      200,
+      Math.max(1, Number(params.limit) || 70),
+    );
+
+    const finalParams = {
+      page,
+      limit,
+      hideFootwear: true,
+      sort: "available_desc",
+      ...params,
+    };
+
+    set({
+      inventoryLoading: true,
+      inventoryError: null,
+      inventoryLastParams: finalParams,
+    });
+
+    try {
+      const response = await fetch(buildInventoryUrl(finalParams), {
+        cache: "no-store",
+      });
+
+      const data = await safeJson(response);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message || "Failed to fetch inventory",
+        );
+      }
+
+      const products = Array.isArray(data?.products)
+        ? data.products.map(normalizeInventoryProduct)
+        : [];
+
+      set({
+        inventoryProducts: products,
+
+        inventorySummary: {
+          totalProducts: Number(
+            data?.summary?.totalProducts ?? data?.total ?? 0,
+          ),
+          totalInventory: Number(
+            data?.summary?.totalInventory ?? 0,
+          ),
+          reservedInventory: Number(
+            data?.summary?.reservedInventory ?? 0,
+          ),
+          availableInventory: Number(
+            data?.summary?.availableInventory ?? 0,
+          ),
+          inStockProducts: Number(
+            data?.summary?.inStockProducts ?? 0,
+          ),
+          outOfStockProducts: Number(
+            data?.summary?.outOfStockProducts ?? 0,
+          ),
+        },
+
+        inventoryPage: Number(data?.page || page),
+        inventoryLimit: Number(data?.limit || limit),
+        inventoryTotal: Number(data?.total || 0),
+        inventoryPages: Number(data?.pages || 1),
+
+        inventoryHasMore:
+          typeof data?.hasNextPage === "boolean"
+            ? data.hasNextPage
+            : page * limit < Number(data?.total || 0),
+
+        inventoryLoading: false,
+        inventoryError: null,
+      });
+
+      return data;
+    } catch (error) {
+      set({
+        inventoryLoading: false,
+        inventoryError:
+          error?.message || "Failed to fetch inventory",
+      });
+
+      return null;
+    }
+  },
+
+  clearInventory: () =>
+    set({
+      inventoryProducts: [],
+
+      inventorySummary: {
+        totalProducts: 0,
+        totalInventory: 0,
+        reservedInventory: 0,
+        availableInventory: 0,
+        inStockProducts: 0,
+        outOfStockProducts: 0,
+      },
+
+      inventoryPage: 1,
+      inventoryTotal: 0,
+      inventoryPages: 1,
+      inventoryHasMore: false,
+      inventoryLoading: false,
+      inventoryError: null,
+      inventoryLastParams: {},
+    }),
 }));

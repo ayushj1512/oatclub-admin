@@ -86,6 +86,12 @@ const DOMAIN_LIST = [
     route: "/products",
   },
   {
+    id: "delhivery",
+    name: "Delhivery",
+    icon: Truck,
+    route: "/delhivery",
+  },
+  {
     id: "barcode",
     name: "Barcode",
     icon: Barcode,
@@ -227,7 +233,8 @@ const CARD_HINTS = {
   fabrics: "Manage fabric records and mappings",
   email: "Preview all brand emails, subjects and template states",
   affiliate: "Manage affiliates, referrals, commissions and payouts",
-    dispatching: "Pack, verify and dispatch ready orders",
+  dispatching: "Pack, verify and dispatch ready orders",
+  delhivery: "Create shipments, check pincodes, labels and tracking",
 
 };
 

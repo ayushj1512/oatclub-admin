@@ -5,7 +5,8 @@ export const DOMAIN_PERMISSIONS = {
   design_lab: "manageDesignLab",
   production: "manageProduction",
   vendors: "manageVendors",
-dispatching: "manageDispatching",
+  dispatching: "manageDispatching",
+
   accounts: "manageAccounts",
   products: "manageProducts",
   barcode: "manageBarcode",
@@ -15,6 +16,7 @@ dispatching: "manageDispatching",
   otp: "manageOTP",
   fast2sms: "manageFast2SMS",
   shiprocket: "manageOrders",
+  delhivery: "manageOrders", // ✅ Added
 
   reviews: "manageReviews",
   rma: "manageRMA",
