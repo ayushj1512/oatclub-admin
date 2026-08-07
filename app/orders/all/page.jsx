@@ -585,8 +585,8 @@ export default function OrdersListPage() {
     if (!response.ok) {
       throw new Error(
         payload?.message ||
-          payload?.error ||
-          "Unable to fetch advanced filtered orders.",
+        payload?.error ||
+        "Unable to fetch advanced filtered orders.",
       );
     }
 
@@ -714,19 +714,23 @@ export default function OrdersListPage() {
 
           for (const order of merged) {
             const key = String(order?._id || order?.orderNumber || "");
-            if (key && !unique.has(key)) unique.set(key, order);
+            if (key && !unique.has(key)) {
+              unique.set(key, order);
+            }
           }
 
           return Array.from(unique.values()).slice(0, 10);
         });
+
+        // Auto refresh table when new order is detected
+        await loadOrders();
       }
     } catch (error) {
       console.error("New order polling failed:", error);
     } finally {
       pollingRef.current = false;
     }
-  }, []);
-
+  }, [loadOrders]);
   useEffect(() => {
     if (!hasLoadedOnce) return;
 
@@ -817,9 +821,18 @@ export default function OrdersListPage() {
 
   const viewNewOrders = useCallback(async () => {
     setNewOrders([]);
-    setCurrentPage(1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+
+    if (currentPage !== 1) {
+      setCurrentPage(1);
+    }
+
+    await loadOrders();
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }, [currentPage, loadOrders]);
 
   const filteredOrders = useMemo(() => {
     return applyClientFiltersToOrders({
@@ -837,6 +850,29 @@ export default function OrdersListPage() {
     search,
   ]);
 
+  const getParentOrderNumber = (order = {}) => {
+    const orderNumber = String(
+      order?.orderNumber || "",
+    ).trim();
+
+    // 000089-A -> 000089
+    const match = orderNumber.match(
+      /^(.+)-([A-Z])$/i,
+    );
+
+    return match ? match[1] : "";
+  };
+
+  const isSplitChildOrder = (order = {}) => {
+    if (order?.parentOrderId) {
+      return true;
+    }
+
+    return Boolean(
+      getParentOrderNumber(order),
+    );
+  };
+
 
 
   const REVENUE_STATUSES = new Set([
@@ -849,49 +885,221 @@ export default function OrdersListPage() {
   ]);
 
   // All filtered orders revenue
+  const revenueOrders = useMemo(
+    () =>
+      filteredOrders.filter(
+        (order) =>
+          !isSplitChildOrder(order),
+      ),
+    [filteredOrders],
+  );
+
   const totalRevenue = useMemo(() => {
-    return filteredOrders.reduce(
+    return revenueOrders.reduce(
       (sum, order) =>
         sum + getOrderRevenue(order),
-      0
+      0,
     );
-  }, [filteredOrders]);
+  }, [revenueOrders]);
 
-  // Confirmed + valid fulfillment status revenue
   const validRevenue = useMemo(() => {
-    return filteredOrders.reduce((sum, order) => {
-      const status = String(
-        order?.fulfillmentStatus || ""
-      ).toLowerCase();
+    return revenueOrders.reduce(
+      (sum, order) => {
+        const status = String(
+          order?.fulfillmentStatus || "",
+        ).toLowerCase();
 
-      if (order?.isConfirmed !== true) {
-        return sum;
-      }
+        if (order?.isConfirmed !== true) {
+          return sum;
+        }
 
-      if (!REVENUE_STATUSES.has(status)) {
-        return sum;
-      }
+        if (!REVENUE_STATUSES.has(status)) {
+          return sum;
+        }
 
-      return sum + getOrderRevenue(order);
-    }, 0);
-  }, [filteredOrders]);
-
+        return sum + getOrderRevenue(order);
+      },
+      0,
+    );
+  }, [revenueOrders]);
   // ✅ stable sorted list so table work stays neat
-  const sortedOrders = useMemo(() => {
-    const getNum = (o) => {
-      const m = String(o?.orderNumber || "").match(/(\d+)$/);
-      return m ? Number(m[1]) : 0;
+  const groupedOrders = useMemo(() => {
+    const source = Array.isArray(
+      filteredOrders,
+    )
+      ? filteredOrders
+      : [];
+
+    const parentByOrderNumber =
+      new Map();
+
+    /*
+     * First register all top-level orders.
+     */
+    for (const order of source) {
+      if (isSplitChildOrder(order)) {
+        continue;
+      }
+
+      const orderNumber = String(
+        order?.orderNumber || "",
+      ).trim();
+
+      if (orderNumber) {
+        parentByOrderNumber.set(
+          orderNumber,
+          order,
+        );
+      }
+    }
+
+    const childrenByParent =
+      new Map();
+
+    /*
+     * Attach children using:
+     * 1. parentOrderId when available
+     * 2. order number fallback: 000089-A -> 000089
+     */
+    for (const order of source) {
+      if (!isSplitChildOrder(order)) {
+        continue;
+      }
+
+      let parent = null;
+
+      if (order?.parentOrderId) {
+        const parentId = String(
+          order?.parentOrderId?._id ||
+          order?.parentOrderId,
+        );
+
+        parent = source.find(
+          (candidate) =>
+            String(
+              candidate?._id ||
+              candidate?.id ||
+              "",
+            ) === parentId,
+        );
+      }
+
+      if (!parent) {
+        const parentOrderNumber =
+          getParentOrderNumber(order);
+
+        parent =
+          parentByOrderNumber.get(
+            parentOrderNumber,
+          ) || null;
+      }
+
+      if (!parent) {
+        continue;
+      }
+
+      const parentKey = String(
+        parent?._id ||
+        parent?.id ||
+        parent?.orderNumber,
+      );
+
+      if (
+        !childrenByParent.has(
+          parentKey,
+        )
+      ) {
+        childrenByParent.set(
+          parentKey,
+          [],
+        );
+      }
+
+      childrenByParent
+        .get(parentKey)
+        .push(order);
+    }
+
+    /*
+     * Only render real top-level orders.
+     */
+    const topLevelOrders =
+      source.filter(
+        (order) =>
+          !isSplitChildOrder(order),
+      );
+
+    const getBaseNumber = (
+      order = {},
+    ) => {
+      const value = String(
+        order?.orderNumber || "",
+      );
+
+      const match =
+        value.match(/\d+/);
+
+      return match
+        ? Number(match[0])
+        : 0;
     };
 
-    return [...filteredOrders].sort((a, b) => {
-      const an = getNum(a);
-      const bn = getNum(b);
-      if (bn !== an) return bn - an;
+    return topLevelOrders
+      .map((order) => {
+        const parentKey = String(
+          order?._id ||
+          order?.id ||
+          order?.orderNumber,
+        );
 
-      const ad = new Date(a?.createdAt || a?.orderDate || 0).getTime();
-      const bd = new Date(b?.createdAt || b?.orderDate || 0).getTime();
-      return bd - ad;
-    });
+        const children = [
+          ...(childrenByParent.get(
+            parentKey,
+          ) || []),
+        ].sort((a, b) =>
+          String(
+            a?.splitSuffix ||
+            a?.orderNumber ||
+            "",
+          ).localeCompare(
+            String(
+              b?.splitSuffix ||
+              b?.orderNumber ||
+              "",
+            ),
+          ),
+        );
+
+        return {
+          order,
+          children,
+        };
+      })
+      .sort((a, b) => {
+        const an =
+          getBaseNumber(a.order);
+
+        const bn =
+          getBaseNumber(b.order);
+
+        if (bn !== an) {
+          return bn - an;
+        }
+
+        const ad = new Date(
+          a.order?.createdAt ||
+          a.order?.orderDate ||
+          0,
+        ).getTime();
+
+        const bd = new Date(
+          b.order?.createdAt ||
+          b.order?.orderDate ||
+          0,
+        ).getTime();
+
+        return bd - ad;
+      });
   }, [filteredOrders]);
 
   const buildCsvRows = (ordersArr) => {
@@ -1139,7 +1347,7 @@ export default function OrdersListPage() {
   const totalPages = Math.max(
     1,
     toNumber(ordersMeta?.totalPages) ||
-      Math.ceil(totalCount / pageSize),
+    Math.ceil(totalCount / pageSize),
   );
   const currentMetaPage = toNumber(ordersMeta?.page) || currentPage;
 
@@ -1170,8 +1378,7 @@ export default function OrdersListPage() {
               </span>
 
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-                Revenue: {formatINR(ordersMeta?.totalSum ?? totalRevenue)}
-              </span>
+                Revenue: {formatINR(totalRevenue)}              </span>
 
               <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
                 Valid Revenue: {formatINR(validRevenue)}
@@ -1283,8 +1490,8 @@ export default function OrdersListPage() {
                       </div>
                     </td>
                   </tr>
-                ) : sortedOrders.length ? (
-                  sortedOrders.map((order, idx) => {
+                ) : groupedOrders.length ? (
+                  groupedOrders.map(({ order, children }, idx) => {
                     const rowKey =
                       order?._id ||
                       order?.id ||
@@ -1295,8 +1502,11 @@ export default function OrdersListPage() {
                       <OrderRow
                         key={String(rowKey)}
                         order={order}
+                        childOrders={children}
                         onUpdated={handleOrderUpdated}
-                        openActionsUp={idx >= sortedOrders.length - 2}
+                        openActionsUp={
+                          idx >= groupedOrders.length - 2
+                        }
                       />
                     );
                   })

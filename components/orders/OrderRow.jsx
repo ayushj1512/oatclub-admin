@@ -75,6 +75,7 @@ const paymentMethodMeta = (method) => {
 
 function OrderRow({
   order,
+  childOrders = [],
   onUpdated,
   openActionsUp = false,
   selectable = false,
@@ -89,6 +90,13 @@ function OrderRow({
   );
 
   const orderId = order?._id || order?.id;
+
+  const isSplitParent =
+    String(order?.orderType || "").toLowerCase() === "parent";
+
+  const hasChildren =
+    Array.isArray(childOrders) &&
+    childOrders.length > 0;
 
   const effectiveStatus = useMemo(
     () => String(order?.fulfillmentStatus || "processing").toLowerCase(),
@@ -300,131 +308,539 @@ function OrderRow({
 
       {open ? (
         <tr className="border-b border-black/[0.06] bg-gray-50">
-          <td colSpan={selectable ? 9 : 8} className="px-5 pb-4">
-            <div className="mt-3 space-y-4 rounded-lg border border-black/[0.06] bg-white px-4 py-4 shadow-sm">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-900">
-                    Items ({items.length})
-                  </h3>
+          <td
+            colSpan={selectable ? 9 : 8}
+            className="px-5 pb-4"
+          >
+            <div className="mt-3 space-y-4 rounded-2xl border border-black/[0.06] bg-white p-4 shadow-sm">
 
-                  <button
-                    type="button"
-                    onClick={goToOrder}
-                    title="Open order"
-                    className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] px-2.5 py-1 text-xs font-semibold text-gray-900 transition hover:bg-gray-50"
-                  >
-                    Open <ExternalLink size={14} />
-                  </button>
-                </div>
+              {/* =====================================================
+            SPLIT PARENT VIEW
+        ===================================================== */}
+              {isSplitParent && hasChildren ? (
+                <div className="space-y-4">
 
-                {items.length === 0 ? (
-                  <p className="text-xs text-gray-500">No items</p>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {items.map((it, idx) => {
-                      const snap = it?.productSnapshot || {};
-                      const variant = it?.variant || {};
-                      const size = it?.selectedSize || "";
-                      const color = it?.selectedColor || "";
-                      const productCode = safe(snap?.productCode).trim();
-                      const productUrl = buildProductUrl(it);
+                  {/* Header */}
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-black text-gray-950">
+                        Split Shipments
+                      </h3>
 
-                      const variantText =
-                        size || color
-                          ? [
-                            size ? `Size: ${size}` : "",
-                            color ? `Color: ${color}` : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" • ")
-                          : Array.isArray(variant?.attributes)
-                            ? variant.attributes
-                              .map((a) => `${a?.key}:${a?.value}`)
-                              .filter(Boolean)
-                              .join(", ")
-                            : "";
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        This order is split into {childOrders.length} shipments
+                      </p>
+                    </div>
+
+                    <span className="text-sm font-black text-gray-950">
+                      {childOrders.length} Shipments
+                    </span>
+                  </div>
+
+                  {/* =================================================
+                TOP SHIPMENT SUMMARY
+            ================================================= */}
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {childOrders.map((child, index) => {
+                      const childItems = Array.isArray(child?.items)
+                        ? child.items
+                        : [];
+
+                      const qty = childItems.reduce(
+                        (sum, item) =>
+                          sum + Number(item?.quantity || 0),
+                        0,
+                      );
+
+                      const suffix =
+                        child?.splitSuffix ||
+                        String(child?.orderNumber || "")
+                          .split("-")
+                          .pop() ||
+                        String.fromCharCode(65 + index);
+
+                      const isA = suffix === "A";
+
+                      const itemNames = childItems
+                        .map(
+                          (item) =>
+                            item?.productSnapshot?.title,
+                        )
+                        .filter(Boolean);
+
+                      return (
+                        <button
+                          key={child?._id}
+                          type="button"
+                          onClick={() =>
+                            window.open(
+                              `/orders/${child._id}`,
+                              "_blank",
+                              "noopener,noreferrer",
+                            )
+                          }
+                          className={`flex min-w-0 items-center gap-4 rounded-2xl border p-4 text-left transition hover:shadow-sm ${isA
+                              ? "border-blue-200 bg-blue-50/30 hover:bg-blue-50/60"
+                              : "border-amber-200 bg-amber-50/30 hover:bg-amber-50/60"
+                            }`}
+                        >
+                          {/* A / B */}
+                          <div
+                            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-black text-white ${isA
+                                ? "bg-blue-600"
+                                : "bg-amber-500"
+                              }`}
+                          >
+                            {suffix}
+                          </div>
+
+                          {/* Details */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-base font-black text-gray-950">
+                                {child?.orderNumber}
+                              </span>
+
+                              <span className="rounded-lg border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                                {qty} Items
+                              </span>
+                            </div>
+
+                            <p className="mt-1 truncate text-xs text-gray-500">
+                              {itemNames
+                                .slice(0, 2)
+                                .join(" • ")}
+
+                              {itemNames.length > 2
+                                ? ` +${itemNames.length - 2} more`
+                                : ""}
+                            </p>
+                          </div>
+
+                          {/* Amount */}
+                          <div className="shrink-0 text-right">
+                            <p className="font-mono text-base font-black text-gray-950">
+                              ₹{money(child?.finalPayable)}
+                            </p>
+
+                            <span
+                              className={`mt-1 inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold capitalize ${isA
+                                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                                  : "border-amber-200 bg-amber-50 text-amber-700"
+                                }`}
+                            >
+                              {String(
+                                child?.fulfillmentStatus ||
+                                "processing",
+                              ).replaceAll("_", " ")}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* =================================================
+                DETAILED SHIPMENTS
+            ================================================= */}
+                  <div className="space-y-3">
+                    {childOrders.map((child, index) => {
+                      const childItems = Array.isArray(child?.items)
+                        ? child.items
+                        : [];
+
+                      const suffix =
+                        child?.splitSuffix ||
+                        String(child?.orderNumber || "")
+                          .split("-")
+                          .pop() ||
+                        String.fromCharCode(65 + index);
+
+                      const isA = suffix === "A";
 
                       return (
                         <div
-                          key={`${orderId}-item-${idx}`}
-                          className="flex items-center justify-between gap-3 py-3"
+                          key={`shipment-${child?._id}`}
+                          className={`overflow-hidden rounded-2xl border ${isA
+                              ? "border-blue-200 bg-blue-50/20"
+                              : "border-amber-200 bg-amber-50/20"
+                            }`}
                         >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <img
-                              src={snap.thumbnail || "/placeholder.png"}
-                              alt={snap.title || "Product"}
-                              loading="lazy"
-                              className="h-10 w-10 rounded-lg border border-gray-100 object-cover"
-                            />
-
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                                <p className="text-sm font-semibold text-gray-900 truncate">
-                                  {snap.title || "-"}
-                                </p>
-
-                                {productUrl ? (
-                                  <a
-                                    href={productUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    title="Open product"
-                                    className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-gray-700 hover:text-gray-950"
-                                  >
-                                    Product <ExternalLink size={14} />
-                                  </a>
-                                ) : null}
+                          {/* Shipment Header */}
+                          <div
+                            className={`flex items-center justify-between gap-4 border-b px-4 py-3 ${isA
+                                ? "border-blue-200 bg-blue-50/60"
+                                : "border-amber-200 bg-amber-50/60"
+                              }`}
+                          >
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black text-white ${isA
+                                    ? "bg-blue-600"
+                                    : "bg-amber-500"
+                                  }`}
+                              >
+                                {suffix}
                               </div>
 
-                              <p className="text-xs text-gray-500 truncate">
-                                {variantText ||
-                                  (variant?.sku || snap?.sku
-                                    ? `SKU: ${variant?.sku || snap?.sku}`
-                                    : "")}
+                              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                                <span className="text-sm text-gray-700">
+                                  Shipment{" "}
+                                  <b className="font-mono font-black text-gray-950">
+                                    {child?.orderNumber}
+                                  </b>
+                                </span>
+
+                                <span
+                                  className={`rounded-full border px-2.5 py-1 text-[10px] font-bold capitalize ${isA
+                                      ? "border-blue-200 bg-white text-blue-700"
+                                      : "border-amber-200 bg-white text-amber-700"
+                                    }`}
+                                >
+                                  {String(
+                                    child?.fulfillmentStatus ||
+                                    "processing",
+                                  ).replaceAll("_", " ")}
+                                </span>
+
+                                <span className="text-xs font-medium text-gray-600">
+                                  {childItems.length} Items
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 text-right">
+                              <p className="text-[10px] text-gray-500">
+                                Shipment Total
                               </p>
 
-                              {productCode ? (
-                                <div className="mt-1">
-                                  <span className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
-                                    Code: {productCode}
-                                  </span>
-                                </div>
-                              ) : null}
+                              <p className="font-mono text-base font-black text-gray-950">
+                                ₹{money(child?.finalPayable)}
+                              </p>
                             </div>
                           </div>
 
-                          <div className="text-right shrink-0">
-                            <p className="text-sm font-semibold text-gray-900">
-                              ₹{money(it?.price)} × {money(it?.quantity)}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              ₹{money(it?.subtotal)}
-                            </p>
+                          {/* Shipment Items */}
+                          <div className="divide-y divide-gray-100 bg-white">
+                            {childItems.map((item, idx) => {
+                              const snap =
+                                item?.productSnapshot || {};
+
+                              const size =
+                                item?.selectedSize || "";
+
+                              const productCode = safe(
+                                snap?.productCode,
+                              ).trim();
+
+                              const productUrl =
+                                buildProductUrl(item);
+
+                              return (
+                                <div
+                                  key={`${child?._id}-item-${idx}`}
+                                  className="flex items-center justify-between gap-4 px-4 py-3"
+                                >
+                                  {/* Product */}
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <div
+                                      className={`h-14 w-1 shrink-0 rounded-full ${isA
+                                          ? "bg-blue-500"
+                                          : "bg-amber-500"
+                                        }`}
+                                    />
+
+                                    <img
+                                      src={
+                                        snap.thumbnail ||
+                                        "/placeholder.png"
+                                      }
+                                      alt={
+                                        snap.title ||
+                                        "Product"
+                                      }
+                                      loading="lazy"
+                                      className="h-14 w-14 shrink-0 rounded-xl border border-gray-100 object-cover"
+                                    />
+
+                                    <div className="min-w-0">
+                                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <p className="truncate text-sm font-bold text-gray-950">
+                                          {snap.title || "-"}
+                                        </p>
+
+                                        {productUrl ? (
+                                          <a
+                                            href={productUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="shrink-0 text-gray-500 transition hover:text-black"
+                                          >
+                                            <ExternalLink
+                                              size={13}
+                                            />
+                                          </a>
+                                        ) : null}
+                                      </div>
+
+                                      {size ? (
+                                        <p className="mt-0.5 text-xs text-gray-500">
+                                          Size: {size}
+                                        </p>
+                                      ) : null}
+
+                                      {productCode ? (
+                                        <span className="mt-1 inline-flex rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-700">
+                                          Code:{" "}
+                                          {productCode}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+
+                                  {/* Price */}
+                                  <div className="ml-auto shrink-0 text-right">
+                                    <p className="font-mono text-sm font-black text-gray-950">
+                                      ₹{money(item?.price)} ×{" "}
+                                      {money(item?.quantity)}
+                                    </p>
+
+                                    <p className="mt-0.5 text-xs text-gray-500">
+                                      ₹{money(item?.subtotal)}
+                                    </p>
+                                  </div>
+
+                                  {/* Assignment */}
+                                  <div
+                                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-black text-white ${isA
+                                        ? "bg-blue-600"
+                                        : "bg-amber-500"
+                                      }`}
+                                  >
+                                    {suffix}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                /* ===================================================
+                   NORMAL NON-SPLIT ORDER ITEMS
+                =================================================== */
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Items ({items.length})
+                    </h3>
 
-              <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2 text-xs text-gray-700">
-                <span className="rounded-md bg-gray-100 px-3 py-1">
-                  Subtotal: <b>₹{money(order?.subtotal)}</b>
-                </span>
-                <span className="rounded-md bg-gray-100 px-3 py-1">
-                  Discount: <b>₹{money(order?.discount)}</b>
-                </span>
-                <span className="rounded-md bg-gray-100 px-3 py-1">
-                  Shipping: <b>₹{money(order?.shippingFee)}</b>
-                </span>
-                <span className="rounded-md bg-gray-100 px-3 py-1">
-                  Tax: <b>₹{money(order?.tax)}</b>
-                </span>
-                <span className="ml-auto rounded-md bg-black px-4 py-1 font-semibold text-white">
-                  Final: ₹{money(order?.finalPayable)}
-                </span>
+                    <button
+                      type="button"
+                      onClick={goToOrder}
+                      title="Open order"
+                      className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] px-2.5 py-1 text-xs font-semibold text-gray-900 transition hover:bg-gray-50"
+                    >
+                      Open
+                      <ExternalLink size={14} />
+                    </button>
+                  </div>
+
+                  {items.length === 0 ? (
+                    <p className="text-xs text-gray-500">
+                      No items
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {items.map((it, idx) => {
+                        const snap =
+                          it?.productSnapshot || {};
+
+                        const variant =
+                          it?.variant || {};
+
+                        const size =
+                          it?.selectedSize || "";
+
+                        const color =
+                          it?.selectedColor || "";
+
+                        const productCode = safe(
+                          snap?.productCode,
+                        ).trim();
+
+                        const productUrl =
+                          buildProductUrl(it);
+
+                        const variantText =
+                          size || color
+                            ? [
+                              size
+                                ? `Size: ${size}`
+                                : "",
+                              color
+                                ? `Color: ${color}`
+                                : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" • ")
+                            : Array.isArray(
+                              variant?.attributes,
+                            )
+                              ? variant.attributes
+                                .map(
+                                  (a) =>
+                                    `${a?.key}:${a?.value}`,
+                                )
+                                .filter(Boolean)
+                                .join(", ")
+                              : "";
+
+                        return (
+                          <div
+                            key={`${orderId}-item-${idx}`}
+                            className="flex items-center justify-between gap-3 py-3"
+                          >
+                            <div className="flex min-w-0 items-center gap-3">
+                              <img
+                                src={
+                                  snap.thumbnail ||
+                                  "/placeholder.png"
+                                }
+                                alt={
+                                  snap.title ||
+                                  "Product"
+                                }
+                                loading="lazy"
+                                className="h-10 w-10 rounded-lg border border-gray-100 object-cover"
+                              />
+
+                              <div className="min-w-0">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                  <p className="truncate text-sm font-semibold text-gray-900">
+                                    {snap.title || "-"}
+                                  </p>
+
+                                  {productUrl ? (
+                                    <a
+                                      href={productUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Open product"
+                                      className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-gray-700 hover:text-gray-950"
+                                    >
+                                      Product
+                                      <ExternalLink
+                                        size={14}
+                                      />
+                                    </a>
+                                  ) : null}
+                                </div>
+
+                                <p className="truncate text-xs text-gray-500">
+                                  {variantText ||
+                                    (variant?.sku ||
+                                      snap?.sku
+                                      ? `SKU: ${variant?.sku ||
+                                      snap?.sku
+                                      }`
+                                      : "")}
+                                </p>
+
+                                {productCode ? (
+                                  <div className="mt-1">
+                                    <span className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
+                                      Code:{" "}
+                                      {productCode}
+                                    </span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-semibold text-gray-900">
+                                ₹{money(it?.price)} ×{" "}
+                                {money(it?.quantity)}
+                              </p>
+
+                              <p className="text-xs text-gray-500">
+                                ₹{money(it?.subtotal)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* =====================================================
+            ORDER FINANCIAL SUMMARY
+        ===================================================== */}
+              <div className="grid grid-cols-2 gap-2 border-t border-gray-100 pt-4 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="rounded-xl bg-gray-50 px-3 py-2 text-center">
+                  <p className="text-[10px] font-medium text-gray-500">
+                    Items
+                  </p>
+                  <p className="mt-1 text-sm font-black text-gray-950">
+                    {items.reduce(
+                      (sum, item) =>
+                        sum +
+                        Number(item?.quantity || 0),
+                      0,
+                    )}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-gray-50 px-3 py-2 text-center">
+                  <p className="text-[10px] font-medium text-gray-500">
+                    Subtotal
+                  </p>
+                  <p className="mt-1 font-mono text-sm font-black text-gray-950">
+                    ₹{money(order?.subtotal)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-gray-50 px-3 py-2 text-center">
+                  <p className="text-[10px] font-medium text-gray-500">
+                    Discount
+                  </p>
+                  <p className="mt-1 font-mono text-sm font-black text-emerald-600">
+                    - ₹{money(order?.discount)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-gray-50 px-3 py-2 text-center">
+                  <p className="text-[10px] font-medium text-gray-500">
+                    Shipping
+                  </p>
+                  <p className="mt-1 font-mono text-sm font-black text-gray-950">
+                    ₹{money(order?.shippingFee)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-gray-50 px-3 py-2 text-center">
+                  <p className="text-[10px] font-medium text-gray-500">
+                    Tax
+                  </p>
+                  <p className="mt-1 font-mono text-sm font-black text-gray-950">
+                    ₹{money(order?.tax)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-black px-3 py-2 text-center text-white">
+                  <p className="text-[10px] font-medium text-white/70">
+                    Final Amount
+                  </p>
+                  <p className="mt-1 font-mono text-base font-black">
+                    ₹{money(order?.finalPayable)}
+                  </p>
+                </div>
               </div>
             </div>
           </td>
@@ -437,6 +853,7 @@ function OrderRow({
 export default memo(OrderRow, (prev, next) => {
   return (
     prev.order === next.order &&
+    prev.childOrders === next.childOrders &&
     prev.onUpdated === next.onUpdated &&
     prev.openActionsUp === next.openActionsUp &&
     prev.selectable === next.selectable &&

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useInventoryReservationStore } from "@/store/inventoryReservationStore";
+import InventoryReservationGuide from "@/components/inventory/InventoryReservationGuide";
 
 /* ---------------------------------------------------
    Helpers
@@ -160,6 +161,11 @@ export default function ReservedInventoryPage() {
     moveReservationToPending,
     deleteReservation,
     transferReservation,
+    repairRows,
+    repairSummary,
+
+    detectPendingReservationIssues,
+    bulkDeletePendingReservationIssues,
   } = useInventoryReservationStore();
 
   const [form, setForm] = useState({
@@ -181,6 +187,11 @@ export default function ReservedInventoryPage() {
   );
 
   const [bulkReason, setBulkReason] = useState("");
+
+  const [showRepair, setShowRepair] = useState(false);
+
+  const [selectedRepairIds, setSelectedRepairIds] =
+    useState(() => new Set());
 
   const [actionMenu, setActionMenu] = useState({
     id: "",
@@ -738,6 +749,90 @@ export default function ReservedInventoryPage() {
   };
 
   /* ---------------------------------------------------
+   Pending reservation repair
+--------------------------------------------------- */
+
+  const repairList = Array.isArray(repairRows)
+    ? repairRows
+    : [];
+
+  const allRepairSelected =
+    repairList.length > 0 &&
+    selectedRepairIds.size === repairList.length;
+
+  const runRepairDetection = async () => {
+    clearError?.();
+
+    try {
+      await detectPendingReservationIssues();
+
+      setSelectedRepairIds(new Set());
+      setShowRepair(true);
+    } catch {
+      // Store handles error
+    }
+  };
+
+  const toggleRepairRow = (id) => {
+    if (!id) return;
+
+    setSelectedRepairIds((previous) => {
+      const next = new Set(previous);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
+      return next;
+    });
+  };
+
+  const toggleAllRepairRows = () => {
+    setSelectedRepairIds(() => {
+      if (allRepairSelected) {
+        return new Set();
+      }
+
+      return new Set(
+        repairList
+          .map((row) => safe(row?.reservationId))
+          .filter(Boolean)
+      );
+    });
+  };
+
+  const deleteDetectedRepairRows = async () => {
+    const ids = [...selectedRepairIds];
+
+    if (!ids.length) return;
+
+    const approved = window.confirm(
+      `Delete ${ids.length} invalid pending reservation(s)?\n\n` +
+      "Only rows still verified as invalid by the backend will be deleted."
+    );
+
+    if (!approved) return;
+
+    clearError?.();
+
+    try {
+      const summary =
+        await bulkDeletePendingReservationIssues(ids);
+
+      setSelectedRepairIds(new Set());
+
+      window.alert(
+        `Repair complete.\n\nDeleted: ${summary?.deleted || 0
+        }\nRejected: ${summary?.rejected || 0}`
+      );
+    } catch {
+      // Store handles error
+    }
+  };
+
+  /* ---------------------------------------------------
      Bulk selection
   --------------------------------------------------- */
 
@@ -855,6 +950,18 @@ export default function ReservedInventoryPage() {
               Refresh
             </button>
 
+            <InventoryReservationGuide />
+
+
+            <button
+              type="button"
+              onClick={runRepairDetection}
+              disabled={loading || actionLoading}
+              className="h-9 rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+            >
+              Repair Pending
+            </button>
+
             <button
               type="button"
               onClick={onExpireDue}
@@ -927,6 +1034,222 @@ export default function ReservedInventoryPage() {
                 Dismiss
               </button>
             </div>
+          </section>
+        ) : null}
+
+        {/* Pending reservation repair */}
+        {showRepair ? (
+          <section className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-black text-amber-950">
+                  Pending Reservation Repair
+                </div>
+
+                <div className="mt-0.5 text-[10px] text-amber-800">
+                  Checked {repairSummary?.checked || 0} • Invalid{" "}
+                  {repairSummary?.invalid || 0} • Review{" "}
+                  {repairSummary?.needsReview || 0}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={runRepairDetection}
+                  disabled={actionLoading}
+                  className="h-8 rounded-lg border border-amber-300 bg-white px-3 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Recheck
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRepair(false);
+                    setSelectedRepairIds(new Set());
+                  }}
+                  className="h-8 rounded-lg border border-gray-300 bg-white px-3 text-[11px] font-bold hover:bg-gray-50"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {!repairList.length ? (
+              <div className="px-4 py-8 text-center">
+                <div className="text-sm font-bold text-emerald-700">
+                  No unsafe pending reservations found
+                </div>
+
+                <div className="mt-1 text-xs text-gray-500">
+                  Current pending order reservations are safe.
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-4 py-2.5">
+                  <button
+                    type="button"
+                    onClick={toggleAllRepairRows}
+                    disabled={actionLoading}
+                    className="h-8 rounded-lg border border-gray-300 bg-white px-3 text-[11px] font-bold hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {allRepairSelected
+                      ? "Unselect All"
+                      : "Select All Invalid"}
+                  </button>
+
+                  <div className="rounded-lg bg-gray-100 px-3 py-1.5 text-[11px] text-gray-700">
+                    Selected{" "}
+                    <strong>{selectedRepairIds.size}</strong> /{" "}
+                    <strong>{repairList.length}</strong>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={deleteDetectedRepairRows}
+                    disabled={
+                      actionLoading ||
+                      selectedRepairIds.size === 0
+                    }
+                    className="ml-auto h-8 rounded-lg bg-red-600 px-3 text-[11px] font-black text-white hover:bg-red-700 disabled:opacity-40"
+                  >
+                    Delete Selected
+                  </button>
+                </div>
+
+                <div className="max-h-[360px] overflow-auto">
+                  <table className="w-full min-w-[850px] text-xs">
+                    <thead className="sticky top-0 bg-gray-100 text-left text-[10px] uppercase text-gray-600">
+                      <tr>
+                        <th className="w-10 px-3 py-2">
+                          Select
+                        </th>
+
+                        <th className="px-3 py-2">
+                          Order
+                        </th>
+
+                        <th className="px-3 py-2">
+                          Product
+                        </th>
+
+                        <th className="px-3 py-2">
+                          Variant
+                        </th>
+
+                        <th className="px-3 py-2 text-center">
+                          Qty
+                        </th>
+
+                        <th className="px-3 py-2">
+                          Fulfillment
+                        </th>
+
+                        <th className="px-3 py-2">
+                          Issue
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-gray-200">
+                      {repairList.map((row) => {
+                        const id = safe(
+                          row?.reservationId
+                        );
+
+                        const selected =
+                          selectedRepairIds.has(id);
+
+                        return (
+                          <tr
+                            key={id}
+                            className={
+                              selected
+                                ? "bg-red-50/50"
+                                : "hover:bg-gray-50"
+                            }
+                          >
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() =>
+                                  toggleRepairRow(id)
+                                }
+                                disabled={actionLoading}
+                                className="h-4 w-4 accent-red-600"
+                              />
+                            </td>
+
+                            <td className="px-3 py-2">
+                              <div className="font-black">
+                                {safe(
+                                  row?.orderNumber,
+                                  "—"
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="px-3 py-2">
+                              <div className="max-w-[220px] truncate font-bold">
+                                {safe(
+                                  row?.productTitle,
+                                  "Untitled"
+                                )}
+                              </div>
+
+                              <div className="text-[10px] text-gray-500">
+                                {safe(
+                                  row?.productCode,
+                                  "—"
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="px-3 py-2">
+                              <div className="text-[10px]">
+                                {safe(
+                                  row?.selectedSize,
+                                  "—"
+                                )}
+
+                                {row?.selectedColor
+                                  ? ` • ${row.selectedColor}`
+                                  : ""}
+                              </div>
+                            </td>
+
+                            <td className="px-3 py-2 text-center font-black">
+                              {qty(row?.qty)}
+                            </td>
+
+                            <td className="px-3 py-2">
+                              <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold capitalize">
+                                {safe(
+                                  row?.fulfillmentStatus,
+                                  "—"
+                                )}
+                              </span>
+                            </td>
+
+                            <td className="px-3 py-2">
+                              <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-black text-red-700">
+                                {safe(
+                                  row?.repairReason,
+                                  "INVALID_PENDING"
+                                )}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </section>
         ) : null}
 

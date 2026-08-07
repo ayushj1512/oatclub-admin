@@ -72,6 +72,8 @@ export const useInventoryReservationStore = create((set, get) => ({
 
   reservations: [],
   total: 0,
+  repairRows: [],
+  repairSummary: null,
 
   filters: { ...DEFAULT_FILTERS },
 
@@ -388,6 +390,93 @@ export const useInventoryReservationStore = create((set, get) => ({
       });
 
       invLog("deleteReservation ERROR", m);
+      throw e;
+    }
+  },
+
+  /* ---------------- pending repair ---------------- */
+
+  detectPendingReservationIssues: async (limit = 500) => {
+    set({
+      actionLoading: true,
+      error: null,
+    });
+
+    try {
+      const { data } = await api.get(
+        `/api/inventory-reservations/repair/pending-orders?limit=${limit}`
+      );
+
+      set({
+        actionLoading: false,
+        repairRows: data?.rows || [],
+        repairSummary: data?.summary || null,
+      });
+
+      return data;
+    } catch (e) {
+      const m = msg(
+        e,
+        "Failed to detect pending reservation issues"
+      );
+
+      set({
+        actionLoading: false,
+        error: m,
+      });
+
+      throw e;
+    }
+  },
+
+  bulkDeletePendingReservationIssues: async (ids = []) => {
+    const cleanIds = Array.from(
+      new Set(
+        (Array.isArray(ids) ? ids : [])
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (!cleanIds.length) {
+      throw new Error("No reservations selected");
+    }
+
+    set({
+      actionLoading: true,
+      error: null,
+    });
+
+    try {
+      const { data } = await api.delete(
+        `/api/inventory-reservations/repair/pending-orders`,
+        {
+          data: {
+            ids: cleanIds,
+          },
+        }
+      );
+
+      set({
+        actionLoading: false,
+      });
+
+      // Refresh both repair list and normal reservation list
+      await get().detectPendingReservationIssues();
+      await get().fetchReservations();
+
+      return data?.summary;
+    } catch (e) {
+      const m = msg(
+        e,
+        "Failed to repair pending reservations"
+      );
+
+      set({
+        actionLoading: false,
+        error: m,
+      });
+
       throw e;
     }
   },

@@ -26,7 +26,6 @@ import {
 } from "lucide-react";
 
 import {
-  buildTwoWayOrderSplit,
   canSplitOrder,
   canMarkAsTestingOrder,
   canSendPaymentRecoveryEmail,
@@ -196,26 +195,26 @@ const getShippingLabelUrl = (order) =>
 
 const createConfirmationMessage = (order = {}) => `Hi ${getCustomerName(order)},
 
-Welcome to *OATCLUB*
+  Welcome to *OATCLUB*
 
-Before we process your order, please confirm the details below:
+  Before we process your order, please confirm the details below:
 
-*Order:* #${getOrderNumber(order)}
-*Product:* ${getItemSummary(order)}
-*Final Payable:* ${formatCurrency(getFinalPayable(order))}
-*Payment:* ${getPaymentLabel(order)}
+  *Order:* #${getOrderNumber(order)}
+  *Product:* ${getItemSummary(order)}
+  *Final Payable:* ${formatCurrency(getFinalPayable(order))}
+  *Payment:* ${getPaymentLabel(order)}
 
-Each order is carefully quality-checked before dispatch and will be shipped within *7 business days*.
+  Each order is carefully quality-checked before dispatch and will be shipped within *7 business days*.
 
-Please reply with:
+  Please reply with:
 
-*YES* – Confirm my order
-*NO* – Cancel my order
+  *YES* – Confirm my order
+  *NO* – Cancel my order
 
-Thank you for choosing *OATCLUB*.
+  Thank you for choosing *OATCLUB*.
 
-*Team OATCLUB*
-Own All Trends`;
+  *Team OATCLUB*
+  Own All Trends`;
 
 
 const createPaymentRecoveryMessage = (order = {}) => {
@@ -230,33 +229,33 @@ const createPaymentRecoveryMessage = (order = {}) => {
 
   return `Hi ${getCustomerName(order)},
 
-Welcome to *OATCLUB*.
+  Welcome to *OATCLUB*.
 
-We noticed that your payment for the order below was not successful, so your order is currently not confirmed.
+  We noticed that your payment for the order below was not successful, so your order is currently not confirmed.
 
-*Order:* #${getOrderNumber(order)}
-*Product:* ${getItemSummary(order)}
+  *Order:* #${getOrderNumber(order)}
+  *Product:* ${getItemSummary(order)}
 
-*Amount Payable:* ${formatCurrency(getFinalPayable(order))}
-*Payment Status:* ❌ Failed
+  *Amount Payable:* ${formatCurrency(getFinalPayable(order))}
+  *Payment Status:* ❌ Failed
 
-Your selected ${itemLabel} currently reserved for a limited time.
+  Your selected ${itemLabel} currently reserved for a limited time.
 
-If you would still like to place this order, please visit *https://oatclub.in* and complete your purchase.
+  If you would still like to place this order, please visit *https://oatclub.in* and complete your purchase.
 
-Once your payment is received, your order will be carefully quality-checked and dispatched within *7 business days*.
+  Once your payment is received, your order will be carefully quality-checked and dispatched within *7 business days*.
 
-Please reply with:
+  Please reply with:
 
-*YES* – I want to complete the payment and confirm my order.
-*NO* – Cancel my order.
+  *YES* – I want to complete the payment and confirm my order.
+  *NO* – Cancel my order.
 
-Website: https://oatclub.in
+  Website: https://oatclub.in
 
-Thank you for choosing *OATCLUB*.
+  Thank you for choosing *OATCLUB*.
 
-*Team OATCLUB*
-Own All Trends`;
+  *Team OATCLUB*
+  Own All Trends`;
 };
 
 
@@ -270,23 +269,23 @@ const createShippingMessage = (order = {}) => {
 
   return `Hi ${getCustomerName(order)},
 
-Great news! 🎉
+  Great news! 🎉
 
-Your *OATCLUB* order *#${getOrderNumber(order)}* has been shipped and is on its way.
+  Your *OATCLUB* order *#${getOrderNumber(order)}* has been shipped and is on its way.
 
-*Shipping Details*
-Courier: *${courierName || "Assigned Courier"}*
-AWB: *${awb || "Available shortly"}*
+  *Shipping Details*
+  Courier: *${courierName || "Assigned Courier"}*
+  AWB: *${awb || "Available shortly"}*
 
-*Track your order:*
-${trackingUrl || "Tracking link will be updated shortly."}
+  *Track your order:*
+  ${trackingUrl || "Tracking link will be updated shortly."}
 
-Please keep your phone available for courier and delivery updates.
+  Please keep your phone available for courier and delivery updates.
 
-Thank you for shopping with *OATCLUB*. We can't wait for you to receive your order!
+  Thank you for shopping with *OATCLUB*. We can't wait for you to receive your order!
 
-*Team OATCLUB*
-Own All Trends`;
+  *Team OATCLUB*
+  Own All Trends`;
 };
 
 const createWhatsAppLink = (order, type) => {
@@ -357,6 +356,8 @@ export default function OrderRowActions({
   const [invoice, setInvoice] = useState(null);
   const [error, setError] = useState("");
   const [splitLoading, setSplitLoading] = useState(false);
+  const [splitModalOpen, setSplitModalOpen] = useState(false);
+  const [splitRows, setSplitRows] = useState([]);
   const [invoiceLoading, setInvoiceLoading] =
     useState(false);
 
@@ -454,22 +455,22 @@ export default function OrderRowActions({
     documentTitle: `Invoice-${invoiceTitle}`,
 
     pageStyle: `
-      @page {
-        size: A4;
-        margin: 10mm;
-      }
-
-      @media print {
-        html,
-        body {
-          margin: 0;
-          padding: 0;
-          background: #ffffff;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
+        @page {
+          size: A4;
+          margin: 10mm;
         }
-      }
-    `,
+
+        @media print {
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+      `,
   });
 
   const loadInvoice = useCallback(async () => {
@@ -791,59 +792,217 @@ export default function OrderRowActions({
     }
   };
 
-  const handleSplitOrder = async () => {
-    if (!orderId || splitLoading || !splitAvailable) {
+  const handleSplitOrder = () => {
+    if (!orderId || splitLoading || !splitAvailable) return;
+
+    const items = getItems(order);
+
+    if (!items.length) {
+      toast.error("Order has no items to split");
       return;
     }
 
-    let shipments;
+    const rows = items.map((item) => ({
+      lineId: safe(item?.lineId),
+      title: getItemTitle(item),
+      size: getItemSize(item),
+      thumbnail:
+        item?.productSnapshot?.thumbnail ||
+        item?.thumbnail ||
+        "",
+      price: Number(item?.price || 0),
+      quantity: Math.max(
+        1,
+        Number(item?.quantity || 1),
+      ),
+      shipmentAQty: 0,
+    }));
 
-    try {
-      shipments = buildTwoWayOrderSplit(order);
-    } catch (splitError) {
-      toast.error(splitError?.message || "Order cannot be split");
+    if (rows.some((row) => !row.lineId)) {
+      toast.error("Some order items are missing lineId");
       return;
     }
 
-    const shipmentASummary = shipments[0]?.items
-      ?.map((item) => {
-        const orderItem = getItems(order).find(
-          (currentItem) =>
-            safe(currentItem?.lineId) === safe(item?.lineId),
-        );
-
-        return `${getItemTitle(orderItem)} × ${item.quantity}`;
-      })
-      .join(", ");
-
-    const shipmentBSummary = shipments[1]?.items
-      ?.map((item) => {
-        const orderItem = getItems(order).find(
-          (currentItem) =>
-            safe(currentItem?.lineId) === safe(item?.lineId),
-        );
-
-        return `${getItemTitle(orderItem)} × ${item.quantity}`;
-      })
-      .join(", ");
-
-    const confirmed = window.confirm(
-      `Split order ${orderNumber}?\n\n` +
-      `${orderNumber}-A: ${shipmentASummary}\n` +
-      `${orderNumber}-B: ${shipmentBSummary}\n\n` +
-      `The original order will become the parent order.`,
-    );
-
-    if (!confirmed) return;
-
+    setSplitRows(rows);
     setOpen(false);
+    setSplitModalOpen(true);
+  };
+
+  const updateShipmentAQty = (lineId, value) => {
+    setSplitRows((current) =>
+      current.map((row) => {
+        if (row.lineId !== lineId) return row;
+
+        const requested = Number(value);
+
+        const quantity = Math.max(
+          0,
+          Math.min(
+            row.quantity,
+            Number.isFinite(requested)
+              ? requested
+              : 0,
+          ),
+        );
+
+        return {
+          ...row,
+          shipmentAQty: Math.floor(quantity),
+        };
+      }),
+    );
+  };
+
+  const assignAllToA = (lineId) => {
+    setSplitRows((current) =>
+      current.map((row) =>
+        row.lineId === lineId
+          ? {
+            ...row,
+            shipmentAQty: row.quantity,
+          }
+          : row,
+      ),
+    );
+  };
+
+  const assignAllToB = (lineId) => {
+    setSplitRows((current) =>
+      current.map((row) =>
+        row.lineId === lineId
+          ? {
+            ...row,
+            shipmentAQty: 0,
+          }
+          : row,
+      ),
+    );
+  };
+
+  const getManualSplitPreview = () => {
+    const shipmentAItems = [];
+    const shipmentBItems = [];
+
+    let shipmentASubtotal = 0;
+    let shipmentBSubtotal = 0;
+
+    let shipmentAQuantity = 0;
+    let shipmentBQuantity = 0;
+
+    for (const row of splitRows) {
+      const aQty = Math.max(
+        0,
+        Math.min(
+          row.quantity,
+          Number(row.shipmentAQty || 0),
+        ),
+      );
+
+      const bQty = row.quantity - aQty;
+
+      if (aQty > 0) {
+        shipmentAItems.push({
+          lineId: row.lineId,
+          quantity: aQty,
+        });
+
+        shipmentAQuantity += aQty;
+        shipmentASubtotal += row.price * aQty;
+      }
+
+      if (bQty > 0) {
+        shipmentBItems.push({
+          lineId: row.lineId,
+          quantity: bQty,
+        });
+
+        shipmentBQuantity += bQty;
+        shipmentBSubtotal += row.price * bQty;
+      }
+    }
+
+    const parentSubtotal =
+      Number(order?.subtotal || 0);
+
+    const parentFinalPayable =
+      Number(order?.finalPayable || 0);
+
+    const aRatio =
+      parentSubtotal > 0
+        ? shipmentASubtotal / parentSubtotal
+        : 0;
+
+    const estimatedAPayable =
+      Math.round(
+        parentFinalPayable * aRatio,
+      );
+
+    const estimatedBPayable =
+      parentFinalPayable -
+      estimatedAPayable;
+
+    return {
+      shipmentAItems,
+      shipmentBItems,
+
+      shipmentAQuantity,
+      shipmentBQuantity,
+
+      shipmentASubtotal,
+      shipmentBSubtotal,
+
+      estimatedAPayable,
+      estimatedBPayable,
+    };
+  };
+
+  const confirmManualSplit = async () => {
+    if (
+      !orderId ||
+      splitLoading ||
+      !splitAvailable
+    ) {
+      return;
+    }
+
+    const preview = getManualSplitPreview();
+
+    if (!preview.shipmentAItems.length) {
+      toast.error(
+        "Shipment A must contain at least one item",
+      );
+      return;
+    }
+
+    if (!preview.shipmentBItems.length) {
+      toast.error(
+        "Shipment B must contain at least one item",
+      );
+      return;
+    }
+
+    const shipments = [
+      {
+        suffix: "A",
+        items: preview.shipmentAItems,
+      },
+      {
+        suffix: "B",
+        items: preview.shipmentBItems,
+      },
+    ];
+
     setSplitLoading(true);
 
     try {
-      const result = await splitOrderIntoShipments(
-        orderId,
-        shipments,
-      );
+      const result =
+        await splitOrderIntoShipments(
+          orderId,
+          shipments,
+        );
+
+      setSplitModalOpen(false);
+      setSplitRows([]);
 
       toast.success(
         `Order split into ${orderNumber}-A and ${orderNumber}-B`,
@@ -855,10 +1014,14 @@ export default function OrderRowActions({
 
       await onRefresh?.();
     } catch (splitError) {
-      console.error("Split order error:", splitError);
+      console.error(
+        "Manual split order error:",
+        splitError,
+      );
 
       toast.error(
-        splitError?.message || "Failed to split order",
+        splitError?.message ||
+        "Failed to split order",
       );
     } finally {
       setSplitLoading(false);
@@ -1824,6 +1987,318 @@ export default function OrderRowActions({
           </div>
         )}
       </div>
+
+      {splitModalOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 flex items-start justify-center overflow-y-auto bg-black/55 p-3 pt-6 backdrop-blur-sm sm:p-5 sm:pt-8"
+            style={{ zIndex: 2147483647 }}
+          >             <div className="my-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl max-h-[calc(100dvh-48px)] sm:max-h-[calc(100dvh-64px)]">
+              {/* Header */}
+              <div className="relative z-20 flex shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 sm:px-5 sm:py-4">                  <div>
+                <h2 className="text-base font-black text-zinc-950">
+                  Split Order
+                </h2>
+
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  #{orderNumber} · Choose quantity for Shipment A.
+                  Remaining quantity automatically goes to Shipment B.
+                </p>
+              </div>
+
+                <button
+                  type="button"
+                  disabled={splitLoading}
+                  onClick={() => {
+                    setSplitModalOpen(false);
+                    setSplitRows([]);
+                  }}
+                  className="rounded-lg px-3 py-2 text-sm font-bold text-zinc-500 hover:bg-zinc-100"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Products */}
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 md:p-5">                  <div className="space-y-3">
+                {splitRows.map((row) => {
+                  const aQty = Number(
+                    row.shipmentAQty || 0,
+                  );
+
+                  const bQty =
+                    row.quantity - aQty;
+
+                  return (
+                    <div
+                      key={row.lineId}
+                      className="rounded-xl border border-zinc-200 p-3"
+                    >
+                      <div className="flex gap-3">
+
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-100">
+                          {row.thumbnail ? (
+                            <img
+                              src={row.thumbnail}
+                              alt={row.title}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center">
+                              <PackageOpen
+                                size={18}
+                                className="text-zinc-400"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-bold text-zinc-900">
+                                {row.title}
+                              </p>
+
+                              <p className="mt-1 text-xs text-zinc-500">
+                                {row.size
+                                  ? `Size ${row.size} · `
+                                  : ""}
+                                ₹{Number(
+                                  row.price || 0,
+                                ).toLocaleString("en-IN")}
+                                {" · "}
+                                Qty {row.quantity}
+                              </p>
+                            </div>
+
+                            <div className="flex shrink-0 items-center gap-2">
+
+                              {/* A */}
+                              <div className="rounded-xl border border-violet-200 bg-violet-50 p-2">
+                                <p className="mb-1 text-[9px] font-black uppercase tracking-wider text-violet-600">
+                                  Shipment A
+                                </p>
+
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateShipmentAQty(
+                                        row.lineId,
+                                        aQty - 1,
+                                      )
+                                    }
+                                    className="h-7 w-7 rounded-md bg-white text-sm font-black shadow-sm"
+                                  >
+                                    −
+                                  </button>
+
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={row.quantity}
+                                    value={aQty}
+                                    onChange={(event) =>
+                                      updateShipmentAQty(
+                                        row.lineId,
+                                        event.target.value,
+                                      )
+                                    }
+                                    className="h-7 w-12 rounded-md border border-violet-200 bg-white text-center text-xs font-black outline-none"
+                                  />
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateShipmentAQty(
+                                        row.lineId,
+                                        aQty + 1,
+                                      )
+                                    }
+                                    className="h-7 w-7 rounded-md bg-white text-sm font-black shadow-sm"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* B */}
+                              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-2 text-center">
+                                <p className="mb-1 text-[9px] font-black uppercase tracking-wider text-zinc-500">
+                                  Shipment B
+                                </p>
+
+                                <div className="flex h-7 min-w-12 items-center justify-center rounded-md bg-white px-3 text-xs font-black text-zinc-900 shadow-sm">
+                                  {bQty}
+                                </div>
+                              </div>
+
+                            </div>
+                          </div>
+
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                assignAllToA(row.lineId)
+                              }
+                              className="rounded-md bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700 hover:bg-violet-100"
+                            >
+                              All → A
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                assignAllToB(row.lineId)
+                              }
+                              className="rounded-md bg-zinc-100 px-2 py-1 text-[10px] font-bold text-zinc-700 hover:bg-zinc-200"
+                            >
+                              All → B
+                            </button>
+                          </div>
+
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              </div>
+
+              {/* Footer / preview */}
+              {(() => {
+                const preview =
+                  getManualSplitPreview();
+
+                const valid =
+                  preview.shipmentAItems.length > 0 &&
+                  preview.shipmentBItems.length > 0;
+
+                return (
+                  <div className="relative z-20 shrink-0 border-t border-zinc-200 bg-zinc-50 p-3 sm:p-4 md:p-5">
+                    <div className="grid grid-cols-2 gap-3">
+
+                      <div className="rounded-xl border border-violet-200 bg-white p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-violet-700">
+                            Shipment A
+                          </span>
+
+                          <span className="text-xs font-bold text-zinc-500">
+                            {preview.shipmentAQuantity} qty
+                          </span>
+                        </div>
+
+                        <p className="mt-2 text-lg font-black text-zinc-950">
+                          ₹
+                          {preview.estimatedAPayable.toLocaleString(
+                            "en-IN",
+                          )}
+                        </p>
+
+                        <p className="text-[10px] text-zinc-500">
+                          Subtotal ₹
+                          {preview.shipmentASubtotal.toLocaleString(
+                            "en-IN",
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-zinc-700">
+                            Shipment B
+                          </span>
+
+                          <span className="text-xs font-bold text-zinc-500">
+                            {preview.shipmentBQuantity} qty
+                          </span>
+                        </div>
+
+                        <p className="mt-2 text-lg font-black text-zinc-950">
+                          ₹
+                          {preview.estimatedBPayable.toLocaleString(
+                            "en-IN",
+                          )}
+                        </p>
+
+                        <p className="text-[10px] text-zinc-500">
+                          Subtotal ₹
+                          {preview.shipmentBSubtotal.toLocaleString(
+                            "en-IN",
+                          )}
+                        </p>
+                      </div>
+
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between rounded-xl bg-white px-3 py-2 text-xs">
+                      <span className="text-zinc-500">
+                        Original Final Payable
+                      </span>
+
+                      <span className="font-black text-zinc-950">
+                        {formatCurrency(
+                          getFinalPayable(order),
+                        )}
+                      </span>
+                    </div>
+
+                    {!valid && (
+                      <p className="mt-2 text-xs font-semibold text-red-600">
+                        Both Shipment A and Shipment B must contain at least one item.
+                      </p>
+                    )}
+
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        disabled={splitLoading}
+                        onClick={() => {
+                          setSplitModalOpen(false);
+                          setSplitRows([]);
+                        }}
+                        className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50"
+                      >
+                        Cancel
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={
+                          splitLoading || !valid
+                        }
+                        onClick={confirmManualSplit}
+                        className="inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {splitLoading ? (
+                          <>
+                            <Loader2
+                              size={14}
+                              className="animate-spin"
+                            />
+                            Splitting...
+                          </>
+                        ) : (
+                          <>
+                            <Split size={14} />
+                            Confirm Split
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                  </div>
+                );
+              })()}
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {/* Printable invoice */}
 
