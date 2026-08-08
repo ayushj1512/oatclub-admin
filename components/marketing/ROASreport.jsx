@@ -199,6 +199,20 @@ export default function ROASreport() {
     [spendList]
   );
 
+  const marketingCostAll = useMemo(() => {
+    const spend = num(roasSummary?.spendTotal);
+    const orders = num(roasSummary?.ordersAll);
+
+    return orders > 0 ? spend / orders : 0;
+  }, [roasSummary]);
+
+  const marketingCostValid = useMemo(() => {
+    const spend = num(roasSummary?.spendTotal);
+    const orders = num(roasSummary?.ordersValid);
+
+    return orders > 0 ? spend / orders : 0;
+  }, [roasSummary]);
+
   const selectedRangeText = useMemo(() => {
     if (!from && !to) return "All Time";
     return `${from ? prettyDate(from) : "Start"} → ${to ? prettyDate(to) : "End"}`;
@@ -230,21 +244,32 @@ export default function ROASreport() {
       setDownloading(true);
 
       const wb = new ExcelJS.Workbook();
-      wb.creator = "ChatGPT";
+      wb.creator = "OATCLUB";
       wb.created = new Date();
 
+      // =========================
+      // SUMMARY
+      // =========================
       const summarySheet = wb.addWorksheet("Summary");
+
       summarySheet.columns = [
         { header: "From", key: "from", width: 14 },
         { header: "To", key: "to", width: 14 },
         { header: "Source", key: "source", width: 18 },
-        { header: "Spend Total", key: "spendTotal", width: 16 },
-        { header: "Revenue All", key: "revenueAll", width: 16 },
-        { header: "Revenue Valid", key: "revenueValid", width: 16 },
+        { header: "Marketing Spend", key: "spendTotal", width: 18 },
+
         { header: "Orders All", key: "ordersAll", width: 14 },
         { header: "Orders Valid", key: "ordersValid", width: 14 },
+
+        { header: "Cost / All Order", key: "costAll", width: 18 },
+        { header: "Cost / Valid Order", key: "costValid", width: 20 },
+
+        { header: "Revenue All", key: "revenueAll", width: 16 },
+        { header: "Revenue Valid", key: "revenueValid", width: 16 },
+
         { header: "AOV All", key: "aovAll", width: 14 },
         { header: "AOV Valid", key: "aovValid", width: 14 },
+
         { header: "ROAS All", key: "roasAll", width: 14 },
         { header: "ROAS Valid", key: "roasValid", width: 14 },
       ];
@@ -253,67 +278,110 @@ export default function ROASreport() {
         from: from || "ALL",
         to: to || "ALL",
         source: source || "All",
+
         spendTotal: num(roasSummary?.spendTotal),
-        revenueAll: num(roasSummary?.revenueAll),
-        revenueValid: num(roasSummary?.revenueValid),
+
         ordersAll: num(roasSummary?.ordersAll),
         ordersValid: num(roasSummary?.ordersValid),
+
+        costAll: marketingCostAll,
+        costValid: marketingCostValid,
+
+        revenueAll: num(roasSummary?.revenueAll),
+        revenueValid: num(roasSummary?.revenueValid),
+
         aovAll: num(roasSummary?.aovAll),
         aovValid: num(roasSummary?.aovValid),
+
         roasAll: num(roasSummary?.roasAll),
         roasValid: num(roasSummary?.roasValid),
       });
-      summarySheet.getRow(1).font = { bold: true };
 
+      summarySheet.getRow(1).font = { bold: true };
+      summarySheet.views = [{ state: "frozen", ySplit: 1 }];
+
+      // =========================
+      // DAY WISE
+      // =========================
       const daySheet = wb.addWorksheet("Day Wise");
+
       daySheet.columns = [
         { header: "Date", key: "date", width: 14 },
         { header: "Spend", key: "spend", width: 14 },
         { header: "Entries", key: "entries", width: 12 },
-        { header: "Revenue All", key: "revenueAll", width: 16 },
-        { header: "Revenue Valid", key: "revenueValid", width: 16 },
+
         { header: "Orders All", key: "ordersAll", width: 14 },
         { header: "Orders Valid", key: "ordersValid", width: 14 },
+
+        { header: "Cost / All Order", key: "costAll", width: 18 },
+        { header: "Cost / Valid Order", key: "costValid", width: 20 },
+
+        { header: "Revenue All", key: "revenueAll", width: 16 },
+        { header: "Revenue Valid", key: "revenueValid", width: 16 },
+
         { header: "AOV All", key: "aovAll", width: 14 },
         { header: "AOV Valid", key: "aovValid", width: 14 },
+
         { header: "ROAS All", key: "roasAll", width: 14 },
         { header: "ROAS Valid", key: "roasValid", width: 14 },
       ];
 
-      rows.forEach((row) =>
+      rows.forEach((row) => {
+        const ordersAll = num(row.ordersAll);
+        const ordersValid = num(row.ordersValid);
+        const spend = num(row.spend);
+
         daySheet.addRow({
           date: row.ymd,
-          spend: num(row.spend),
+          spend,
           entries: num(row.entries),
+
+          ordersAll,
+          ordersValid,
+
+          costAll: ordersAll ? spend / ordersAll : 0,
+          costValid: ordersValid ? spend / ordersValid : 0,
+
           revenueAll: num(row.revenueAll),
           revenueValid: num(row.revenueValid),
-          ordersAll: num(row.ordersAll),
-          ordersValid: num(row.ordersValid),
+
           aovAll: num(row.aovAll),
           aovValid: num(row.aovValid),
+
           roasAll: num(row.roasAll),
           roasValid: num(row.roasValid),
-        })
-      );
-      daySheet.getRow(1).font = { bold: true };
+        });
+      });
 
+      daySheet.getRow(1).font = { bold: true };
+      daySheet.views = [{ state: "frozen", ySplit: 1 }];
+
+      // =========================
+      // SPEND DAY WISE
+      // =========================
       const spendSheet = wb.addWorksheet("Spend Day Wise");
+
       spendSheet.columns = [
         { header: "Date", key: "date", width: 14 },
         { header: "Spend", key: "spend", width: 14 },
         { header: "Entries", key: "entries", width: 12 },
       ];
 
-      spendList.forEach((row) =>
+      spendList.forEach((row) => {
         spendSheet.addRow({
           date: row.ymd,
           spend: num(row.spend),
           entries: num(row.entries),
-        })
-      );
+        });
+      });
+
       spendSheet.getRow(1).font = { bold: true };
 
+      // =========================
+      // EXPORT
+      // =========================
       const buffer = await wb.xlsx.writeBuffer();
+
       saveAs(
         new Blob([buffer]),
         `roas-report-${from || "all"}-${to || "all"}.xlsx`
@@ -505,7 +573,7 @@ export default function ROASreport() {
           ) : null}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <AccentCard
             icon={BadgeIndianRupee}
             title="Marketing Spend"
@@ -513,6 +581,23 @@ export default function ROASreport() {
             sub={`${totalSpendEntries.toLocaleString("en-IN")} entries`}
             tone="amber"
           />
+
+          <AccentCard
+            icon={ShoppingCart}
+            title="Cost / All Order"
+            value={money(marketingCostAll)}
+            sub={`${num(roasSummary?.ordersAll).toLocaleString("en-IN")} total orders`}
+            tone="violet"
+          />
+
+          <AccentCard
+            icon={ShoppingCart}
+            title="Cost / Valid Order"
+            value={money(marketingCostValid)}
+            sub={`${num(roasSummary?.ordersValid).toLocaleString("en-IN")} valid orders`}
+            tone="rose"
+          />
+
           <AccentCard
             icon={TrendingUp}
             title="Revenue (All Status)"
@@ -520,14 +605,14 @@ export default function ROASreport() {
             sub={`ROAS: ${ratio(roasSummary?.roasAll)}`}
             tone="blue"
           />
+
           <AccentCard
             icon={TrendingUp}
-            title="Revenue (Excl. Failed/Cancelled)"
+            title="Revenue (Valid)"
             value={money(roasSummary?.revenueValid)}
             sub={`ROAS: ${ratio(roasSummary?.roasValid)}`}
             tone="emerald"
           />
-        
         </div>
 
         <div className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
@@ -545,7 +630,7 @@ export default function ROASreport() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-[1280px] w-full text-sm">
+            <table className="min-w-[1450px] w-full text-sm">
               <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-4 py-3">Date</th>
@@ -555,6 +640,8 @@ export default function ROASreport() {
                   <th className="px-4 py-3">Revenue Valid</th>
                   <th className="px-4 py-3">Orders All</th>
                   <th className="px-4 py-3">Orders Valid</th>
+                  <th className="px-4 py-3">Cost / All Order</th>
+                  <th className="px-4 py-3">Cost / Valid Order</th>
                   <th className="px-4 py-3">AOV All</th>
                   <th className="px-4 py-3">AOV Valid</th>
                   <th className="px-4 py-3">ROAS All</th>
@@ -565,7 +652,7 @@ export default function ROASreport() {
               <tbody>
                 {roasLoading ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan={13} className="px-4 py-10 text-center text-gray-500">
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Loading...
@@ -573,47 +660,62 @@ export default function ROASreport() {
                     </td>
                   </tr>
                 ) : rows.length ? (
-                  rows.map((row) => (
-                    <tr
-                      key={row.ymd}
-                      className="border-t border-black/5 transition hover:bg-gray-50/70"
-                    >
-                      <td className="px-4 py-3 font-medium text-black">
-                        {prettyDate(row.ymd)}
-                      </td>
-                      <td className="px-4 py-3 text-amber-700 font-medium">
-                        {money(row.spend)}
-                      </td>
-                      <td className="px-4 py-3">{num(row.entries)}</td>
-                      <td className="px-4 py-3 text-blue-700 font-medium">
-                        {money(row.revenueAll)}
-                      </td>
-                      <td className="px-4 py-3 text-emerald-700 font-medium">
-                        {money(row.revenueValid)}
-                      </td>
-                      <td className="px-4 py-3">{num(row.ordersAll)}</td>
-                      <td className="px-4 py-3">{num(row.ordersValid)}</td>
-                      <td className="px-4 py-3 text-violet-700 font-medium">
-                        {money(row.aovAll)}
-                      </td>
-                      <td className="px-4 py-3 text-rose-700 font-medium">
-                        {money(row.aovValid)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                          {ratio(row.roasAll)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                          {ratio(row.roasValid)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  rows.map((row) => {
+                    const costAll = num(row.ordersAll)
+                      ? num(row.spend) / num(row.ordersAll)
+                      : 0;
+                    const costValid = num(row.ordersValid)
+                      ? num(row.spend) / num(row.ordersValid)
+                      : 0;
+
+                    return (
+                      <tr
+                        key={row.ymd}
+                        className="border-t border-black/5 transition hover:bg-gray-50/70"
+                      >
+                        <td className="px-4 py-3 font-medium text-black">
+                          {prettyDate(row.ymd)}
+                        </td>
+                        <td className="px-4 py-3 text-amber-700 font-medium">
+                          {money(row.spend)}
+                        </td>
+                        <td className="px-4 py-3">{num(row.entries)}</td>
+                        <td className="px-4 py-3 text-blue-700 font-medium">
+                          {money(row.revenueAll)}
+                        </td>
+                        <td className="px-4 py-3 text-emerald-700 font-medium">
+                          {money(row.revenueValid)}
+                        </td>
+                        <td className="px-4 py-3">{num(row.ordersAll)}</td>
+                        <td className="px-4 py-3">{num(row.ordersValid)}</td>
+                        <td className="px-4 py-3 font-medium text-violet-700">
+                          {money(costAll)}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-rose-700">
+                          {money(costValid)}
+                        </td>
+                        <td className="px-4 py-3 text-violet-700 font-medium">
+                          {money(row.aovAll)}
+                        </td>
+                        <td className="px-4 py-3 text-rose-700 font-medium">
+                          {money(row.aovValid)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                            {ratio(row.roasAll)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            {ratio(row.roasValid)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={11} className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan={13} className="px-4 py-10 text-center text-gray-500">
                       No data found
                     </td>
                   </tr>

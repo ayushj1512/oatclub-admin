@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CheckCircle2,
   Clock3,
   MessageCircle,
   ShieldCheck,
@@ -26,34 +25,66 @@ const formatIST = (date) => {
 const getConfirmedByMeta = (confirmedBy) => {
   const value = String(confirmedBy || "").toLowerCase();
 
-  if (value === "admin") {
-    return {
+  const map = {
+    admin: {
       label: "Admin",
       icon: ShieldCheck,
       cls: "bg-blue-50 text-blue-700 ring-blue-100",
-    };
-  }
-
-  if (value === "customer") {
-    return {
+    },
+    customer: {
       label: "Customer",
       icon: UserCheck,
       cls: "bg-green-50 text-green-700 ring-green-100",
-    };
-  }
-
-  if (value === "auto") {
-    return {
+    },
+    auto: {
       label: "Auto",
       icon: Zap,
       cls: "bg-amber-50 text-amber-700 ring-amber-100",
+    },
+  };
+
+  return (
+    map[value] || {
+      label: "-",
+      icon: Clock3,
+      cls: "bg-gray-50 text-gray-600 ring-gray-100",
+    }
+  );
+};
+
+const getConfirmationState = (order) => {
+  const status = String(
+    order?.confirmationStatus || order?.status || ""
+  ).toLowerCase();
+
+  const isCancelled =
+    order?.isCancelled === true ||
+    Boolean(order?.cancelledAt) ||
+    ["cancelled", "canceled"].includes(status);
+
+  if (isCancelled) {
+    return {
+      key: "cancelled",
+      label: "Cancelled",
+      badge: "bg-red-50 text-red-700",
+      card: "bg-red-50/60",
+    };
+  }
+
+  if (order?.isConfirmed === true) {
+    return {
+      key: "confirmed",
+      label: "Confirmed",
+      badge: "bg-green-50 text-green-700",
+      card: "bg-green-50/60",
     };
   }
 
   return {
-    label: "-",
-    icon: Clock3,
-    cls: "bg-gray-50 text-gray-600 ring-gray-100",
+    key: "pending",
+    label: "Pending",
+    badge: "bg-amber-50 text-amber-700",
+    card: "bg-amber-50/60",
   };
 };
 
@@ -83,11 +114,7 @@ const getCustomerPhone = (order) => {
     phone = `91${phone}`;
   }
 
-  if (phone.startsWith("91") && phone.length === 12) {
-    return phone;
-  }
-
-  return "";
+  return phone.startsWith("91") && phone.length === 12 ? phone : "";
 };
 
 const getOrderItemsSummary = (order) => {
@@ -103,16 +130,16 @@ const getOrderItemsSummary = (order) => {
       "Product";
 
     const size = item?.selectedSize || item?.variant?.size;
-    const quantity = Number(item?.quantity || 1);
+    const quantity = Math.max(1, Number(item?.quantity || 1));
 
     return `${title}${size ? ` (${size})` : ""}${quantity > 1 ? ` × ${quantity}` : ""
       }`;
   });
 
-  const remainingCount = items.length - visibleItems.length;
+  const remaining = items.length - visibleItems.length;
 
-  return remainingCount > 0
-    ? `${visibleItems.join(", ")} and ${remainingCount} more item${remainingCount > 1 ? "s" : ""
+  return remaining > 0
+    ? `${visibleItems.join(", ")} and ${remaining} more item${remaining > 1 ? "s" : ""
     }`
     : visibleItems.join(", ");
 };
@@ -128,7 +155,6 @@ const getOrderTotal = (order) =>
 
 const createWhatsAppLink = (order) => {
   const phone = getCustomerPhone(order);
-
   if (!phone) return "";
 
   const customerName = getCustomerName(order);
@@ -149,16 +175,14 @@ Order: *${orderNumber}*
 Items: ${itemSummary}
 Total: *₹${orderTotal.toLocaleString("en-IN")}*
 
-As each order is carefully curated and quality-checked specifically for you, our dispatch timeline is up to *7 days*.
-
-As a growing brand, we're committed to ensuring every order meets our quality standards before it leaves our warehouse. We truly appreciate your patience and support.
+Our dispatch timeline is up to *7 days* as every order is carefully quality-checked before dispatch.
 
 Kindly reply with:
 
-YES - Confirm my order
-NO - Cancel my order
+*YES* - Confirm my order
+*NO* - Cancel my order
 
-Once we receive your confirmation, we'll begin preparing your order.
+Once confirmed, we'll begin preparing your order.
 
 Thank you for choosing OATCLUB.
 
@@ -169,7 +193,11 @@ Own All Trends`;
 };
 
 export default function OrderConfirmationDetails({ order }) {
-  const isConfirmed = order?.isConfirmed === true;
+  const state = getConfirmationState(order);
+  const isConfirmed = state.key === "confirmed";
+  const isCancelled = state.key === "cancelled";
+  const isPending = state.key === "pending";
+
   const meta = getConfirmedByMeta(order?.confirmedBy);
   const Icon = meta.icon;
 
@@ -177,13 +205,12 @@ export default function OrderConfirmationDetails({ order }) {
   const hasValidPhone = Boolean(whatsappLink);
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white/90 p-5 shadow-sm">
-      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+    <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm">
+      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
         <div>
-          <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-            <CheckCircle2 size={18} />
+          <h3 className="text-sm font-semibold text-gray-900">
             Confirmation Details
-          </h2>
+          </h3>
 
           <p className="mt-0.5 text-xs text-gray-500">
             Order confirmation source and timestamp.
@@ -191,21 +218,25 @@ export default function OrderConfirmationDetails({ order }) {
         </div>
 
         <span
-          className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${isConfirmed
-              ? "bg-green-50 text-green-700"
-              : "bg-red-50 text-red-700"
-            }`}
+          className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${state.badge}`}
         >
-          {isConfirmed ? "Confirmed" : "Not Confirmed"}
+          {state.label}
         </span>
       </div>
 
       <div className="grid gap-3 text-sm sm:grid-cols-3">
-        <div className="rounded-xl bg-gray-50 p-4">
+        <div className={`rounded-xl p-4 ${state.card}`}>
           <p className="text-xs font-medium text-gray-500">Status</p>
 
-          <p className="mt-1 font-semibold text-gray-900">
-            {isConfirmed ? "Confirmed" : "Pending"}
+          <p
+            className={`mt-1 font-semibold ${isConfirmed
+                ? "text-green-700"
+                : isCancelled
+                  ? "text-red-700"
+                  : "text-amber-700"
+              }`}
+          >
+            {state.label}
           </p>
         </div>
 
@@ -213,7 +244,8 @@ export default function OrderConfirmationDetails({ order }) {
           <p className="text-xs font-medium text-gray-500">Confirmed By</p>
 
           <span
-            className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${meta.cls}`}
+            className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${isConfirmed ? meta.cls : "bg-gray-100 text-gray-500 ring-gray-200"
+              }`}
           >
             <Icon size={13} />
             {isConfirmed ? meta.label : "-"}
@@ -221,15 +253,21 @@ export default function OrderConfirmationDetails({ order }) {
         </div>
 
         <div className="rounded-xl bg-gray-50 p-4">
-          <p className="text-xs font-medium text-gray-500">Confirmed At</p>
+          <p className="text-xs font-medium text-gray-500">
+            {isCancelled ? "Cancelled At" : "Confirmed At"}
+          </p>
 
           <p className="mt-1 font-semibold text-gray-900">
-            {isConfirmed ? formatIST(order?.confirmedAt) : "-"}
+            {isConfirmed
+              ? formatIST(order?.confirmedAt)
+              : isCancelled
+                ? formatIST(order?.cancelledAt)
+                : "-"}
           </p>
         </div>
       </div>
 
-      {!isConfirmed && (
+      {isPending && (
         <div className="mt-4 rounded-xl border border-green-100 bg-green-50/50 p-4">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div>
@@ -238,8 +276,7 @@ export default function OrderConfirmationDetails({ order }) {
               </p>
 
               <p className="mt-0.5 text-xs leading-5 text-gray-600">
-                Opens WhatsApp with a polite OATCLUB confirmation message and a
-                short order summary.
+                Opens WhatsApp with the order summary and confirmation request.
               </p>
             </div>
 
