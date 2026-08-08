@@ -280,6 +280,7 @@ export const sidebarMenus = {
       label: "Secondary Products",
       href: "/products/secondary-products",
     },
+    { label: "Product Costing", href: "/products/product-costing" },
 
     { label: "Attributes", href: "/products/attributes" },
     { label: "Variants", href: "/products/variants" },
