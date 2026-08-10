@@ -67,10 +67,10 @@ const formatINR = (value) =>
 const getOrderRevenue = (order) =>
   toNumber(
     order?.finalPayable ??
-      order?.totalAmount ??
-      order?.grandTotal ??
-      order?.amount ??
-      0
+    order?.totalAmount ??
+    order?.grandTotal ??
+    order?.amount ??
+    0
   );
 
 const getPaginationItems = (currentPage, totalPages) => {
@@ -141,11 +141,10 @@ function PaginationBar({
           <button
             onClick={onRefresh}
             disabled={loading}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
-              loading
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${loading
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-white border border-gray-200 hover:bg-gray-50"
-            }`}
+              }`}
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
@@ -162,11 +161,10 @@ function PaginationBar({
             onClick={() =>
               onPageChange(Math.max(currentPage - 1, 1))
             }
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
-              !canGoPrev || loading
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoPrev || loading
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-white border border-gray-200 hover:bg-gray-50"
-            }`}
+              }`}
           >
             <ChevronLeft size={16} />
             Prev
@@ -177,11 +175,10 @@ function PaginationBar({
             onClick={() =>
               onPageChange(Math.min(currentPage + 1, totalPages))
             }
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
-              !canGoNext || loading
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${!canGoNext || loading
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-black text-white hover:opacity-90"
-            }`}
+              }`}
           >
             Next
             <ChevronRight size={16} />
@@ -203,11 +200,10 @@ function PaginationBar({
               key={item}
               onClick={() => onPageChange(item)}
               disabled={loading}
-              className={`min-w-[42px] px-3 py-2 rounded-xl text-sm font-semibold transition ${
-                currentPage === item
+              className={`min-w-[42px] px-3 py-2 rounded-xl text-sm font-semibold transition ${currentPage === item
                   ? "bg-black text-white shadow-sm"
                   : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-              }`}
+                }`}
             >
               {item}
             </button>
@@ -266,6 +262,7 @@ export default function ConfirmedOrdersPage({
 
   const [status, setStatus] = useState("");
   const [priority, setPriority] = useState("");
+  const [readiness, setReadiness] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -286,6 +283,7 @@ export default function ConfirmedOrdersPage({
     setStatus("");
     setPriority("");
     setCurrentPage(1);
+    setReadiness("");
   }, []);
 
   useEffect(() => {
@@ -365,7 +363,48 @@ export default function ConfirmedOrdersPage({
   }, [loadOrders]);
 
   const sortedOrders = useMemo(() => {
-    return [...(orders || [])].sort((a, b) => {
+    let list = [...(orders || [])];
+
+    // Only relevant for unconfirmed orders
+    if (isUnconfirmed && readiness) {
+      list = list.filter((order) => {
+        const r = order?.fulfillmentReadiness;
+
+        const canFulfill =
+          r?.canFulfill === true ||
+          r?.canFullyFulfill === true ||
+          r?.isFullyFulfillable === true ||
+          r?.status === "ready";
+
+        return readiness === "ready"
+          ? canFulfill
+          : !canFulfill;
+      });
+    }
+
+    return list.sort((a, b) => {
+      // 🔥 Unconfirmed: fulfillable orders first
+      if (isUnconfirmed) {
+        const ar = a?.fulfillmentReadiness;
+        const br = b?.fulfillmentReadiness;
+
+        const aReady =
+          ar?.canFulfill === true ||
+          ar?.canFullyFulfill === true ||
+          ar?.isFullyFulfillable === true ||
+          ar?.status === "ready";
+
+        const bReady =
+          br?.canFulfill === true ||
+          br?.canFullyFulfill === true ||
+          br?.isFullyFulfillable === true ||
+          br?.status === "ready";
+
+        if (aReady !== bReady) {
+          return aReady ? -1 : 1;
+        }
+      }
+
       const ad = new Date(
         a?.createdAt || a?.orderDate || 0
       ).getTime();
@@ -376,7 +415,7 @@ export default function ConfirmedOrdersPage({
 
       return bd - ad;
     });
-  }, [orders]);
+  }, [orders, isUnconfirmed, readiness]);
 
   const totalRevenue = useMemo(() => {
     return sortedOrders.reduce((sum, order) => {
@@ -424,11 +463,10 @@ export default function ConfirmedOrdersPage({
 
             <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
               <span
-                className={`px-3 py-1 rounded-full font-semibold ${
-                  isUnconfirmed
+                className={`px-3 py-1 rounded-full font-semibold ${isUnconfirmed
                     ? "bg-amber-50 text-amber-700"
                     : "bg-emerald-50 text-emerald-700"
-                }`}
+                  }`}
               >
                 {totalCount || sortedOrders.length}{" "}
                 {isUnconfirmed
@@ -601,6 +639,24 @@ export default function ConfirmedOrdersPage({
                 Confirmation
               </label>
 
+              {isUnconfirmed && (
+                <div>
+                  <label className="text-sm font-semibold text-gray-700">
+                    Inventory Readiness
+                  </label>
+
+                  <select
+                    className="w-full mt-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 outline-none"
+                    value={readiness}
+                    onChange={(e) => setReadiness(e.target.value)}
+                  >
+                    <option value="">All Orders</option>
+                    <option value="ready">🔥 Ready to Fulfill</option>
+                    <option value="not_ready">Waiting for Inventory</option>
+                  </select>
+                </div>
+              )}
+
               <input
                 value={
                   isUnconfirmed
@@ -608,11 +664,10 @@ export default function ConfirmedOrdersPage({
                     : "Confirmed only"
                 }
                 disabled
-                className={`w-full mt-2 px-3 py-2.5 rounded-xl border outline-none font-semibold cursor-not-allowed ${
-                  isUnconfirmed
+                className={`w-full mt-2 px-3 py-2.5 rounded-xl border outline-none font-semibold cursor-not-allowed ${isUnconfirmed
                     ? "bg-amber-50 border-amber-100 text-amber-700"
                     : "bg-emerald-50 border-emerald-100 text-emerald-700"
-                }`}
+                  }`}
               />
             </div>
           </div>
@@ -628,11 +683,10 @@ export default function ConfirmedOrdersPage({
                     prev === chip.key ? "" : chip.key
                   );
                 }}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${
-                  status === chip.key
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap ${status === chip.key
                     ? "bg-black text-white shadow-sm"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
+                  }`}
               >
                 {chip.label}
               </button>
@@ -718,8 +772,8 @@ export default function ConfirmedOrdersPage({
                     <OrderRow
                       key={String(
                         order?._id ||
-                          order?.orderNumber ||
-                          idx
+                        order?.orderNumber ||
+                        idx
                       )}
                       order={order}
                       onUpdated={syncOrderInList}

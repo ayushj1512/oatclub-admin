@@ -484,6 +484,8 @@ export default function OrdersListPage() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
+  const [readyToFulfill, setReadyToFulfill] =
+    useState(false);
   const pageSize = 100;
 
   // ✅ Update only changed order in list, avoid full page refresh feel
@@ -517,6 +519,7 @@ export default function OrdersListPage() {
     setSearch("");
     setFilters(INITIAL_ORDER_FILTERS);
     setCurrentPage(1);
+    setReadyToFulfill(false);
   }, []);
 
   const applySearch = useCallback(() => {
@@ -835,19 +838,33 @@ export default function OrdersListPage() {
   }, [currentPage, loadOrders]);
 
   const filteredOrders = useMemo(() => {
-    return applyClientFiltersToOrders({
+    let data = applyClientFiltersToOrders({
       orders,
       confirmFilter: filters.confirmFilter,
       influencerFilter: filters.isInfluencerOrder,
       priority: filters.priority,
       search,
     });
+
+    if (readyToFulfill) {
+      data = data.filter(
+        (order) =>
+          order?.isConfirmed !== true &&
+          norm(order?.paymentMethod) === "cod" &&
+          norm(order?.fulfillmentStatus) === "processing" &&
+          order?.fulfillmentReadiness
+            ?.isFullyFulfillable === true,
+      );
+    }
+
+    return data;
   }, [
     orders,
     filters.confirmFilter,
     filters.isInfluencerOrder,
     filters.priority,
     search,
+    readyToFulfill,
   ]);
 
   const getParentOrderNumber = (order = {}) => {
@@ -1446,6 +1463,22 @@ export default function OrdersListPage() {
           onClear={clearFilters}
           currentPageSize={pageSize}
         />
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentPage(1);
+              setReadyToFulfill((prev) => !prev);
+            }}
+            className={`rounded-xl border px-5 py-2.5 text-sm font-semibold transition ${readyToFulfill
+                ? "!border-emerald-600 !bg-emerald-600 !text-white"
+                : "!border-gray-900 !bg-white !text-gray-900 hover:!bg-gray-50"
+              }`}
+          >
+            🔥 Ready to Fulfill
+          </button>
+        </div>
 
         {/* Top Pagination */}
         <Card>

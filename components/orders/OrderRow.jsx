@@ -195,6 +195,27 @@ function OrderRow({
               </span>
             )}
 
+            {order?.fulfillmentReadiness &&
+              !order?.isConfirmed &&
+              String(order?.paymentMethod || "").toLowerCase() === "cod" &&
+              effectiveStatus === "processing" && (
+                <>
+                  {order.fulfillmentReadiness?.isFullyFulfillable ? (
+                    <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                      🔥 Ready to Fulfill
+                    </span>
+                  ) : order.fulfillmentReadiness?.status === "partial" ? (
+                    <span className="inline-flex rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                      Partial Inventory
+                    </span>
+                  ) : (
+                    <span className="inline-flex rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-semibold text-gray-600">
+                      Waiting for Inventory
+                    </span>
+                  )}
+                </>
+              )}
+
             {order?.isInfluencerOrder && (
               <span className="inline-flex rounded-md border border-pink-200 bg-pink-50 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-pink-700">
                 Influencer
@@ -380,15 +401,15 @@ function OrderRow({
                             )
                           }
                           className={`flex min-w-0 items-center gap-4 rounded-2xl border p-4 text-left transition hover:shadow-sm ${isA
-                              ? "border-blue-200 bg-blue-50/30 hover:bg-blue-50/60"
-                              : "border-amber-200 bg-amber-50/30 hover:bg-amber-50/60"
+                            ? "border-blue-200 bg-blue-50/30 hover:bg-blue-50/60"
+                            : "border-amber-200 bg-amber-50/30 hover:bg-amber-50/60"
                             }`}
                         >
                           {/* A / B */}
                           <div
                             className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-black text-white ${isA
-                                ? "bg-blue-600"
-                                : "bg-amber-500"
+                              ? "bg-blue-600"
+                              : "bg-amber-500"
                               }`}
                           >
                             {suffix}
@@ -425,8 +446,8 @@ function OrderRow({
 
                             <span
                               className={`mt-1 inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold capitalize ${isA
-                                  ? "border-blue-200 bg-blue-50 text-blue-700"
-                                  : "border-amber-200 bg-amber-50 text-amber-700"
+                                ? "border-blue-200 bg-blue-50 text-blue-700"
+                                : "border-amber-200 bg-amber-50 text-amber-700"
                                 }`}
                             >
                               {String(
@@ -462,22 +483,22 @@ function OrderRow({
                         <div
                           key={`shipment-${child?._id}`}
                           className={`overflow-hidden rounded-2xl border ${isA
-                              ? "border-blue-200 bg-blue-50/20"
-                              : "border-amber-200 bg-amber-50/20"
+                            ? "border-blue-200 bg-blue-50/20"
+                            : "border-amber-200 bg-amber-50/20"
                             }`}
                         >
                           {/* Shipment Header */}
                           <div
                             className={`flex items-center justify-between gap-4 border-b px-4 py-3 ${isA
-                                ? "border-blue-200 bg-blue-50/60"
-                                : "border-amber-200 bg-amber-50/60"
+                              ? "border-blue-200 bg-blue-50/60"
+                              : "border-amber-200 bg-amber-50/60"
                               }`}
                           >
                             <div className="flex min-w-0 items-center gap-3">
                               <div
                                 className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black text-white ${isA
-                                    ? "bg-blue-600"
-                                    : "bg-amber-500"
+                                  ? "bg-blue-600"
+                                  : "bg-amber-500"
                                   }`}
                               >
                                 {suffix}
@@ -493,8 +514,8 @@ function OrderRow({
 
                                 <span
                                   className={`rounded-full border px-2.5 py-1 text-[10px] font-bold capitalize ${isA
-                                      ? "border-blue-200 bg-white text-blue-700"
-                                      : "border-amber-200 bg-white text-amber-700"
+                                    ? "border-blue-200 bg-white text-blue-700"
+                                    : "border-amber-200 bg-white text-amber-700"
                                     }`}
                                 >
                                   {String(
@@ -545,8 +566,8 @@ function OrderRow({
                                   <div className="flex min-w-0 items-center gap-3">
                                     <div
                                       className={`h-14 w-1 shrink-0 rounded-full ${isA
-                                          ? "bg-blue-500"
-                                          : "bg-amber-500"
+                                        ? "bg-blue-500"
+                                        : "bg-amber-500"
                                         }`}
                                     />
 
@@ -613,8 +634,8 @@ function OrderRow({
                                   {/* Assignment */}
                                   <div
                                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-black text-white ${isA
-                                        ? "bg-blue-600"
-                                        : "bg-amber-500"
+                                      ? "bg-blue-600"
+                                      : "bg-amber-500"
                                       }`}
                                   >
                                     {suffix}
