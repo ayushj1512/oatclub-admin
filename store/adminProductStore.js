@@ -2149,6 +2149,163 @@ export const useAdminProductStore = create((set, get) => ({
   },
 
   /* ============================================================
+   BULK TRENDING BY PRODUCT CODES
+   PATCH /api/products/bulk/trending/by-codes
+
+   bulkMarkTrendingByCodes(["00229", "00230"], true)
+============================================================ */
+
+  bulkMarkTrendingByCodes: async (
+    codes = [],
+    isTrending = true
+  ) => {
+    try {
+      const normalizedCodes = Array.from(
+        new Set(
+          (Array.isArray(codes) ? codes : [codes])
+            .flatMap((value) =>
+              typeof value === "string"
+                ? value.split(",")
+                : [value]
+            )
+            .map((value) =>
+              String(value ?? "").trim()
+            )
+            .filter(Boolean)
+        )
+      );
+
+      if (!normalizedCodes.length) {
+        toast.error("Select at least one product");
+        return null;
+      }
+
+      const nextValue = Boolean(isTrending);
+
+      set({
+        saving: true,
+        error: null,
+      });
+
+      const res = await fetch(
+        `${API}/bulk/trending/by-codes`,
+        {
+          method: "PATCH",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            codes: normalizedCodes,
+            isTrending: nextValue,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message ||
+          "Bulk trending update failed"
+        );
+      }
+
+      const updatedProducts = Array.isArray(
+        data?.products
+      )
+        ? data.products
+        : [];
+
+      const updatedByCode = new Map(
+        updatedProducts.map((product) => [
+          String(
+            product?.productCode || ""
+          ).trim(),
+          product,
+        ])
+      );
+
+      const selectedCodesSet = new Set(
+        normalizedCodes.map((code) =>
+          String(code).trim()
+        )
+      );
+
+      set((state) => ({
+        products: (state.products || []).map(
+          (product) => {
+            const code = String(
+              product?.productCode || ""
+            ).trim();
+
+            if (!selectedCodesSet.has(code)) {
+              return product;
+            }
+
+            const updated =
+              updatedByCode.get(code);
+
+            return {
+              ...product,
+              ...(updated || {}),
+              isTrending:
+                updated?.isTrending ??
+                nextValue,
+            };
+          }
+        ),
+      }));
+
+      const modifiedCount = Number(
+        data?.modifiedCount ??
+        data?.matchedCount ??
+        normalizedCodes.length
+      );
+
+      toast.success(
+        nextValue
+          ? `${modifiedCount} product(s) marked Trending ✅`
+          : `${modifiedCount} product(s) removed from Trending`
+      );
+
+      if (data?.missingCodes?.length) {
+        console.warn(
+          "Trending products not found:",
+          data.missingCodes
+        );
+      }
+
+      return data;
+    } catch (error) {
+      console.error(
+        "❌ bulkMarkTrendingByCodes:",
+        error
+      );
+
+      set({
+        error:
+          error?.message ||
+          "Bulk trending update failed",
+      });
+
+      toast.error(
+        error?.message ||
+        "Bulk trending update failed"
+      );
+
+      throw error;
+    } finally {
+      set({
+        saving: false,
+      });
+    }
+  },
+
+  /* ============================================================
   COLLAB READY — SINGLE PRODUCT
 
   PATCH /api/products/:id/collab-ready

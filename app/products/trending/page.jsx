@@ -2,36 +2,47 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Check,
+  CheckSquare2,
+  ChevronDown,
+  Loader2,
+  RefreshCcw,
   Search,
   Sparkles,
-  CheckSquare,
   Square,
-  Save,
-  RefreshCcw,
   X,
 } from "lucide-react";
 
 import { useAdminProductStore } from "@/store/adminProductStore";
 
-const safe = (v) => (v == null ? "" : String(v));
-const money = (v) => {
-  const n = Number(v || 0);
-  return `₹${Number.isFinite(n) ? n.toLocaleString("en-IN") : "0"}`;
+const safe = (value) => String(value ?? "").trim();
+
+const money = (value) => {
+  const amount = Number(value || 0);
+
+  return `₹${Number.isFinite(amount)
+      ? amount.toLocaleString("en-IN")
+      : "0"
+    }`;
 };
 
-const Card = ({ children, className = "" }) => (
-  <div className={`rounded-3xl bg-white shadow-sm ring-1 ring-black/5 ${className}`}>
-    {children}
-  </div>
-);
-
-const Badge = ({ children, className = "" }) => (
+const Badge = ({
+  children,
+  className = "",
+}) => (
   <span
-    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${className}`}
+    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold ${className}`}
   >
     {children}
   </span>
 );
+
+const getProductImage = (product = {}) =>
+  product?.thumbnail ||
+  product?.images?.[0]?.url ||
+  product?.images?.[0] ||
+  product?.image ||
+  "";
 
 export default function TrendingProductsPage() {
   const {
@@ -44,364 +55,865 @@ export default function TrendingProductsPage() {
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
-  const [selectedCodes, setSelectedCodes] = useState([]);
+  const [statusFilter, setStatusFilter] =
+    useState("all");
+  const [selectedCodes, setSelectedCodes] =
+    useState([]);
 
   useEffect(() => {
-    fetchAllProducts({ limit: 250, sort: "newest" });
+    fetchAllProducts({
+      limit: 250,
+      sort: "newest",
+    });
   }, [fetchAllProducts]);
 
-  const categoryOptions = useMemo(() => {
-    const set = new Set();
+  /* =========================
+     CATEGORY OPTIONS
+  ========================= */
 
-    (products || []).forEach((p) => {
-      const cats = Array.isArray(p?.categories) ? p.categories : [];
-      cats.forEach((c) => {
-        const val = safe(c).trim();
-        if (val) set.add(val);
+  const categoryOptions = useMemo(() => {
+    const values = new Set();
+
+    (products || []).forEach((product) => {
+      const categories = Array.isArray(
+        product?.categories
+      )
+        ? product.categories
+        : [];
+
+      categories.forEach((item) => {
+        const value = safe(item);
+
+        if (value) {
+          values.add(value);
+        }
       });
     });
 
-    return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    return [
+      "all",
+      ...Array.from(values).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    ];
   }, [products]);
 
+  /* =========================
+     FILTER PRODUCTS
+  ========================= */
+
   const filteredProducts = useMemo(() => {
-    const q = safe(search).trim().toLowerCase();
+    const query = safe(search).toLowerCase();
 
-    return (products || []).filter((p) => {
-      const title = safe(p?.title).toLowerCase();
-      const code = safe(p?.productCode).toLowerCase();
-      const cats = Array.isArray(p?.categories)
-        ? p.categories.map((c) => safe(c).toLowerCase())
-        : [];
+    return (products || []).filter(
+      (product) => {
+        const title = safe(
+          product?.title
+        ).toLowerCase();
 
-      const matchesSearch =
-        !q || title.includes(q) || code.includes(q);
+        const code = safe(
+          product?.productCode
+        ).toLowerCase();
 
-      const matchesCategory =
-        category === "all" || cats.includes(category.toLowerCase());
+        const categories = Array.isArray(
+          product?.categories
+        )
+          ? product.categories.map((item) =>
+            safe(item).toLowerCase()
+          )
+          : [];
 
-      return matchesSearch && matchesCategory;
-    });
-  }, [products, search, category]);
+        const matchesSearch =
+          !query ||
+          title.includes(query) ||
+          code.includes(query);
+
+        const matchesCategory =
+          category === "all" ||
+          categories.includes(
+            category.toLowerCase()
+          );
+
+        let matchesStatus = true;
+
+        if (statusFilter === "trending") {
+          matchesStatus =
+            product?.isTrending === true;
+        }
+
+        if (statusFilter === "not-trending") {
+          matchesStatus =
+            product?.isTrending !== true;
+        }
+
+        if (statusFilter === "active") {
+          matchesStatus =
+            product?.isActive !== false;
+        }
+
+        return (
+          matchesSearch &&
+          matchesCategory &&
+          matchesStatus
+        );
+      }
+    );
+  }, [
+    products,
+    search,
+    category,
+    statusFilter,
+  ]);
+
+  /* =========================
+     COUNTS
+  ========================= */
+
+  const totalCount = products?.length || 0;
+
+  const trendingCount = useMemo(
+    () =>
+      (products || []).filter(
+        (product) => product?.isTrending
+      ).length,
+    [products]
+  );
+
+  const filteredTrendingCount = useMemo(
+    () =>
+      filteredProducts.filter(
+        (product) => product?.isTrending
+      ).length,
+    [filteredProducts]
+  );
+
+  /* =========================
+     SELECTION
+  ========================= */
+
+  const selectedSet = useMemo(
+    () => new Set(selectedCodes),
+    [selectedCodes]
+  );
 
   const filteredCodes = useMemo(
     () =>
       filteredProducts
-        .map((p) => safe(p?.productCode).trim())
+        .map((product) =>
+          safe(product?.productCode)
+        )
         .filter(Boolean),
     [filteredProducts]
   );
 
-  const selectedSet = useMemo(() => new Set(selectedCodes), [selectedCodes]);
-
   const allFilteredSelected =
     filteredCodes.length > 0 &&
-    filteredCodes.every((code) => selectedSet.has(code));
-
-  const selectedCount = selectedCodes.length;
+    filteredCodes.every((code) =>
+      selectedSet.has(code)
+    );
 
   const toggleOne = (productCode) => {
-    const code = safe(productCode).trim();
+    const code = safe(productCode);
+
     if (!code) return;
 
-    setSelectedCodes((prev) =>
-      prev.includes(code) ? prev.filter((x) => x !== code) : [...prev, code]
+    setSelectedCodes((current) =>
+      current.includes(code)
+        ? current.filter(
+          (item) => item !== code
+        )
+        : [...current, code]
     );
   };
 
   const toggleSelectAllFiltered = () => {
     if (!filteredCodes.length) return;
 
-    setSelectedCodes((prev) => {
-      const prevSet = new Set(prev);
-
+    setSelectedCodes((current) => {
       if (allFilteredSelected) {
-        return prev.filter((code) => !filteredCodes.includes(code));
+        return current.filter(
+          (code) =>
+            !filteredCodes.includes(code)
+        );
       }
 
-      filteredCodes.forEach((code) => prevSet.add(code));
-      return Array.from(prevSet);
+      return Array.from(
+        new Set([
+          ...current,
+          ...filteredCodes,
+        ])
+      );
     });
   };
 
-  const clearSelection = () => setSelectedCodes([]);
+  const clearSelection = () => {
+    setSelectedCodes([]);
+  };
+
+  /* =========================
+     ACTIONS
+  ========================= */
+
+  const refreshProducts = async () => {
+    await fetchAllProducts({
+      limit: 250,
+      sort: "newest",
+    });
+  };
 
   const handleSave = async () => {
     if (!selectedCodes.length) return;
 
     try {
-      await bulkMarkTrendingByCodes(selectedCodes, true);
+      await bulkMarkTrendingByCodes(
+        selectedCodes,
+        true
+      );
 
       setSelectedCodes([]);
-      await fetchAllProducts({ limit: 250, sort: "newest" });
-    } catch (e) {
-      console.error(e);
+
+      await refreshProducts();
+    } catch (error) {
+      console.error(
+        "Failed to mark trending products:",
+        error
+      );
     }
   };
 
-  const trendingCountInFiltered = filteredProducts.filter((p) => p?.isTrending).length;
+  const clearFilters = () => {
+    setSearch("");
+    setCategory("all");
+    setStatusFilter("all");
+  };
+
+  const hasFilters =
+    search ||
+    category !== "all" ||
+    statusFilter !== "all";
 
   return (
-    <main className="min-h-screen bg-[#f7f7f5] p-4 md:p-6">
-      <div className="mx-auto  space-y-6">
-        <Card className="p-5 md:p-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-black px-3 py-1 text-sm text-white">
-                <Sparkles className="h-4 w-4" />
-                Trending Products
+    <main className="min-h-screen bg-zinc-50">
+      <div className="mx-auto w-full p-3 md:p-5">
+        {/* =========================
+            HEADER
+        ========================= */}
+
+        <div className="mb-3 flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black text-white">
+                <Sparkles size={15} />
               </div>
 
-              <h1 className="text-2xl font-semibold tracking-tight text-black md:text-3xl">
-                Mark products as Trending
-              </h1>
+              <div className="min-w-0">
+                <h1 className="text-base font-bold tracking-tight text-zinc-950 md:text-lg">
+                  Trending Products
+                </h1>
 
-              <p className="mt-2 text-sm text-neutral-600">
-                Search by product code or name, filter by category, select the products,
-                and save to mark them as trending.
+                <p className="mt-0.5 text-[11px] text-zinc-500">
+                  Select products and mark
+                  them as trending.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">
+                Products
+              </p>
+
+              <p className="text-sm font-bold text-zinc-950">
+                {totalCount}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="bg-neutral-100 text-neutral-700">
-                Total: {products?.length || 0}
-              </Badge>
-              <Badge className="bg-neutral-100 text-neutral-700">
-                Filtered: {filteredProducts.length}
-              </Badge>
-              <Badge className="bg-neutral-100 text-neutral-700">
-                Already Trending: {trendingCountInFiltered}
-              </Badge>
-              <Badge className="bg-black text-white">
-                Selected: {selectedCount}
-              </Badge>
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">
+                Trending
+              </p>
+
+              <p className="text-sm font-bold text-zinc-950">
+                {trendingCount}
+              </p>
+            </div>
+
+            <div
+              className={`rounded-lg border px-2.5 py-1.5 ${selectedCodes.length
+                  ? "border-black bg-black text-white"
+                  : "border-zinc-200 bg-zinc-50"
+                }`}
+            >
+              <p
+                className={`text-[9px] font-bold uppercase tracking-wider ${selectedCodes.length
+                    ? "text-white/60"
+                    : "text-zinc-400"
+                  }`}
+              >
+                Selected
+              </p>
+
+              <p className="text-sm font-bold">
+                {selectedCodes.length}
+              </p>
             </div>
           </div>
-        </Card>
+        </div>
 
-        <Card className="p-4 md:p-5">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_0.7fr_auto_auto_auto]">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+        {/* =========================
+            FILTER BAR
+        ========================= */}
+
+        <div className="mb-3 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+            {/* Search */}
+
+            <div className="relative min-w-0 flex-1">
+              <Search
+                size={15}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+              />
+
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by product code or title..."
-                className="h-11 w-full rounded-2xl border-0 bg-neutral-100 pl-10 pr-4 text-sm outline-none ring-1 ring-transparent transition focus:bg-white focus:ring-black/10"
+                onChange={(event) =>
+                  setSearch(
+                    event.target.value
+                  )
+                }
+                placeholder="Search product code or name..."
+                className="h-9 w-full rounded-lg border border-zinc-200 bg-zinc-50 pl-9 pr-9 text-xs font-medium text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 focus:bg-white"
+              />
+
+              {!!search && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSearch("")
+                  }
+                  className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Category */}
+
+            <div className="relative">
+              <select
+                value={category}
+                onChange={(event) =>
+                  setCategory(
+                    event.target.value
+                  )
+                }
+                className="h-9 min-w-[170px] appearance-none rounded-lg border border-zinc-200 bg-zinc-50 pl-3 pr-8 text-xs font-semibold text-zinc-700 outline-none hover:bg-zinc-100 focus:border-zinc-400"
+              >
+                {categoryOptions.map(
+                  (item) => (
+                    <option
+                      key={item}
+                      value={item}
+                    >
+                      {item === "all"
+                        ? "All Categories"
+                        : item}
+                    </option>
+                  )
+                )}
+              </select>
+
+              <ChevronDown
+                size={14}
+                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400"
               />
             </div>
 
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="h-11 rounded-2xl border-0 bg-neutral-100 px-4 text-sm outline-none ring-1 ring-transparent transition focus:bg-white focus:ring-black/10"
-            >
-              {categoryOptions.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat === "all" ? "All categories" : cat}
+            {/* Status */}
+
+            <div className="relative">
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(
+                    event.target.value
+                  )
+                }
+                className="h-9 min-w-[155px] appearance-none rounded-lg border border-zinc-200 bg-zinc-50 pl-3 pr-8 text-xs font-semibold text-zinc-700 outline-none hover:bg-zinc-100 focus:border-zinc-400"
+              >
+                <option value="all">
+                  All Products
                 </option>
-              ))}
-            </select>
+
+                <option value="not-trending">
+                  Not Trending
+                </option>
+
+                <option value="trending">
+                  Trending
+                </option>
+
+                <option value="active">
+                  Active Only
+                </option>
+              </select>
+
+              <ChevronDown
+                size={14}
+                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400"
+              />
+            </div>
+
+            {/* Select */}
 
             <button
               type="button"
-              onClick={toggleSelectAllFiltered}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-neutral-100 px-4 text-sm font-medium text-black transition hover:bg-neutral-200"
+              onClick={
+                toggleSelectAllFiltered
+              }
+              disabled={
+                !filteredProducts.length
+              }
+              className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${allFilteredSelected
+                  ? "border-black bg-black text-white"
+                  : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                }`}
             >
               {allFilteredSelected ? (
-                <>
-                  <CheckSquare className="h-4 w-4" />
-                  Unselect filtered
-                </>
+                <CheckSquare2
+                  size={14}
+                />
+              ) : (
+                <Square size={14} />
+              )}
+
+              {allFilteredSelected
+                ? "Unselect All"
+                : "Select All"}
+            </button>
+
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-xs font-bold text-zinc-500 transition hover:bg-zinc-50 hover:text-zinc-900"
+              >
+                <X size={14} />
+                Reset
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={refreshProducts}
+              disabled={loading}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 transition hover:bg-zinc-50 disabled:opacity-50"
+              title="Refresh products"
+            >
+              <RefreshCcw
+                size={14}
+                className={
+                  loading
+                    ? "animate-spin"
+                    : ""
+                }
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* =========================
+            PRODUCT LIST
+        ========================= */}
+
+        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+          {/* Table Header */}
+
+          <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-3 py-2 md:px-4">
+            <div className="text-[11px] font-semibold text-zinc-500">
+              {loading ? (
+                "Loading products..."
               ) : (
                 <>
-                  <Square className="h-4 w-4" />
-                  Select filtered
+                  <span className="font-bold text-zinc-900">
+                    {
+                      filteredProducts.length
+                    }
+                  </span>{" "}
+                  products
+                  {filteredTrendingCount >
+                    0 && (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <span className="font-bold text-zinc-900">
+                          {
+                            filteredTrendingCount
+                          }
+                        </span>{" "}
+                        trending
+                      </>
+                    )}
                 </>
               )}
-            </button>
+            </div>
 
-            <button
-              type="button"
-              onClick={clearSelection}
-              disabled={!selectedCount}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-neutral-100 px-4 text-sm font-medium text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <X className="h-4 w-4" />
-              Clear
-            </button>
-
-            <button
-              type="button"
-              onClick={() => fetchAllProducts({ limit: 250, sort: "newest" })}
-              disabled={loading}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-neutral-100 px-4 text-sm font-medium text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RefreshCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-          </div>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <div className="border-b border-black/5 px-4 py-3 text-sm text-neutral-600 md:px-5">
-            {loading
-              ? "Loading products..."
-              : filteredProducts.length
-                ? `${filteredProducts.length} products found`
-                : "No products found"}
+            {!!selectedCodes.length && (
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-500 hover:text-red-600"
+              >
+                <X size={12} />
+                Clear selection
+              </button>
+            )}
           </div>
 
-          <div className="max-h-[68vh] overflow-auto">
+          {/* Rows */}
+
+          <div className="max-h-[calc(100vh-270px)] min-h-[420px] overflow-y-auto">
             {loading ? (
-              <div className="space-y-3 p-4 md:p-5">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-20 animate-pulse rounded-2xl bg-neutral-100"
-                  />
-                ))}
-              </div>
+              <LoadingRows />
             ) : !filteredProducts.length ? (
-              <div className="p-10 text-center text-sm text-neutral-500">
-                No matching products found.
+              <div className="flex min-h-[420px] flex-col items-center justify-center px-4 text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100">
+                  <Search
+                    size={17}
+                    className="text-zinc-400"
+                  />
+                </div>
+
+                <p className="mt-3 text-sm font-bold text-zinc-900">
+                  No products found
+                </p>
+
+                <p className="mt-1 text-xs text-zinc-500">
+                  Try changing your search
+                  or filters.
+                </p>
+
+                {hasFilters && (
+                  <button
+                    type="button"
+                    onClick={
+                      clearFilters
+                    }
+                    className="mt-3 text-xs font-bold underline underline-offset-4"
+                  >
+                    Reset filters
+                  </button>
+                )}
               </div>
             ) : (
-              <div className="divide-y divide-black/5">
-                {filteredProducts.map((product) => {
-                  const code = safe(product?.productCode).trim();
-                  const isChecked = selectedSet.has(code);
-                  const categories = Array.isArray(product?.categories)
-                    ? product.categories
-                    : [];
+              <div className="divide-y divide-zinc-100">
+                {filteredProducts.map(
+                  (product) => {
+                    const code = safe(
+                      product?.productCode
+                    );
 
-                  return (
-                    <label
-                      key={product?._id || code}
-                      className={`flex cursor-pointer items-start gap-4 px-4 py-4 transition md:px-5 ${
-                        isChecked ? "bg-black/[0.03]" : "bg-white"
-                      }`}
-                    >
-                      <div className="pt-1">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleOne(code)}
-                          className="h-4 w-4 rounded border-neutral-300 text-black focus:ring-black"
-                        />
-                      </div>
+                    const selected =
+                      selectedSet.has(code);
 
-                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-neutral-100">
-                        {product?.thumbnail ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={product.thumbnail}
-                            alt={product?.title || "Product"}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-xs text-neutral-400">
-                            No image
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="truncate text-sm font-semibold text-black md:text-base">
-                                {product?.title || "Untitled Product"}
-                              </h3>
-
-                              {product?.isTrending && (
-                                <Badge className="bg-black text-white">
-                                  Trending
-                                </Badge>
-                              )}
-
-                              {product?.isBestSeller && (
-                                <Badge className="bg-neutral-100 text-neutral-700">
-                                  Best Seller
-                                </Badge>
-                              )}
-                            </div>
-
-                            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500 md:text-sm">
-                              <span>Code: {code || "-"}</span>
-                              <span>Price: {money(product?.price)}</span>
-                              <span>
-                                Stock: {Number(product?.stock || 0).toLocaleString("en-IN")}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="shrink-0">
-                            <Badge
-                              className={
-                                product?.isActive
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-neutral-100 text-neutral-500"
-                              }
-                            >
-                              {product?.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        {!!categories.length && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {categories.slice(0, 4).map((cat) => (
-                              <Badge
-                                key={`${code}-${cat}`}
-                                className="bg-neutral-100 text-neutral-600"
-                              >
-                                {cat}
-                              </Badge>
-                            ))}
-                            {categories.length > 4 && (
-                              <Badge className="bg-neutral-100 text-neutral-500">
-                                +{categories.length - 4} more
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </label>
-                  );
-                })}
+                    return (
+                      <ProductRow
+                        key={
+                          product?._id ||
+                          code
+                        }
+                        product={
+                          product
+                        }
+                        code={code}
+                        selected={
+                          selected
+                        }
+                        onToggle={() =>
+                          toggleOne(code)
+                        }
+                      />
+                    );
+                  }
+                )}
               </div>
             )}
           </div>
-        </Card>
+        </div>
 
-        <div className="sticky bottom-4">
-          <Card className="p-4 md:p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="text-sm text-neutral-600">
-                {selectedCount > 0 ? (
-                  <>
-                    <span className="font-medium text-black">{selectedCount}</span> products selected
-                    for trending.
-                  </>
-                ) : (
-                  "Select products to mark them as trending."
-                )}
+        {/* =========================
+            STICKY SAVE BAR
+        ========================= */}
+
+        {!!selectedCodes.length && (
+          <div className="sticky bottom-3 z-20 mx-auto mt-3">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-black px-3 py-2.5 text-white shadow-xl md:px-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                  <Check
+                    size={14}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-bold">
+                    {
+                      selectedCodes.length
+                    }{" "}
+                    product
+                    {selectedCodes.length >
+                      1
+                      ? "s"
+                      : ""}{" "}
+                    selected
+                  </p>
+
+                  <p className="hidden text-[10px] text-white/60 sm:block">
+                    These products will be
+                    marked as trending.
+                  </p>
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!selectedCount || saving}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-black px-5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" />
-                {saving ? "Saving..." : `Save Trending (${selectedCount})`}
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={
+                    clearSelection
+                  }
+                  disabled={saving}
+                  className="hidden h-8 items-center justify-center rounded-lg px-3 text-xs font-bold text-white/70 transition hover:bg-white/10 hover:text-white sm:inline-flex"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white px-3.5 text-xs font-extrabold text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saving ? (
+                    <Loader2
+                      size={13}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <Sparkles
+                      size={13}
+                    />
+                  )}
+
+                  {saving
+                    ? "Saving..."
+                    : "Mark Trending"}
+                </button>
+              </div>
             </div>
-          </Card>
-        </div>
+          </div>
+        )}
       </div>
     </main>
+  );
+}
+
+/* =========================
+   PRODUCT ROW
+========================= */
+
+function ProductRow({
+  product,
+  code,
+  selected,
+  onToggle,
+}) {
+  const image =
+    getProductImage(product);
+
+  const categories = Array.isArray(
+    product?.categories
+  )
+    ? product.categories
+    : [];
+
+  const stock = Number(
+    product?.stock || 0
+  );
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition md:px-4 ${selected
+          ? "bg-zinc-950/[0.035]"
+          : "bg-white hover:bg-zinc-50"
+        }`}
+    >
+      {/* Checkbox */}
+
+      <div
+        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${selected
+            ? "border-black bg-black text-white"
+            : "border-zinc-300 bg-white group-hover:border-zinc-500"
+          }`}
+      >
+        {selected && (
+          <Check
+            size={11}
+            strokeWidth={3}
+          />
+        )}
+      </div>
+
+      {/* Image */}
+
+      <div className="h-12 w-10 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 md:h-14 md:w-12">
+        {image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={image}
+            alt={
+              product?.title ||
+              "Product"
+            }
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[8px] font-semibold text-zinc-400">
+            IMAGE
+          </div>
+        )}
+      </div>
+
+      {/* Main */}
+
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h3 className="truncate text-xs font-bold text-zinc-950 md:text-[13px]">
+            {product?.title ||
+              "Untitled Product"}
+          </h3>
+
+          {product?.isTrending && (
+            <Badge className="shrink-0 bg-black text-white">
+              TRENDING
+            </Badge>
+          )}
+
+          {product?.isBestSeller && (
+            <Badge className="hidden shrink-0 bg-amber-50 text-amber-700 sm:inline-flex">
+              BESTSELLER
+            </Badge>
+          )}
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] font-medium text-zinc-500">
+          <span className="font-bold text-zinc-700">
+            {code || "NO CODE"}
+          </span>
+
+          <span className="text-zinc-300">
+            •
+          </span>
+
+          <span>
+            {money(product?.price)}
+          </span>
+
+          <span className="text-zinc-300">
+            •
+          </span>
+
+          <span
+            className={
+              stock > 0
+                ? ""
+                : "font-semibold text-red-500"
+            }
+          >
+            Stock{" "}
+            {stock.toLocaleString(
+              "en-IN"
+            )}
+          </span>
+
+          {!!categories.length && (
+            <>
+              <span className="hidden text-zinc-300 md:inline">
+                •
+              </span>
+
+              <span className="hidden max-w-[260px] truncate md:inline">
+                {categories
+                  .slice(0, 3)
+                  .join(" · ")}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Right Status */}
+
+      <div className="flex shrink-0 items-center gap-2">
+        <span
+          className={`hidden rounded-md px-2 py-1 text-[9px] font-bold uppercase tracking-wide sm:inline-flex ${product?.isActive ===
+              false
+              ? "bg-zinc-100 text-zinc-400"
+              : "bg-emerald-50 text-emerald-700"
+            }`}
+        >
+          {product?.isActive === false
+            ? "Inactive"
+            : "Active"}
+        </span>
+
+        <div
+          className={`h-2 w-2 rounded-full ${product?.isTrending
+              ? "bg-black"
+              : "bg-zinc-200"
+            }`}
+          title={
+            product?.isTrending
+              ? "Trending"
+              : "Not trending"
+          }
+        />
+      </div>
+    </button>
+  );
+}
+
+/* =========================
+   LOADING ROWS
+========================= */
+
+function LoadingRows() {
+  return (
+    <div className="divide-y divide-zinc-100">
+      {Array.from({
+        length: 10,
+      }).map((_, index) => (
+        <div
+          key={index}
+          className="flex items-center gap-3 px-3 py-2.5 md:px-4"
+        >
+          <div className="h-4 w-4 animate-pulse rounded bg-zinc-100" />
+
+          <div className="h-14 w-12 animate-pulse rounded-md bg-zinc-100" />
+
+          <div className="min-w-0 flex-1">
+            <div className="h-3 w-52 max-w-full animate-pulse rounded bg-zinc-100" />
+
+            <div className="mt-2 h-2.5 w-72 max-w-full animate-pulse rounded bg-zinc-100" />
+          </div>
+
+          <div className="hidden h-5 w-14 animate-pulse rounded bg-zinc-100 sm:block" />
+        </div>
+      ))}
+    </div>
   );
 }
