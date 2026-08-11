@@ -15,6 +15,7 @@ import {
   Smartphone,
   Truck,
   X,
+  TimerReset,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 
@@ -23,6 +24,18 @@ import ConfirmationTab from "./ConfirmationTab";
 import ShippingTab from "./ShippingTab";
 
 const PAGE_SIZE = 20;
+const LATE_ORDER_DAYS = 7;
+const getDaysSinceOrder = (order = {}) => {
+  if (!order?.createdAt) return 0;
+
+  const createdAt = new Date(order.createdAt);
+
+  if (Number.isNaN(createdAt.getTime())) return 0;
+
+  return Math.floor(
+    (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24),
+  );
+};
 
 const formatCurrency = (value) =>
   `₹${Number(value || 0).toLocaleString("en-IN")}`;
@@ -182,6 +195,7 @@ const getItemSummary = (order = {}) => {
     : visibleItems.join(", ");
 };
 
+
 const createConfirmationMessage = (order = {}) => `Hi ${getCustomerName(order)},
 
 Welcome to *OATCLUB*.
@@ -226,15 +240,38 @@ Own All Trends`;
 
 const createWhatsAppLink = (order, type) => {
   const phone = normalizeWhatsAppPhone(getRawPhone(order));
+
   if (!phone) return "";
 
-  const message =
-    type === "shipping"
-      ? createShippingMessage(order)
-      : createConfirmationMessage(order);
+  let message = createConfirmationMessage(order);
+
+  if (type === "shipping") {
+    message = createShippingMessage(order);
+  }
+
+  if (type === "late") {
+    message = createLateOrderMessage(order);
+  }
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 };
+
+const createLateOrderMessage = (order = {}) => `Hi ${getCustomerName(order)},
+
+We wanted to share a quick update regarding your *OATCLUB* order *#${getOrderNumber(order)}*.
+
+Your products are taking a little longer than expected to get ready, and we sincerely apologise for the delay.
+
+Please be assured that your order has been marked as *HIGH PRIORITY* and our team is working to get it ready and dispatched as soon as possible.
+
+We truly appreciate your patience and understanding. 🤍
+
+Thank you for choosing *OATCLUB*.
+
+www.oatclub.in
+
+*Team OATCLUB*
+Own All Trends`;
 
 function StatCard({ icon: Icon, label, value, helper }) {
   return (
@@ -342,10 +379,27 @@ export default function UnconfirmedOrderWhatsAppPage({
     [allOrders],
   );
 
+  const lateOrders = useMemo(
+    () =>
+      allOrders.filter((order) => {
+        const status = String(
+          order?.fulfillmentStatus || "",
+        ).toLowerCase();
+
+        return (
+          status === "processing" &&
+          getDaysSinceOrder(order) >= LATE_ORDER_DAYS
+        );
+      }),
+    [allOrders],
+  );
+
   const selectedOrders =
     activeTab === "shipping"
       ? shippingOrders
-      : confirmationOrders;
+      : activeTab === "late"
+        ? lateOrders
+        : confirmationOrders;
 
   const filteredOrders = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -419,6 +473,14 @@ export default function UnconfirmedOrderWhatsAppPage({
       type === "shipping"
         ? "Shipping message opened"
         : "Confirmation message opened",
+    );
+
+    toast.success(
+      type === "shipping"
+        ? "Shipping message opened"
+        : type === "late"
+          ? "Late order update opened"
+          : "Confirmation message opened",
     );
 
     window.setTimeout(() => setOpeningOrderId(""), 700);
@@ -496,14 +558,26 @@ export default function UnconfirmedOrderWhatsAppPage({
 
         <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard
-            icon={activeTab === "shipping" ? Truck : Clock3}
+            icon={
+              activeTab === "shipping"
+                ? Truck
+                : activeTab === "late"
+                  ? TimerReset
+                  : Clock3
+            }
             label={
               activeTab === "shipping"
                 ? "Shipping Ready"
-                : "Pending Confirmation"
+                : activeTab === "late"
+                  ? "Delayed Orders"
+                  : "Pending Confirmation"
             }
             value={selectedOrders.length}
-            helper="Orders in selected queue"
+            helper={
+              activeTab === "late"
+                ? "Processing for 7+ days"
+                : "Orders in selected queue"
+            }
           />
 
           <StatCard
@@ -542,6 +616,7 @@ export default function UnconfirmedOrderWhatsAppPage({
                   }`}
               >
                 <Clock3 size={15} />
+
                 Confirmation
 
                 <span
@@ -563,6 +638,7 @@ export default function UnconfirmedOrderWhatsAppPage({
                   }`}
               >
                 <Truck size={15} />
+
                 Shipping
 
                 <span
@@ -574,6 +650,28 @@ export default function UnconfirmedOrderWhatsAppPage({
                   {shippingOrders.length}
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("late")}
+                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "late"
+                  ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
+                  : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
+                  }`}
+              >
+                <TimerReset size={15} />
+
+                Late Orders
+
+                <span
+                  className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeTab === "late"
+                    ? "bg-gray-900 text-white"
+                    : "bg-white text-gray-600"
+                    }`}
+                >
+                  {lateOrders.length}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -582,7 +680,9 @@ export default function UnconfirmedOrderWhatsAppPage({
               <h2 className="text-lg font-semibold tracking-tight text-gray-950">
                 {activeTab === "shipping"
                   ? "Shipping Queue"
-                  : "Confirmation Queue"}
+                  : activeTab === "late"
+                    ? "Late Order Queue"
+                    : "Confirmation Queue"}
               </h2>
 
               <p className="mt-1 text-xs text-gray-500">
@@ -655,10 +755,10 @@ export default function UnconfirmedOrderWhatsAppPage({
                   {error}
                 </p>
               </div>
-            ) : activeTab === "confirmation" ? (
-              <ConfirmationTab {...commonTabProps} />
-            ) : (
+            ) : activeTab === "shipping" ? (
               <ShippingTab {...commonTabProps} />
+            ) : (
+              <ConfirmationTab {...commonTabProps} />
             )}
           </div>
 

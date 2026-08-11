@@ -486,6 +486,7 @@ export default function OrdersListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [readyToFulfill, setReadyToFulfill] =
     useState(false);
+  const [callConfirmation, setCallConfirmation] = useState(false);
   const pageSize = 100;
 
   // ✅ Update only changed order in list, avoid full page refresh feel
@@ -520,6 +521,7 @@ export default function OrdersListPage() {
     setFilters(INITIAL_ORDER_FILTERS);
     setCurrentPage(1);
     setReadyToFulfill(false);
+    setCallConfirmation(false);
   }, []);
 
   const applySearch = useCallback(() => {
@@ -846,6 +848,15 @@ export default function OrdersListPage() {
       search,
     });
 
+    if (callConfirmation) {
+      data = data.filter(
+        (order) =>
+          order?.isConfirmed !== true &&
+          norm(order?.paymentMethod) === "cod" &&
+          norm(order?.fulfillmentStatus) === "processing"
+      );
+    }
+
     if (readyToFulfill) {
       data = data.filter(
         (order) =>
@@ -865,6 +876,7 @@ export default function OrdersListPage() {
     filters.priority,
     search,
     readyToFulfill,
+    callConfirmation,
   ]);
 
   const getParentOrderNumber = (order = {}) => {
@@ -1472,11 +1484,25 @@ export default function OrdersListPage() {
               setReadyToFulfill((prev) => !prev);
             }}
             className={`rounded-xl border px-5 py-2.5 text-sm font-semibold transition ${readyToFulfill
-                ? "!border-emerald-600 !bg-emerald-600 !text-white"
-                : "!border-gray-900 !bg-white !text-gray-900 hover:!bg-gray-50"
+              ? "!border-emerald-600 !bg-emerald-600 !text-white"
+              : "!border-gray-900 !bg-white !text-gray-900 hover:!bg-gray-50"
               }`}
           >
             🔥 Ready to Fulfill
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentPage(1);
+              setCallConfirmation((prev) => !prev);
+            }}
+            className={`rounded-xl border px-5 py-2.5 text-sm font-semibold transition ${callConfirmation
+              ? "!border-blue-600 !bg-blue-600 !text-white"
+              : "!border-gray-900 !bg-white !text-gray-900 hover:!bg-gray-50"
+              }`}
+          >
+            📞 Call Confirmation
           </button>
         </div>
 

@@ -3,9 +3,9 @@ import UnconfirmedOrderWhatsAppPage from "@/components/orders/UnconfirmedOrderWh
 export default function Page() {
   return (
     <UnconfirmedOrderWhatsAppPage
-      title="Unconfirmed Orders"
+      title="WhatsApp Order Desk"
       badge="OATCLUB Order Desk"
-      description="Review pending orders and open a personalised WhatsApp confirmation message in one click."
+      description="Manage order confirmations, shipping updates and delayed order communication from one place."
       orderDetailsBasePath="/orders"
     />
   );
