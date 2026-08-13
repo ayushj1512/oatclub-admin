@@ -7,6 +7,8 @@ import {
   PackageCheck,
   Truck,
   ArrowUpRight,
+  PackageOpen,
+  ReceiptText,
 } from "lucide-react";
 
 const DISPATCHING_PAGES = [
@@ -23,6 +25,12 @@ const DISPATCHING_PAGES = [
     icon: Factory,
   },
   {
+    title: "Ready to Ship",
+    description: "View orders that are ready for packing and dispatch.",
+    href: "/dispatching/ready-to-ship",
+    icon: PackageOpen,
+  },
+  {
     title: "Packed Orders",
     description: "View packed orders ready for shipment processing.",
     href: "/dispatching/packed",
@@ -33,6 +41,12 @@ const DISPATCHING_PAGES = [
     description: "Track orders that have already been dispatched.",
     href: "/dispatching/shipped",
     icon: Truck,
+  },
+  {
+    title: "Invoices",
+    description: "View, search and manage invoices for dispatching orders.",
+    href: "/dispatching/invoices",
+    icon: ReceiptText,
   },
 ];
 
@@ -52,19 +66,19 @@ export default function DispatchingDashboard() {
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
-            Manage inventory requirements, production, packed orders and shipped
-            orders from one workspace.
+            Manage inventory, production, ready-to-ship orders, packing,
+            shipments and invoices from one workspace.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {DISPATCHING_PAGES.map(
             ({ title, description, href, icon: Icon }) => (
               <button
                 key={href}
                 type="button"
                 onClick={() => router.push(href)}
-                className="group flex min-h-[180px] flex-col rounded-3xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+                className="group flex min-h-[180px] flex-col rounded-3xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition duration-200 hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
               >
                 <div className="flex items-start justify-between">
                   <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-950 text-white">

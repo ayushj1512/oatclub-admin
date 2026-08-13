@@ -3,15 +3,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
+  CheckCircle2,
   CheckSquare2,
   Download,
   FileText,
   Loader2,
+  PackageSearch,
   RefreshCw,
   Search,
   Tags,
   Truck,
-} from "lucide-react"; import OrderRow from "@/components/orders/OrderRow";
+  XCircle,
+} from "lucide-react";
+
+import PackedOrderRow, {
+  getPackedShippingMeta,
+} from "@/components/dispatching/PackedOrderRow";
+
+import PackedOrdersReconcileModal from "@/components/dispatching/PackedOrdersReconcileModal";
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { useOrderStore } from "@/store/orderStore";
 import { useShiprocketStore } from "@/store/ShipRocketStore";
@@ -107,6 +117,8 @@ export default function PackedOrdersPage() {
   // Search (button based)
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [shippingFilter, setShippingFilter] = useState("all");
+  const [reconcileOpen, setReconcileOpen] = useState(false);
 
   // pagination
   const [pageSize] = useState(500);
@@ -146,39 +158,86 @@ export default function PackedOrdersPage() {
     loadOrders();
   }, [loadOrders]);
 
-  /* ---------------------------------------------
-     ✅ Client-side search fallback
-  --------------------------------------------- */
-  const filteredOrders = useMemo(() => {
-    let data = Array.isArray(orders) ? [...orders] : [];
-
-    // Safety: keep only packed
-    data = data.filter(
-      (o) => String(o?.fulfillmentStatus || "").toLowerCase() === "packed"
+  const packedOrders = useMemo(() => {
+    return (Array.isArray(orders) ? orders : []).filter(
+      (order) =>
+        String(order?.fulfillmentStatus || "").toLowerCase() === "packed"
     );
+  }, [orders]);
+
+  const shippingCounts = useMemo(() => {
+    const counts = {
+      all: packedOrders.length,
+      serviceable: 0,
+      missing_awb: 0,
+      unserviceable: 0,
+      failed: 0,
+    };
+
+    packedOrders.forEach((order) => {
+      const meta = getPackedShippingMeta(order);
+
+      if (meta?.key && Object.prototype.hasOwnProperty.call(counts, meta.key)) {
+        counts[meta.key] += 1;
+      }
+    });
+
+    return counts;
+  }, [packedOrders]);
+
+  const filteredOrders = useMemo(() => {
+    let data = [...packedOrders];
+
+    if (shippingFilter !== "all") {
+      data = data.filter(
+        (order) =>
+          getPackedShippingMeta(order)?.key === shippingFilter
+      );
+    }
 
     const q = search.trim().toLowerCase();
+
     if (!q) return data;
 
-    return data.filter((o) => {
-      const orderNumber = String(o?.orderNumber || "").toLowerCase();
+    return data.filter((order) => {
+      const orderNumber = String(
+        order?.orderNumber || ""
+      ).toLowerCase();
+
       const name = String(
-        o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
+        order?.customerId?.name ||
+        order?.shippingAddressSnapshot?.fullName ||
+        ""
       ).toLowerCase();
+
       const email = String(
-        o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
+        order?.customerId?.email ||
+        order?.shippingAddressSnapshot?.email ||
+        ""
       ).toLowerCase();
+
       const phone = String(
-        o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
+        order?.customerId?.phone ||
+        order?.shippingAddressSnapshot?.phone ||
+        ""
       ).toLowerCase();
+
+      const awb = String(
+        order?.shipment?.awb ||
+        order?.shipment?.shiprocket?.awb ||
+        order?.trackingDetails?.trackingId ||
+        ""
+      ).toLowerCase();
+
       return (
         orderNumber.includes(q) ||
         name.includes(q) ||
         email.includes(q) ||
-        phone.includes(q)
+        phone.includes(q) ||
+        awb.includes(q)
       );
     });
-  }, [orders, search]);
+  }, [packedOrders, search, shippingFilter]);
 
   const sortedOrders = useMemo(() => {
     return [...filteredOrders].sort((a, b) => {
@@ -234,24 +293,83 @@ export default function PackedOrdersPage() {
 
   const runBulkSync = async () => {
     if (!selectedOrders.length || bulkAction) return;
+
     setBulkAction("sync");
 
-    let success = 0;
+    let successCount = 0;
+    let failedCount = 0;
+    const failedOrders = [];
+
     try {
       for (const order of selectedOrders) {
-        const result = await syncTracking({
-          orderId: getOrderId(order),
-          orderNumber: order?.orderNumber,
-        });
-        const updatedOrder =
-          result?.order || result?.data?.order || result?.updatedOrder;
-        if (updatedOrder) syncOrderInList(updatedOrder);
-        success += 1;
+        const orderId = getOrderId(order);
+        const orderNumber = order?.orderNumber;
+
+        try {
+          const result = await syncTracking({
+            orderId,
+            orderNumber,
+          });
+
+          const updatedOrder =
+            result?.order ||
+            result?.data?.order ||
+            result?.updatedOrder ||
+            result?.data;
+
+          if (updatedOrder?._id || updatedOrder?.id) {
+            syncOrderInList(updatedOrder);
+          }
+
+          successCount += 1;
+        } catch (error) {
+          failedCount += 1;
+
+          failedOrders.push({
+            orderNumber: orderNumber || orderId,
+            message:
+              error?.message ||
+              "Tracking sync failed",
+          });
+
+          console.warn(
+            `Tracking sync failed for ${orderNumber || orderId}:`,
+            error
+          );
+
+          // IMPORTANT:
+          // do NOT throw here.
+          // Continue with next selected order.
+        }
       }
-      toast.success(`${success} order${success === 1 ? "" : "s"} synced`);
+
+      if (successCount > 0) {
+        toast.success(
+          `${successCount} order${successCount === 1 ? "" : "s"
+          } synced successfully`
+        );
+      }
+
+      if (failedCount > 0) {
+        toast.error(
+          `${failedCount} order${failedCount === 1 ? "" : "s"
+          } could not be synced`,
+          {
+            duration: 5000,
+          }
+        );
+      }
+
+      console.table(failedOrders);
+
       await loadOrders();
     } catch (error) {
-      toast.error(error?.message || `Bulk sync stopped after ${success} orders`);
+      console.error("Bulk tracking sync error:", error);
+
+      toast.error(
+        error?.message ||
+        "Bulk tracking sync failed"
+      );
     } finally {
       setBulkAction("");
     }
@@ -704,37 +822,42 @@ export default function PackedOrdersPage() {
   };
 
   return (
-    <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-10">
+    <section className="min-h-screen bg-[#f6f7fb] px-4 py-10 sm:px-6 lg:px-10">
       <div className="mx-auto space-y-8">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
+        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">
               Packed Orders
             </h1>
-            <p className="text-gray-500 mt-1">
-              Search and manage only <b>packed</b> orders.
+
+            <p className="mt-1 text-gray-500">
+              Search, reconcile and manage only <b>packed</b> orders.
             </p>
-            <div className="mt-4 flex items-center gap-3 text-sm text-gray-600">
-              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
+
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+              <span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-700">
                 {totals.count} Orders
               </span>
-              <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
+
+              <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-700">
                 Total ₹{totals.sum}
               </span>
-              <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-800 font-semibold">
+
+              <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-800">
                 Status: packed
               </span>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 w-full md:w-80">
+          <div className="flex w-full flex-col flex-wrap gap-3 sm:flex-row md:w-auto">
+            <div className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm md:w-80">
               <Search size={18} className="text-gray-400" />
+
               <input
                 type="text"
-                placeholder="Search order # / name / email / phone..."
-                className="outline-none w-full bg-transparent text-sm placeholder:text-gray-400"
+                placeholder="Order # / name / phone / AWB..."
+                className="w-full bg-transparent text-sm outline-none placeholder:text-gray-400"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && applySearch()}
@@ -743,27 +866,130 @@ export default function PackedOrdersPage() {
 
             <button
               onClick={applySearch}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-gray-200 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 active:scale-[0.98]"
             >
-              <Search size={18} /> Search
+              <Search size={18} />
+              Search
             </button>
 
             <button
               onClick={clearSearch}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold shadow-sm hover:bg-gray-200 active:scale-[0.98] transition"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-100 px-5 py-3 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-200 active:scale-[0.98]"
             >
               Clear
             </button>
 
             <button
-              onClick={exportToCSV}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
+              type="button"
+              onClick={() => setReconcileOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-yellow-400 px-5 py-3 text-sm font-black text-yellow-950 shadow-sm transition hover:bg-yellow-300 active:scale-[0.98]"
             >
-              <Download size={18} /> Export CSV
+              <PackageSearch size={18} />
+              Reconcile Orders
+            </button>
+
+            <button
+              onClick={exportToCSV}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 active:scale-[0.98]"
+            >
+              <Download size={18} />
+              Export CSV
             </button>
           </div>
         </div>
 
+        {/* Shipping Filters */}
+        <Card className="!p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              {
+                key: "all",
+                label: "All",
+                count: shippingCounts.all,
+                icon: null,
+              },
+              {
+                key: "serviceable",
+                label: "Ready",
+                count: shippingCounts.serviceable,
+                icon: CheckCircle2,
+              },
+              {
+                key: "missing_awb",
+                label: "Missing AWB",
+                count: shippingCounts.missing_awb,
+                icon: AlertTriangle,
+              },
+              {
+                key: "unserviceable",
+                label: "Unserviceable",
+                count: shippingCounts.unserviceable,
+                icon: AlertTriangle,
+              },
+              {
+                key: "failed",
+                label: "Failed",
+                count: shippingCounts.failed,
+                icon: XCircle,
+              },
+            ].map((filter) => {
+              const active = shippingFilter === filter.key;
+              const Icon = filter.icon;
+
+              const isWarning =
+                filter.key === "missing_awb" ||
+                filter.key === "unserviceable";
+
+              const isFailed = filter.key === "failed";
+              const isReady = filter.key === "serviceable";
+
+              return (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => {
+                    setShippingFilter(filter.key);
+                    setSelectedIds([]);
+                  }}
+                  className={[
+                    "inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition",
+
+                    active
+                      ? isWarning
+                        ? "border-yellow-400 bg-yellow-400 text-yellow-950"
+                        : isFailed
+                          ? "border-red-600 bg-red-600 text-white"
+                          : isReady
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-black bg-black text-white"
+                      : isWarning
+                        ? "border-yellow-300 bg-yellow-50 text-yellow-900 hover:bg-yellow-100"
+                        : isFailed
+                          ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                          : isReady
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                  ].join(" ")}
+                >
+                  {Icon ? <Icon size={14} /> : null}
+
+                  {filter.label}
+
+                  <span
+                    className={[
+                      "rounded-full px-1.5 py-0.5 text-[10px]",
+                      active ? "bg-white/20" : "bg-black/[0.06]",
+                    ].join(" ")}
+                  >
+                    {filter.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+
+        {/* Bulk Actions */}
         <Card className="!p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
@@ -773,8 +999,10 @@ export default function PackedOrdersPage() {
                 className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50"
               >
                 <CheckSquare2 size={16} />
+
                 {allVisibleSelected ? "Clear visible" : "Select visible"}
               </button>
+
               <span className="text-sm font-semibold text-gray-700">
                 {selectedOrders.length} selected
               </span>
@@ -795,12 +1023,14 @@ export default function PackedOrdersPage() {
                   className={[
                     "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40",
                     key === "shipped" ? "bg-emerald-600" : "bg-black",
-                  ].join(" ")}                >
+                  ].join(" ")}
+                >
                   {bulkAction === key ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
                     <Icon size={16} />
                   )}
+
                   {label}
                 </button>
               ))}
@@ -810,7 +1040,7 @@ export default function PackedOrdersPage() {
 
         {/* Load More / Refresh */}
         <Card>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
             <div className="text-xs text-gray-500">
               {ordersMeta?.page
                 ? `Page ${ordersMeta.page} • Showing ${orders.length} orders`
@@ -820,7 +1050,7 @@ export default function PackedOrdersPage() {
             <div className="flex items-center gap-3">
               <button
                 onClick={loadOrders}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98] transition"
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-gray-50 active:scale-[0.98]"
               >
                 Refresh
               </button>
@@ -828,14 +1058,15 @@ export default function PackedOrdersPage() {
               <button
                 disabled={!hasMore || loadingMore}
                 onClick={loadMore}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${!hasMore || loadingMore
-                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${!hasMore || loadingMore
+                  ? "cursor-not-allowed bg-gray-200 text-gray-500"
                   : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
                   }`}
               >
                 {loadingMore ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin" /> Loading...
+                    <Loader2 size={16} className="animate-spin" />
+                    Loading...
                   </span>
                 ) : hasMore ? (
                   "Load More"
@@ -847,11 +1078,11 @@ export default function PackedOrdersPage() {
           </div>
         </Card>
 
-        {/* Table */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* Packed Dispatch Table */}
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
+            <table className="w-full min-w-[1250px] text-sm">
+              <thead className="border-b border-gray-100 bg-gray-50 text-gray-600">
                 <tr>
                   <th className="w-12 px-4 py-4 text-left">
                     <input
@@ -862,76 +1093,90 @@ export default function PackedOrdersPage() {
                       className="h-4 w-4 rounded border-gray-300 accent-black"
                     />
                   </th>
-                  <th className="py-4 px-5 text-left font-semibold">Order #</th>
-                  <th className="py-4 px-5 text-left font-semibold">Customer</th>
-                  <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Method</th>
-                  <th className="py-4 px-5 text-left font-semibold">Fulfillment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Amount</th>
-                  <th className="py-4 px-5 text-left font-semibold">Date</th>
-                  <th className="py-4 px-5 text-left font-semibold">Action</th>
+
+                  <th className="px-5 py-4 text-left font-semibold">
+                    Order
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold">
+                    Customer
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold">
+                    Items
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold">
+                    Payment
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold">
+                    Shipping
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold">
+                    AWB
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold">
+                    Packed At
+                  </th>
+
+                  <th className="px-5 py-4 text-right font-semibold">
+                    Actions
+                  </th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-                {filteredOrders.length ? (
-                  [...filteredOrders]
-                    .sort((a, b) => {
-                      const packedTimeA = new Date(
-                        a?.fulfillmentDates?.packedAt ||
-                        a?.updatedAt ||
-                        a?.createdAt ||
-                        a?.orderDate ||
-                        0
-                      ).getTime();
+                {sortedOrders.length ? (
+                  sortedOrders.map((order, idx) => {
+                    const rowKey =
+                      order?._id ||
+                      order?.id ||
+                      order?.orderNumber ||
+                      `packed-${idx}`;
 
-                      const packedTimeB = new Date(
-                        b?.fulfillmentDates?.packedAt ||
-                        b?.updatedAt ||
-                        b?.createdAt ||
-                        b?.orderDate ||
-                        0
-                      ).getTime();
-
-                      // Oldest packed first
-                      if (packedTimeA !== packedTimeB) {
-                        return packedTimeA - packedTimeB;
-                      }
-
-                      // Same packed time: smaller order number first
-                      const getNum = (order) => {
-                        const match = String(order?.orderNumber || "").match(/(\d+)$/);
-                        return match ? Number(match[1]) : 0;
-                      };
-
-                      return getNum(a) - getNum(b);
-                    })
-                    .map((order, idx) => {
-                      const rowKey =
-                        order?._id ||
-                        order?.id ||
-                        order?.orderNumber ||
-                        `order-${idx}`;
-
-                      return (
-                        <OrderRow
-                          key={String(rowKey)}
-                          order={order}
-                          selectable
-                          selected={selectedIds.includes(getOrderId(order))}
-                          onSelect={toggleOrder}
-                          onUpdated={(updatedOrder) => {
-                            if (updatedOrder?._id) {
-                              syncOrderInList(updatedOrder);
-                            }
-                          }}
-                        />
-                      );
-                    })
+                    return (
+                      <PackedOrderRow
+                        key={String(rowKey)}
+                        order={order}
+                        selectable
+                        selected={selectedIds.includes(getOrderId(order))}
+                        onSelect={toggleOrder}
+                        onUpdated={(updatedOrder) => {
+                          if (updatedOrder?._id || updatedOrder?.id) {
+                            syncOrderInList(updatedOrder);
+                          }
+                        }}
+                      />
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-gray-500">
-                      No packed orders found.
+                    <td colSpan={9} className="py-16 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        {shippingFilter === "unserviceable" ||
+                          shippingFilter === "missing_awb" ? (
+                          <AlertTriangle
+                            size={28}
+                            className="text-yellow-500"
+                          />
+                        ) : (
+                          <PackageSearch
+                            size={28}
+                            className="text-gray-300"
+                          />
+                        )}
+
+                        <div className="mt-2 text-sm font-bold text-gray-600">
+                          No packed orders found
+                        </div>
+
+                        <div className="mt-1 text-xs text-gray-400">
+                          Try another shipping filter or search.
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -945,7 +1190,10 @@ export default function PackedOrdersPage() {
         <div className="fixed left-[-100000px] top-0 w-[794px] bg-white">
           <div ref={invoiceBatchRef}>
             {bulkInvoices.map((invoice, index) => (
-              <div key={invoice?._id || invoice?.orderNumber || index} className="w-[794px] bg-white">
+              <div
+                key={invoice?._id || invoice?.orderNumber || index}
+                className="w-[794px] bg-white"
+              >
                 <InvoiceTemplate data={invoice} />
               </div>
             ))}
@@ -953,12 +1201,24 @@ export default function PackedOrdersPage() {
         </div>
       ) : null}
 
+      <PackedOrdersReconcileModal
+        open={reconcileOpen}
+        onClose={() => setReconcileOpen(false)}
+        orders={packedOrders}
+        onSelectOrders={(ids) => {
+          setSelectedIds(Array.from(new Set(ids.map(String))));
+        }}
+      />
+
       {/* Global loading overlay */}
       {loading ? (
-        <div className="fixed inset-0 bg-black/10 backdrop-blur-[1px] flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 px-5 py-4 flex items-center gap-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
+          <div className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white px-5 py-4 shadow-lg">
             <Loader2 size={18} className="animate-spin text-gray-700" />
-            <span className="text-sm font-semibold text-gray-800">Loading...</span>
+
+            <span className="text-sm font-semibold text-gray-800">
+              Loading...
+            </span>
           </div>
         </div>
       ) : null}

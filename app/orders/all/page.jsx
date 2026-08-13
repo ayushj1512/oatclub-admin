@@ -903,54 +903,53 @@ export default function OrdersListPage() {
   };
 
 
+  // ============================================================
+  // ✅ VALID REVENUE
+  // Any top-level order is valid revenue EXCEPT:
+  // failed, return_requested, exchange_requested, cancelled
+  // ============================================================
 
-  const REVENUE_STATUSES = new Set([
-    "processing",
-    "packed",
-    "picked",
-    "shipped",
-    "out_for_delivery",
-    "delivered",
+  const INVALID_REVENUE_STATUSES = new Set([
+    "failed",
+    "return_requested",
+    "exchange_requested",
+    "cancelled",
   ]);
 
-  // All filtered orders revenue
+  const isValidRevenueOrder = (order = {}) => {
+    const status = norm(order?.fulfillmentStatus);
+
+    return !INVALID_REVENUE_STATUSES.has(status);
+  };
+
+  // Revenue should count only parent/top-level orders.
+  // Split child orders otherwise double-count revenue.
   const revenueOrders = useMemo(
     () =>
       filteredOrders.filter(
-        (order) =>
-          !isSplitChildOrder(order),
+        (order) => !isSplitChildOrder(order),
       ),
     [filteredOrders],
   );
 
   const totalRevenue = useMemo(() => {
     return revenueOrders.reduce(
-      (sum, order) =>
-        sum + getOrderRevenue(order),
+      (sum, order) => sum + getOrderRevenue(order),
       0,
     );
   }, [revenueOrders]);
 
   const validRevenue = useMemo(() => {
-    return revenueOrders.reduce(
-      (sum, order) => {
-        const status = String(
-          order?.fulfillmentStatus || "",
-        ).toLowerCase();
+    return revenueOrders.reduce((sum, order) => {
+      if (!isValidRevenueOrder(order)) {
+        return sum;
+      }
 
-        if (order?.isConfirmed !== true) {
-          return sum;
-        }
-
-        if (!REVENUE_STATUSES.has(status)) {
-          return sum;
-        }
-
-        return sum + getOrderRevenue(order);
-      },
-      0,
-    );
+      return sum + getOrderRevenue(order);
+    }, 0);
   }, [revenueOrders]);
+
+
   // ✅ stable sorted list so table work stays neat
   const groupedOrders = useMemo(() => {
     const source = Array.isArray(
@@ -1134,99 +1133,326 @@ export default function OrdersListPage() {
   const buildCsvRows = (ordersArr) => {
     const rows = [];
 
+    const round2 = (value) =>
+      Math.round((toNumber(value) + Number.EPSILON) * 100) / 100;
+
+    const GST_RATE = 5;
+    const GST_DIVISOR = 1.05;
+
     for (const order of ordersArr || []) {
+      // Never export split children separately as normal revenue orders
+      if (isSplitChildOrder(order)) {
+        continue;
+      }
+
       const orderId = safe(order?._id || order?.id);
       const orderNumber = safe(order?.orderNumber);
-      const orderDate = formatDateISO(order?.createdAt || order?.orderDate);
+      const orderDate = formatDateISO(
+        order?.createdAt || order?.orderDate,
+      );
 
       const customerName = safe(
-        order?.customerId?.name || order?.shippingAddressSnapshot?.fullName
+        order?.customerId?.name ||
+        order?.shippingAddressSnapshot?.fullName,
       );
+
       const customerEmail = safe(
-        order?.customerId?.email || order?.shippingAddressSnapshot?.email
+        order?.customerId?.email ||
+        order?.shippingAddressSnapshot?.email,
       );
+
       const customerPhone = safe(
-        order?.customerId?.phone || order?.shippingAddressSnapshot?.phone
+        order?.customerId?.phone ||
+        order?.shippingAddressSnapshot?.phone,
       );
 
-      const subtotal = money(order?.subtotal);
-      const discount = money(order?.discount);
-      const shippingFee = money(order?.shippingFee);
-      const tax = money(order?.tax);
-      const totalAmount = money(order?.totalAmount);
-      const finalPayable = money(order?.finalPayable);
+      const fulfillmentStatus = safe(
+        order?.fulfillmentStatus,
+      );
 
-      const fulfillmentStatus = safe(order?.fulfillmentStatus);
-      const isConfirmed = order?.isConfirmed === true ? "YES" : "NO";
+      const isConfirmed =
+        order?.isConfirmed === true ? "YES" : "NO";
 
-      const items = Array.isArray(order?.items) ? order.items : [];
+      const validRevenueOrder =
+        isValidRevenueOrder(order) ? "YES" : "NO";
+
+      const items = Array.isArray(order?.items)
+        ? order.items
+        : [];
+
+      const orderDiscount = round2(order?.discount);
+      const orderShippingFee = round2(order?.shippingFee);
+      const orderTax = round2(order?.tax);
+      const orderTotalAmount = round2(order?.totalAmount);
+      const orderFinalPayable = round2(order?.finalPayable);
+
+      // ---------------------------------------------------------
+      // Gross value used only for old orders where item-level
+      // discountAmount is unavailable.
+      // ---------------------------------------------------------
+      const itemGrossValues = items.map((item) => {
+        const qty = Math.max(1, toNumber(item?.quantity) || 1);
+
+        if (toNumber(item?.originalSubtotal) > 0) {
+          return round2(item.originalSubtotal);
+        }
+
+        if (toNumber(item?.originalPrice) > 0) {
+          return round2(toNumber(item.originalPrice) * qty);
+        }
+
+        return round2(
+          toNumber(item?.subtotal) ||
+          toNumber(item?.price) * qty,
+        );
+      });
+
+      const grossItemsTotal = round2(
+        itemGrossValues.reduce(
+          (sum, value) => sum + value,
+          0,
+        ),
+      );
 
       if (!items.length) {
         rows.push({
           orderId,
           orderNumber,
           orderDate,
+
           customerName,
           customerEmail,
           customerPhone,
+
           isConfirmed,
           fulfillmentStatus,
-          subtotal,
-          discount,
-          shippingFee,
-          tax,
-          totalAmount,
-          finalPayable,
+          validRevenueOrder,
+
+          // Order totals shown once
+          orderSubtotal: round2(order?.subtotal),
+          orderDiscount,
+          orderShippingFee,
+          orderTax,
+          orderTotalAmount,
+          orderFinalPayable,
+
           itemIndex: "",
           itemTitle: "",
           itemProductCode: "",
           itemSku: "",
           itemSize: "",
           itemQuantity: "",
-          itemPrice: "",
+
+          originalUnitPrice: "",
+          originalProductValue: "",
+          itemDiscount: "",
+          discountedUnitPrice: "",
+          productValue: "",
+          taxableValue: "",
+          gstRate: "",
+          gstAmount: "",
         });
+
         continue;
       }
 
+      let fallbackDiscountAllocated = 0;
+
       items.forEach((item, idx) => {
         const snap = item?.productSnapshot || {};
-        const itemProductCode = safe(snap?.productCode || "");
-        const attrs = Array.isArray(item?.variant?.attributes)
+
+        const attrs = Array.isArray(
+          item?.variant?.attributes,
+        )
           ? item.variant.attributes
           : [];
 
         const attrSize =
-          attrs.find((a) => String(a?.key || "").toLowerCase() === "size")
-            ?.value ||
-          attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")
-            ?.value ||
+          attrs.find(
+            (a) =>
+              String(a?.key || "").toLowerCase() ===
+              "size",
+          )?.value ||
+          attrs.find(
+            (a) =>
+              String(a?.key || "").toLowerCase() ===
+              "sizes",
+          )?.value ||
           "";
 
-        const itemSku = safe(item?.variant?.sku || snap?.sku || "");
-        const itemSize = safe(item?.selectedSize || attrSize || "");
+        const itemProductCode = safe(
+          snap?.productCode || "",
+        );
+
+        const itemSku = safe(
+          item?.variant?.sku || snap?.sku || "",
+        );
+
+        const itemSize = safe(
+          item?.selectedSize || attrSize || "",
+        );
+
+        const quantity = Math.max(
+          1,
+          toNumber(item?.quantity) || 1,
+        );
+
+        // =======================================================
+        // ORIGINAL PRODUCT VALUE
+        // =======================================================
+
+        const originalProductValue =
+          itemGrossValues[idx];
+
+        const originalUnitPrice = round2(
+          toNumber(item?.originalPrice) > 0
+            ? item.originalPrice
+            : originalProductValue / quantity,
+        );
+
+        // =======================================================
+        // ITEM DISCOUNT
+        // =======================================================
+
+        let itemDiscount = 0;
+
+        // New pricing schema has direct item discount
+        if (
+          item?.discountAmount !== undefined &&
+          item?.discountAmount !== null
+        ) {
+          itemDiscount = round2(
+            item.discountAmount,
+          );
+        } else if (
+          orderDiscount > 0 &&
+          grossItemsTotal > 0
+        ) {
+          // Old orders:
+          // distribute total order discount proportionately
+
+          if (idx === items.length - 1) {
+            itemDiscount = round2(
+              orderDiscount -
+              fallbackDiscountAllocated,
+            );
+          } else {
+            itemDiscount = round2(
+              orderDiscount *
+              (originalProductValue /
+                grossItemsTotal),
+            );
+
+            fallbackDiscountAllocated = round2(
+              fallbackDiscountAllocated +
+              itemDiscount,
+            );
+          }
+        }
+
+        itemDiscount = Math.min(
+          Math.max(0, itemDiscount),
+          originalProductValue,
+        );
+
+        // =======================================================
+        // FINAL PRODUCT VALUE AFTER DISCOUNT
+        // =======================================================
+
+        let productValue;
+
+        // New schema subtotal = discounted product value
+        if (
+          item?.discountAmount !== undefined &&
+          item?.discountAmount !== null &&
+          item?.subtotal !== undefined
+        ) {
+          productValue = round2(item.subtotal);
+        } else {
+          productValue = round2(
+            originalProductValue - itemDiscount,
+          );
+        }
+
+        const discountedUnitPrice = round2(
+          productValue / quantity,
+        );
+
+        // =======================================================
+        // GST 5% INCLUDED
+        // =======================================================
+
+        const taxableValue =
+          toNumber(item?.taxableValue) > 0
+            ? round2(item.taxableValue)
+            : round2(productValue / GST_DIVISOR);
+
+        const gstAmount =
+          item?.taxAmount !== undefined &&
+            item?.taxAmount !== null
+            ? round2(item.taxAmount)
+            : round2(productValue - taxableValue);
 
         rows.push({
           orderId,
           orderNumber,
           orderDate,
+
           customerName,
           customerEmail,
           customerPhone,
+
           isConfirmed,
           fulfillmentStatus,
-          subtotal,
-          discount,
-          shippingFee,
-          tax,
-          totalAmount,
-          finalPayable,
+          validRevenueOrder,
+
+          // =====================================================
+          // IMPORTANT:
+          // Order totals ONLY on first product row.
+          // This prevents Excel SUM from multiplying order revenue.
+          // =====================================================
+          orderSubtotal:
+            idx === 0
+              ? round2(order?.subtotal)
+              : "",
+
+          orderDiscount:
+            idx === 0 ? orderDiscount : "",
+
+          orderShippingFee:
+            idx === 0 ? orderShippingFee : "",
+
+          orderTax:
+            idx === 0 ? orderTax : "",
+
+          orderTotalAmount:
+            idx === 0 ? orderTotalAmount : "",
+
+          orderFinalPayable:
+            idx === 0 ? orderFinalPayable : "",
+
+          // Product line
           itemIndex: idx + 1,
           itemTitle: safe(snap?.title),
           itemProductCode,
           itemSku,
           itemSize,
-          itemQuantity: money(item?.quantity),
-          itemPrice: money(item?.price),
+          itemQuantity: quantity,
+
+          originalUnitPrice,
+          originalProductValue,
+
+          itemDiscount,
+
+          discountedUnitPrice,
+
+          // ✅ THIS IS THE PRODUCT'S ACTUAL VALUE,
+          // NOT THE FULL ORDER VALUE
+          productValue,
+
+          taxableValue,
+          gstRate: GST_RATE,
+          gstAmount,
         });
       });
     }
@@ -1287,24 +1513,40 @@ export default function OrdersListPage() {
         "Order DB Id",
         "Order #",
         "Order Date (ISO)",
+
         "Customer Name",
         "Customer Email",
         "Customer Phone",
+
         "Is Confirmed",
         "Fulfillment Status",
-        "Subtotal",
-        "Discount",
-        "Shipping Fee",
-        "Tax",
-        "Total Amount",
-        "Final Payable",
+        "Valid Revenue",
+
+        "Order Subtotal",
+        "Order Discount",
+        "Order Shipping Fee",
+        "Order Tax",
+        "Order Total Amount",
+        "Order Final Payable",
+
         "Item #",
         "Item Title",
         "Product Code",
         "Item SKU",
         "Item Size",
         "Item Quantity",
-        "Item Price",
+
+        "Original Unit Price",
+        "Original Product Value",
+
+        "Item Discount",
+
+        "Discounted Unit Price",
+        "Product Value",
+
+        "Taxable Value",
+        "GST Rate %",
+        "GST Amount",
       ];
 
       const csvLines = [
@@ -1314,24 +1556,40 @@ export default function OrdersListPage() {
             row.orderId,
             row.orderNumber,
             row.orderDate,
+
             row.customerName,
             row.customerEmail,
             row.customerPhone,
+
             row.isConfirmed,
             row.fulfillmentStatus,
-            row.subtotal,
-            row.discount,
-            row.shippingFee,
-            row.tax,
-            row.totalAmount,
-            row.finalPayable,
+            row.validRevenueOrder,
+
+            row.orderSubtotal,
+            row.orderDiscount,
+            row.orderShippingFee,
+            row.orderTax,
+            row.orderTotalAmount,
+            row.orderFinalPayable,
+
             row.itemIndex,
             row.itemTitle,
             row.itemProductCode,
             row.itemSku,
             row.itemSize,
             row.itemQuantity,
-            row.itemPrice,
+
+            row.originalUnitPrice,
+            row.originalProductValue,
+
+            row.itemDiscount,
+
+            row.discountedUnitPrice,
+            row.productValue,
+
+            row.taxableValue,
+            row.gstRate,
+            row.gstAmount,
           ]
             .map(escapeCSV)
             .join(","),

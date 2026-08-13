@@ -9,8 +9,12 @@ import {
   Loader2,
   Search,
   Truck,
+  AlertTriangle,
 } from "lucide-react";
-import OrderRow from "@/components/orders/OrderRow";
+import DeliveredOrderRow from "@/components/orders/DeliveredOrderRow";
+import {
+  getDeliveryHealth,
+} from "@/components/orders/DeliveryHealthBadge";
 import { useOrderStore } from "@/store/orderStore";
 
 const IST_TZ = "Asia/Kolkata";
@@ -115,10 +119,10 @@ const normalizeSearchTerm = (value = "") => String(value || "").trim();
 const getOrderRevenue = (order) =>
   toNumber(
     order?.finalPayable ??
-      order?.totalAmount ??
-      order?.grandTotal ??
-      order?.amount ??
-      0
+    order?.totalAmount ??
+    order?.grandTotal ??
+    order?.amount ??
+    0
   );
 
 const getOrderDate = (order) => {
@@ -358,6 +362,20 @@ export default function DeliveredOrdersPage() {
     ).length;
   }, [sortedOrders]);
 
+  const needsReviewCount = useMemo(() => {
+    return sortedOrders.filter(
+      (order) =>
+        getDeliveryHealth(order).issueCount > 0
+    ).length;
+  }, [sortedOrders]);
+
+  const cleanDeliveredCount = useMemo(() => {
+    return sortedOrders.filter(
+      (order) =>
+        getDeliveryHealth(order).isClean
+    ).length;
+  }, [sortedOrders]);
+
   const buildCsvRows = (ordersArr) => {
     const rows = [];
 
@@ -366,11 +384,11 @@ export default function DeliveredOrdersPage() {
       const orderNumber = safe(order?.orderNumber);
       const orderDate = formatDateISO(
         order?.deliveredAt ||
-          order?.shipment?.deliveredAt ||
-          order?.statusTimestamps?.deliveredAt ||
-          order?.updatedAt ||
-          order?.createdAt ||
-          order?.orderDate
+        order?.shipment?.deliveredAt ||
+        order?.statusTimestamps?.deliveredAt ||
+        order?.updatedAt ||
+        order?.createdAt ||
+        order?.orderDate
       );
 
       const customerName = safe(
@@ -598,51 +616,93 @@ export default function DeliveredOrdersPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
                 <CheckCircle2 size={20} />
               </div>
+
               <div>
-                <p className="text-xs text-gray-500">Delivered Orders</p>
-                <p className="text-xl font-bold text-gray-900">{sortedOrders.length}</p>
+                <p className="text-xs text-gray-500">
+                  Delivered
+                </p>
+
+                <p className="text-xl font-bold text-gray-900">
+                  {sortedOrders.length}
+                </p>
               </div>
             </div>
           </Card>
 
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
                 <IndianRupee size={20} />
               </div>
+
               <div>
-                <p className="text-xs text-gray-500">Delivered Revenue</p>
-                <p className="text-xl font-bold text-gray-900">{formatINR(totalRevenue)}</p>
+                <p className="text-xs text-gray-500">
+                  Revenue
+                </p>
+
+                <p className="text-xl font-bold text-gray-900">
+                  {formatINR(totalRevenue)}
+                </p>
               </div>
             </div>
           </Card>
 
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
                 <Truck size={20} />
               </div>
+
               <div>
-                <p className="text-xs text-gray-500">Confirmed Delivered</p>
-                <p className="text-xl font-bold text-gray-900">{confirmedCount}</p>
+                <p className="text-xs text-gray-500">
+                  Prepaid
+                </p>
+
+                <p className="text-xl font-bold text-gray-900">
+                  {prepaidCount}
+                </p>
               </div>
             </div>
           </Card>
 
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center">
-                <Search size={20} />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                <CheckCircle2 size={20} />
               </div>
+
               <div>
-                <p className="text-xs text-gray-500">Prepaid Delivered</p>
-                <p className="text-xl font-bold text-gray-900">{prepaidCount}</p>
+                <p className="text-xs text-gray-500">
+                  Clean Delivery
+                </p>
+
+                <p className="text-xl font-bold text-emerald-700">
+                  {cleanDeliveredCount}
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                <AlertTriangle size={20} />
+              </div>
+
+              <div>
+                <p className="text-xs text-gray-500">
+                  Needs Review
+                </p>
+
+                <p className="text-xl font-bold text-red-600">
+                  {needsReviewCount}
+                </p>
               </div>
             </div>
           </Card>
@@ -729,11 +789,10 @@ export default function DeliveredOrdersPage() {
                 <button
                   key={chip.key || "custom"}
                   onClick={() => setQuickDate(chip.key)}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
-                    active
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition ${active
                       ? "bg-black text-white shadow-sm"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                    }`}
                 >
                   {chip.label}
                 </button>
@@ -793,11 +852,10 @@ export default function DeliveredOrdersPage() {
               <button
                 disabled={!ordersMeta?.hasMore || loadingMore}
                 onClick={loadMore}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  !ordersMeta?.hasMore || loadingMore
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${!ordersMeta?.hasMore || loadingMore
                     ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                     : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
-                }`}
+                  }`}
               >
                 {loadingMore ? (
                   <span className="inline-flex items-center gap-2">
@@ -816,44 +874,68 @@ export default function DeliveredOrdersPage() {
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
-                <tr>
-                  <th className="py-4 px-5 text-left font-semibold">Order</th>
-                  <th className="py-4 px-5 text-left font-semibold">Customer</th>
-                  <th className="py-4 px-5 text-left font-semibold">Payment</th>
-                  <th className="py-4 px-5 text-left font-semibold">Status</th>
-                  <th className="py-4 px-5 text-left font-semibold">Amount</th>
-                  <th className="py-4 px-5 text-left font-semibold">Date</th>
-                  <th className="py-4 px-5 text-left font-semibold">Action</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-gray-100">
-                {sortedOrders.length ? (
-                  sortedOrders.map((order, idx) => {
-                    const rowKey =
-                      order?._id || order?.id || order?.orderNumber || `order-${idx}`;
-
-                    return (
-                      <OrderRow
-                        key={String(rowKey)}
-                        order={order}
-                        onUpdated={(updatedOrder) => {
-                          if (updatedOrder?._id) syncOrderInList(updatedOrder);
-                        }}
-                      />
-                    );
-                  })
-                ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1200px] text-sm">
+                <thead className="border-b border-gray-100 bg-gray-50 text-gray-600">
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">
-                      {loading ? "Loading delivered orders..." : "No delivered orders found."}
-                    </td>
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Order
+                    </th>
+
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Customer
+                    </th>
+
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Delivery
+                    </th>
+
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Courier / AWB
+                    </th>
+
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Payment
+                    </th>
+
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Health
+                    </th>
+
+                    <th className="px-5 py-4 text-right font-semibold">
+                      Action
+                    </th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {sortedOrders.length ? (
+                    sortedOrders.map((order, index) => (
+                      <DeliveredOrderRow
+                        key={
+                          order?._id ||
+                          order?.id ||
+                          order?.orderNumber ||
+                          `delivered-${index}`
+                        }
+                        order={order}
+                      />
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-14 text-center text-gray-500"
+                      >
+                        {loading
+                          ? "Loading delivered orders..."
+                          : "No delivered orders found."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 

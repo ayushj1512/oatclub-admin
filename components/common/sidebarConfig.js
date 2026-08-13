@@ -1,672 +1,699 @@
-export const sidebarMenus = {
-  dashboard: [
-    { label: "Welcome", href: "/dashboard" },
-    { label: "Analytics Overview", href: "/dashboard/analytics" },
-    { label: "Sales Snapshot", href: "/dashboard/sales" },
-    { label: "Quick Actions", href: "/dashboard/actions" },
-  ],
+  export const sidebarMenus = {
+    dashboard: [
+      { label: "Welcome", href: "/dashboard" },
+      { label: "Analytics Overview", href: "/dashboard/analytics" },
+      { label: "Sales Snapshot", href: "/dashboard/sales" },
+      { label: "Quick Actions", href: "/dashboard/actions" },
+    ],
 
-  analytics: [
-    { label: "Analytics Home", href: "/analytics" },
-    { label: "Overview", href: "/analytics/overview" },
-    { label: "Sales Analytics", href: "/analytics/sales" },
-    { label: "Orders Funnel", href: "/analytics/funnel" },
-    { label: "Traffic / UTM", href: "/analytics/traffic" },
-    { label: "Marketing Performance", href: "/analytics/marketing" },
-    { label: "Products Performance", href: "/analytics/products" },
-    { label: "Customer Insights", href: "/analytics/customers" },
-    { label: "Abandoned Carts", href: "/analytics/abandoned-carts" },
-    { label: "Reports Export", href: "/analytics/reports" },
-  ],
+    analytics: [
+      { label: "Analytics Home", href: "/analytics" },
+      { label: "Overview", href: "/analytics/overview" },
+      { label: "Sales Analytics", href: "/analytics/sales" },
+      { label: "Orders Funnel", href: "/analytics/funnel" },
+      { label: "Traffic / UTM", href: "/analytics/traffic" },
+      { label: "Marketing Performance", href: "/analytics/marketing" },
+      { label: "Products Performance", href: "/analytics/products" },
+      { label: "Customer Insights", href: "/analytics/customers" },
+      { label: "Abandoned Carts", href: "/analytics/abandoned-carts" },
+      { label: "Reports Export", href: "/analytics/reports" },
+    ],
 
-  designing: [
-    { label: "Design Home", href: "/designing" },
-    { label: "Banners Manager", href: "/designing/banners" },
+    designing: [
+      { label: "Design Home", href: "/designing" },
+      { label: "Banners Manager", href: "/designing/banners" },
 
-    { label: "Mobile Banners", href: "/designing/mobile-banners" },
+      { label: "Mobile Banners", href: "/designing/mobile-banners" },
 
-    { label: "Category Banner", href: "/designing/category-banner" },
-    { label: "Top Categories", href: "/designing/top-categories" },
-    { label: "Collections Editor", href: "/designing/collection" },
-    { label: "Marquee Manager", href: "/designing/marquee" },
-  ],
+      { label: "Category Banner", href: "/designing/category-banner" },
+      { label: "Top Categories", href: "/designing/top-categories" },
+      { label: "Collections Editor", href: "/designing/collection" },
+      { label: "Marquee Manager", href: "/designing/marquee" },
+    ],
 
-  design_lab: [
-    { label: "Design Lab Home", href: "/design-lab" },
-    { label: "All Tailors", href: "/design-lab/tailors" },
-    { label: "Add Tailor", href: "/design-lab/tailors/new" },
+    design_lab: [
+      { label: "Design Lab Home", href: "/design-lab" },
+      { label: "All Tailors", href: "/design-lab/tailors" },
+      { label: "Add Tailor", href: "/design-lab/tailors/new" },
+      {
+        label: "Products RMA Insights",
+        href: "/design-lab/products-rma-insights",
+      },
+    ],
+
+    production: [
+      { label: "Production Dashboard", href: "/production" },
+      { label: "All Production Jobs", href: "/production/all-production-job" },
+      { label: "Confirmed Production Jobs", href: "/production/production-job" },
+      { label: "Packed Orders", href: "/production/packed" },
+      { label: "Sampling", href: "/production/sampling" },
+      { label: "Stock Update", href: "/production/stock-update" },
+      { label: "Pattern Number", href: "/production/pattern-number" },
+      { label: "Fabric", href: "/production/fabric" },
+      { label: "Product Detail", href: "/production/product-detail" },
+      { label: "Missing Patterns", href: "/production/missing-patterns" },
+      { label: "Barcode Generator", href: "/production/barcode" },
+    ],
+
+    vendors: [
+      {
+        label: "Vendor Dashboard",
+        href: "/vendors",
+      },
+      {
+        label: "Create Vendor",
+        href: "/vendors/create",
+      },
+      {
+        label: "Vendor List",
+        href: "/vendors",
+      },
+    ],
+
+    fast2sms: [
+      { label: "Fast2SMS Dashboard", href: "/fast2sms" },
+      {
+        label: "WhatsApp Logs",
+        href: "/fast2sms/whatsapp-confirmation-message",
+      },
+      {
+        label: "Send Test Message",
+        href: "/fast2sms/whatsapp-confirmation-message/send",
+      },
+      {
+        label: "Analytics",
+        href: "/fast2sms/whatsapp-confirmation-message/analytics",
+      },
+      {
+        label: "Settings",
+        href: "/fast2sms/whatsapp-confirmation-message/settings",
+      },
+    ],
+
+    otp: [
+      { label: "OTP Dashboard", href: "/otp" },
+      { label: "Test OTP", href: "/otp/test" },
+      { label: "OTP Logs", href: "/otp/logs" },
+      { label: "Analytics", href: "/otp/analytics" },
+    ],
+
+    reviews: [
+      { label: "Reviews Dashboard", href: "/reviews" },
+      { label: "Manage Reviews", href: "/reviews/manage" },
+      { label: "Add Review", href: "/reviews/add" },
+      { label: "Pending Reviews", href: "/reviews/pending" },
+      { label: "Approved Reviews", href: "/reviews/approved" },
+      { label: "Rejected Reviews", href: "/reviews/rejected" },
+      { label: "Order Reviews", href: "/reviews/order" },
+    ],
+
+    accounts: [
+      { label: "Accounts Dashboard", href: "/accounts" },
+      { label: "Remittance", href: "/accounts/remittance" },
+      { label: "Sales", href: "/accounts/sales" },
+      { label: "Revenue", href: "/accounts/revenue" },
+      { label: "GST State Wise Report", href: "/accounts/gst-state-wise-report" },
+      { label: "Razorpay transaction", href: "/accounts/razorpay-transaction" },
+      { label: "Razorpay Remittance", href: "/accounts/razorpay-remittance" },
+    ],
+
+    inventory: [
+      { label: "Inventory Dashboard", href: "/inventory" },
+      {
+        label: "Available Inventory",
+        href: "/inventory/available-inventory",
+      },
+      { label: "Modify Inventory", href: "/inventory/modify-inventory" },
+      { label: "Stock Update", href: "/inventory/stock-update" },
+      { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
+      { label: "Reserved Inventory", href: "/inventory/reserved-inventory" },
+      { label: "On Demand Inventory", href: "/inventory/on-demand-inventory" },
+      { label: "Zero Inventory", href: "/inventory/zero-inventory" },
+    ],
+
+    barcodes: [
+      {
+        label: "Barcode Dashboard",
+        href: "/barcodes",
+      },
+      {
+        label: "Generate Barcodes",
+        href: "/barcodes/generate",
+      },
+      {
+        label: "Print Barcode Tags",
+        href: "/barcodes/print",
+      },
+      {
+        label: "Scan Barcode",
+        href: "/barcodes/scan",
+      },
+      {
+        label: "All Barcode Items",
+        href: "/barcodes/all",
+      },
+      {
+        label: "Stock In",
+        href: "/barcodes/stock-in",
+      },
+      {
+        label: "Stock-In History",
+        href: "/barcodes/stock-in/history",
+      },
+    ],
+
+    fabrics: [
+      {
+        label: "Fabric Dashboard",
+        href: "/fabrics",
+      },
+      {
+        label: "Search Fabrics",
+        href: "/fabrics/search",
+      },
+      {
+        label: "Add Fabric",
+        href: "/fabrics/add-fabric",
+      },
+      {
+        label: "Fabric Inventory",
+        href: "/fabrics/inventory",
+      },
+      {
+        label: "Import Fabrics",
+        href: "/fabrics/import",
+      },
+      {
+        label: "Fabric Actions",
+        href: "/fabrics/actions",
+      },
+      {
+        label: "Fabric Logs",
+        href: "/fabrics/logs",
+      },
+      {
+        label: "Fabric Price Logs",
+        href: "/fabrics/price-logs",
+      },
+      {
+        label: "Fabric Product Assignment",
+        href: "/fabrics/fabric-product-assignment",
+      },
+      {
+        label: "Low Stock Fabrics",
+        href: "/fabrics/low-stock",
+      },
+    ],
+
+    media: [
+      { label: "Media Library", href: "/media" },
+      { label: "Upload Media", href: "/media/upload" },
+      { label: "Outsourced Assets", href: "/media/outsourced-assets" },
+    ],
+
+    email: [
+      { label: "Email Dashboard", href: "/email" },
+      { label: "Template Library", href: "/email/library" },
+    ],
+
+    reels: [
+      { label: "Reels Dashboard", href: "/reels" },
+      { label: "Add Reels", href: "/reels/add" },
+      { label: "Manage Reels", href: "/reels/manage" },
+    ],
+
+    blogs: [
+      { label: "Blogs Dashboard", href: "/blogs" },
+      { label: "All Blogs", href: "/blogs/all" },
+      { label: "Create Blog", href: "/blogs/create" },
+      { label: "Drafts", href: "/blogs/drafts" },
+      { label: "Categories", href: "/blogs/categories" },
+      { label: "Analytics", href: "/blogs/analytics" },
+    ],
+
+    products: [
+      { label: "Product Dashboard", href: "/products" },
+      { label: "Add New Product", href: "/products/add" },
+      { label: "Manage Products", href: "/products/manage" },
+      { label: "Search Product", href: "/products/search" },
+
+      {
+        label: "Production Lifecycle",
+        href: "/products/product-production-lifecycle",
+      },
+
+      { label: "Bestsellers", href: "/products/bestseller" },
+      { label: "Trending", href: "/products/trending" },
+
+      { label: "Categories", href: "/products/category" },
+      { label: "Collections", href: "/products/collections" },
+
+      {
+        label: "Collab Ready",
+        href: "/products/collab-ready",
+      },
+      {
+        label: "Dispatch Ready",
+        href: "/products/dispatch-ready",
+      },
+
+      {
+        label: "Product Groups",
+        href: "/products/product-groups",
+      },
+
+      { label: "Analytics", href: "/products/analytics" },
+      {
+        label: "RMA Insights",
+        href: "/products/products-rma-insights",
+      },
+
+      {
+        label: "Excel Export",
+        href: "/products/import-excel",
+      },
+      {
+        label: "Bulk Import",
+        href: "/products/bulk-import",
+      },
+      {
+        label: "Bulk Export",
+        href: "/products/bulk-export",
+      },
+      {
+        label: "Bulk Price Editor",
+        href: "/products/bulkPriceEditor",
+      },
+
+      {
+        label: "Inventory Sync",
+        href: "/products/inventory-sync",
+      },
+      {
+        label: "Pricing",
+        href: "/products/pricing",
+      },
+      {
+        label: "Offers",
+        href: "/products/offers",
+      },
+
+      {
+        label: "SEO Manager",
+        href: "/products/seo",
+      },
+      {
+        label: "Meta Editor",
+        href: "/products/product-meta-editor",
+      },
+
+      {
+        label: "Reviews",
+        href: "/products/reviews",
+      },
+      {
+        label: "Media Library",
+        href: "/media",
+      },
+
+      {
+        label: "Attributes",
+        href: "/products/attributes",
+      },
+      {
+        label: "Variants",
+        href: "/products/variants",
+      },
+      {
+        label: "Fabrics",
+        href: "/products/fabric",
+      },
+      {
+        label: "Colors",
+        href: "/products/colors",
+      },
+    ],
+
+    dispatching: [
+      {
+        label: "Dispatching Dashboard",
+        href: "/dispatching",
+      },
+      {
+        label: "On Demand Inventory",
+        href: "/dispatching/on-demand-inventory",
+      },
+      {
+        label: "Production",
+        href: "/dispatching/production",
+      },
+      {
+        label: "Ready to Ship",
+        href: "/dispatching/ready-to-ship",
+      },
+      {
+        label: "Packed Orders",
+        href: "/dispatching/packed",
+      },
+      {
+        label: "Shipped Orders",
+        href: "/dispatching/shipped",
+      },
+      {
+        label: "Invoices",
+        href: "/dispatching/invoices",
+      },
+    ],
+    orders: [
+      { label: "Orders Dashboard", href: "/orders" },
+      { label: "All Orders", href: "/orders/all" },
+
+      // ✅ confirmation
+
+      { label: "Order Search", href: "/orders/search" },
+
+      {
+        label: "Product → Order Search",
+        href: "/orders/search-order-by-name-or-code",
+      },
+
+      {
+        label: "Order Search by Location",
+        href: "/orders/getOrderbyLocation",
+      },
+      { label: "Confirmed Orders", href: "/orders/confirmed-orders" },
+      { label: "Unconfirmed Orders", href: "/orders/unconfirmed-orders" },
+      { label: "Influencer Orders", href: "/orders/influencer-orders" },
+      {
+        label: "WhatsApp Confirmations",
+        href: "/orders/unconfirmed-order-whatsappmessage",
+      },
+      { label: "Duplicate Orders", href: "/orders/duplicate-orders" },
+      { label: "Refund Escalation", href: "/orders/refund-escalation" },
+      { label: "Order Analytics", href: "/orders/report" },
+
+      // ✅ fulfillment
+      { label: "Processing", href: "/orders/processing" },
+      { label: "Packed", href: "/orders/packed" },
+      { label: "Shipped", href: "/orders/shipped" },
+      { label: "Out for Delivery", href: "/orders/out-for-delivery" },
+      { label: "Delivered", href: "/orders/delivered" },
+
+      // ✅ reverse flow
+      { label: "Return Requested", href: "/orders/return_requested" },
+      { label: "Returned", href: "/orders/returned" },
+      { label: "Exchange Requested", href: "/orders/exchange_requested" },
+      { label: "Exchanged", href: "/orders/exchanged" },
+      { label: "Pickup Initiated", href: "/orders/pickup_initiated" },
+
+      // ✅ failure states
+      { label: "Failed", href: "/orders/failed" },
+      { label: "Cancelled", href: "/orders/cancelled" },
+      { label: "Refunded", href: "/orders/refunded" },
+      { label: "RTO / NDR", href: "/orders/rto" },
+
+      // ✅ misc
+      { label: "Order Remark", href: "/orders/remark" },
+      { label: "Invoice", href: "/orders/invoices" },
+      { label: "RMA Requests", href: "/orders/rma" },
+    ],
+
+    rma: [
+      { label: "RMA Requests", href: "/rma" },
+      { label: "Create RMA", href: "/rma/create-rma" },
+    ],
+
+    coupons: [
+      { label: "Coupons Dashboard", href: "/coupons" },
+      { label: "Create Coupon", href: "/coupons/create" },
+      { label: "Manage Coupons", href: "/coupons/manage" },
+      { label: "Coupon Usage Reports", href: "/coupons/reports" },
+    ],
+
+    operations: [
+      { label: "Ops Dashboard", href: "/operations" },
+      { label: "Order Processing", href: "/operations/order-processing" },
+      { label: "Shipments", href: "/operations/shipments" },
+      { label: "Returns & RTO", href: "/operations/returns" },
+      { label: "Packing Manager", href: "/operations/packing" },
+      { label: "Courier Partners", href: "/operations/couriers" },
+      { label: "Manifest / Dispatch", href: "/operations/manifest" },
+      { label: "NDR Follow-ups", href: "/operations/ndr" },
+    ],
+
+    marketing: [
+      { label: "Dashboard", href: "/marketing" },
+      { label: "Campaigns", href: "/marketing/campaigns" },
+      { label: "Create Campaign", href: "/marketing/campaigns/create" },
+      { label: "Email", href: "/marketing/email" },
+      {
+        label: "Product Meta Editor",
+        href: "/marketing/product-meta-editor",
+      },
+      { label: "Marketing Spend", href: "/marketing/marketingSpend" },
+      { label: "ROAS", href: "/marketing/ROAS" },
+      { label: "Commerce Manager", href: "/marketing/commerceManager" },
+    ],
+
+    customers: [
+      { label: "Customer Dashboard", href: "/customers/dashboard" },
+      { label: "Customer List", href: "/customers" },
+      { label: "Customer Search", href: "/customers/search" },
+      { label: "Customer Blacklist", href: "/customers/blacklist" },
+
+      { label: "Customer Analytics", href: "/customers/analytics" },
+      { label: "Segments Analytics", href: "/customers/analytics/segments" },
+      { label: "Risk / RTO Analytics", href: "/customers/analytics/risk" },
+      { label: "Revenue Analytics", href: "/customers/analytics/revenue" },
+      { label: "Retention Analytics", href: "/customers/analytics/retention" },
+      { label: "Analytics Reports", href: "/customers/analytics/reports" },
+
+      { label: "Customer Credits", href: "/customers/credits" },
+
+      { label: "Banking / Refund Details", href: "/customers/bankingDetails" },
+      { label: "Customer / Address", href: "/customers/address" },
+      { label: "Customer Carts", href: "/customers/carts" },
+      { label: "Cart Adds", href: "/customers/cart-adds" },
+      { label: "Abandoned Carts", href: "/customers/abandoned-carts" },
+      { label: "Wishlist", href: "/customers/wishlist" },
+      { label: "Tickets & Support", href: "/customers/support" },
+      { label: "Newsletter Subscribers", href: "/customers/newsletter" },
+    ],
+    customer_support: [
+      { label: "Support Dashboard", href: "/customer-support" },
+      { label: "Search", href: "/customer-support/search" },
+      {
+        label: "Customer Confirmation",
+        href: "/customer-support/customer-confirmation",
+      },
+      {
+        label: "WhatsApp Confirmations",
+        href: "/customer-support/unconfirmed-order-whatsappmessage",
+      },
+      { label: "Duplicate Orders", href: "/customer-support/duplicate-orders" },
+      { label: "Order Remark", href: "/customer-support/remark" },
+      { label: "All Orders", href: "/customer-support/all-orders" },
+      { label: "All Tickets", href: "/customer-support/all" },
+      { label: "Open Tickets", href: "/customer-support/open" },
+      { label: "In Progress", href: "/customer-support/in-progress" },
+      { label: "Resolved", href: "/customer-support/resolved" },
+      { label: "Closed", href: "/customer-support/closed" },
+      { label: "SLA / Reports", href: "/customer-support/reports" },
+    ],
+
+    sales: [
+      { label: "Sales Dashboard", href: "/sales" },
+      { label: "Orders", href: "/sales/orders" },
+      { label: "Revenue Reports", href: "/sales/reports" },
+      { label: "Returns Summary", href: "/sales/returns" },
+      { label: "COD vs Prepaid", href: "/sales/payment-type" },
+      { label: "Top Products", href: "/sales/top-products" },
+      { label: "Top Categories", href: "/sales/top-categories" },
+    ],
+
+    shiprocket: [
+      { label: "Shiprocket Dashboard", href: "/shiprocket" },
+      { label: "Serviceability Check", href: "/shiprocket/serviceability-check" },
+      { label: "Authentication API", href: "/shiprocket/authentication-api" },
+      { label: "Not Deliverables", href: "/shiprocket/not-deliverables" },
+    ],
+
+    delhivery: [
+      { label: "Delhivery Dashboard", href: "/delhivery" },
+      { label: "Create Shipment", href: "/delhivery/create" },
+      { label: "Tracking", href: "/delhivery/tracking" },
+      { label: "Labels", href: "/delhivery/labels" },
+      { label: "Pickup Requests", href: "/delhivery/pickups" },
+      { label: "Serviceability", href: "/delhivery/serviceability" },
+      { label: "NDR", href: "/delhivery/ndr" },
+      { label: "Logs", href: "/delhivery/logs" },
+      { label: "Settings", href: "/delhivery/settings" },
+    ],
+
+    bluedart: [
+      { label: "BlueDart Dashboard", href: "/bluedart" },
+
+      { label: "Create Shipment", href: "/bluedart/create" },
+
+      { label: "Service Check", href: "/bluedart/service-check" },
+
+      { label: "All Shipments", href: "/bluedart/shipments" },
+
+      { label: "External Orders", href: "/bluedart/external-orders" },
+
+      { label: "EDD Prediction", href: "/bluedart/edd" },
+
+      { label: "Analytics", href: "/bluedart/analytics" },
+    ],
+
+    reports: [
+      { label: "Reports Home", href: "/reports" },
+      {
+        label: "Order & Business Overview",
+        href: "/reports/Order-Business-Overview",
+      },
+      { label: "Revenue by Status", href: "/reports/revenue-by-status" },
+      { label: "Product Sales", href: "/reports/ProductSoldReport" },
+      { label: "Low Product Sale", href: "/reports/low-product-sale" },
+      { label: "Product Unsold", href: "/reports/ProductUnSoldReport" },
+      { label: "Orders Report", href: "/reports/Orders" },
+      { label: "ROAS", href: "/reports/ROAS" },
+      { label: "Operations Status", href: "/reports/Operations-Order-Status" },
+      { label: "RTO Report", href: "/reports/RTO" },
+      { label: "Cancellation Report", href: "/reports/Cancellation" },
+      {
+        label: "Cancellation Analytics",
+        href: "/reports/Cancellation-Analytics",
+      },
+      { label: "Products RMA Insights", href: "/reports/products-rma-insights" },
+    ],
+
+    refunds: [
+      { label: "Dashboard", href: "/refunds" },
+
+      // 🎯 Entry point (important)
+      { label: "Eligible Orders", href: "/refunds/eligible-orders" },
+
+      // 🧾 Core
+      { label: "All Refunds", href: "/refunds/list" },
+      { label: "Create Refund", href: "/refunds/create" },
+
+      // ⚙️ Processing queues
+      { label: "Razorpay Queue", href: "/refunds/razorpay" },
+      { label: "Manual Refunds", href: "/refunds/manual" },
+
+      // ⚠️ Monitoring
+      { label: "Failed Refunds", href: "/refunds/failed" },
+
+      // 📊 Insights
+      { label: "Reports", href: "/refunds/reports" },
+
+      // ⚙️ Config
+      { label: "Settings", href: "/refunds/settings" },
+    ],
+
+    account_user: [
+      { label: "Profile", href: "/account/profile" },
+      { label: "Change Password", href: "/account/password" },
+      { label: "Logout", href: "/logout" },
+    ],
+
+    admin_user_tasks: [
+      {
+        label: "Task Dashboard",
+        href: "/admin-user-tasks",
+      },
+      {
+        label: "Create Task",
+        href: "/admin-user-tasks/create",
+      },
+    ],
+    superadmin: [
+      { label: "Vault", href: "/superadmin" },
+      { label: "Manage Users", href: "/superadmin/manage" },
+      { label: "Add User", href: "/superadmin/add" },
+
+      // ✅ New session control page
+      { label: "Manage Sessions", href: "/superadmin/manage-session" },
+
+      { label: "Activity", href: "/superadmin/activity" },
+      { label: "Meta XML Sync", href: "/superadmin/xml-sync" },
+    ],
+
+    affiliate: [
+      { label: "Affiliate Dashboard", href: "/affiliate" },
+      { label: "All Affiliates", href: "/affiliate/all" },
+      { label: "Create Affiliate", href: "/affiliate/create" },
+      { label: "Coupon Performance", href: "/affiliate/coupons" },
+      { label: "Affiliate Orders", href: "/affiliate/orders" },
+      { label: "Commissions", href: "/affiliate/commissions" },
+      { label: "Pending Payouts", href: "/affiliate/pending-payouts" },
+      { label: "Payout History", href: "/affiliate/payout-history" },
+    ],
+
+    collaboration: [
+      { label: "Influencer Program", href: "/influencer-collaboration-program" },
+      {
+        label: "All Collaborations",
+        href: "/influencer-collaboration-program/all",
+      },
+      {
+        label: "Add Collaboration",
+        href: "/influencer-collaboration-program/add",
+      },
+      { label: "Search", href: "/influencer-collaboration-program/search" },
+      { label: "Analytics", href: "/influencer-collaboration-program/analytics" },
+    ],
+
+    wordpress: [{ label: "WP Orders", href: "/wordpress/orders" }],
+  };
+
+  export const routeSidebarMap = [
+    { prefix: "/refunds", key: "refunds" },
+
+    { prefix: "/superadmin", key: "superadmin" },
+    { prefix: "/customer-support", key: "customer_support" },
+    { prefix: "/reports", key: "reports" },
+    { prefix: "/fabrics", key: "fabrics" },
+    { prefix: "/inventory", key: "inventory" },
+    { prefix: "/analytics", key: "analytics" },
     {
-      label: "Products RMA Insights",
-      href: "/design-lab/products-rma-insights",
+      prefix: "/barcodes",
+      key: "barcodes",
     },
-  ],
-
-  production: [
-    { label: "Production Dashboard", href: "/production" },
-    { label: "All Production Jobs", href: "/production/all-production-job" },
-    { label: "Confirmed Production Jobs", href: "/production/production-job" },
-    { label: "Packed Orders", href: "/production/packed" },
-    { label: "Sampling", href: "/production/sampling" },
-    { label: "Stock Update", href: "/production/stock-update" },
-    { label: "Pattern Number", href: "/production/pattern-number" },
-    { label: "Fabric", href: "/production/fabric" },
-    { label: "Product Detail", href: "/production/product-detail" },
-    { label: "Missing Patterns", href: "/production/missing-patterns" },
-    { label: "Barcode Generator", href: "/production/barcode" },
-  ],
-
-  vendors: [
+    { prefix: "/delhivery", key: "delhivery" },
+    { prefix: "/email", key: "email" },
+    { prefix: "/reels", key: "reels" },
+    { prefix: "/marketing", key: "marketing" },
+    { prefix: "/influencer-collaboration-program", key: "collaboration" },
+    { prefix: "/collaboration", key: "collaboration" },
+    { prefix: "/shiprocket", key: "shiprocket" },
+    { prefix: "/bluedart", key: "bluedart" },
+    { prefix: "/dashboard", key: "dashboard" },
+    { prefix: "/design-lab", key: "design_lab" },
+    { prefix: "/designing", key: "designing" },
+    { prefix: "/production", key: "production" },
+    { prefix: "/accounts", key: "accounts" },
+    { prefix: "/media", key: "media" },
+    { prefix: "/blogs", key: "blogs" },
+    { prefix: "/otp", key: "otp" },
+    { prefix: "/products", key: "products" },
+    { prefix: "/reviews", key: "reviews" },
+    { prefix: "/wordpress", key: "wordpress" },
+    { prefix: "/rma", key: "rma" },
+    { prefix: "/orders", key: "orders" },
+    { prefix: "/coupons", key: "coupons" },
+    { prefix: "/operations", key: "operations" },
+    { prefix: "/it", key: "it_systems" },
+    { prefix: "/customers", key: "customers" },
+    { prefix: "/sales", key: "sales" },
+    { prefix: "/account", key: "account_user" },
+    { prefix: "/vendors", key: "vendors" },
+    { prefix: "/fast2sms", key: "fast2sms" },
+    { prefix: "/affiliate", key: "affiliate" },
+    { prefix: "/dispatching", key: "dispatching" },
     {
-      label: "Vendor Dashboard",
-      href: "/vendors",
+      prefix: "/admin-user-tasks",
+      key: "admin_user_tasks",
     },
-    {
-      label: "Create Vendor",
-      href: "/vendors/create",
-    },
-    {
-      label: "Vendor List",
-      href: "/vendors",
-    },
-  ],
-
-  fast2sms: [
-    { label: "Fast2SMS Dashboard", href: "/fast2sms" },
-    {
-      label: "WhatsApp Logs",
-      href: "/fast2sms/whatsapp-confirmation-message",
-    },
-    {
-      label: "Send Test Message",
-      href: "/fast2sms/whatsapp-confirmation-message/send",
-    },
-    {
-      label: "Analytics",
-      href: "/fast2sms/whatsapp-confirmation-message/analytics",
-    },
-    {
-      label: "Settings",
-      href: "/fast2sms/whatsapp-confirmation-message/settings",
-    },
-  ],
-
-  otp: [
-    { label: "OTP Dashboard", href: "/otp" },
-    { label: "Test OTP", href: "/otp/test" },
-    { label: "OTP Logs", href: "/otp/logs" },
-    { label: "Analytics", href: "/otp/analytics" },
-  ],
-
-  reviews: [
-    { label: "Reviews Dashboard", href: "/reviews" },
-    { label: "Manage Reviews", href: "/reviews/manage" },
-    { label: "Add Review", href: "/reviews/add" },
-    { label: "Pending Reviews", href: "/reviews/pending" },
-    { label: "Approved Reviews", href: "/reviews/approved" },
-    { label: "Rejected Reviews", href: "/reviews/rejected" },
-    { label: "Order Reviews", href: "/reviews/order" },
-  ],
-
-  accounts: [
-    { label: "Accounts Dashboard", href: "/accounts" },
-    { label: "Remittance", href: "/accounts/remittance" },
-    { label: "Sales", href: "/accounts/sales" },
-    { label: "Revenue", href: "/accounts/revenue" },
-    { label: "GST State Wise Report", href: "/accounts/gst-state-wise-report" },
-    { label: "Razorpay transaction", href: "/accounts/razorpay-transaction" },
-    { label: "Razorpay Remittance", href: "/accounts/razorpay-remittance" },
-  ],
-
-  inventory: [
-    { label: "Inventory Dashboard", href: "/inventory" },
-    {
-      label: "Available Inventory",
-      href: "/inventory/available-inventory",
-    },
-    { label: "Modify Inventory", href: "/inventory/modify-inventory" },
-    { label: "Stock Update", href: "/inventory/stock-update" },
-    { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
-    { label: "Reserved Inventory", href: "/inventory/reserved-inventory" },
-    { label: "On Demand Inventory", href: "/inventory/on-demand-inventory" },
-    { label: "Zero Inventory", href: "/inventory/zero-inventory" },
-  ],
-
-  barcodes: [
-    {
-      label: "Barcode Dashboard",
-      href: "/barcodes",
-    },
-    {
-      label: "Generate Barcodes",
-      href: "/barcodes/generate",
-    },
-    {
-      label: "Print Barcode Tags",
-      href: "/barcodes/print",
-    },
-    {
-      label: "Scan Barcode",
-      href: "/barcodes/scan",
-    },
-    {
-      label: "All Barcode Items",
-      href: "/barcodes/all",
-    },
-    {
-      label: "Stock In",
-      href: "/barcodes/stock-in",
-    },
-    {
-      label: "Stock-In History",
-      href: "/barcodes/stock-in/history",
-    },
-  ],
-
-  fabrics: [
-    {
-      label: "Fabric Dashboard",
-      href: "/fabrics",
-    },
-    {
-      label: "Search Fabrics",
-      href: "/fabrics/search",
-    },
-    {
-      label: "Add Fabric",
-      href: "/fabrics/add-fabric",
-    },
-    {
-      label: "Fabric Inventory",
-      href: "/fabrics/inventory",
-    },
-    {
-      label: "Import Fabrics",
-      href: "/fabrics/import",
-    },
-    {
-      label: "Fabric Actions",
-      href: "/fabrics/actions",
-    },
-    {
-      label: "Fabric Logs",
-      href: "/fabrics/logs",
-    },
-    {
-      label: "Fabric Price Logs",
-      href: "/fabrics/price-logs",
-    },
-    {
-      label: "Fabric Product Assignment",
-      href: "/fabrics/fabric-product-assignment",
-    },
-    {
-      label: "Low Stock Fabrics",
-      href: "/fabrics/low-stock",
-    },
-  ],
-
-  media: [
-    { label: "Media Library", href: "/media" },
-    { label: "Upload Media", href: "/media/upload" },
-    { label: "Outsourced Assets", href: "/media/outsourced-assets" },
-  ],
-
-  email: [
-    { label: "Email Dashboard", href: "/email" },
-    { label: "Template Library", href: "/email/library" },
-  ],
-
-  reels: [
-    { label: "Reels Dashboard", href: "/reels" },
-    { label: "Add Reels", href: "/reels/add" },
-    { label: "Manage Reels", href: "/reels/manage" },
-  ],
-
-  blogs: [
-    { label: "Blogs Dashboard", href: "/blogs" },
-    { label: "All Blogs", href: "/blogs/all" },
-    { label: "Create Blog", href: "/blogs/create" },
-    { label: "Drafts", href: "/blogs/drafts" },
-    { label: "Categories", href: "/blogs/categories" },
-    { label: "Analytics", href: "/blogs/analytics" },
-  ],
-
-  products: [
-    { label: "Product Dashboard", href: "/products" },
-    { label: "Add New Product", href: "/products/add" },
-    { label: "Manage Products", href: "/products/manage" },
-
-    {
-      label: "Production Lifecycle",
-      href: "/products/product-production-lifecycle",
-    },
-
-    { label: "Search Product", href: "/products/search" },
-
-    { label: "Product Group Builder", href: "/products/product-groups" },
-    {
-      label: "Existing Product Groups",
-      href: "/products/product-groups/all",
-    },
-
-    {
-      label: "Products RMA Insights",
-      href: "/products/products-rma-insights",
-    },
-    { label: "Analytics", href: "/products/analytics" },
-
-    { label: "Categories", href: "/products/category" },
-    {
-      label: "Category Analytics",
-      href: "/products/category-analytics",
-    },
-
-    { label: "Bestsellers", href: "/products/bestseller" },
-    {
-      label: "Collab Ready Products",
-      href: "/products/collab-ready",
-    },
-    {
-      label: "Dispatch Ready Products",
-      href: "/products/dispatch-ready",
-    },
-    {
-      label: "Excel Export Builder",
-      href: "/products/import-excel",
-    },
-    { label: "Coming Soon", href: "/products/comingsoon" },
-    { label: "Size Charts", href: "/products/size-charts" },
-    {
-      label: "Secondary Products",
-      href: "/products/secondary-products",
-    },
-    { label: "Product Costing", href: "/products/product-costing" },
-
-    { label: "Attributes", href: "/products/attributes" },
-    { label: "Variants", href: "/products/variants" },
-    { label: "Collections", href: "/products/collections" },
-    { label: "Fabric", href: "/products/fabric" },
-    { label: "Product Colors", href: "/products/colors" },
-
-    { label: "Name Edit", href: "/products/name-edit" },
-    { label: "Bulk Import", href: "/products/bulk-import" },
-    { label: "Bulk Export", href: "/products/bulk-export" },
-    {
-      label: "Bulk Price Editor",
-      href: "/products/bulkPriceEditor",
-    },
-
-    {
-      label: "Inventory Sync",
-      href: "/products/inventory-sync",
-    },
-    { label: "Price Updates", href: "/products/pricing" },
-    { label: "Offers & Discounts", href: "/products/offers" },
-    {
-      label: "Product Meta Editor",
-      href: "/products/product-meta-editor",
-    },
-    { label: "SEO Manager", href: "/products/seo" },
-    { label: "Reviews & Ratings", href: "/products/reviews" },
-    { label: "Media Library", href: "/media" },
-  ],
-
-  dispatching: [
-    {
-      label: "Dispatching Dashboard",
-      href: "/dispatching",
-    },
-    {
-      label: "On Demand Inventory",
-      href: "/dispatching/on-demand-inventory",
-    },
-    {
-      label: "Production",
-      href: "/dispatching/production",
-    },
-    {
-      label: "Ready to Ship",
-      href: "/dispatching/ready-to-ship",
-    },
-    {
-      label: "Packed Orders",
-      href: "/dispatching/packed",
-    },
-    {
-      label: "Shipped Orders",
-      href: "/dispatching/shipped",
-    },
-  ],
-  orders: [
-    { label: "Orders Dashboard", href: "/orders" },
-    { label: "All Orders", href: "/orders/all" },
-
-    // ✅ confirmation
-
-    { label: "Order Search", href: "/orders/search" },
-
-    {
-      label: "Product → Order Search",
-      href: "/orders/search-order-by-name-or-code",
-    },
-
-    {
-      label: "Order Search by Location",
-      href: "/orders/getOrderbyLocation",
-    },
-    { label: "Confirmed Orders", href: "/orders/confirmed-orders" },
-    { label: "Unconfirmed Orders", href: "/orders/unconfirmed-orders" },
-    { label: "Influencer Orders", href: "/orders/influencer-orders" },
-    {
-      label: "WhatsApp Confirmations",
-      href: "/orders/unconfirmed-order-whatsappmessage",
-    },
-    { label: "Duplicate Orders", href: "/orders/duplicate-orders" },
-    { label: "Refund Escalation", href: "/orders/refund-escalation" },
-    { label: "Order Analytics", href: "/orders/report" },
-
-    // ✅ fulfillment
-    { label: "Processing", href: "/orders/processing" },
-    { label: "Packed", href: "/orders/packed" },
-    { label: "Shipped", href: "/orders/shipped" },
-    { label: "Out for Delivery", href: "/orders/out-for-delivery" },
-    { label: "Delivered", href: "/orders/delivered" },
-
-    // ✅ reverse flow
-    { label: "Return Requested", href: "/orders/return_requested" },
-    { label: "Returned", href: "/orders/returned" },
-    { label: "Exchange Requested", href: "/orders/exchange_requested" },
-    { label: "Exchanged", href: "/orders/exchanged" },
-    { label: "Pickup Initiated", href: "/orders/pickup_initiated" },
-
-    // ✅ failure states
-    { label: "Failed", href: "/orders/failed" },
-    { label: "Cancelled", href: "/orders/cancelled" },
-    { label: "Refunded", href: "/orders/refunded" },
-    { label: "RTO / NDR", href: "/orders/rto" },
-
-    // ✅ misc
-    { label: "Order Remark", href: "/orders/remark" },
-    { label: "Invoice", href: "/orders/invoices" },
-    { label: "RMA Requests", href: "/orders/rma" },
-  ],
-
-  rma: [
-    { label: "RMA Requests", href: "/rma" },
-    { label: "Create RMA", href: "/rma/create-rma" },
-  ],
-
-  coupons: [
-    { label: "Coupons Dashboard", href: "/coupons" },
-    { label: "Create Coupon", href: "/coupons/create" },
-    { label: "Manage Coupons", href: "/coupons/manage" },
-    { label: "Coupon Usage Reports", href: "/coupons/reports" },
-  ],
-
-  operations: [
-    { label: "Ops Dashboard", href: "/operations" },
-    { label: "Order Processing", href: "/operations/order-processing" },
-    { label: "Shipments", href: "/operations/shipments" },
-    { label: "Returns & RTO", href: "/operations/returns" },
-    { label: "Packing Manager", href: "/operations/packing" },
-    { label: "Courier Partners", href: "/operations/couriers" },
-    { label: "Manifest / Dispatch", href: "/operations/manifest" },
-    { label: "NDR Follow-ups", href: "/operations/ndr" },
-  ],
-
-  marketing: [
-    { label: "Dashboard", href: "/marketing" },
-    { label: "Campaigns", href: "/marketing/campaigns" },
-    { label: "Create Campaign", href: "/marketing/campaigns/create" },
-    { label: "Email", href: "/marketing/email" },
-    {
-      label: "Product Meta Editor",
-      href: "/marketing/product-meta-editor",
-    },
-    { label: "Marketing Spend", href: "/marketing/marketingSpend" },
-    { label: "ROAS", href: "/marketing/ROAS" },
-    { label: "Commerce Manager", href: "/marketing/commerceManager" },
-  ],
-
-  customers: [
-    { label: "Customer Dashboard", href: "/customers/dashboard" },
-    { label: "Customer List", href: "/customers" },
-    { label: "Customer Search", href: "/customers/search" },
-    { label: "Customer Blacklist", href: "/customers/blacklist" },
-
-    { label: "Customer Analytics", href: "/customers/analytics" },
-    { label: "Segments Analytics", href: "/customers/analytics/segments" },
-    { label: "Risk / RTO Analytics", href: "/customers/analytics/risk" },
-    { label: "Revenue Analytics", href: "/customers/analytics/revenue" },
-    { label: "Retention Analytics", href: "/customers/analytics/retention" },
-    { label: "Analytics Reports", href: "/customers/analytics/reports" },
-
-    { label: "Customer Credits", href: "/customers/credits" },
-
-    { label: "Banking / Refund Details", href: "/customers/bankingDetails" },
-    { label: "Customer / Address", href: "/customers/address" },
-    { label: "Customer Carts", href: "/customers/carts" },
-    { label: "Cart Adds", href: "/customers/cart-adds" },
-    { label: "Abandoned Carts", href: "/customers/abandoned-carts" },
-    { label: "Wishlist", href: "/customers/wishlist" },
-    { label: "Tickets & Support", href: "/customers/support" },
-    { label: "Newsletter Subscribers", href: "/customers/newsletter" },
-  ],
-  customer_support: [
-    { label: "Support Dashboard", href: "/customer-support" },
-    { label: "Search", href: "/customer-support/search" },
-    {
-      label: "Customer Confirmation",
-      href: "/customer-support/customer-confirmation",
-    },
-    {
-      label: "WhatsApp Confirmations",
-      href: "/customer-support/unconfirmed-order-whatsappmessage",
-    },
-    { label: "Duplicate Orders", href: "/customer-support/duplicate-orders" },
-    { label: "Order Remark", href: "/customer-support/remark" },
-    { label: "All Orders", href: "/customer-support/all-orders" },
-    { label: "All Tickets", href: "/customer-support/all" },
-    { label: "Open Tickets", href: "/customer-support/open" },
-    { label: "In Progress", href: "/customer-support/in-progress" },
-    { label: "Resolved", href: "/customer-support/resolved" },
-    { label: "Closed", href: "/customer-support/closed" },
-    { label: "SLA / Reports", href: "/customer-support/reports" },
-  ],
-
-  sales: [
-    { label: "Sales Dashboard", href: "/sales" },
-    { label: "Orders", href: "/sales/orders" },
-    { label: "Revenue Reports", href: "/sales/reports" },
-    { label: "Returns Summary", href: "/sales/returns" },
-    { label: "COD vs Prepaid", href: "/sales/payment-type" },
-    { label: "Top Products", href: "/sales/top-products" },
-    { label: "Top Categories", href: "/sales/top-categories" },
-  ],
-
-  shiprocket: [
-    { label: "Shiprocket Dashboard", href: "/shiprocket" },
-    { label: "Serviceability Check", href: "/shiprocket/serviceability-check" },
-    { label: "Authentication API", href: "/shiprocket/authentication-api" },
-    { label: "Not Deliverables", href: "/shiprocket/not-deliverables" },
-  ],
-
-  delhivery: [
-    { label: "Delhivery Dashboard", href: "/delhivery" },
-    { label: "Create Shipment", href: "/delhivery/create" },
-    { label: "Tracking", href: "/delhivery/tracking" },
-    { label: "Labels", href: "/delhivery/labels" },
-    { label: "Pickup Requests", href: "/delhivery/pickups" },
-    { label: "Serviceability", href: "/delhivery/serviceability" },
-    { label: "NDR", href: "/delhivery/ndr" },
-    { label: "Logs", href: "/delhivery/logs" },
-    { label: "Settings", href: "/delhivery/settings" },
-  ],
-
-  bluedart: [
-    { label: "BlueDart Dashboard", href: "/bluedart" },
-
-    { label: "Create Shipment", href: "/bluedart/create" },
-
-    { label: "Service Check", href: "/bluedart/service-check" },
-
-    { label: "All Shipments", href: "/bluedart/shipments" },
-
-    { label: "External Orders", href: "/bluedart/external-orders" },
-
-    { label: "EDD Prediction", href: "/bluedart/edd" },
-
-    { label: "Analytics", href: "/bluedart/analytics" },
-  ],
-
-  reports: [
-    { label: "Reports Home", href: "/reports" },
-    {
-      label: "Order & Business Overview",
-      href: "/reports/Order-Business-Overview",
-    },
-    { label: "Revenue by Status", href: "/reports/revenue-by-status" },
-    { label: "Product Sales", href: "/reports/ProductSoldReport" },
-    { label: "Low Product Sale", href: "/reports/low-product-sale" },
-    { label: "Product Unsold", href: "/reports/ProductUnSoldReport" },
-    { label: "Orders Report", href: "/reports/Orders" },
-    { label: "ROAS", href: "/reports/ROAS" },
-    { label: "Operations Status", href: "/reports/Operations-Order-Status" },
-    { label: "RTO Report", href: "/reports/RTO" },
-    { label: "Cancellation Report", href: "/reports/Cancellation" },
-    {
-      label: "Cancellation Analytics",
-      href: "/reports/Cancellation-Analytics",
-    },
-    { label: "Products RMA Insights", href: "/reports/products-rma-insights" },
-  ],
-
-  refunds: [
-    { label: "Dashboard", href: "/refunds" },
-
-    // 🎯 Entry point (important)
-    { label: "Eligible Orders", href: "/refunds/eligible-orders" },
-
-    // 🧾 Core
-    { label: "All Refunds", href: "/refunds/list" },
-    { label: "Create Refund", href: "/refunds/create" },
-
-    // ⚙️ Processing queues
-    { label: "Razorpay Queue", href: "/refunds/razorpay" },
-    { label: "Manual Refunds", href: "/refunds/manual" },
-
-    // ⚠️ Monitoring
-    { label: "Failed Refunds", href: "/refunds/failed" },
-
-    // 📊 Insights
-    { label: "Reports", href: "/refunds/reports" },
-
-    // ⚙️ Config
-    { label: "Settings", href: "/refunds/settings" },
-  ],
-
-  account_user: [
-    { label: "Profile", href: "/account/profile" },
-    { label: "Change Password", href: "/account/password" },
-    { label: "Logout", href: "/logout" },
-  ],
-
-  admin_user_tasks: [
-    {
-      label: "Task Dashboard",
-      href: "/admin-user-tasks",
-    },
-    {
-      label: "Create Task",
-      href: "/admin-user-tasks/create",
-    },
-  ],
-  superadmin: [
-    { label: "Vault", href: "/superadmin" },
-    { label: "Manage Users", href: "/superadmin/manage" },
-    { label: "Add User", href: "/superadmin/add" },
-
-    // ✅ New session control page
-    { label: "Manage Sessions", href: "/superadmin/manage-session" },
-
-    { label: "Activity", href: "/superadmin/activity" },
-    { label: "Meta XML Sync", href: "/superadmin/xml-sync" },
-  ],
-
-  affiliate: [
-    { label: "Affiliate Dashboard", href: "/affiliate" },
-    { label: "All Affiliates", href: "/affiliate/all" },
-    { label: "Create Affiliate", href: "/affiliate/create" },
-    { label: "Coupon Performance", href: "/affiliate/coupons" },
-    { label: "Affiliate Orders", href: "/affiliate/orders" },
-    { label: "Commissions", href: "/affiliate/commissions" },
-    { label: "Pending Payouts", href: "/affiliate/pending-payouts" },
-    { label: "Payout History", href: "/affiliate/payout-history" },
-  ],
-
-  collaboration: [
-    { label: "Influencer Program", href: "/influencer-collaboration-program" },
-    {
-      label: "All Collaborations",
-      href: "/influencer-collaboration-program/all",
-    },
-    {
-      label: "Add Collaboration",
-      href: "/influencer-collaboration-program/add",
-    },
-    { label: "Search", href: "/influencer-collaboration-program/search" },
-    { label: "Analytics", href: "/influencer-collaboration-program/analytics" },
-  ],
-
-  wordpress: [{ label: "WP Orders", href: "/wordpress/orders" }],
-};
-
-export const routeSidebarMap = [
-  { prefix: "/refunds", key: "refunds" },
-
-  { prefix: "/superadmin", key: "superadmin" },
-  { prefix: "/customer-support", key: "customer_support" },
-  { prefix: "/reports", key: "reports" },
-  { prefix: "/fabrics", key: "fabrics" },
-  { prefix: "/inventory", key: "inventory" },
-  { prefix: "/analytics", key: "analytics" },
-  {
-    prefix: "/barcodes",
-    key: "barcodes",
-  },
-  { prefix: "/delhivery", key: "delhivery" },
-  { prefix: "/email", key: "email" },
-  { prefix: "/reels", key: "reels" },
-  { prefix: "/marketing", key: "marketing" },
-  { prefix: "/influencer-collaboration-program", key: "collaboration" },
-  { prefix: "/collaboration", key: "collaboration" },
-  { prefix: "/shiprocket", key: "shiprocket" },
-  { prefix: "/bluedart", key: "bluedart" },
-  { prefix: "/dashboard", key: "dashboard" },
-  { prefix: "/design-lab", key: "design_lab" },
-  { prefix: "/designing", key: "designing" },
-  { prefix: "/production", key: "production" },
-  { prefix: "/accounts", key: "accounts" },
-  { prefix: "/media", key: "media" },
-  { prefix: "/blogs", key: "blogs" },
-  { prefix: "/otp", key: "otp" },
-  { prefix: "/products", key: "products" },
-  { prefix: "/reviews", key: "reviews" },
-  { prefix: "/wordpress", key: "wordpress" },
-  { prefix: "/rma", key: "rma" },
-  { prefix: "/orders", key: "orders" },
-  { prefix: "/coupons", key: "coupons" },
-  { prefix: "/operations", key: "operations" },
-  { prefix: "/it", key: "it_systems" },
-  { prefix: "/customers", key: "customers" },
-  { prefix: "/sales", key: "sales" },
-  { prefix: "/account", key: "account_user" },
-  { prefix: "/vendors", key: "vendors" },
-  { prefix: "/fast2sms", key: "fast2sms" },
-  { prefix: "/affiliate", key: "affiliate" },
-  { prefix: "/dispatching", key: "dispatching" },
-  {
-    prefix: "/admin-user-tasks",
-    key: "admin_user_tasks",
-  },
-];
+  ];

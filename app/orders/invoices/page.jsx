@@ -25,6 +25,24 @@ const safe = (value) => String(value ?? "").trim();
 const unique = (values = []) =>
   [...new Set(values.map(safe).filter(Boolean))];
 
+const normalizeInvoiceOrderNumber = (value = "") => {
+  const raw = safe(value);
+
+  if (!raw) return "";
+
+  // Remove common prefixes like # or whitespace
+  const cleaned = raw.replace(/^#+/, "").trim();
+
+  // Pure numeric order number → always 6 digits
+  if (/^\d+$/.test(cleaned)) {
+    return cleaned.padStart(6, "0");
+  }
+
+  // Existing project normalizer as fallback
+  return normalizeOrderNumberInput(cleaned);
+};
+
+
 const parseInput = (input = "") => {
   const tokens = String(input)
     .split(/[\n,\s]+/)
@@ -37,8 +55,7 @@ const parseInput = (input = "") => {
   const seen = new Set();
 
   tokens.forEach((token) => {
-    const normalized = normalizeOrderNumberInput(token);
-
+    const normalized = normalizeInvoiceOrderNumber(token);
     if (!normalized) {
       invalid.push(token);
       return;

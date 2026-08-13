@@ -545,7 +545,7 @@ export default function BestsellerManagerPage() {
                             title="Remove"
                           >
                             ✕
-                          </button>
+                        </button>
                         </div>
                       </div>
                     );
