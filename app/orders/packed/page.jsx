@@ -9,6 +9,7 @@ import {
   Download,
   FileText,
   Loader2,
+  Copy,
   PackageSearch,
   RefreshCw,
   Search,
@@ -290,6 +291,26 @@ export default function PackedOrdersPage() {
         : Array.from(new Set([...current, ...visibleIds]));
     });
   }, [filteredOrders]);
+
+
+  const copySelectedOrderNumbers = async () => {
+    if (!selectedOrders.length) {
+      toast.error("No orders selected");
+      return;
+    }
+
+    const text = selectedOrders
+      .map((order) => String(order?.orderNumber || "").trim())
+      .filter(Boolean)
+      .join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${selectedOrders.length} order numbers copied`);
+    } catch {
+      toast.error("Failed to copy order numbers");
+    }
+  };
 
   const runBulkSync = async () => {
     if (!selectedOrders.length || bulkAction) return;
@@ -1010,6 +1031,7 @@ export default function PackedOrdersPage() {
 
             <div className="flex flex-wrap gap-2">
               {[
+                ["copy", "Copy Order #", Copy, copySelectedOrderNumbers],
                 ["shipped", "Mark as Shipped", Truck, runBulkMarkAsShipped],
                 ["sync", "Bulk Sync", RefreshCw, runBulkSync],
                 ["invoice", "Invoices", FileText, runBulkInvoiceDownload],
