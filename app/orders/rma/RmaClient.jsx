@@ -1,693 +1,1176 @@
 // app/orders/rma/RmaClient.jsx
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { ChevronDown } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Check,
+  CheckCheck,
+  ChevronDown,
+  Download,
+  Loader2,
+} from "lucide-react";
+import axios from "axios";
 
-import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown"; // ✅ use this
+import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown";
 import { useRmaStore } from "@/store/useRmaStore";
-import { useOrderStore } from "@/store/orderStore";
-import { useAdminProductStore } from "@/store/adminProductStore";
-import { formatCurrency, formatOrderNumber, formatRmaNumber } from "@/utils/formatters";
+import {
+  formatCurrency,
+  formatOrderNumber,
+  formatRmaNumber,
+} from "@/utils/formatters";
 
-/* ----------------------------
-   Tiny helpers (safe)
----------------------------- */
-const toStr = (v) => (v == null ? "" : String(v));
-const norm = (v) => toStr(v).trim().toLowerCase();
-const pick = (...values) => values.find((value) => toStr(value).trim()) || "";
-const parseDate = (d) => {
-  const dt = d ? new Date(d) : null;
-  return dt && !Number.isNaN(dt.getTime()) ? dt : null;
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:9000";
+
+const str = (v) => (v == null ? "" : String(v));
+const norm = (v) => str(v).trim().toLowerCase();
+const pick = (...values) => values.find((v) => str(v).trim()) || "";
+
+const parseDate = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
 };
-const fmtDate = (d) => (d ? d.toLocaleDateString("en-IN") : "-");
-const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-const endOfDay = (d) => {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
+
+const formatDate = (value) => {
+  const date = parseDate(value);
+  return date ? date.toLocaleDateString("en-IN") : "-";
 };
+
+const endOfDay = (value) => {
+  const date = parseDate(value);
+  if (!date) return null;
+  date.setHours(23, 59, 59, 999);
+  return date;
+};
+
+const statusBadge = (status) => {
+  const value = norm(status);
+
+  if (value === "requested")
+    return "bg-purple-50 text-purple-700 ring-purple-100";
+
+  if (value === "approved")
+    return "bg-green-50 text-green-700 ring-green-100";
+
+  if (value === "rejected")
+    return "bg-red-50 text-red-700 ring-red-100";
+
+  return "bg-gray-100 text-gray-700 ring-gray-200";
+};
+
+const typeBadge = (type) => {
+  const value = norm(type);
+
+  if (value === "exchange")
+    return "bg-amber-50 text-amber-800 ring-amber-100";
+
+  if (value === "return")
+    return "bg-sky-50 text-sky-700 ring-sky-100";
+
+  return "bg-gray-100 text-gray-700 ring-gray-200";
+};
+
+const fulfilledBadge = (fulfilled) =>
+  fulfilled
+    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+    : "bg-orange-50 text-orange-700 ring-orange-200";
 
 export default function RmaClient() {
   const [expanded, setExpanded] = useState(null);
+  const [selected, setSelected] = useState([]);
 
-  /* ----------------------------
-     Filters + Sorting
-  ---------------------------- */
-  const [search, setSearch] = useState("");
-  const [fromDate, setFromDate] = useState(""); // YYYY-MM-DD
-  const [toDate, setToDate] = useState(""); // YYYY-MM-DD
-  const [quickRange, setQuickRange] = useState("all"); // all | today | 7d | 30d
+  const [orderSearch, setOrderSearch] = useState("");
+  const [mobileSearch, setMobileSearch] = useState("");
+  const [fulfilledFilter, setFulfilledFilter] = useState("all");
 
-  // ✅ easy filters
-  const [statusFilter, setStatusFilter] = useState("all"); // requested | approved | rejected | ...
-  const [typeFilter, setTypeFilter] = useState("all"); // exchange | return | ...
-  const [sortDir, setSortDir] = useState("desc"); // createdAt
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-  const { rmas, loading: rmaLoading, error: rmaError, fetchAllRmas } = useRmaStore();
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+
+  const [sortDir, setSortDir] = useState("desc");
+  const [updating, setUpdating] = useState([]);
+
   const {
-    orders,
-    loading: orderLoading,
-    error: orderError,
-    fetchAllOrders,
-  } = useOrderStore();
-  const {
-    products,
-    loading: productLoading,
-    error: productError,
-    fetchProducts,
-  } = useAdminProductStore();
+    rmas,
+    loading,
+    error,
+    fetchAllRmas,
+  } = useRmaStore();
 
-  /* ----------------------------
-     Fetch data
-  ---------------------------- */
   useEffect(() => {
     fetchAllRmas();
-    fetchAllOrders();
-    fetchProducts({ limit: 500 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchAllRmas]);
 
-  /* ----------------------------
-     Maps for fast lookup
-  ---------------------------- */
-  const orderMap = useMemo(() => {
-    const map = new Map();
-    (orders || []).forEach((o) => o?._id && map.set(String(o._id), o));
-    return map;
-  }, [orders]);
+  const statusOptions = useMemo(
+    () => [
+      "all",
+      ...new Set(
+        (rmas || [])
+          .map((rma) => norm(rma?.status))
+          .filter(Boolean)
+      ),
+    ],
+    [rmas]
+  );
 
-  const productMap = useMemo(() => {
-    const map = new Map();
-    (products || []).forEach((p) => p?._id && map.set(String(p._id), p));
-    return map;
-  }, [products]);
+  const typeOptions = useMemo(
+    () => [
+      "all",
+      ...new Set(
+        (rmas || [])
+          .map((rma) => norm(rma?.type))
+          .filter(Boolean)
+      ),
+    ],
+    [rmas]
+  );
 
-  const loading = rmaLoading || orderLoading || productLoading;
-  const error = rmaError || orderError || productError;
-
-  /* ----------------------------
-     Expand / Collapse row
-  ---------------------------- */
-  const toggleExpand = useCallback((key) => {
-    setExpanded((prev) => (prev === key ? null : key));
-  }, []);
-
-  /* ----------------------------
-     Quick range start
-  ---------------------------- */
-  const quickFrom = useMemo(() => {
-    const now = new Date();
-    const today = startOfDay(now);
-    if (quickRange === "today") return today;
-
-    if (quickRange === "7d") {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 7);
-      return d;
-    }
-
-    if (quickRange === "30d") {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 30);
-      return d;
-    }
-
-    return null;
-  }, [quickRange]);
-
-  /* ----------------------------
-     Badge styles (requested/exchange updated)
----------------------------- */
-  const statusBadge = (statusRaw) => {
-    const st = norm(statusRaw);
-    if (st === "requested") return "bg-purple-50 text-purple-700 ring-purple-100";
-    if (st === "approved") return "bg-green-50 text-green-700 ring-green-100";
-    if (st === "rejected") return "bg-red-50 text-red-700 ring-red-100";
-    return "bg-gray-100 text-gray-700 ring-gray-200";
-  };
-
-  const typeBadge = (typeRaw) => {
-    const tp = norm(typeRaw);
-    if (tp === "exchange") return "bg-amber-50 text-amber-800 ring-amber-100";
-    if (tp === "return") return "bg-sky-50 text-sky-700 ring-sky-100";
-    return "bg-gray-100 text-gray-700 ring-gray-200";
-  };
-
-  /* ============================================================
-     ✅ FILTER + SORT (createdAt)
-  ============================================================ */
   const filteredRmas = useMemo(() => {
-    if (!Array.isArray(rmas)) return [];
+    const orderQ = norm(orderSearch);
+    const mobileQ = norm(mobileSearch);
 
-    const q = norm(search);
-    const from = fromDate ? parseDate(fromDate) : null;
-    const to = toDate ? endOfDay(parseDate(toDate) || new Date(toDate)) : null;
+    const from = parseDate(fromDate);
+    const to = endOfDay(toDate);
 
-    return rmas
+    return [...(rmas || [])]
       .filter((rma) => {
-        const linkedOrder = orderMap.get(String(rma?.orderId)) || null;
+        const address = rma?.shippingAddressSnapshot || {};
+        const customer = rma?.customer || {};
 
-        const orderNumber = pick(linkedOrder?.orderNumber, rma?.orderNumber);
-        const rmaNumber = toStr(rma?.rmaNumber);
-        const customerName = toStr(
-          linkedOrder?.shippingAddressSnapshot?.fullName ||
-            linkedOrder?.customerId?.name ||
-            rma?.customer?.name
+        if (
+          orderQ &&
+          !norm(rma?.orderNumber).includes(orderQ) &&
+          !norm(rma?.rmaNumber).includes(orderQ)
+        ) {
+          return false;
+        }
+
+        const mobile = pick(
+          address?.phone,
+          customer?.phone
         );
-        const customerPhone = pick(
-          linkedOrder?.shippingAddressSnapshot?.phone,
-          linkedOrder?.customerId?.phone,
-          rma?.customer?.phone
-        );
-        const customerEmail = pick(linkedOrder?.customerId?.email, rma?.customer?.email);
+
+        if (
+          mobileQ &&
+          !norm(mobile).includes(mobileQ)
+        ) {
+          return false;
+        }
+
+        if (
+          fulfilledFilter === "fulfilled" &&
+          rma?.isFulfilled !== true
+        ) {
+          return false;
+        }
+
+        if (
+          fulfilledFilter === "pending" &&
+          rma?.isFulfilled === true
+        ) {
+          return false;
+        }
+
+        if (
+          statusFilter !== "all" &&
+          norm(rma?.status) !== norm(statusFilter)
+        ) {
+          return false;
+        }
+
+        if (
+          typeFilter !== "all" &&
+          norm(rma?.type) !== norm(typeFilter)
+        ) {
+          return false;
+        }
 
         const createdAt = parseDate(rma?.createdAt);
 
-        // ✅ search
-        const matchesSearch =
-          !q ||
-          norm(orderNumber).includes(q) ||
-          norm(rmaNumber).includes(q) ||
-          norm(customerName).includes(q) ||
-          norm(customerPhone).includes(q) ||
-          norm(customerEmail).includes(q);
+        if ((from || to) && !createdAt) return false;
+        if (from && createdAt < from) return false;
+        if (to && createdAt > to) return false;
 
-        // ✅ status filter (RMA status)
-        const st = norm(rma?.status);
-        const matchesStatus = statusFilter === "all" || st === norm(statusFilter);
-
-        // ✅ type filter
-        const tp = norm(rma?.type);
-        const matchesType = typeFilter === "all" || tp === norm(typeFilter);
-
-        // ✅ date filter
-        let matchesDate = true;
-        if (createdAt) {
-          if (quickFrom) matchesDate = createdAt >= quickFrom;
-          if (from) matchesDate = matchesDate && createdAt >= from;
-          if (to) matchesDate = matchesDate && createdAt <= to;
-        } else {
-          if (quickFrom || from || to) matchesDate = false;
-        }
-
-        return matchesSearch && matchesStatus && matchesType && matchesDate;
+        return true;
       })
       .sort((a, b) => {
-        const ta = parseDate(a?.createdAt)?.getTime?.() ?? 0;
-        const tb = parseDate(b?.createdAt)?.getTime?.() ?? 0;
-        return sortDir === "asc" ? ta - tb : tb - ta;
+        const aTime = parseDate(a?.createdAt)?.getTime() || 0;
+        const bTime = parseDate(b?.createdAt)?.getTime() || 0;
+
+        return sortDir === "asc"
+          ? aTime - bTime
+          : bTime - aTime;
       });
-  }, [rmas, orderMap, search, fromDate, toDate, quickFrom, statusFilter, typeFilter, sortDir]);
+  }, [
+    rmas,
+    orderSearch,
+    mobileSearch,
+    fulfilledFilter,
+    fromDate,
+    toDate,
+    statusFilter,
+    typeFilter,
+    sortDir,
+  ]);
 
-  /* ----------------------------
-     Filter options (from data)
-  ---------------------------- */
-  const statusOptions = useMemo(() => {
-    const set = new Set();
-    (rmas || []).forEach((r) => {
-      const v = norm(r?.status);
-      if (v) set.add(v);
-    });
-    return ["all", ...Array.from(set).sort()];
-  }, [rmas]);
+  const getKey = (rma) =>
+    `${rma?.orderId || ""}:${rma?.rmaNumber || ""}`;
 
-  const typeOptions = useMemo(() => {
-    const set = new Set();
-    (rmas || []).forEach((r) => {
-      const v = norm(r?.type);
-      if (v) set.add(v);
+  const toggleExpand = useCallback((key) => {
+    setExpanded((current) =>
+      current === key ? null : key
+    );
+  }, []);
+
+  const toggleSelected = (rma) => {
+    const key = getKey(rma);
+
+    setSelected((current) =>
+      current.includes(key)
+        ? current.filter((x) => x !== key)
+        : [...current, key]
+    );
+  };
+
+  const allVisibleSelected =
+    filteredRmas.length > 0 &&
+    filteredRmas.every((rma) =>
+      selected.includes(getKey(rma))
+    );
+
+  const toggleSelectAll = () => {
+    const visibleKeys = filteredRmas.map(getKey);
+
+    if (allVisibleSelected) {
+      setSelected((current) =>
+        current.filter(
+          (key) => !visibleKeys.includes(key)
+        )
+      );
+    } else {
+      setSelected((current) => [
+        ...new Set([
+          ...current,
+          ...visibleKeys,
+        ]),
+      ]);
+    }
+  };
+
+  const updateFulfilled = async (
+    rma,
+    isFulfilled
+  ) => {
+    const key = getKey(rma);
+
+    try {
+      setUpdating((current) => [
+        ...current,
+        key,
+      ]);
+
+      await axios.patch(
+        `${API_BASE}/api/orders/${rma.orderId}/rma/${encodeURIComponent(
+          rma.rmaNumber
+        )}`,
+        {
+          isFulfilled,
+        },
+        {
+          withCredentials: true,
+        }
+      );
+
+      await fetchAllRmas();
+    } catch (error) {
+      console.error(
+        "Failed to update RMA fulfilled status:",
+        error
+      );
+
+      alert(
+        error?.response?.data?.message ||
+        "Failed to update RMA"
+      );
+    } finally {
+      setUpdating((current) =>
+        current.filter((x) => x !== key)
+      );
+    }
+  };
+
+  const bulkMarkFulfilled = async () => {
+    const targets = filteredRmas.filter(
+      (rma) =>
+        selected.includes(getKey(rma)) &&
+        rma?.isFulfilled !== true
+    );
+
+    if (!targets.length) return;
+
+    try {
+      const keys = targets.map(getKey);
+
+      setUpdating((current) => [
+        ...new Set([...current, ...keys]),
+      ]);
+
+      await Promise.all(
+        targets.map((rma) =>
+          axios.patch(
+            `${API_BASE}/api/orders/${rma.orderId}/rma/${encodeURIComponent(
+              rma.rmaNumber
+            )}`,
+            {
+              isFulfilled: true,
+            },
+            {
+              withCredentials: true,
+            }
+          )
+        )
+      );
+
+      setSelected([]);
+      await fetchAllRmas();
+    } catch (error) {
+      console.error(
+        "Bulk fulfilled update failed:",
+        error
+      );
+
+      alert(
+        error?.response?.data?.message ||
+        "Bulk update failed"
+      );
+    } finally {
+      setUpdating([]);
+    }
+  };
+
+  const downloadExcel = () => {
+    if (!filteredRmas.length) return;
+
+    const rows = filteredRmas.map((rma) => {
+      const address =
+        rma?.shippingAddressSnapshot || {};
+
+      const customer =
+        rma?.customer || {};
+
+      return {
+        "Order Number": rma?.orderNumber || "",
+        "RMA Number": rma?.rmaNumber || "",
+        Type: rma?.type || "",
+        "RMA Status": rma?.status || "",
+        Fulfilled: rma?.isFulfilled
+          ? "Yes"
+          : "No",
+        Customer:
+          address?.fullName ||
+          customer?.name ||
+          "",
+        Mobile:
+          address?.phone ||
+          customer?.phone ||
+          "",
+        Email:
+          address?.email ||
+          customer?.email ||
+          "",
+        Reason: rma?.reason || "",
+        Note: rma?.customerNote || "",
+        Amount:
+          rma?.finalPayable ??
+          rma?.totalAmount ??
+          0,
+        "Payment Method":
+          rma?.paymentMethod || "",
+        "Payment Status":
+          rma?.paymentStatus || "",
+        "Fulfillment Status":
+          rma?.fulfillmentStatus || "",
+        City: address?.city || "",
+        State: address?.state || "",
+        Pincode: address?.pincode || "",
+        "RMA Created":
+          formatDate(rma?.createdAt),
+        "Order Date":
+          formatDate(rma?.orderDate),
+      };
     });
-    return ["all", ...Array.from(set).sort()];
-  }, [rmas]);
+
+    const headers = Object.keys(rows[0]);
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+        </head>
+        <body>
+          <table border="1">
+            <thead>
+              <tr>
+                ${headers
+        .map(
+          (header) =>
+            `<th>${header}</th>`
+        )
+        .join("")}
+              </tr>
+            </thead>
+
+            <tbody>
+              ${rows
+        .map(
+          (row) => `
+                    <tr>
+                      ${headers
+              .map(
+                (header) =>
+                  `<td>${str(
+                    row[header]
+                  )
+                    .replaceAll("&", "&amp;")
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;")}</td>`
+              )
+              .join("")}
+                    </tr>
+                  `
+        )
+        .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([html], {
+      type: "application/vnd.ms-excel",
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const anchor =
+      document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = `rma-report-${new Date()
+      .toISOString()
+      .slice(0, 10)}.xls`;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    URL.revokeObjectURL(url);
+  };
 
   const clearFilters = () => {
-    setSearch("");
+    setOrderSearch("");
+    setMobileSearch("");
+    setFulfilledFilter("all");
     setFromDate("");
     setToDate("");
-    setQuickRange("all");
     setStatusFilter("all");
     setTypeFilter("all");
     setSortDir("desc");
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+    <div className="space-y-5">
+      {/* HEADER */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">RMA Requests</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Click any row to view full order + RMA details. You can also set order status to{" "}
-            <b>Pickup Initiated</b>.
+          <h1 className="text-2xl font-semibold text-gray-900">
+            RMA Requests
+          </h1>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Manage return and exchange requests.
           </p>
         </div>
 
-        <div className="text-sm text-gray-600">
-          <span className="font-medium text-gray-900">{filteredRmas.length}</span>{" "}
-          requests
+        <div className="flex flex-wrap gap-2">
+          {selected.length > 0 && (
+            <button
+              onClick={bulkMarkFulfilled}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              <CheckCheck size={16} />
+              Mark Fulfilled ({selected.length})
+            </button>
+          )}
+
+          <button
+            onClick={downloadExcel}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Download size={16} />
+            Excel
+          </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 p-4">
-        <div className="grid lg:grid-cols-8 gap-3">
-          {/* Search */}
-          <div className="lg:col-span-2">
-            <label className="text-xs text-gray-500">Search</label>
+      {/* FILTERS */}
+      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+          <div className="xl:col-span-2">
+            <label className="text-xs text-gray-500">
+              Order / RMA Number
+            </label>
+
             <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Order #, RMA #, customer, phone, email..."
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+              value={orderSearch}
+              onChange={(e) =>
+                setOrderSearch(e.target.value)
+              }
+              placeholder="000205 / RMA-..."
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none"
             />
           </div>
 
-          {/* From */}
           <div>
-            <label className="text-xs text-gray-500">From</label>
+            <label className="text-xs text-gray-500">
+              Mobile
+            </label>
+
+            <input
+              value={mobileSearch}
+              onChange={(e) =>
+                setMobileSearch(e.target.value)
+              }
+              placeholder="9876543210"
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500">
+              Fulfilled
+            </label>
+
+            <select
+              value={fulfilledFilter}
+              onChange={(e) =>
+                setFulfilledFilter(e.target.value)
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+            >
+              <option value="all">All</option>
+              <option value="pending">
+                Pending
+              </option>
+              <option value="fulfilled">
+                Fulfilled
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500">
+              From
+            </label>
+
             <input
               type="date"
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+              onChange={(e) =>
+                setFromDate(e.target.value)
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
             />
           </div>
 
-          {/* To */}
           <div>
-            <label className="text-xs text-gray-500">To</label>
+            <label className="text-xs text-gray-500">
+              To
+            </label>
+
             <input
               type="date"
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+              onChange={(e) =>
+                setToDate(e.target.value)
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
             />
           </div>
 
-          {/* Quick */}
           <div>
-            <label className="text-xs text-gray-500">Quick</label>
-            <select
-              value={quickRange}
-              onChange={(e) => setQuickRange(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-            >
-              <option value="all">All</option>
-              <option value="today">Today</option>
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-            </select>
-          </div>
+            <label className="text-xs text-gray-500">
+              RMA Status
+            </label>
 
-          {/* Status (RMA) */}
-          <div>
-            <label className="text-xs text-gray-500">RMA Status</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm capitalize outline-none focus:ring-2 focus:ring-blue-200"
+              onChange={(e) =>
+                setStatusFilter(e.target.value)
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm capitalize"
             >
-              {statusOptions.map((s) => (
-                <option key={s} value={s} className="capitalize">
-                  {s}
+              {statusOptions.map((status) => (
+                <option
+                  key={status}
+                  value={status}
+                >
+                  {status}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Type */}
           <div>
-            <label className="text-xs text-gray-500">Type</label>
+            <label className="text-xs text-gray-500">
+              Type
+            </label>
+
             <select
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm capitalize outline-none focus:ring-2 focus:ring-blue-200"
+              onChange={(e) =>
+                setTypeFilter(e.target.value)
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm capitalize"
             >
-              {typeOptions.map((t) => (
-                <option key={t} value={t} className="capitalize">
-                  {t}
+              {typeOptions.map((type) => (
+                <option
+                  key={type}
+                  value={type}
+                >
+                  {type}
                 </option>
               ))}
-            </select>
-          </div>
-
-          {/* Sort */}
-          <div>
-            <label className="text-xs text-gray-500">Sort</label>
-            <select
-              value={sortDir}
-              onChange={(e) => setSortDir(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-            >
-              <option value="desc">Created: Newest</option>
-              <option value="asc">Created: Oldest</option>
             </select>
           </div>
         </div>
 
-        {/* Clear */}
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex items-center justify-between">
+          <p className="text-xs text-gray-500">
+            {filteredRmas.length} requests
+          </p>
+
           <button
             onClick={clearFilters}
-            className="text-xs rounded-lg px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700"
+            className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
           >
             Clear Filters
           </button>
         </div>
       </div>
 
-      {/* States */}
       {loading && (
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <span className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-blue-600 animate-spin" />
+        <div className="text-sm text-gray-500">
           Loading RMA requests...
         </div>
       )}
 
       {error && (
-        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-          ❌ {toStr(error)}
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {str(error)}
         </div>
       )}
 
-      {!loading && filteredRmas.length === 0 && (
-        <div className="rounded-xl bg-gray-50 border border-gray-100 px-5 py-10 text-center">
-          <p className="text-gray-600 font-medium">No RMA requests found</p>
-          <p className="text-sm text-gray-500 mt-1">Try changing filters or search.</p>
-        </div>
-      )}
+      {!loading &&
+        filteredRmas.length > 0 && (
+          <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] text-sm">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="w-10 p-4">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
 
-      {/* Table */}
-      {!loading && filteredRmas.length > 0 && (
-        <div className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600">
-                <tr className="border-b border-gray-100">
-                  <th className="p-4 text-left font-semibold w-10" />
-                  <th className="p-4 text-left font-semibold">Order #</th>
-                  <th className="p-4 text-left font-semibold">RMA #</th>
-                  <th className="p-4 text-left font-semibold">Type</th>
-                  <th className="p-4 text-left font-semibold">RMA Status</th>
-                  <th className="p-4 text-left font-semibold">Customer</th>
-                  <th className="p-4 text-left font-semibold">Created</th>
-                </tr>
-              </thead>
+                    <th className="w-10 p-4" />
 
-              <tbody className="divide-y divide-gray-100">
-                {filteredRmas.map((rma, index) => {
-                  const linkedOrder = orderMap.get(String(rma?.orderId)) || null;
-                  const orderNumber = formatOrderNumber(
-                    pick(linkedOrder?.orderNumber, rma?.orderNumber)
-                  );
-                  const rmaNumber = formatRmaNumber(rma?.rmaNumber);
+                    <th className="p-4 text-left">
+                      Order #
+                    </th>
 
-                  const customerName =
-                    linkedOrder?.shippingAddressSnapshot?.fullName ||
-                    linkedOrder?.customerId?.name ||
-                    rma?.customer?.name ||
-                    "-";
-                  const customerPhone = pick(
-                    linkedOrder?.shippingAddressSnapshot?.phone,
-                    linkedOrder?.customerId?.phone,
-                    rma?.customer?.phone
-                  );
-                  const customerEmail = pick(linkedOrder?.customerId?.email, rma?.customer?.email);
-                  const reverseShipment = rma?.reverseShipment || {};
-                  const refund = rma?.refund || {};
+                    <th className="p-4 text-left">
+                      RMA #
+                    </th>
 
-                  const rowKey =
-                    rma?.rmaNumber || rma?._id || `${rma?.orderId || "order"}-${index}`;
-                  const isOpen = expanded === rowKey;
+                    <th className="p-4 text-left">
+                      Type
+                    </th>
 
-                  return (
-                    <React.Fragment key={rowKey}>
-                      {/* MAIN ROW */}
-                      <tr
-                        onClick={() => toggleExpand(rowKey)}
-                        className={`cursor-pointer transition ${
-                          isOpen ? "bg-blue-50/40" : "hover:bg-gray-50"
-                        }`}
-                      >
-                        <td className="p-4 align-middle">
-                          <ChevronDown
-                            size={18}
-                            className={`text-gray-500 transition-transform ${
-                              isOpen ? "rotate-180" : "rotate-0"
-                            }`}
-                          />
-                        </td>
+                    <th className="p-4 text-left">
+                      Status
+                    </th>
 
-                        <td className="p-4 font-medium text-gray-900">
-                          {orderNumber}
-                        </td>
+                    <th className="p-4 text-left">
+                      Fulfilled
+                    </th>
 
-                        <td className="p-4 text-gray-700">{rmaNumber}</td>
+                    <th className="p-4 text-left">
+                      Customer
+                    </th>
 
-                        <td className="p-4">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 capitalize ${typeBadge(
-                              rma?.type
-                            )}`}
-                          >
-                            {rma?.type || "-"}
-                          </span>
-                        </td>
+                    <th className="p-4 text-left">
+                      Mobile
+                    </th>
 
-                        <td className="p-4">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 capitalize ${statusBadge(
-                              rma?.status
-                            )}`}
-                          >
-                            {rma?.status || "-"}
-                          </span>
-                        </td>
+                    <th className="p-4 text-left">
+                      Created
+                    </th>
 
-                        <td className="p-4 text-gray-700">{customerName}</td>
+                    <th className="p-4 text-right">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
 
-                        <td className="p-4 text-gray-500">
-                          {fmtDate(parseDate(rma?.createdAt))}
-                        </td>
-                      </tr>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredRmas.map(
+                    (rma, index) => {
+                      const address =
+                        rma?.shippingAddressSnapshot ||
+                        {};
 
-                      {/* EXPANDED ROW */}
-                      {isOpen && (
-                        <tr className="bg-white">
-                          <td colSpan={7} className="px-6 py-5">
-                            <div className="space-y-5">
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-semibold text-gray-900">
-                                  Order, RMA & Pickup Status
-                                </p>
-                                <span className="text-xs text-gray-500">
-                                  Click row again to collapse
-                                </span>
-                              </div>
+                      const customer =
+                        rma?.customer || {};
 
-                              {/* Summary cards */}
-                              <div className="grid lg:grid-cols-4 gap-4 text-xs">
-                                {/* Order */}
-                                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
-                                  <p className="text-gray-500">Order</p>
-                                  <p className="mt-2 text-gray-900">
-                                    <b>Order #:</b> {orderNumber}
-                                  </p>
-                                  <p className="text-gray-700">
-                                    <b>Fulfillment:</b> {linkedOrder?.fulfillmentStatus || "-"}
-                                  </p>
-                                  <p className="text-gray-900 mt-1">
-                                    <b>Total:</b>{" "}
-                                    {linkedOrder?.finalPayable != null
-                                      ? formatCurrency(linkedOrder.finalPayable)
-                                      : "-"}
-                                  </p>
-                                </div>
+                      const orderItems =
+                        rma?.orderItems || [];
 
-                                {/* ✅ UPDATE ORDER STATUS (Pickup Initiated available) */}
-                                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
-                                  <p className="text-gray-500">Update Order Status</p>
-                                  <div className="mt-2">
-                                    <OrderStatusDropdown
-                                      orderId={linkedOrder?._id}
-                                      currentStatus={linkedOrder?.fulfillmentStatus}
-                                      onUpdated={() => {
-                                        // ✅ refresh list so UI shows updated fulfillmentStatus
-                                        fetchAllOrders();
-                                      }}
-                                    />
+                      const reverseShipment =
+                        rma?.reverseShipment || {};
+
+                      const refund =
+                        rma?.refund || {};
+
+                      const orderNumber =
+                        formatOrderNumber(
+                          rma?.orderNumber
+                        );
+
+                      const rmaNumber =
+                        formatRmaNumber(
+                          rma?.rmaNumber
+                        );
+
+                      const customerName =
+                        pick(
+                          address?.fullName,
+                          customer?.name,
+                          "-"
+                        );
+
+                      const customerPhone =
+                        pick(
+                          address?.phone,
+                          customer?.phone
+                        );
+
+                      const customerEmail =
+                        pick(
+                          address?.email,
+                          customer?.email
+                        );
+
+                      const rowKey =
+                        getKey(rma) ||
+                        `${index}`;
+
+                      const isOpen =
+                        expanded === rowKey;
+
+                      const isUpdating =
+                        updating.includes(
+                          rowKey
+                        );
+
+                      return (
+                        <React.Fragment
+                          key={rowKey}
+                        >
+                          <tr className="hover:bg-gray-50">
+                            <td className="p-4">
+                              <input
+                                type="checkbox"
+                                checked={selected.includes(
+                                  rowKey
+                                )}
+                                onChange={() =>
+                                  toggleSelected(
+                                    rma
+                                  )
+                                }
+                              />
+                            </td>
+
+                            <td
+                              className="cursor-pointer p-4"
+                              onClick={() =>
+                                toggleExpand(
+                                  rowKey
+                                )
+                              }
+                            >
+                              <ChevronDown
+                                size={18}
+                                className={`transition-transform ${isOpen
+                                    ? "rotate-180"
+                                    : ""
+                                  }`}
+                              />
+                            </td>
+
+                            <td className="p-4 font-medium">
+                              {orderNumber}
+                            </td>
+
+                            <td className="p-4">
+                              {rmaNumber}
+                            </td>
+
+                            <td className="p-4">
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-xs capitalize ring-1 ${typeBadge(
+                                  rma?.type
+                                )}`}
+                              >
+                                {rma?.type ||
+                                  "-"}
+                              </span>
+                            </td>
+
+                            <td className="p-4">
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-xs capitalize ring-1 ${statusBadge(
+                                  rma?.status
+                                )}`}
+                              >
+                                {rma?.status ||
+                                  "-"}
+                              </span>
+                            </td>
+
+                            <td className="p-4">
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${fulfilledBadge(
+                                  rma?.isFulfilled
+                                )}`}
+                              >
+                                {rma?.isFulfilled
+                                  ? "Fulfilled"
+                                  : "Pending"}
+                              </span>
+                            </td>
+
+                            <td className="p-4">
+                              {customerName}
+                            </td>
+
+                            <td className="p-4">
+                              {customerPhone ||
+                                "-"}
+                            </td>
+
+                            <td className="p-4 text-gray-500">
+                              {formatDate(
+                                rma?.createdAt
+                              )}
+                            </td>
+
+                            <td className="p-4 text-right">
+                              <button
+                                disabled={
+                                  isUpdating
+                                }
+                                onClick={() =>
+                                  updateFulfilled(
+                                    rma,
+                                    !rma?.isFulfilled
+                                  )
+                                }
+                                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${rma?.isFulfilled
+                                    ? "bg-gray-100 text-gray-700"
+                                    : "bg-emerald-600 text-white hover:bg-emerald-700"
+                                  }`}
+                              >
+                                {isUpdating ? (
+                                  <Loader2
+                                    size={14}
+                                    className="animate-spin"
+                                  />
+                                ) : (
+                                  <Check
+                                    size={14}
+                                  />
+                                )}
+
+                                {rma?.isFulfilled
+                                  ? "Mark Pending"
+                                  : "Mark Fulfilled"}
+                              </button>
+                            </td>
+                          </tr>
+
+                          {isOpen && (
+                            <tr>
+                              <td
+                                colSpan={11}
+                                className="px-6 py-5"
+                              >
+                                <div className="space-y-5">
+                                  <div className="grid gap-4 text-xs lg:grid-cols-4">
+                                    <div className="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100">
+                                      <p className="text-gray-500">
+                                        Order
+                                      </p>
+
+                                      <p className="mt-2">
+                                        <b>
+                                          Order #:
+                                        </b>{" "}
+                                        {
+                                          orderNumber
+                                        }
+                                      </p>
+
+                                      <p>
+                                        <b>
+                                          Fulfillment:
+                                        </b>{" "}
+                                        {rma?.fulfillmentStatus ||
+                                          "-"}
+                                      </p>
+
+                                      <p>
+                                        <b>
+                                          Payment:
+                                        </b>{" "}
+                                        {rma?.paymentMethod ||
+                                          "-"}
+                                      </p>
+
+                                      <p className="mt-1">
+                                        <b>
+                                          Total:
+                                        </b>{" "}
+                                        {formatCurrency(
+                                          rma?.finalPayable ??
+                                          rma?.totalAmount ??
+                                          0
+                                        )}
+                                      </p>
+                                    </div>
+
+                                    <div className="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100">
+                                      <p className="text-gray-500">
+                                        Update Order
+                                        Status
+                                      </p>
+
+                                      <div className="mt-2">
+                                        <OrderStatusDropdown
+                                          orderId={
+                                            rma?.orderId
+                                          }
+                                          currentStatus={
+                                            rma?.fulfillmentStatus
+                                          }
+                                          onUpdated={
+                                            fetchAllRmas
+                                          }
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100">
+                                      <p className="text-gray-500">
+                                        Shipping
+                                      </p>
+
+                                      <p className="mt-2 font-medium">
+                                        {
+                                          customerName
+                                        }
+                                      </p>
+
+                                      <p>
+                                        {customerPhone ||
+                                          "-"}
+                                      </p>
+
+                                      <p>
+                                        {customerEmail ||
+                                          "-"}
+                                      </p>
+
+                                      <p>
+                                        {[
+                                          address?.line1,
+                                          address?.city,
+                                          address?.state,
+                                          address?.pincode,
+                                        ]
+                                          .filter(
+                                            Boolean
+                                          )
+                                          .join(
+                                            ", "
+                                          ) || "-"}
+                                      </p>
+                                    </div>
+
+                                    <div className="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100">
+                                      <p className="text-gray-500">
+                                        RMA
+                                      </p>
+
+                                      <p className="mt-2">
+                                        <b>
+                                          RMA #:
+                                        </b>{" "}
+                                        {rmaNumber}
+                                      </p>
+
+                                      <p>
+                                        <b>
+                                          Reason:
+                                        </b>{" "}
+                                        {rma?.reason ||
+                                          "-"}
+                                      </p>
+
+                                      <p>
+                                        <b>
+                                          Note:
+                                        </b>{" "}
+                                        {rma?.customerNote ||
+                                          "-"}
+                                      </p>
+
+                                      <p>
+                                        <b>
+                                          Fulfilled:
+                                        </b>{" "}
+                                        {rma?.isFulfilled
+                                          ? "Yes"
+                                          : "No"}
+                                      </p>
+                                    </div>
                                   </div>
-                                  <p className="mt-2 text-[11px] text-gray-500">
-                                    Set this to <b>pickup initiated</b> when reverse pickup is started.
-                                  </p>
-                                </div>
 
-                                {/* Shipping */}
-                                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
-                                  <p className="text-gray-500">Shipping</p>
-                                  <p className="mt-2 text-gray-900 font-medium">
-                                    {linkedOrder?.shippingAddressSnapshot?.fullName || "-"}
-                                  </p>
-                                  <p className="text-gray-700">
-                                    {customerPhone || "-"}
-                                  </p>
-                                  <p className="text-gray-700">{customerEmail || "-"}</p>
-                                  <p className="text-gray-700">
-                                    {linkedOrder?.shippingAddressSnapshot?.line1 || "-"}
-                                  </p>
-                                  <p className="text-gray-700">
-                                    {linkedOrder?.shippingAddressSnapshot?.city || "-"}{" "}
-                                    {linkedOrder?.shippingAddressSnapshot?.state || "-"}{" "}
-                                    {linkedOrder?.shippingAddressSnapshot?.pincode || "-"}
-                                  </p>
-                                </div>
+                                  <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="rounded-xl bg-white p-4 ring-1 ring-gray-100">
+                                      <p className="mb-3 text-xs font-semibold">
+                                        Order Items
+                                      </p>
 
-                                {/* RMA */}
-                                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
-                                  <p className="text-gray-500">RMA</p>
-                                  <p className="mt-2 text-gray-900">
-                                    <b>RMA #:</b> {rmaNumber}
-                                  </p>
-                                  <p className="mt-2 text-gray-900">
-                                    <b>Reason:</b> {rma?.reason || "-"}
-                                  </p>
-                                  <p className="text-gray-700">
-                                    <b>Note:</b> {rma?.customerNote || "-"}
-                                  </p>
+                                      {!orderItems.length ? (
+                                        <p className="text-xs text-gray-500">
+                                          No
+                                          order
+                                          items.
+                                        </p>
+                                      ) : (
+                                        <div className="space-y-2">
+                                          {orderItems.map(
+                                            (
+                                              item,
+                                              i
+                                            ) => (
+                                              <div
+                                                key={
+                                                  item?.lineId ||
+                                                  i
+                                                }
+                                                className="flex justify-between rounded-lg bg-gray-50 px-3 py-2"
+                                              >
+                                                <div>
+                                                  <p className="font-medium">
+                                                    {item
+                                                      ?.productSnapshot
+                                                      ?.title ||
+                                                      "Item"}
+                                                  </p>
 
-                                  {rma?.fee?.amount > 0 && (
-                                    <p className="mt-2 text-blue-700 font-medium">
-                                      Exchange Fee: {formatCurrency(rma.fee.amount)} ({rma.fee.status})
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
+                                                  <p className="text-xs text-gray-500">
+                                                    Qty:{" "}
+                                                    {item?.quantity ||
+                                                      1}
+                                                    {item?.selectedSize &&
+                                                      ` · ${item.selectedSize}`}
+                                                  </p>
+                                                </div>
 
-                              <div className="grid md:grid-cols-2 gap-4 text-xs">
-                                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
-                                  <p className="text-gray-500">Reverse Shipment</p>
-                                  <p className="mt-2 text-gray-900">
-                                    <b>Courier:</b> {reverseShipment?.courier || reverseShipment?.carrier || "-"}
-                                  </p>
-                                  <p className="text-gray-700">
-                                    <b>AWB:</b> {reverseShipment?.awb || reverseShipment?.awbCode || "-"}
-                                  </p>
-                                  <p className="text-gray-700">
-                                    <b>Status:</b> {reverseShipment?.status || "-"}
-                                  </p>
-                                </div>
+                                                <p className="font-semibold">
+                                                  {formatCurrency(
+                                                    item?.subtotal ??
+                                                    item?.price ??
+                                                    0
+                                                  )}
+                                                </p>
+                                              </div>
+                                            )
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
 
-                                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 p-4">
-                                  <p className="text-gray-500">Refund</p>
-                                  <p className="mt-2 text-gray-900">
-                                    <b>Amount:</b>{" "}
-                                    {refund?.amount != null ? formatCurrency(refund.amount) : "-"}
-                                  </p>
-                                  <p className="text-gray-700">
-                                    <b>Status:</b> {refund?.status || "-"}
-                                  </p>
-                                  <p className="text-gray-700">
-                                    <b>Reference:</b> {refund?.reference || refund?.refundId || "-"}
-                                  </p>
-                                </div>
-                              </div>
+                                    <div className="rounded-xl bg-white p-4 ring-1 ring-gray-100">
+                                      <p className="mb-3 text-xs font-semibold">
+                                        RMA Items
+                                      </p>
 
-                              {/* Items */}
-                              <div className="grid md:grid-cols-2 gap-4">
-                                {/* Order items */}
-                                <div className="rounded-xl bg-white ring-1 ring-gray-100 p-4">
-                                  <p className="text-xs font-semibold text-gray-900 mb-3">
-                                    Order Items
-                                  </p>
+                                      {(rma?.items ||
+                                        []).map(
+                                          (
+                                            item,
+                                            i
+                                          ) => (
+                                            <div
+                                              key={
+                                                i
+                                              }
+                                              className="mb-2 flex justify-between rounded-lg bg-gray-50 px-3 py-2"
+                                            >
+                                              <div>
+                                                <p className="font-medium">
+                                                  {item?.title ||
+                                                    "Item"}
+                                                </p>
 
-                                  {!linkedOrder?.items?.length ? (
-                                    <p className="text-xs text-gray-500">
-                                      No order items found.
-                                    </p>
-                                  ) : (
-                                    <div className="space-y-2">
-                                      {linkedOrder.items.map((it, idx) => {
-                                        const pid = it?.productId;
-                                        const prod = pid ? productMap.get(String(pid)) : null;
+                                                <p className="text-xs text-gray-500">
+                                                  Qty:{" "}
+                                                  {item?.quantity ||
+                                                    1}
+                                                </p>
+                                              </div>
 
-                                        const title =
-                                          it?.productSnapshot?.title ||
-                                          prod?.title ||
-                                          "Item";
-
-                                        const itemKey =
-                                          it?.lineId ||
-                                          it?._id ||
-                                          `${rowKey}-orderItem-${idx}`;
-
-                                        return (
-                                          <div
-                                            key={itemKey}
-                                            className="flex items-start justify-between rounded-lg bg-gray-50 px-3 py-2"
-                                          >
-                                            <div>
-                                              <p className="text-gray-900 font-medium">{title}</p>
-                                              <p className="text-gray-500 text-xs">
-                                                Qty: {it?.quantity || 1}
+                                              <p className="text-xs text-gray-600">
+                                                {item?.variantSku ||
+                                                  "-"}
                                               </p>
                                             </div>
-                                            <p className="text-gray-900 font-semibold">
-                                              {formatCurrency(it?.subtotal ?? it?.price ?? 0)}
-                                            </p>
-                                          </div>
-                                        );
-                                      })}
+                                          )
+                                        )}
                                     </div>
-                                  )}
+                                  </div>
                                 </div>
-
-                                {/* RMA items */}
-                                <div className="rounded-xl bg-white ring-1 ring-gray-100 p-4">
-                                  <p className="text-xs font-semibold text-gray-900 mb-3">
-                                    RMA Items
-                                  </p>
-
-                                  {!rma?.items?.length ? (
-                                    <p className="text-xs text-gray-500">
-                                      No RMA items found.
-                                    </p>
-                                  ) : (
-                                    <div className="space-y-2">
-                                      {rma.items.map((it, idx) => (
-                                        <div
-                                          key={`${rowKey}-rmaItem-${idx}`}
-                                          className="flex items-start justify-between rounded-lg bg-gray-50 px-3 py-2"
-                                        >
-                                          <div>
-                                            <p className="text-gray-900 font-medium">
-                                              {it?.title || "Item"}
-                                            </p>
-                                            <p className="text-gray-500 text-xs">
-                                              Qty: {it?.quantity || 1}
-                                            </p>
-                                          </div>
-                                          <p className="text-gray-600 text-xs">
-                                            {it?.variantSku ? `SKU: ${it.variantSku}` : "-"}
-                                          </p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    }
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ const DEFAULT_FILTERS = {
   status: "",
   reason: "",
   search: "",
+  isFulfilled: "",
   sortBy: "totalRmaQty",
   sortOrder: "desc",
 };
@@ -32,103 +33,222 @@ const toQueryString = (params = {}) => {
   const searchParams = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") return;
+    if (
+      value === undefined ||
+      value === null ||
+      value === ""
+    ) {
+      return;
+    }
+
     searchParams.set(key, String(value));
   });
 
   return searchParams.toString();
 };
 
-export const useOrderRmaStore = create((set, get) => ({
-  groupedProducts: [],
-  loadingGroupedProducts: false,
-  groupedProductsError: "",
-  groupedProductsFilters: { ...DEFAULT_FILTERS },
-  groupedProductsPagination: { ...DEFAULT_PAGINATION },
+const normalizePagination = (
+  pagination = {},
+  filters = {}
+) => ({
+  page: Number(
+    pagination?.page ||
+    filters?.page ||
+    1
+  ),
+  limit: Number(
+    pagination?.limit ||
+    filters?.limit ||
+    20
+  ),
+  total: Number(
+    pagination?.total || 0
+  ),
+  totalPages: Number(
+    pagination?.totalPages || 1
+  ),
+  hasNextPage: Boolean(
+    pagination?.hasNextPage
+  ),
+  hasPrevPage: Boolean(
+    pagination?.hasPrevPage
+  ),
+});
 
-  setGroupedProductsFilters: (updates = {}) =>
-    set((state) => ({
-      groupedProductsFilters: {
-        ...state.groupedProductsFilters,
-        ...updates,
-      },
-    })),
+export const useOrderRmaStore = create(
+  (set, get) => ({
+    groupedProducts: [],
 
-  resetGroupedProductsFilters: () =>
-    set({
-      groupedProductsFilters: { ...DEFAULT_FILTERS },
-    }),
+    loadingGroupedProducts: false,
 
-  clearGroupedProducts: () =>
-    set({
-      groupedProducts: [],
-      groupedProductsError: "",
-      groupedProductsPagination: { ...DEFAULT_PAGINATION },
-    }),
+    groupedProductsError: "",
 
-  getGroupedRmaProducts: async (customFilters = {}) => {
-    try {
+    groupedProductsFilters: {
+      ...DEFAULT_FILTERS,
+    },
+
+    groupedProductsPagination: {
+      ...DEFAULT_PAGINATION,
+    },
+
+    setGroupedProductsFilters: (
+      updates = {}
+    ) =>
+      set((state) => ({
+        groupedProductsFilters: {
+          ...state.groupedProductsFilters,
+          ...updates,
+        },
+      })),
+
+    resetGroupedProductsFilters: () =>
       set({
-        loadingGroupedProducts: true,
+        groupedProductsFilters: {
+          ...DEFAULT_FILTERS,
+        },
+
+        groupedProductsPagination: {
+          ...DEFAULT_PAGINATION,
+        },
+
         groupedProductsError: "",
-      });
+      }),
 
-      const mergedFilters = {
-        ...get().groupedProductsFilters,
-        ...customFilters,
-      };
-
-      const queryString = toQueryString(mergedFilters);
-      const url = `${API_BASE}/api/orders/rma/grouped-by-product-code${
-        queryString ? `?${queryString}` : ""
-      }`;
-
-      const { data } = await axios.get(url, {
-        withCredentials: true,
-      });
-
+    clearGroupedProducts: () =>
       set({
-        groupedProducts: Array.isArray(data?.data) ? data.data : [],
-        groupedProductsPagination: data?.pagination
-          ? {
-              page: Number(data.pagination.page || mergedFilters.page || 1),
-              limit: Number(data.pagination.limit || mergedFilters.limit || 20),
-              total: Number(data.pagination.total || 0),
-              totalPages: Number(data.pagination.totalPages || 1),
-              hasNextPage: Boolean(data.pagination.hasNextPage),
-              hasPrevPage: Boolean(data.pagination.hasPrevPage),
-            }
-          : {
-              ...DEFAULT_PAGINATION,
-              page: Number(mergedFilters.page || 1),
-              limit: Number(mergedFilters.limit || 20),
-            },
-        groupedProductsFilters: mergedFilters,
-        loadingGroupedProducts: false,
-      });
-
-      return data;
-    } catch (error) {
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to fetch grouped RMA products";
-
-      set({
-        loadingGroupedProducts: false,
-        groupedProductsError: message,
         groupedProducts: [],
-      });
+        groupedProductsError: "",
 
-      return {
-        success: false,
-        message,
-      };
-    }
-  },
+        groupedProductsPagination: {
+          ...DEFAULT_PAGINATION,
+        },
+      }),
 
-  refreshGroupedRmaProducts: async () => {
-    const filters = get().groupedProductsFilters;
-    return get().getGroupedRmaProducts(filters);
-  },
-}));
+    getGroupedRmaProducts: async (
+      customFilters = {}
+    ) => {
+      try {
+        set({
+          loadingGroupedProducts: true,
+          groupedProductsError: "",
+        });
+
+        const mergedFilters = {
+          ...get().groupedProductsFilters,
+          ...customFilters,
+        };
+
+        const queryString =
+          toQueryString(mergedFilters);
+
+        const url =
+          `${API_BASE}/api/orders/rma/grouped-by-product-code` +
+          (queryString
+            ? `?${queryString}`
+            : "");
+
+        const { data } =
+          await axios.get(url, {
+            withCredentials: true,
+          });
+
+        const products =
+          Array.isArray(data?.data)
+            ? data.data
+            : Array.isArray(
+              data?.products
+            )
+              ? data.products
+              : [];
+
+        const pagination =
+          data?.pagination
+            ? normalizePagination(
+              data.pagination,
+              mergedFilters
+            )
+            : {
+              ...DEFAULT_PAGINATION,
+
+              page: Number(
+                mergedFilters.page || 1
+              ),
+
+              limit: Number(
+                mergedFilters.limit ||
+                20
+              ),
+            };
+
+        set({
+          groupedProducts: products,
+
+          groupedProductsPagination:
+            pagination,
+
+          groupedProductsFilters:
+            mergedFilters,
+
+          loadingGroupedProducts:
+            false,
+
+          groupedProductsError: "",
+        });
+
+        return data;
+      } catch (error) {
+        const message =
+          error?.response?.data
+            ?.message ||
+          error?.message ||
+          "Failed to fetch grouped RMA products";
+
+        set({
+          loadingGroupedProducts:
+            false,
+
+          groupedProductsError:
+            message,
+
+          groupedProducts: [],
+
+          groupedProductsPagination: {
+            ...DEFAULT_PAGINATION,
+          },
+        });
+
+        return {
+          success: false,
+          message,
+        };
+      }
+    },
+
+    setFulfilledFilter: (
+      isFulfilled
+    ) => {
+      const value =
+        isFulfilled === true
+          ? "true"
+          : isFulfilled === false
+            ? "false"
+            : "";
+
+      set((state) => ({
+        groupedProductsFilters: {
+          ...state.groupedProductsFilters,
+
+          isFulfilled: value,
+
+          page: 1,
+        },
+      }));
+    },
+
+    refreshGroupedRmaProducts:
+      async () =>
+        get().getGroupedRmaProducts(
+          get().groupedProductsFilters
+        ),
+  })
+);
