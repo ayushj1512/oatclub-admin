@@ -467,6 +467,7 @@ export default function OrdersListPage() {
     page: 1,
     limit: 100,
     totalCount: 0,
+    parentCount: 0,
     totalPages: 1,
     totalSum: null,
   });
@@ -613,10 +614,23 @@ export default function OrdersListPage() {
       setOrdersMeta({
         page: toNumber(result.meta?.page) || currentPage,
         limit: toNumber(result.meta?.limit) || pageSize,
+
+        // pagination count
         totalCount: toNumber(result.meta?.totalCount),
-        totalPages: Math.max(1, toNumber(result.meta?.totalPages) || 1),
+
+        // actual parent orders count
+        parentCount: toNumber(
+          result.meta?.parentCount ?? result.meta?.totalCount
+        ),
+
+        totalPages: Math.max(
+          1,
+          toNumber(result.meta?.totalPages) || 1
+        ),
+
         totalSum:
-          result.meta?.totalSum === null || result.meta?.totalSum === undefined
+          result.meta?.totalSum === null ||
+            result.meta?.totalSum === undefined
             ? null
             : toNumber(result.meta.totalSum),
       });
@@ -1631,6 +1645,9 @@ export default function OrdersListPage() {
   ]);
 
   const totalCount = toNumber(ordersMeta?.totalCount);
+  const parentCount = toNumber(
+    ordersMeta?.parentCount ?? ordersMeta?.totalCount
+  );
   const totalPages = Math.max(
     1,
     toNumber(ordersMeta?.totalPages) ||
@@ -1661,8 +1678,7 @@ export default function OrdersListPage() {
 
             <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-                {totalCount || filteredOrders.length} Orders
-              </span>
+                {parentCount || groupedOrders.length} Orders              </span>
 
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
                 Revenue: {formatINR(totalRevenue)}              </span>

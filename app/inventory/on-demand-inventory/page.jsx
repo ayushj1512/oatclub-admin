@@ -157,12 +157,20 @@
       return totalCurrentInventory + totalAddOnInventory;
     }, [totalCurrentInventory, totalAddOnInventory]);
 
+    const normalizeProductCode = (v) => {
+      const raw = t(v);
+      return /^\d+$/.test(raw) ? raw.padStart(5, "0") : raw;
+    };
+
     const runSearch = async () => {
-      const q = t(search);
-      if (!q) {
+      const raw = t(search);
+
+      if (!raw) {
         toast.error("Enter productId / productCode / SKU / barcode");
         return;
       }
+
+      const q = normalizeProductCode(raw);
 
       setSearching(true);
       setHasSearched(true);
