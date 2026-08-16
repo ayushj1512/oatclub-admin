@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Download,
   Loader2,
+  RotateCcw,
 } from "lucide-react";
 import axios from "axios";
 
@@ -91,6 +92,7 @@ export default function RmaClient() {
 
   const [sortDir, setSortDir] = useState("desc");
   const [updating, setUpdating] = useState([]);
+  const [creatingPickup, setCreatingPickup] = useState([]);
 
   const {
     rmas,
@@ -301,6 +303,50 @@ export default function RmaClient() {
     }
   };
 
+  const createReturnPickup = async (rma) => {
+    const key = getKey(rma);
+
+    if (!rma?.orderId || !rma?.rmaNumber) {
+      alert("Order ID or RMA number missing");
+      return;
+    }
+
+    try {
+      setCreatingPickup((current) => [...current, key]);
+
+      const { data } = await axios.post(
+        `${API_BASE}/api/shiprocket/return/${rma.orderId}/${encodeURIComponent(
+          rma.rmaNumber
+        )}`,
+        {},
+        {
+          withCredentials: true,
+        }
+      );
+
+      await fetchAllRmas();
+
+      alert(
+        data?.message ||
+        "Return pickup created successfully"
+      );
+    } catch (error) {
+      console.error(
+        "Create return pickup failed:",
+        error
+      );
+
+      alert(
+        error?.response?.data?.message ||
+        "Failed to create return pickup"
+      );
+    } finally {
+      setCreatingPickup((current) =>
+        current.filter((x) => x !== key)
+      );
+    }
+  };
+
   const bulkMarkFulfilled = async () => {
     const targets = filteredRmas.filter(
       (rma) =>
@@ -493,6 +539,8 @@ export default function RmaClient() {
             Manage return and exchange requests.
           </p>
         </div>
+
+
 
         <div className="flex flex-wrap gap-2">
           {selected.length > 0 && (
@@ -788,7 +836,15 @@ export default function RmaClient() {
                           rowKey
                         );
 
-                      return (
+                      const isCreatingPickup =
+                        creatingPickup.includes(rowKey);
+
+                      const hasReturnPickup = Boolean(
+                        reverseShipment?.orderId ||
+                        reverseShipment?.shipmentId ||
+                        reverseShipment?.awb
+                      );
+                                return (
                         <React.Fragment
                           key={rowKey}
                         >
@@ -881,37 +937,50 @@ export default function RmaClient() {
                               )}
                             </td>
 
-                            <td className="p-4 text-right">
-                              <button
-                                disabled={
-                                  isUpdating
-                                }
-                                onClick={() =>
-                                  updateFulfilled(
-                                    rma,
-                                    !rma?.isFulfilled
-                                  )
-                                }
-                                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${rma?.isFulfilled
-                                    ? "bg-gray-100 text-gray-700"
-                                    : "bg-emerald-600 text-white hover:bg-emerald-700"
-                                  }`}
-                              >
-                                {isUpdating ? (
-                                  <Loader2
-                                    size={14}
-                                    className="animate-spin"
-                                  />
-                                ) : (
-                                  <Check
-                                    size={14}
-                                  />
-                                )}
+                            <td className="p-4">
+                              <div className="flex justify-end gap-2">
+                                          <button
+                                            disabled={hasReturnPickup || isCreatingPickup}
+                                            onClick={() => createReturnPickup(rma)}
+                                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${hasReturnPickup
+                                                ? "cursor-not-allowed bg-blue-50 text-blue-700"
+                                                : "bg-black text-white hover:bg-gray-800"
+                                              }`}
+                                          >
+                                            {isCreatingPickup ? (
+                                              <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                              <RotateCcw size={14} />
+                                            )}
 
-                                {rma?.isFulfilled
-                                  ? "Mark Pending"
-                                  : "Mark Fulfilled"}
-                              </button>
+                                            {hasReturnPickup
+                                              ? "Pickup Created"
+                                              : isCreatingPickup
+                                                ? "Creating..."
+                                                : "Create Pickup"}
+                                          </button>
+
+                                <button
+                                  disabled={isUpdating}
+                                  onClick={() =>
+                                    updateFulfilled(rma, !rma?.isFulfilled)
+                                  }
+                                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${rma?.isFulfilled
+                                      ? "bg-gray-100 text-gray-700"
+                                      : "bg-emerald-600 text-white hover:bg-emerald-700"
+                                    }`}
+                                >
+                                  {isUpdating ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                  ) : (
+                                    <Check size={14} />
+                                  )}
+
+                                  {rma?.isFulfilled
+                                    ? "Mark Pending"
+                                    : "Mark Fulfilled"}
+                                </button>
+                              </div>
                             </td>
                           </tr>
 
