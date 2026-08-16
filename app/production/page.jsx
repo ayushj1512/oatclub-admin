@@ -171,24 +171,33 @@ export default function ProductionDashboardPage() {
     await runQueueRefresh({ page: safePage });
   };
 
-  const doMarkPacked = async (orderId) => {
+  const doMarkPacked = async (orderId, { silent = false } = {}) => {
     if (!orderId || !markPackedFn) {
       toast.error("Pack action not available");
-      return;
+      return false;
     }
 
     const oid = String(orderId);
     const order = (queue || []).find((o) => String(o?._id) === oid);
 
-    if (!order) return;
-    if (!order?.isConfirmed) return toast.error("Only confirmed orders can be packed");
+    if (!order) return false;
+
+    if (!order?.isConfirmed) {
+      toast.error("Only confirmed orders can be packed");
+      return false;
+    }
+
     if (String(order?.fulfillmentStatus) !== "processing") {
-      return toast.error("Only processing orders can be packed");
+      toast.error("Only processing orders can be packed");
+      return false;
     }
+
     if (!order?.isPackable) {
-      return toast.error("Order is not packable");
+      toast.error("Order is not packable");
+      return false;
     }
-    if (packingIds.has(oid)) return;
+
+    if (packingIds.has(oid)) return false;
 
     setPackingIds((prev) => new Set(prev).add(oid));
 
@@ -206,11 +215,14 @@ export default function ProductionDashboardPage() {
         return next;
       });
 
-      await runQueueRefresh();
-      await fetchProductionSummary();
-      toast.success(`Order packed: ${order?.orderNumber || oid}`);
+      if (!silent) {
+        toast.success(`Order packed: ${order?.orderNumber || oid}`);
+      }
+
+      return true;
     } catch (e) {
       toast.error(e?.message || "Failed to mark packed");
+      return false;
     } finally {
       setPackingIds((prev) => {
         const next = new Set(prev);
@@ -224,16 +236,40 @@ export default function ProductionDashboardPage() {
     if (bulkPacking) return;
 
     const ids = Array.from(selectedIds).filter((id) => {
-      const order = (queue || []).find((o) => String(o?._id) === String(id));
-      return order?.isPackable === true;
+      const order = (queue || []).find(
+        (o) => String(o?._id) === String(id)
+      );
+
+      return (
+        order?.isConfirmed === true &&
+        String(order?.fulfillmentStatus) === "processing" &&
+        order?.isPackable === true
+      );
     });
 
     if (!ids.length) return;
 
     setBulkPacking(true);
+
+    let packedCount = 0;
+
     try {
       for (const id of ids) {
-        await doMarkPacked(id);
+        const ok = await doMarkPacked(id, { silent: true });
+        if (ok) packedCount += 1;
+      }
+
+      clearSelection();
+
+      // Sync counts/jobs once after the whole bulk action.
+      // Important: no production queue refetch here.
+      await Promise.allSettled([
+        fetchProductionSummary(),
+        store.fetchProductionJobs?.(store.productionJobFilters),
+      ]);
+
+      if (packedCount > 0) {
+        toast.success(`${packedCount} order(s) packed`);
       }
     } finally {
       setBulkPacking(false);
@@ -437,8 +473,10 @@ export default function ProductionDashboardPage() {
       ) : null}
 
       <div className="space-y-2">
-        {loadingQueue ? (
-          <div className="p-6 text-center text-sm text-gray-500">Loading orders...</div>
+        {!queue.length && loadingQueue ? (
+          <div className="p-6 text-center text-sm text-gray-500">
+            Loading orders...
+          </div>
         ) : !queue.length ? (
           <div className="p-6 text-center text-sm text-gray-500">
             No orders found in selected filter.

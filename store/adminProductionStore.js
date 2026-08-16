@@ -553,6 +553,9 @@ if (toNum(merged.limit, 0) <= 0) merged.limit = state.filters.limit || 100;
   /* =========================================================
      MARK ORDER PACKED
   ========================================================= */
+  /* =========================================================
+   MARK ORDER PACKED
+========================================================= */
   markOrderPacked: async (orderId) => {
     try {
       if (!orderId) throw new Error("Order id missing");
@@ -563,34 +566,80 @@ if (toNum(merged.limit, 0) <= 0) merged.limit = state.filters.limit || 100;
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ fulfillmentStatus: "packed" }),
+        body: JSON.stringify({
+          fulfillmentStatus: "packed",
+        }),
       });
 
       const data = await parseJson(res);
       const updated = data.order;
 
-      set((state) => ({
-        queue: (state.queue || []).map((o) =>
-          String(o._id) === String(orderId) ? updated : o
-        ),
-      }));
+      set((state) => {
+        const viewingProcessing =
+          String(state.fulfillmentStatus || "").toLowerCase() ===
+          "processing";
 
-      toast.success("Order marked packed ✅");
+        const existsInQueue = (state.queue || []).some(
+          (order) => String(order?._id) === String(orderId)
+        );
 
-      await Promise.allSettled([
-        get().fetchProductionSummary(),
-        get().fetchProductionQueue(get().filters),
-        get().fetchProductionJobs(get().productionJobFilters),
-      ]);
+        const shouldRemove =
+          viewingProcessing && existsInQueue;
+
+        const nextQueue = shouldRemove
+          ? (state.queue || []).filter(
+            (order) =>
+              String(order?._id) !== String(orderId)
+          )
+          : (state.queue || []).map((order) =>
+            String(order?._id) === String(orderId)
+              ? updated
+              : order
+          );
+
+        const nextTotal = shouldRemove
+          ? Math.max(0, Number(state.total || 0) - 1)
+          : Number(state.total || 0);
+
+        return {
+          queue: nextQueue,
+
+          total: nextTotal,
+
+          queuePagination: {
+            ...state.queuePagination,
+            total: nextTotal,
+          },
+
+          summary: {
+            ...state.summary,
+
+            processing: Math.max(
+              0,
+              Number(state.summary?.processing || 0) -
+              (shouldRemove ? 1 : 0)
+            ),
+
+            packed:
+              Number(state.summary?.packed || 0) +
+              (shouldRemove ? 1 : 0),
+          },
+        };
+      });
 
       return updated;
     } catch (e) {
       console.error("❌ markOrderPacked error:", e);
-      set({ error: e.message });
-      toast.error(e.message);
+
+      set({
+        error: e.message,
+      });
+
       throw e;
     } finally {
-      set({ updatingPacked: false });
+      set({
+        updatingPacked: false,
+      });
     }
   },
 
