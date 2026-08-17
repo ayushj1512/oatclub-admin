@@ -242,18 +242,14 @@ function PackedOrderRow({
 
   const ShippingIcon = shippingStyle.icon;
 
+  const createdDate = useMemo(
+    () => formatDateTime(order?.createdAt || order?.orderDate),
+    [order?.createdAt, order?.orderDate]
+  );
+
   const packedDate = useMemo(
-    () =>
-      formatDateTime(
-        order?.fulfillmentDates?.packedAt ||
-        order?.updatedAt ||
-        order?.createdAt
-      ),
-    [
-      order?.fulfillmentDates?.packedAt,
-      order?.updatedAt,
-      order?.createdAt,
-    ]
+    () => formatDateTime(order?.fulfillmentDates?.packedAt),
+    [order?.fulfillmentDates?.packedAt]
   );
 
   const items = useMemo(() => getItems(order), [order]);
@@ -481,6 +477,17 @@ function PackedOrderRow({
 
         <td className="px-5 py-4 align-top">
           <div className="text-sm font-semibold text-gray-900">
+            {createdDate.time}
+          </div>
+
+          <div className="mt-0.5 text-[11px] text-gray-500">
+            {createdDate.date}
+          </div>
+        </td>
+
+
+        <td className="px-5 py-4 align-top">
+          <div className="text-sm font-semibold text-gray-900">
             {packedDate.time}
           </div>
 
@@ -520,8 +527,8 @@ function PackedOrderRow({
       {open ? (
         <tr className="border-b border-black/[0.06] bg-gray-50">
           <td
-            colSpan={selectable ? 9 : 8}
-            className="px-5 pb-5"
+            colSpan={selectable ? 10 : 9}
+              className="px-5 pb-5"
           >
             <div className="mt-3 grid gap-4 rounded-2xl border border-gray-200 bg-white p-4 md:grid-cols-3">
               <div>

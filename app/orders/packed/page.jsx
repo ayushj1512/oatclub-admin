@@ -119,6 +119,7 @@ export default function PackedOrdersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [shippingFilter, setShippingFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("packed_desc");
   const [reconcileOpen, setReconcileOpen] = useState(false);
 
   // pagination
@@ -241,22 +242,34 @@ export default function PackedOrdersPage() {
   }, [packedOrders, search, shippingFilter]);
 
   const sortedOrders = useMemo(() => {
+    const getTime = (value) => {
+      const time = new Date(value || 0).getTime();
+      return Number.isFinite(time) ? time : 0;
+    };
+
     return [...filteredOrders].sort((a, b) => {
-      // Oldest packed order first
-      const timeDifference = getPackedTime(a) - getPackedTime(b);
+      const aPacked = getTime(a?.fulfillmentDates?.packedAt);
+      const bPacked = getTime(b?.fulfillmentDates?.packedAt);
 
-      if (timeDifference !== 0) {
-        return timeDifference;
+      const aCreated = getTime(a?.createdAt || a?.orderDate);
+      const bCreated = getTime(b?.createdAt || b?.orderDate);
+
+      switch (sortBy) {
+        case "packed_asc":
+          return aPacked - bPacked;
+
+        case "created_desc":
+          return bCreated - aCreated;
+
+        case "created_asc":
+          return aCreated - bCreated;
+
+        case "packed_desc":
+        default:
+          return bPacked - aPacked;
       }
-
-      // Same packed time fallback
-      return String(a?.orderNumber || "").localeCompare(
-        String(b?.orderNumber || ""),
-        undefined,
-        { numeric: true }
-      );
     });
-  }, [filteredOrders]);
+  }, [filteredOrders, sortBy]);
 
   const selectedOrders = useMemo(() => {
     const selected = new Set(selectedIds);
@@ -921,92 +934,105 @@ export default function PackedOrdersPage() {
 
         {/* Shipping Filters */}
         <Card className="!p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              {
-                key: "all",
-                label: "All",
-                count: shippingCounts.all,
-                icon: null,
-              },
-              {
-                key: "serviceable",
-                label: "Ready",
-                count: shippingCounts.serviceable,
-                icon: CheckCircle2,
-              },
-              {
-                key: "missing_awb",
-                label: "Missing AWB",
-                count: shippingCounts.missing_awb,
-                icon: AlertTriangle,
-              },
-              {
-                key: "unserviceable",
-                label: "Unserviceable",
-                count: shippingCounts.unserviceable,
-                icon: AlertTriangle,
-              },
-              {
-                key: "failed",
-                label: "Failed",
-                count: shippingCounts.failed,
-                icon: XCircle,
-              },
-            ].map((filter) => {
-              const active = shippingFilter === filter.key;
-              const Icon = filter.icon;
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                {
+                  key: "all",
+                  label: "All",
+                  count: shippingCounts.all,
+                  icon: null,
+                },
+                {
+                  key: "serviceable",
+                  label: "Ready",
+                  count: shippingCounts.serviceable,
+                  icon: CheckCircle2,
+                },
+                {
+                  key: "missing_awb",
+                  label: "Missing AWB",
+                  count: shippingCounts.missing_awb,
+                  icon: AlertTriangle,
+                },
+                {
+                  key: "unserviceable",
+                  label: "Unserviceable",
+                  count: shippingCounts.unserviceable,
+                  icon: AlertTriangle,
+                },
+                {
+                  key: "failed",
+                  label: "Failed",
+                  count: shippingCounts.failed,
+                  icon: XCircle,
+                },
+              ].map((filter) => {
+                const active = shippingFilter === filter.key;
+                const Icon = filter.icon;
 
-              const isWarning =
-                filter.key === "missing_awb" ||
-                filter.key === "unserviceable";
+                const isWarning =
+                  filter.key === "missing_awb" ||
+                  filter.key === "unserviceable";
 
-              const isFailed = filter.key === "failed";
-              const isReady = filter.key === "serviceable";
+                const isFailed = filter.key === "failed";
+                const isReady = filter.key === "serviceable";
 
-              return (
-                <button
-                  key={filter.key}
-                  type="button"
-                  onClick={() => {
-                    setShippingFilter(filter.key);
-                    setSelectedIds([]);
-                  }}
-                  className={[
-                    "inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition",
-
-                    active
-                      ? isWarning
-                        ? "border-yellow-400 bg-yellow-400 text-yellow-950"
-                        : isFailed
-                          ? "border-red-600 bg-red-600 text-white"
-                          : isReady
-                            ? "border-emerald-600 bg-emerald-600 text-white"
-                            : "border-black bg-black text-white"
-                      : isWarning
-                        ? "border-yellow-300 bg-yellow-50 text-yellow-900 hover:bg-yellow-100"
-                        : isFailed
-                          ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                          : isReady
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                            : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
-                  ].join(" ")}
-                >
-                  {Icon ? <Icon size={14} /> : null}
-
-                  {filter.label}
-
-                  <span
+                return (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => {
+                      setShippingFilter(filter.key);
+                      setSelectedIds([]);
+                    }}
                     className={[
-                      "rounded-full px-1.5 py-0.5 text-[10px]",
-                      active ? "bg-white/20" : "bg-black/[0.06]",
+                      "inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition",
+
+                      active
+                        ? isWarning
+                          ? "border-yellow-400 bg-yellow-400 text-yellow-950"
+                          : isFailed
+                            ? "border-red-600 bg-red-600 text-white"
+                            : isReady
+                              ? "border-emerald-600 bg-emerald-600 text-white"
+                              : "border-black bg-black text-white"
+                        : isWarning
+                          ? "border-yellow-300 bg-yellow-50 text-yellow-900 hover:bg-yellow-100"
+                          : isFailed
+                            ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                            : isReady
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                              : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
                     ].join(" ")}
                   >
-                    {filter.count}
-                  </span>
-                </button>
-              );
-            })}
+                    {Icon ? <Icon size={14} /> : null}
+
+                    {filter.label}
+
+                    <span
+                      className={[
+                        "rounded-full px-1.5 py-0.5 text-[10px]",
+                        active ? "bg-white/20" : "bg-black/[0.06]",
+                      ].join(" ")}
+                    >
+                      {filter.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-xs font-bold text-gray-800 outline-none transition focus:border-black sm:w-auto"
+            >
+              <option value="packed_desc">Recently Packed</option>
+              <option value="packed_asc">Oldest Packed</option>
+              <option value="created_desc">Newest Order</option>
+              <option value="created_asc">Oldest Order</option>
+            </select>
           </div>
         </Card>
 
@@ -1138,6 +1164,10 @@ export default function PackedOrdersPage() {
 
                   <th className="px-5 py-4 text-left font-semibold">
                     AWB
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold">
+                    Created At
                   </th>
 
                   <th className="px-5 py-4 text-left font-semibold">
