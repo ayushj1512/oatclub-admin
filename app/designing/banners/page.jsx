@@ -45,11 +45,41 @@ const createId = () =>
     .toString(36)
     .slice(2)}`;
 
+const VIDEO_EXTENSIONS = [
+  "mp4",
+  "mov",
+  "webm",
+  "m4v",
+  "avi",
+  "mkv",
+  "mpeg",
+  "mpg",
+];
+
+const isVideoUrl = (url = "") => {
+  const value = String(url || "").toLowerCase();
+
+  return (
+    value.includes("/video/upload/") ||
+    VIDEO_EXTENSIONS.some((ext) =>
+      value.split("?")[0].endsWith(`.${ext}`)
+    )
+  );
+};
+
+const isVideoMedia = (media = {}) =>
+  String(media?.resourceType || "").toLowerCase() === "video" ||
+  VIDEO_EXTENSIONS.includes(
+    String(media?.format || "").toLowerCase()
+  ) ||
+  isVideoUrl(media?.url);
+
 const emptyBanner = () => ({
   clientId: createId(),
 
   image: "",
   publicId: "",
+  resourceType: "",
 
   title: "",
   link: "",
@@ -77,9 +107,15 @@ const prepareBanners = (items = []) =>
 
       publicId: String(
         banner?.publicId ||
-          banner?.imagePublicId ||
-          ""
+        banner?.imagePublicId ||
+        ""
       ).trim(),
+
+      resourceType:
+        banner?.resourceType === "video" ||
+          isVideoUrl(banner?.image)
+          ? "video"
+          : "image",
 
       title: String(banner?.title || "").trim(),
       link: String(banner?.link || "").trim(),
@@ -126,36 +162,64 @@ const comparable = (items = []) =>
 function DesktopImagePicker({
   label,
   image,
+  resourceType,
   onClick,
 }) {
+  const isVideo =
+    resourceType === "video" ||
+    isVideoUrl(image);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 text-left transition hover:border-gray-400"
-    >
+    <div className="group overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 transition hover:border-gray-400">
       <div className="relative aspect-[16/6] w-full overflow-hidden bg-gray-100">
         {image ? (
-          <Image
-            src={image}
-            alt={label}
-            fill
-            sizes="(max-width: 768px) 100vw, 900px"
-            className="object-cover"
-            unoptimized
-          />
+          isVideo ? (
+            <video
+              key={image}
+              src={image}
+              controls
+              muted
+              playsInline
+              preload="metadata"
+              className="h-full w-full bg-black object-cover"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <Image
+              src={image}
+              alt={label}
+              fill
+              sizes="(max-width: 768px) 100vw, 900px"
+              className="object-cover"
+              unoptimized
+            />
+          )
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-400">
+          <button
+            type="button"
+            onClick={onClick}
+            className="absolute inset-0 flex w-full flex-col items-center justify-center gap-2 text-gray-400"
+          >
             <ImageIcon size={24} />
 
             <span className="text-xs">
-              Select desktop image
+              Select desktop media
             </span>
+          </button>
+        )}
+
+        {image && (
+          <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-black/70 px-2 py-1 text-[10px] font-semibold uppercase text-white">
+            {isVideo ? "Video" : "Image"}
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+      >
         <span className="flex items-center gap-2 text-xs font-semibold text-gray-800">
           <Monitor size={14} />
           {label}
@@ -164,8 +228,8 @@ function DesktopImagePicker({
         <span className="text-[11px] text-gray-500">
           {image ? "Change" : "Required"}
         </span>
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
 
@@ -267,8 +331,9 @@ function SortableBanner({
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <DesktopImagePicker
-          label="Desktop image"
+          label="Desktop media"
           image={banner.image}
+          resourceType={banner.resourceType}
           onClick={() => onMedia(index)}
         />
 
@@ -548,11 +613,16 @@ export default function BannersManagerPage() {
       media?.public_id ||
       "";
 
+    const resourceType = isVideoMedia(media)
+      ? "video"
+      : "image";
+
     if (mediaPicker.draft) {
       setDraft((current) => ({
         ...current,
         image: media.url,
         publicId,
+        resourceType,
       }));
     } else {
       const nextBanners = [...banners];
@@ -569,6 +639,7 @@ export default function BannersManagerPage() {
         ...nextBanners[mediaPicker.index],
         image: media.url,
         publicId,
+        resourceType,
       };
 
       updateLocal(nextBanners);
@@ -635,7 +706,7 @@ export default function BannersManagerPage() {
         Array.isArray(result)
           ? result
           : result?.desktopHeroBanners ||
-              ordered
+          ordered
       );
 
       setDesktopHeroBannersLocal(saved);
@@ -701,12 +772,10 @@ export default function BannersManagerPage() {
 
     const shouldDelete =
       window.confirm(
-        `Delete desktop banner ${
-          index + 1
-        }${
-          banner?.title
-            ? ` — ${banner.title}`
-            : ""
+        `Delete desktop banner ${index + 1
+        }${banner?.title
+          ? ` — ${banner.title}`
+          : ""
         }?`
       );
 
@@ -748,7 +817,7 @@ export default function BannersManagerPage() {
       const nextBanners =
         prepareBanners(
           result?.desktopHeroBanners ||
-            []
+          []
         );
 
       setDesktopHeroBannersLocal(
@@ -836,11 +905,10 @@ export default function BannersManagerPage() {
         {/* Messages */}
         {(error || success) && (
           <div
-            className={`mt-5 rounded-xl px-4 py-3 text-sm ${
-              error
+            className={`mt-5 rounded-xl px-4 py-3 text-sm ${error
                 ? "bg-red-50 text-red-700"
                 : "bg-green-50 text-green-700"
-            }`}
+              }`}
           >
             {error || success}
           </div>
@@ -855,8 +923,7 @@ export default function BannersManagerPage() {
               </h2>
 
               <p className="text-xs text-gray-500">
-                Select one desktop image and optionally add a title and link.
-              </p>
+                Select desktop image or video and optionally add a title and link.              </p>
             </div>
 
             <button
@@ -875,11 +942,10 @@ export default function BannersManagerPage() {
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
             <DesktopImagePicker
-              label="Desktop image"
+              label="Desktop media"
               image={draft.image}
-              onClick={() =>
-                openMedia(null, true)
-              }
+              resourceType={draft.resourceType}
+              onClick={() => openMedia(null, true)}
             />
 
             <div className="flex flex-col gap-3 rounded-2xl bg-gray-50 p-4">
@@ -980,7 +1046,7 @@ export default function BannersManagerPage() {
           </div>
 
           {banners.length === 0 &&
-          !loading ? (
+            !loading ? (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white py-12 text-center">
               <Monitor
                 size={30}

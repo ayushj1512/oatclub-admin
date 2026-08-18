@@ -35,6 +35,7 @@ const createEmptyBanner = (sortOrder = 0) => ({
   clientId: createClientId(),
   image: "",
   publicId: "",
+  resourceType: "",
   title: "",
   link: "",
   isActive: true,
@@ -70,6 +71,33 @@ export default function MobileBannersPage() {
     fetchHomepageSettings();
   }, [fetchHomepageSettings]);
 
+
+  const VIDEO_EXTENSIONS = [
+    "mp4",
+    "mov",
+    "webm",
+    "m4v",
+    "avi",
+    "mkv",
+    "mpeg",
+    "mpg",
+  ];
+
+  const isVideoUrl = (url = "") => {
+    const value = String(url).toLowerCase().split("?")[0];
+
+    return VIDEO_EXTENSIONS.some((ext) =>
+      value.endsWith(`.${ext}`)
+    );
+  };
+
+  const isVideoMedia = (media = {}) =>
+    String(media?.resourceType || "").toLowerCase() === "video" ||
+    VIDEO_EXTENSIONS.includes(
+      String(media?.format || "").toLowerCase()
+    ) ||
+    isVideoUrl(media?.url);
+
   /* =======================================================
      SORTED BANNERS
   ======================================================= */
@@ -94,14 +122,17 @@ export default function MobileBannersPage() {
     const nextBanners = sortedBanners.map((banner, index) =>
       index === mediaTarget
         ? {
-            ...banner,
-            image: media.url,
-            publicId:
-              media?.publicId ||
-              media?.public_id ||
-              banner?.publicId ||
-              "",
-          }
+          ...banner,
+          image: media.url,
+          publicId:
+            media?.publicId ||
+            media?.public_id ||
+            banner?.publicId ||
+            "",
+          resourceType: isVideoMedia(media)
+            ? "video"
+            : "image",
+        }
         : banner
     );
 
@@ -197,6 +228,13 @@ export default function MobileBannersPage() {
       sortedBanners.map((banner) => ({
         image: String(banner?.image || "").trim(),
         publicId: String(banner?.publicId || "").trim(),
+
+        resourceType:
+          banner?.resourceType === "video" ||
+            isVideoUrl(banner?.image)
+            ? "video"
+            : "image",
+
         title: String(banner?.title || "").trim(),
         link: String(banner?.link || "").trim(),
         isActive: banner?.isActive !== false,
@@ -405,33 +443,49 @@ export default function MobileBannersPage() {
                   </button>
                 </div>
 
-                {/* Image preview */}
+                {/* Media preview */}
                 <div className="relative mx-auto aspect-[3/4] w-full max-w-[270px] overflow-hidden border border-zinc-200 bg-zinc-100">
                   {banner?.image ? (
-                    <Image
-                      src={banner.image}
-                      alt={banner?.title || `Mobile banner ${index + 1}`}
-                      fill
-                      sizes="(max-width: 640px) 100vw, 270px"
-                      className="object-cover"
-                      unoptimized
-                    />
+                    banner?.resourceType === "video" || isVideoUrl(banner.image) ? (
+                      <video
+                        key={banner.image}
+                        src={banner.image}
+                        controls
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="h-full w-full bg-black object-cover"
+                        onClick={(e) => e.stopPropagation()}
+                        onDragStart={(e) => e.preventDefault()}
+                      />
+                    ) : (
+                      <Image
+                        src={banner.image}
+                        alt={banner?.title || `Mobile banner ${index + 1}`}
+                        fill
+                        sizes="(max-width: 640px) 100vw, 270px"
+                        className="object-cover"
+                        unoptimized
+                      />
+                    )
                   ) : (
                     <div className="flex h-full flex-col items-center justify-center px-4 text-center text-xs text-zinc-400">
                       <Phone size={24} />
-
-                      <span className="mt-2">
-                        No mobile image selected
-                      </span>
+                      <span className="mt-2">No mobile media selected</span>
                     </div>
                   )}
 
+                  <div className="pointer-events-none absolute left-2 top-2 bg-black/70 px-2 py-1 text-[10px] font-semibold uppercase text-white">
+                    {banner?.resourceType === "video" || isVideoUrl(banner?.image)
+                      ? "Video"
+                      : "Image"}
+                  </div>
+
                   <div
-                    className={`absolute right-2 top-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                      banner?.isActive === false
+                    className={`pointer-events-none absolute right-2 top-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${banner?.isActive === false
                         ? "bg-white text-zinc-500"
                         : "bg-zinc-950 text-white"
-                    }`}
+                      }`}
                   >
                     {banner?.isActive === false ? "Hidden" : "Active"}
                   </div>
@@ -444,8 +498,8 @@ export default function MobileBannersPage() {
                   className="mt-3 w-full border border-zinc-300 bg-white px-2 py-2 text-xs font-semibold transition hover:bg-zinc-100"
                 >
                   {banner?.image
-                    ? "Change mobile image"
-                    : "Add mobile image"}
+                    ? "Change mobile media"
+                    : "Add mobile media"}
                 </button>
 
                 <div className="mt-2 border border-zinc-200 bg-zinc-100 px-3 py-2 text-center text-xs font-medium text-zinc-600">
