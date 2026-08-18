@@ -19,8 +19,8 @@ import { useRouter } from "next/navigation";
 
 import ProductPicker from "@/components/common/ProductPicker";
 
-const XML_BASE_URL =
-  "https://studio.oatclub.in/api/commerce-manager/xml";
+const COMMERCE_BASE_URL =
+  "https://studio.oatclub.in/api/commerce-manager";
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -95,6 +95,9 @@ export default function CommerceFeedForm({
   );
 
   const [name, setName] = useState(initialData?.name || "");
+  const [platform, setPlatform] = useState(
+    initialData?.platform || "meta",
+  );
   const [slug, setSlug] = useState(initialData?.slug || "");
   const [slugTouched, setSlugTouched] = useState(
     Boolean(initialData?.slug),
@@ -149,10 +152,15 @@ export default function CommerceFeedForm({
   const generatedXmlUrl = useMemo(() => {
     const currentSlug = createSlug(slug);
 
-    return currentSlug
-      ? `${XML_BASE_URL}/${currentSlug}`
-      : "";
-  }, [slug]);
+    if (!currentSlug) return "";
+
+    const path =
+      platform === "google"
+        ? "google/xml"
+        : "xml";
+
+    return `${COMMERCE_BASE_URL}/${path}/${currentSlug}`;
+  }, [platform, slug]);
 
   const pickerCodes = useMemo(
     () =>
@@ -258,6 +266,7 @@ export default function CommerceFeedForm({
     const result = await onSubmit?.({
       name: normalizedName,
       slug: normalizedSlug,
+      platform,
       selectedProductCodes: selectedCodes,
       isActive,
       notes: String(notes).trim(),
@@ -340,8 +349,9 @@ export default function CommerceFeedForm({
                 </h1>
 
                 <p className="mt-1 text-sm text-zinc-500">
-                  Select products and generate a dedicated Meta
-                  Commerce Manager XML link.
+                  Select products and generate a dedicated {platform === "google"
+                    ? "Google Merchant"
+                    : "Meta Commerce"} XML link.
                 </p>
               </div>
             </div>
@@ -441,6 +451,27 @@ export default function CommerceFeedForm({
                     placeholder="trending-tops"
                     className={inputClass}
                   />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    Platform
+                  </label>
+
+                  <select
+                    value={platform}
+                    onChange={(event) =>
+                      setPlatform(event.target.value)
+                    }
+                    className={inputClass}
+                  >
+                    <option value="meta">
+                      Meta Commerce
+                    </option>
+                    <option value="google">
+                      Google Merchant
+                    </option>
+                  </select>
                 </div>
 
                 <div className="md:col-span-2">
@@ -653,7 +684,11 @@ export default function CommerceFeedForm({
                       }))
                     }
                     rows={4}
-                    placeholder="Selected products for Meta Commerce Manager."
+                    placeholder={
+                      platform === "google"
+                        ? "Selected products for Google Merchant Center."
+                        : "Selected products for Meta Commerce Manager."
+                    }
                     className={`${inputClass} resize-none`}
                   />
                 </div>
@@ -744,7 +779,8 @@ export default function CommerceFeedForm({
               <div className="space-y-3">
                 <ToggleRow
                   label="Feed active"
-                  description="Allow Meta to access this XML feed."
+                  description={`Allow ${platform === "google" ? "Google" : "Meta"
+                    } to access this XML feed.`}
                   checked={isActive}
                   onChange={setIsActive}
                 />
@@ -775,7 +811,8 @@ export default function CommerceFeedForm({
 
                 <ToggleRow
                   label="Additional images"
-                  description="Send gallery images to Meta."
+                  description={`Send gallery images to ${platform === "google" ? "Google" : "Meta"
+                    }.`}
                   checked={
                     feedSettings.includeAdditionalImages
                   }
