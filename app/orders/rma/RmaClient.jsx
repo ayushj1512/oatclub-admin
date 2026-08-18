@@ -399,14 +399,34 @@ export default function RmaClient() {
   const downloadExcel = () => {
     if (!filteredRmas.length) return;
 
-    const rows = filteredRmas.map((rma) => {
+    const getSizeFromAttributes = (attributes = []) =>
+      pick(
+        ...safeArray(attributes)
+          .filter((attr) => norm(attr?.key) === "size")
+          .map((attr) => attr?.value)
+      );
+
+    const rows = filteredRmas.flatMap((rma) => {
       const address =
         rma?.shippingAddressSnapshot || {};
 
       const customer =
         rma?.customer || {};
 
-      return {
+      const orderItems =
+        safeArray(rma?.orderItems);
+
+      const rmaItems =
+        safeArray(rma?.items);
+
+      const newSize =
+        norm(rma?.type) === "exchange"
+          ? getSizeFromAttributes(
+            rma?.exchangeTo?.attributes
+          )
+          : "";
+
+      const baseRow = {
         "Order Number": rma?.orderNumber || "",
         "RMA Number": rma?.rmaNumber || "",
         Type: rma?.type || "",
@@ -446,6 +466,58 @@ export default function RmaClient() {
         "Order Date":
           formatDate(rma?.orderDate),
       };
+
+      if (!rmaItems.length) {
+        return [{
+          ...baseRow,
+          "Product Code": "",
+          "Previous Size / Size": "",
+          "New Size": newSize,
+          Qty: "",
+        }];
+      }
+
+      return rmaItems.map((item) => {
+        const matchedOrderItem =
+          orderItems.find(
+            (orderItem) =>
+              str(orderItem?.lineId) ===
+              str(item?.orderLineId)
+          ) ||
+          orderItems[item?.orderItemIndex] ||
+          null;
+
+        const previousSize = pick(
+          item?.selectedSize,
+          matchedOrderItem?.selectedSize,
+          matchedOrderItem?.size,
+          getSizeFromAttributes(
+            matchedOrderItem?.variant?.attributes
+          ),
+          getSizeFromAttributes(
+            matchedOrderItem?.attributes
+          )
+        );
+
+        const productCode = pick(
+          item?.productCode,
+          matchedOrderItem?.productSnapshot
+            ?.productCode,
+          matchedOrderItem?.productCode,
+          matchedOrderItem?.code
+        );
+
+        return {
+          ...baseRow,
+          "Product Code": productCode,
+          "Previous Size / Size": previousSize,
+          "New Size":
+            norm(rma?.type) === "exchange"
+              ? newSize
+              : "",
+          Qty: item?.quantity || 1,
+        };
+      });
     });
 
     const headers = Object.keys(rows[0]);
@@ -504,7 +576,7 @@ export default function RmaClient() {
       document.createElement("a");
 
     anchor.href = url;
-    anchor.download = `rma-report-${new Date()
+    anchor.download = `rma-production-${new Date()
       .toISOString()
       .slice(0, 10)}.xls`;
 
@@ -844,7 +916,7 @@ export default function RmaClient() {
                         reverseShipment?.shipmentId ||
                         reverseShipment?.awb
                       );
-                                return (
+                      return (
                         <React.Fragment
                           key={rowKey}
                         >
@@ -874,8 +946,8 @@ export default function RmaClient() {
                               <ChevronDown
                                 size={18}
                                 className={`transition-transform ${isOpen
-                                    ? "rotate-180"
-                                    : ""
+                                  ? "rotate-180"
+                                  : ""
                                   }`}
                               />
                             </td>
@@ -939,26 +1011,26 @@ export default function RmaClient() {
 
                             <td className="p-4">
                               <div className="flex justify-end gap-2">
-                                          <button
-                                            disabled={hasReturnPickup || isCreatingPickup}
-                                            onClick={() => createReturnPickup(rma)}
-                                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${hasReturnPickup
-                                                ? "cursor-not-allowed bg-blue-50 text-blue-700"
-                                                : "bg-black text-white hover:bg-gray-800"
-                                              }`}
-                                          >
-                                            {isCreatingPickup ? (
-                                              <Loader2 size={14} className="animate-spin" />
-                                            ) : (
-                                              <RotateCcw size={14} />
-                                            )}
+                                <button
+                                  disabled={hasReturnPickup || isCreatingPickup}
+                                  onClick={() => createReturnPickup(rma)}
+                                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${hasReturnPickup
+                                    ? "cursor-not-allowed bg-blue-50 text-blue-700"
+                                    : "bg-black text-white hover:bg-gray-800"
+                                    }`}
+                                >
+                                  {isCreatingPickup ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                  ) : (
+                                    <RotateCcw size={14} />
+                                  )}
 
-                                            {hasReturnPickup
-                                              ? "Pickup Created"
-                                              : isCreatingPickup
-                                                ? "Creating..."
-                                                : "Create Pickup"}
-                                          </button>
+                                  {hasReturnPickup
+                                    ? "Pickup Created"
+                                    : isCreatingPickup
+                                      ? "Creating..."
+                                      : "Create Pickup"}
+                                </button>
 
                                 <button
                                   disabled={isUpdating}
@@ -966,8 +1038,8 @@ export default function RmaClient() {
                                     updateFulfilled(rma, !rma?.isFulfilled)
                                   }
                                   className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${rma?.isFulfilled
-                                      ? "bg-gray-100 text-gray-700"
-                                      : "bg-emerald-600 text-white hover:bg-emerald-700"
+                                    ? "bg-gray-100 text-gray-700"
+                                    : "bg-emerald-600 text-white hover:bg-emerald-700"
                                     }`}
                                 >
                                   {isUpdating ? (
