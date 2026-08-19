@@ -22,6 +22,7 @@ import { toast } from "react-hot-toast";
 import { useOrderStore } from "@/store/orderStore";
 import ConfirmationTab from "./ConfirmationTab";
 import ShippingTab from "./ShippingTab";
+import ReviewTab from "./ReviewTab";
 
 const PAGE_SIZE = 20;
 const LATE_ORDER_DAYS = 7;
@@ -247,10 +248,10 @@ const createWhatsAppLink = (order, type) => {
 
   if (type === "shipping") {
     message = createShippingMessage(order);
-  }
-
-  if (type === "late") {
+  } else if (type === "late") {
     message = createLateOrderMessage(order);
+  } else if (type === "review") {
+    message = createReviewMessage(order);
   }
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
@@ -269,6 +270,21 @@ We truly appreciate your patience and understanding. 🤍
 Thank you for choosing *OATCLUB*.
 
 www.oatclub.in
+
+*Team OATCLUB*
+Own All Trends`;
+
+const createReviewMessage = (order = {}) => `Hi ${getCustomerName(order)}! 🤍
+
+Hope you're loving your *OATCLUB* order *#${getOrderNumber(order)}*.
+
+We'd love to hear what you think!
+
+You can simply reply here on WhatsApp with your review or upload your review from the Profile section on oatclub.in.
+
+Once you share your review, we'll send you a surprise coupon for your next purchase. 🎁
+
+Thank you for being a part of OATCLUB.
 
 *Team OATCLUB*
 Own All Trends`;
@@ -310,7 +326,7 @@ export default function UnconfirmedOrderWhatsAppPage({
     ordersMeta,
     loading,
     error,
-    fetchAllOrders,
+    fetchAllOrdersAllPages,
     clearOrders,
   } = useOrderStore();
 
@@ -322,13 +338,13 @@ export default function UnconfirmedOrderWhatsAppPage({
 
   const loadOrders = useCallback(async () => {
     try {
-      await fetchAllOrders({ page: 1, limit: 200 });
-    } catch (fetchError) {
+      await fetchAllOrdersAllPages({ limit: 200 });
+    } catch (error) {
       toast.error(
-        fetchError?.message || "Unable to fetch WhatsApp orders",
+        error?.message || "Unable to fetch WhatsApp orders",
       );
     }
-  }, [fetchAllOrders]);
+  }, [fetchAllOrdersAllPages]);
 
   useEffect(() => {
     loadOrders();
@@ -394,12 +410,42 @@ export default function UnconfirmedOrderWhatsAppPage({
     [allOrders],
   );
 
+  const reviewOrders = useMemo(
+    () =>
+      allOrders.filter((order) => {
+        const status = String(
+          order?.fulfillmentStatus || "",
+        ).toLowerCase();
+
+        const deliveredAt =
+          order?.fulfillmentDates?.deliveredAt ||
+          order?.shipment?.deliveredAt ||
+          order?.trackingDetails?.deliveredAt ||
+          order?.deliveredAt ||
+          order?.statusTimestamps?.deliveredAt;
+
+        if (status !== "delivered" || !deliveredAt) {
+          return false;
+        }
+
+        const time = new Date(deliveredAt).getTime();
+
+        return (
+          Number.isFinite(time) &&
+          Date.now() - time >= 7 * 24 * 60 * 60 * 1000
+        );
+      }),
+    [allOrders],
+  );
+
   const selectedOrders =
     activeTab === "shipping"
       ? shippingOrders
       : activeTab === "late"
         ? lateOrders
-        : confirmationOrders;
+        : activeTab === "review"
+          ? reviewOrders
+          : confirmationOrders;
 
   const filteredOrders = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -472,15 +518,11 @@ export default function UnconfirmedOrderWhatsAppPage({
     toast.success(
       type === "shipping"
         ? "Shipping message opened"
-        : "Confirmation message opened",
-    );
-
-    toast.success(
-      type === "shipping"
-        ? "Shipping message opened"
         : type === "late"
           ? "Late order update opened"
-          : "Confirmation message opened",
+          : type === "review"
+            ? "Review message opened"
+            : "Confirmation message opened",
     );
 
     window.setTimeout(() => setOpeningOrderId(""), 700);
@@ -563,20 +605,26 @@ export default function UnconfirmedOrderWhatsAppPage({
                 ? Truck
                 : activeTab === "late"
                   ? TimerReset
-                  : Clock3
+                  : activeTab === "review"
+                    ? MessageCircle
+                    : Clock3
             }
             label={
               activeTab === "shipping"
                 ? "Shipping Ready"
                 : activeTab === "late"
                   ? "Delayed Orders"
-                  : "Pending Confirmation"
+                  : activeTab === "review"
+                    ? "Review Ready"
+                    : "Pending Confirmation"
             }
             value={selectedOrders.length}
             helper={
               activeTab === "late"
                 ? "Processing for 7+ days"
-                : "Orders in selected queue"
+                : activeTab === "review"
+                  ? "Return window closed"
+                  : "Orders in selected queue"
             }
           />
 
@@ -597,26 +645,23 @@ export default function UnconfirmedOrderWhatsAppPage({
           <StatCard
             icon={Package}
             label="Fetched Orders"
-            value={
-              Number(ordersMeta?.totalCount) || allOrders.length
-            }
-            helper="Latest API result"
+            value={allOrders.length}
+            helper="All order pages loaded"
           />
         </section>
 
         <section className="min-w-0 overflow-hidden rounded-[22px] border border-black/[0.06] bg-white shadow-[0_14px_40px_rgba(15,23,42,0.05)]">
           <div className="border-b border-gray-100 px-4 pt-4 sm:px-5">
-            <div className="inline-flex w-full rounded-2xl bg-[#f3f4f6] p-1 sm:w-auto">
+            <div className="flex w-full gap-1 overflow-x-auto rounded-2xl bg-[#f3f4f6] p-1">
               <button
                 type="button"
                 onClick={() => setActiveTab("confirmation")}
-                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "confirmation"
+                className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "confirmation"
                   ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
                   : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
                   }`}
               >
                 <Clock3 size={15} />
-
                 Confirmation
 
                 <span
@@ -632,13 +677,12 @@ export default function UnconfirmedOrderWhatsAppPage({
               <button
                 type="button"
                 onClick={() => setActiveTab("shipping")}
-                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "shipping"
+                className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "shipping"
                   ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
                   : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
                   }`}
               >
                 <Truck size={15} />
-
                 Shipping
 
                 <span
@@ -654,13 +698,12 @@ export default function UnconfirmedOrderWhatsAppPage({
               <button
                 type="button"
                 onClick={() => setActiveTab("late")}
-                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "late"
+                className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "late"
                   ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
                   : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
                   }`}
               >
                 <TimerReset size={15} />
-
                 Late Orders
 
                 <span
@@ -670,6 +713,27 @@ export default function UnconfirmedOrderWhatsAppPage({
                     }`}
                 >
                   {lateOrders.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("review")}
+                className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "review"
+                  ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
+                  : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
+                  }`}
+              >
+                <MessageCircle size={15} />
+                Reviews
+
+                <span
+                  className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeTab === "review"
+                    ? "bg-gray-900 text-white"
+                    : "bg-white text-gray-600"
+                    }`}
+                >
+                  {reviewOrders.length}
                 </span>
               </button>
             </div>
@@ -682,7 +746,9 @@ export default function UnconfirmedOrderWhatsAppPage({
                   ? "Shipping Queue"
                   : activeTab === "late"
                     ? "Late Order Queue"
-                    : "Confirmation Queue"}
+                    : activeTab === "review"
+                      ? "Review Queue"
+                      : "Confirmation Queue"}
               </h2>
 
               <p className="mt-1 text-xs text-gray-500">
@@ -757,55 +823,57 @@ export default function UnconfirmedOrderWhatsAppPage({
               </div>
             ) : activeTab === "shipping" ? (
               <ShippingTab {...commonTabProps} />
+            ) : activeTab === "review" ? (
+              <ReviewTab {...commonTabProps} />
             ) : (
               <ConfirmationTab {...commonTabProps} />
             )}
-          </div>
 
-          {filteredOrders.length > 0 ? (
-            <div className="flex flex-col gap-3 border-t border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-              <p className="text-xs text-gray-500">
-                Showing{" "}
-                <span className="font-semibold text-gray-800">
-                  {startResult}–{endResult}
-                </span>{" "}
-                of{" "}
-                <span className="font-semibold text-gray-800">
-                  {filteredOrders.length}
-                </span>
-              </p>
+            {filteredOrders.length > 0 ? (
+              <div className="flex flex-col gap-3 border-t border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <p className="text-xs text-gray-500">
+                  Showing{" "}
+                  <span className="font-semibold text-gray-800">
+                    {startResult}–{endResult}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold text-gray-800">
+                    {filteredOrders.length}
+                  </span>
+                </p>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPage((value) => Math.max(1, value - 1))
-                  }
-                  disabled={page === 1}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white transition hover:border-black disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronLeft size={16} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPage((value) => Math.max(1, value - 1))
+                    }
+                    disabled={page === 1}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white transition hover:border-black disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
 
-                <span className="inline-flex h-9 items-center rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-700">
-                  Page {page} of {totalPages}
-                </span>
+                  <span className="inline-flex h-9 items-center rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-700">
+                    Page {page} of {totalPages}
+                  </span>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPage((value) =>
-                      Math.min(totalPages, value + 1),
-                    )
-                  }
-                  disabled={page === totalPages}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white transition hover:border-black disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronRight size={16} />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPage((value) =>
+                        Math.min(totalPages, value + 1),
+                      )
+                    }
+                    disabled={page === totalPages}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white transition hover:border-black disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </section>
       </div>
     </main>

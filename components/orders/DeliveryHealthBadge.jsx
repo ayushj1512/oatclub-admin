@@ -6,230 +6,117 @@ import {
   CircleAlert,
 } from "lucide-react";
 
-const safe = (value) => String(value ?? "").trim();
+const safe = (v) => String(v ?? "").trim();
 
 export const getDeliveredAt = (order = {}) =>
   order?.fulfillmentDates?.deliveredAt ||
-  order?.deliveredAt ||
   order?.shipment?.deliveredAt ||
-  order?.statusTimestamps?.deliveredAt ||
   order?.trackingDetails?.deliveredAt ||
+  order?.deliveredAt ||
+  order?.statusTimestamps?.deliveredAt ||
   null;
 
 export const getDeliveryHealth = (order = {}) => {
   const issues = [];
-
   const shipment = order?.shipment || {};
   const shiprocket = shipment?.shiprocket || {};
-
-  const awb =
-    shipment?.awb ||
-    shiprocket?.awb ||
-    order?.trackingId ||
-    order?.trackingDetails?.trackingId ||
-    "";
-
-  const courier =
-    shipment?.courierName ||
-    shiprocket?.courierName ||
-    order?.courierName ||
-    "";
-
-  const trackingUrl =
-    shipment?.trackingUrl ||
-    shiprocket?.trackingUrl ||
-    order?.trackingUrl ||
-    "";
-
   const address = order?.shippingAddressSnapshot || {};
-
-  const phone =
-    order?.customerId?.phone ||
-    order?.customerPhone ||
-    address?.phone ||
-    "";
-
   const items = Array.isArray(order?.items) ? order.items : [];
 
-  if (!getDeliveredAt(order)) {
-    issues.push({
-      key: "delivered_at",
-      type: "error",
-      label: "Delivered timestamp missing",
-    });
-  }
+  const add = (key, type, label, missing) => {
+    if (missing) issues.push({ key, type, label });
+  };
 
-  if (!safe(awb)) {
-    issues.push({
-      key: "awb",
-      type: "error",
-      label: "AWB missing",
-    });
-  }
+  add("delivered_at", "error", "Delivered time missing", !getDeliveredAt(order));
+  add("awb", "error", "AWB missing", !safe(shipment?.awb || shiprocket?.awb));
+  add("courier", "error", "Courier missing", !safe(shipment?.courierName || shiprocket?.courierName));
+  add("tracking", "warning", "Tracking URL missing", !safe(shipment?.trackingUrl || shiprocket?.trackingUrl));
 
-  if (!safe(courier)) {
-    issues.push({
-      key: "courier",
-      type: "error",
-      label: "Courier missing",
-    });
-  }
+  add(
+    "phone",
+    "warning",
+    "Phone missing",
+    !safe(order?.customerId?.phone || address?.phone)
+  );
 
-  if (!safe(trackingUrl)) {
-    issues.push({
-      key: "tracking",
-      type: "warning",
-      label: "Tracking URL missing",
-    });
-  }
+  add("city", "warning", "City missing", !safe(address?.city));
+  add("state", "warning", "State missing", !safe(address?.state));
+  add("pincode", "warning", "Pincode missing", !safe(address?.pincode));
+  add("items", "error", "Items missing", !items.length);
 
-  if (!safe(phone)) {
-    issues.push({
-      key: "phone",
-      type: "warning",
-      label: "Customer phone missing",
-    });
-  }
+  items.forEach((item, i) => {
+    add(
+      `title_${i}`,
+      "warning",
+      `Item ${i + 1} title missing`,
+      !safe(item?.productSnapshot?.title)
+    );
 
-  if (!safe(address?.city)) {
-    issues.push({
-      key: "city",
-      type: "warning",
-      label: "City missing",
-    });
-  }
+    add(
+      `sku_${i}`,
+      "warning",
+      `Item ${i + 1} SKU missing`,
+      !safe(item?.variant?.sku || item?.productSnapshot?.sku)
+    );
 
-  if (!safe(address?.state)) {
-    issues.push({
-      key: "state",
-      type: "warning",
-      label: "State missing",
-    });
-  }
-
-  if (!safe(address?.pincode)) {
-    issues.push({
-      key: "pincode",
-      type: "warning",
-      label: "Pincode missing",
-    });
-  }
-
-  if (!items.length) {
-    issues.push({
-      key: "items",
-      type: "error",
-      label: "Order items missing",
-    });
-  }
-
-  items.forEach((item, index) => {
-    const title = item?.productSnapshot?.title;
-    const sku =
-      item?.variant?.sku ||
-      item?.productSnapshot?.sku ||
-      "";
-
-    const size =
-      item?.selectedSize ||
-      item?.variant?.size ||
-      "";
-
-    if (!safe(title)) {
-      issues.push({
-        key: `item_title_${index}`,
-        type: "warning",
-        label: `Item ${index + 1} title missing`,
-      });
-    }
-
-    if (!safe(sku)) {
-      issues.push({
-        key: `item_sku_${index}`,
-        type: "warning",
-        label: `Item ${index + 1} SKU missing`,
-      });
-    }
-
-    if (!safe(size)) {
-      issues.push({
-        key: `item_size_${index}`,
-        type: "warning",
-        label: `Item ${index + 1} size missing`,
-      });
-    }
+    add(
+      `size_${i}`,
+      "warning",
+      `Item ${i + 1} size missing`,
+      !safe(item?.selectedSize || item?.variant?.size)
+    );
   });
 
-  const paymentMethod = safe(order?.paymentMethod).toLowerCase();
-  const paymentStatus = safe(order?.paymentStatus).toLowerCase();
+  const method = safe(order?.paymentMethod).toLowerCase();
+  const status = safe(order?.paymentStatus).toLowerCase();
 
-  if (
-    paymentMethod === "cod" &&
-    ["", "pending", "unpaid"].includes(paymentStatus)
-  ) {
-    issues.push({
-      key: "cod_payment",
-      type: "warning",
-      label: "COD collection still pending",
-    });
-  }
-
-  const errorCount = issues.filter(
-    (issue) => issue.type === "error"
-  ).length;
-
-  const warningCount = issues.filter(
-    (issue) => issue.type === "warning"
-  ).length;
-
-  const score = Math.max(
-    0,
-    100 - errorCount * 20 - warningCount * 8
+  add(
+    "cod_payment",
+    "warning",
+    "COD pending",
+    method === "cod" && ["", "pending", "unpaid"].includes(status)
   );
+
+  const errorCount = issues.filter((x) => x.type === "error").length;
+  const warningCount = issues.length - errorCount;
 
   return {
     issues,
     issueCount: issues.length,
     errorCount,
     warningCount,
-    score,
+    score: Math.max(0, 100 - errorCount * 20 - warningCount * 8),
     isClean: issues.length === 0,
   };
 };
 
-export default function DeliveryHealthBadge({
-  order,
-  compact = false,
-}) {
+export default function DeliveryHealthBadge({ order, compact = false }) {
   const health = getDeliveryHealth(order);
 
-  if (health.isClean) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-        <CheckCircle2 size={13} />
-
-        {compact ? "Clean" : "Delivery Clean"}
-      </span>
-    );
-  }
-
-  if (health.errorCount > 0) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700">
-        <CircleAlert size={13} />
-
-        {health.issueCount}{" "}
-        {health.issueCount === 1 ? "Issue" : "Issues"}
-      </span>
-    );
-  }
+  const config = health.isClean
+    ? {
+      Icon: CheckCircle2,
+      text: compact ? "Clean" : "Delivery Clean",
+      cls: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    }
+    : health.errorCount
+      ? {
+        Icon: CircleAlert,
+        text: `${health.issueCount} Issue${health.issueCount > 1 ? "s" : ""}`,
+        cls: "border-red-200 bg-red-50 text-red-700",
+      }
+      : {
+        Icon: AlertTriangle,
+        text: `${health.issueCount} Warning${health.issueCount > 1 ? "s" : ""}`,
+        cls: "border-amber-200 bg-amber-50 text-amber-700",
+      };
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
-      <AlertTriangle size={13} />
-
-      {health.issueCount}{" "}
-      {health.issueCount === 1 ? "Warning" : "Warnings"}
+    <span
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold ${config.cls}`}
+    >
+      <config.Icon size={11} />
+      {config.text}
     </span>
   );
 }

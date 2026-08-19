@@ -125,17 +125,18 @@ const getOrderRevenue = (order) =>
     0
   );
 
-const getOrderDate = (order) => {
+const getOrderDate = (order = {}) => {
   const raw =
-    order?.deliveredAt ||
+    order?.fulfillmentDates?.deliveredAt ||
     order?.shipment?.deliveredAt ||
+    order?.trackingDetails?.deliveredAt ||
+    order?.deliveredAt ||
     order?.statusTimestamps?.deliveredAt ||
-    order?.updatedAt ||
     order?.createdAt ||
     order?.orderDate;
 
-  const dt = new Date(raw);
-  return Number.isNaN(dt.getTime()) ? null : dt;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
 };
 
 const normalizeDateStart = (dateStr) => {
@@ -174,6 +175,24 @@ export default function DeliveredOrdersPage() {
 
   const [pageSize] = useState(500);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [returnFilter, setReturnFilter] = useState("all");
+
+  const getReturnStatus = (order = {}) => {
+    const deliveredAt =
+      order?.fulfillmentDates?.deliveredAt ||
+      order?.shipment?.deliveredAt ||
+      order?.trackingDetails?.deliveredAt ||
+      order?.deliveredAt;
+
+    if (!deliveredAt) return "unknown";
+
+    const time = new Date(deliveredAt).getTime();
+    if (Number.isNaN(time)) return "unknown";
+
+    return Date.now() - time < 7 * 24 * 60 * 60 * 1000
+      ? "open"
+      : "closed";
+  };
 
   const applyFilters = useCallback(() => {
     setSearch(normalizeSearchTerm(searchInput));
@@ -191,6 +210,7 @@ export default function DeliveredOrdersPage() {
     setToDateInput("");
     setFromDate("");
     setToDate("");
+    setReturnFilter("all");
     setQuickDate("");
   }, []);
 
@@ -318,6 +338,12 @@ export default function DeliveredOrdersPage() {
     const from = normalizeDateStart(fromDate);
     const to = normalizeDateEnd(toDate);
 
+    if (returnFilter !== "all") {
+      data = data.filter(
+        (order) => getReturnStatus(order) === returnFilter
+      );
+    }
+
     if (from || to) {
       data = data.filter((o) => {
         const dt = getOrderDate(o);
@@ -329,8 +355,14 @@ export default function DeliveredOrdersPage() {
     }
 
     return data;
-  }, [orders, search, selectedMonth, fromDate, toDate]);
-
+  }, [
+    orders,
+    search,
+    selectedMonth,
+    fromDate,
+    toDate,
+    returnFilter,
+  ]);
   const sortedOrders = useMemo(() => {
     return [...filteredOrders].sort((a, b) => {
       const getNum = (o) => {
@@ -722,6 +754,16 @@ export default function DeliveredOrdersPage() {
               />
             </div>
 
+            <select
+              value={returnFilter}
+              onChange={(e) => setReturnFilter(e.target.value)}
+              className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
+            >
+              <option value="all">All Returns</option>
+              <option value="open">Return Period Open</option>
+              <option value="closed">Return Period Closed</option>
+            </select>
+
             <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-gray-100">
               <CalendarDays size={18} className="text-gray-400 shrink-0" />
               <input
@@ -811,6 +853,12 @@ export default function DeliveredOrdersPage() {
                   Search: {search}
                 </span>
               ) : null}
+
+              {returnFilter !== "all" && (
+                <span className="rounded-full bg-violet-50 px-3 py-1 text-sm font-medium text-violet-700">
+                  Return: {returnFilter === "open" ? "Open" : "Closed"}
+                </span>
+              )}
 
               {selectedMonth ? (
                 <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-medium">

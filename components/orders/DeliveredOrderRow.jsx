@@ -2,16 +2,10 @@
 
 import { useMemo, useState } from "react";
 import {
-  Banknote,
   ChevronDown,
   ChevronUp,
   CircleAlert,
-  Clock3,
-  CreditCard,
   ExternalLink,
-  MapPin,
-  PackageCheck,
-  Truck,
 } from "lucide-react";
 
 import DeliveryHealthBadge, {
@@ -19,26 +13,22 @@ import DeliveryHealthBadge, {
   getDeliveryHealth,
 } from "@/components/orders/DeliveryHealthBadge";
 
-const safe = (value) => String(value ?? "").trim();
+const safe = (v) => String(v ?? "").trim();
 
-const money = (value) => {
-  const amount = Number(value || 0);
-
-  return new Intl.NumberFormat("en-IN", {
+const money = (v) =>
+  new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 0,
-  }).format(amount);
-};
+  }).format(Number(v || 0));
 
-const formatDate = (value) => {
-  if (!value) return "-";
+const formatDate = (v) => {
+  if (!v) return "-";
 
-  const date = new Date(value);
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "-";
 
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return date.toLocaleString("en-IN", {
+  return d.toLocaleString("en-IN", {
     timeZone: "Asia/Kolkata",
     day: "2-digit",
     month: "short",
@@ -50,76 +40,58 @@ const formatDate = (value) => {
 };
 
 const getShipment = (order = {}) => {
-  const shipment = order?.shipment || {};
-  const shiprocket = shipment?.shiprocket || {};
+  const s = order?.shipment || {};
+  const sr = s?.shiprocket || {};
 
   return {
     awb:
-      shipment?.awb ||
-      shiprocket?.awb ||
-      order?.trackingId ||
+      s?.awb ||
+      sr?.awb ||
       order?.trackingDetails?.trackingId ||
+      order?.trackingDetails?.awb ||
       "",
-
     courier:
-      shipment?.courierName ||
-      shiprocket?.courierName ||
-      order?.courierName ||
+      s?.courierName ||
+      sr?.courierName ||
+      order?.trackingDetails?.courierName ||
       "",
-
     trackingUrl:
-      shipment?.trackingUrl ||
-      shiprocket?.trackingUrl ||
-      order?.trackingUrl ||
+      s?.trackingUrl ||
+      sr?.trackingUrl ||
+      order?.trackingDetails?.trackingUrl ||
       "",
-
-    provider:
-      shipment?.provider ||
-      "shiprocket",
+    provider: s?.provider || "",
   };
 };
 
-export default function DeliveredOrderRow({
-  order,
-}) {
+export default function DeliveredOrderRow({ order }) {
   const [open, setOpen] = useState(false);
 
   const orderId = order?._id || order?.id;
-
   const items = useMemo(
     () => (Array.isArray(order?.items) ? order.items : []),
-    [order?.items]
+    [order?.items],
   );
 
-  const health = useMemo(
-    () => getDeliveryHealth(order),
-    [order]
-  );
+  const health = useMemo(() => getDeliveryHealth(order), [order]);
+  const shipment = useMemo(() => getShipment(order), [order]);
 
-  const shipment = useMemo(
-    () => getShipment(order),
-    [order]
-  );
+  const address = order?.shippingAddressSnapshot || {};
 
   const customerName =
     order?.customerId?.name ||
-    order?.customerName ||
-    order?.shippingAddressSnapshot?.fullName ||
+    address?.fullName ||
     "Unknown Customer";
 
   const phone =
     order?.customerId?.phone ||
-    order?.customerPhone ||
-    order?.shippingAddressSnapshot?.phone ||
+    address?.phone ||
     "";
 
   const email =
     order?.customerId?.email ||
-    order?.customerEmail ||
-    order?.shippingAddressSnapshot?.email ||
+    address?.email ||
     "";
-
-  const address = order?.shippingAddressSnapshot || {};
 
   const deliveredAt = getDeliveredAt(order);
 
@@ -128,25 +100,28 @@ export default function DeliveredOrderRow({
     order?.packedAt ||
     null;
 
+  const returnExpiresAt = deliveredAt
+    ? new Date(
+      new Date(deliveredAt).getTime() +
+      7 * 24 * 60 * 60 * 1000,
+    )
+    : null;
+
+  const isReturnEligible =
+    returnExpiresAt &&
+    Date.now() < returnExpiresAt.getTime();
+
   const paymentMethod = safe(
-    order?.paymentMethod || "cod"
+    order?.paymentMethod || "cod",
   ).toLowerCase();
 
   const paymentStatus = safe(
-    order?.paymentStatus || "pending"
+    order?.paymentStatus || "pending",
   ).toLowerCase();
 
-  const isCod = paymentMethod === "cod";
-
-  const PaymentIcon = isCod
-    ? Banknote
-    : CreditCard;
-
   const firstItem = items[0] || {};
-
   const firstTitle =
-    firstItem?.productSnapshot?.title ||
-    "No product title";
+    firstItem?.productSnapshot?.title || "No product";
 
   const firstSize =
     firstItem?.selectedSize ||
@@ -164,14 +139,14 @@ export default function DeliveredOrderRow({
     window.open(
       `/orders/${orderId}`,
       "_blank",
-      "noopener,noreferrer"
+      "noopener,noreferrer",
     );
   };
 
   return (
     <>
       <tr
-        className={`border-b border-black/[0.06] bg-white transition hover:bg-gray-50/70 ${health.errorCount
+        className={`border-b border-gray-100 bg-white transition hover:bg-gray-50/70 ${health.errorCount
             ? "border-l-2 border-l-red-400"
             : health.warningCount
               ? "border-l-2 border-l-amber-400"
@@ -179,18 +154,17 @@ export default function DeliveredOrderRow({
           }`}
       >
         {/* ORDER */}
-        <td className="px-5 py-4 align-top">
-          <div className="flex items-start gap-2">
+        <td className="px-4 py-2.5">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setOpen((prev) => !prev)}
-              className="mt-0.5 rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 transition hover:bg-gray-100"
-              title="Delivery audit"
+              onClick={() => setOpen((v) => !v)}
+              className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-black"
             >
               {open ? (
-                <ChevronUp size={16} />
+                <ChevronUp size={14} />
               ) : (
-                <ChevronDown size={16} />
+                <ChevronDown size={14} />
               )}
             </button>
 
@@ -198,142 +172,110 @@ export default function DeliveredOrderRow({
               <button
                 type="button"
                 onClick={openOrder}
-                className="inline-flex items-center gap-1 font-mono text-sm font-black text-gray-950 underline decoration-black/20 underline-offset-2 hover:decoration-black"
+                className="font-mono text-xs font-bold text-gray-950 hover:underline"
               >
                 #{order?.orderNumber || "-"}
-                <ExternalLink size={12} />
               </button>
 
-              <p className="mt-1 max-w-[240px] truncate text-xs font-medium text-gray-700">
+              <p className="max-w-[220px] truncate text-[11px] text-gray-500">
                 {firstTitle}
+                {firstSize ? ` · ${firstSize}` : ""}
+                {items.length > 1
+                  ? ` · +${items.length - 1}`
+                  : ""}
               </p>
-
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                {firstSize ? (
-                  <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-700">
-                    {firstSize}
-                  </span>
-                ) : null}
-
-                {firstSku ? (
-                  <span className="font-mono text-[10px] text-gray-400">
-                    {firstSku}
-                  </span>
-                ) : null}
-
-                {items.length > 1 ? (
-                  <span className="text-[10px] font-semibold text-gray-500">
-                    +{items.length - 1} more
-                  </span>
-                ) : null}
-              </div>
             </div>
           </div>
         </td>
 
         {/* CUSTOMER */}
-        <td className="px-5 py-4 align-top">
-          <p className="font-semibold text-gray-950">
+        <td className="px-4 py-2.5">
+          <p className="max-w-[180px] truncate text-xs font-semibold text-gray-900">
             {customerName}
           </p>
 
-          {phone ? (
-            <p className="mt-1 text-xs text-gray-500">
-              {phone}
-            </p>
-          ) : null}
-
-          <div className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-            <MapPin size={11} />
-
-            <span>
-              {[address?.city, address?.state]
-                .filter(Boolean)
-                .join(", ") || "-"}
-            </span>
-          </div>
-
-          {address?.pincode ? (
-            <p className="ml-4 text-[10px] text-gray-400">
-              {address.pincode}
-            </p>
-          ) : null}
+          <p className="mt-0.5 max-w-[210px] truncate text-[10px] text-gray-500">
+            {phone || "-"} ·{" "}
+            {[address?.city, address?.state]
+              .filter(Boolean)
+              .join(", ") || "-"}
+          </p>
         </td>
 
         {/* DELIVERY */}
-        <td className="px-5 py-4 align-top">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-            <PackageCheck size={13} />
-            Delivered
-          </span>
+        <td className="px-4 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className="rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
+              Delivered
+            </span>
 
-          {deliveredAt ? (
-            <p className="mt-2 text-xs font-semibold text-gray-800">
-              {formatDate(deliveredAt)}
-            </p>
-          ) : (
-            <p className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-red-600">
-              <CircleAlert size={12} />
-              Date missing
-            </p>
-          )}
+            {deliveredAt ? (
+              <span
+                className={`rounded-md px-2 py-1 text-[10px] font-semibold ${isReturnEligible
+                    ? "bg-blue-50 text-blue-700"
+                    : "bg-gray-100 text-gray-500"
+                  }`}
+              >
+                {isReturnEligible
+                  ? "Return Eligible"
+                  : "Return Closed"}
+              </span>
+            ) : null}
+          </div>
 
-          {packedAt ? (
-            <p className="mt-1 text-[10px] text-gray-400">
-              Packed {formatDate(packedAt)}
-            </p>
-          ) : null}
+          <p
+            className={`mt-1 text-[10px] ${deliveredAt
+                ? "text-gray-500"
+                : "font-semibold text-red-600"
+              }`}
+          >
+            {deliveredAt
+              ? formatDate(deliveredAt)
+              : "Delivered date missing"}
+          </p>
         </td>
 
         {/* COURIER */}
-        <td className="px-5 py-4 align-top">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700">
-              <Truck size={15} />
-            </div>
+        <td className="px-4 py-2.5">
+          <p className="max-w-[160px] truncate text-xs font-semibold text-gray-900">
+            {shipment.courier || "Courier missing"}
+          </p>
 
-            <div className="min-w-0">
-              <p className="max-w-[150px] truncate text-xs font-bold text-gray-900">
-                {shipment.courier || "Courier missing"}
-              </p>
+          <div className="mt-0.5 flex items-center gap-2">
+            <span className="max-w-[140px] truncate font-mono text-[10px] text-gray-500">
+              {shipment.awb || "AWB missing"}
+            </span>
 
-              <p className="mt-0.5 max-w-[160px] truncate font-mono text-[10px] text-gray-500">
-                {shipment.awb || "AWB missing"}
-              </p>
-            </div>
+            {shipment.trackingUrl ? (
+              <a
+                href={shipment.trackingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-semibold text-blue-600 hover:underline"
+              >
+                Track
+              </a>
+            ) : null}
           </div>
-
-          {shipment.trackingUrl ? (
-            <a
-              href={shipment.trackingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
-            >
-              Track shipment
-              <ExternalLink size={10} />
-            </a>
-          ) : null}
         </td>
 
         {/* PAYMENT */}
-        <td className="px-5 py-4 align-top">
+        <td className="px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <PaymentIcon size={15} />
+            <span className="text-xs font-bold text-gray-950">
+              {money(order?.finalPayable)}
+            </span>
 
-            <span className="text-xs font-bold uppercase text-gray-800">
+            <span className="text-[10px] font-semibold uppercase text-gray-500">
               {paymentMethod}
             </span>
           </div>
 
-          <p className="mt-2 font-mono text-sm font-black text-gray-950">
-            {money(order?.finalPayable)}
-          </p>
-
           <span
-            className={`mt-1 inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold capitalize ${paymentStatus === "paid"
+            className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[9px] font-semibold capitalize ${paymentStatus === "paid"
                 ? "bg-emerald-50 text-emerald-700"
-                : isCod && paymentStatus === "pending"
+                : paymentMethod === "cod" &&
+                  paymentStatus === "pending"
                   ? "bg-amber-50 text-amber-700"
                   : "bg-gray-100 text-gray-600"
               }`}
@@ -343,310 +285,198 @@ export default function DeliveredOrderRow({
         </td>
 
         {/* HEALTH */}
-        <td className="px-5 py-4 align-top">
-          <DeliveryHealthBadge
-            order={order}
-            compact
-          />
+        <td className="px-4 py-2.5">
+          {/* HEALTH */}
+          <td className="px-4 py-2.5">
+            <DeliveryHealthBadge order={order} compact />
 
-          <div className="mt-2">
-            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-gray-100">
-              <div
-                className={`h-full rounded-full ${health.score >= 90
-                    ? "bg-emerald-500"
-                    : health.score >= 60
-                      ? "bg-amber-500"
-                      : "bg-red-500"
-                  }`}
-                style={{
-                  width: `${health.score}%`,
-                }}
-              />
-            </div>
+            {health.issues.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {health.issues.slice(0, 2).map((issue) => (
+                  <p
+                    key={issue.key}
+                    className={`max-w-[170px] truncate text-[9px] font-medium ${issue.type === "error"
+                        ? "text-red-600"
+                        : "text-amber-600"
+                      }`}
+                    title={issue.label}
+                  >
+                    • {issue.label}
+                  </p>
+                ))}
 
-            <p className="mt-1 text-[10px] font-medium text-gray-400">
-              Health {health.score}%
-            </p>
-          </div>
-        </td>
+                {health.issues.length > 2 && (
+                  <p className="text-[9px] text-gray-400">
+                    +{health.issues.length - 2} more
+                  </p>
+                )}
+              </div>
+            )}
+          </td>        </td>
 
         {/* ACTION */}
-        <td className="px-5 py-4 align-top text-right">
+        <td className="px-4 py-2.5 text-right">
           <button
             type="button"
             onClick={openOrder}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-black px-3 py-2 text-xs font-bold text-white transition hover:bg-gray-800"
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 hover:bg-gray-50"
           >
             View
-            <ExternalLink size={12} />
+            <ExternalLink size={10} />
           </button>
         </td>
       </tr>
 
-      {/* DELIVERY AUDIT */}
+      {/* COMPACT AUDIT */}
       {open ? (
-        <tr className="border-b border-black/[0.06] bg-gray-50/70">
-          <td
-            colSpan={7}
-            className="px-5 py-4"
-          >
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-4">
+        <tr className="border-b border-gray-100 bg-gray-50/60">
+          <td colSpan={7} className="px-4 py-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.12em] text-gray-400">
-                    Delivery Audit
-                  </p>
+                  <span className="text-xs font-bold text-gray-950">
+                    #{order?.orderNumber}
+                  </span>
 
-                  <h3 className="mt-1 text-base font-black text-gray-950">
-                    Order #{order?.orderNumber}
-                  </h3>
+                  <span className="ml-2 text-[10px] text-gray-400">
+                    Delivery Audit
+                  </span>
                 </div>
 
                 <DeliveryHealthBadge order={order} />
               </div>
 
-              <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-4">
-                {/* TIMELINE */}
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <div className="flex items-center gap-2 text-xs font-black text-gray-950">
-                    <Clock3 size={14} />
-                    TIMELINE
-                  </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 text-[11px] md:grid-cols-4">
+                <Info
+                  label="Created"
+                  value={formatDate(
+                    order?.orderDate || order?.createdAt,
+                  )}
+                />
 
-                  <div className="mt-3 space-y-2 text-xs">
-                    <div>
-                      <p className="text-gray-400">
-                        Order Created
-                      </p>
-                      <p className="font-semibold text-gray-800">
-                        {formatDate(
-                          order?.orderDate ||
-                          order?.createdAt
-                        )}
-                      </p>
-                    </div>
+                <Info
+                  label="Packed"
+                  value={formatDate(packedAt)}
+                />
 
-                    <div>
-                      <p className="text-gray-400">
-                        Packed
-                      </p>
-                      <p className="font-semibold text-gray-800">
-                        {formatDate(packedAt)}
-                      </p>
-                    </div>
+                <Info
+                  label="Delivered"
+                  value={formatDate(deliveredAt)}
+                />
 
-                    <div>
-                      <p className="text-gray-400">
-                        Delivered
-                      </p>
-                      <p
-                        className={`font-semibold ${deliveredAt
-                            ? "text-emerald-700"
-                            : "text-red-600"
-                          }`}
-                      >
-                        {deliveredAt
-                          ? formatDate(deliveredAt)
-                          : "Timestamp missing"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <Info
+                  label="Return"
+                  value={
+                    deliveredAt
+                      ? isReturnEligible
+                        ? `Till ${formatDate(returnExpiresAt)}`
+                        : "Period closed"
+                      : "-"
+                  }
+                />
 
-                {/* SHIPPING */}
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <div className="flex items-center gap-2 text-xs font-black text-gray-950">
-                    <Truck size={14} />
-                    SHIPMENT
-                  </div>
+                <Info
+                  label="Courier"
+                  value={shipment.courier || "-"}
+                />
 
-                  <div className="mt-3 space-y-2 text-xs">
-                    <div>
-                      <p className="text-gray-400">
-                        Courier
-                      </p>
-                      <p className="font-semibold text-gray-800">
-                        {shipment.courier || "-"}
-                      </p>
-                    </div>
+                <Info
+                  label="AWB"
+                  value={shipment.awb || "-"}
+                  mono
+                />
 
-                    <div>
-                      <p className="text-gray-400">
-                        AWB
-                      </p>
-                      <p className="break-all font-mono font-semibold text-gray-800">
-                        {shipment.awb || "-"}
-                      </p>
-                    </div>
+                <Info
+                  label="Customer"
+                  value={customerName}
+                />
 
-                    <div>
-                      <p className="text-gray-400">
-                        Provider
-                      </p>
-                      <p className="font-semibold capitalize text-gray-800">
-                        {shipment.provider}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* CUSTOMER */}
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-xs font-black text-gray-950">
-                    CUSTOMER
-                  </p>
-
-                  <div className="mt-3 space-y-1 text-xs">
-                    <p className="font-bold text-gray-900">
-                      {customerName}
-                    </p>
-
-                    <p className="text-gray-600">
-                      {phone || "-"}
-                    </p>
-
-                    <p className="break-all text-gray-500">
-                      {email || "-"}
-                    </p>
-
-                    <p className="pt-2 text-gray-600">
-                      {[
-                        address?.city,
-                        address?.state,
-                        address?.pincode,
-                      ]
-                        .filter(Boolean)
-                        .join(", ") || "-"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* HEALTH */}
-                <div className="rounded-xl bg-gray-950 p-4 text-white">
-                  <p className="text-xs font-black">
-                    DELIVERY HEALTH
-                  </p>
-
-                  <p className="mt-3 text-3xl font-black">
-                    {health.score}%
-                  </p>
-
-                  <p className="mt-1 text-xs text-white/50">
-                    {health.issueCount
-                      ? `${health.issueCount} issue${health.issueCount === 1
-                        ? ""
-                        : "s"
-                      } detected`
-                      : "Everything looks clean"}
-                  </p>
-                </div>
+                <Info
+                  label="Contact"
+                  value={phone || email || "-"}
+                />
               </div>
 
-              {/* PRODUCTS */}
-              <div className="mt-4">
-                <p className="mb-2 text-xs font-black text-gray-950">
-                  DELIVERED ITEMS
-                </p>
+              {items.length ? (
+                <div className="mt-3 border-t border-gray-100 pt-2">
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                    Items
+                  </p>
 
-                <div className="overflow-hidden rounded-xl border border-gray-200">
-                  {items.map((item, index) => {
-                    const snapshot =
-                      item?.productSnapshot || {};
+                  <div className="space-y-1">
+                    {items.map((item, index) => {
+                      const snap =
+                        item?.productSnapshot || {};
 
-                    return (
-                      <div
-                        key={
-                          item?.lineId ||
-                          `${orderId}-${index}`
-                        }
-                        className="flex items-center gap-3 border-b border-gray-100 p-3 last:border-b-0"
-                      >
-                        {snapshot?.thumbnail ? (
-                          <img
-                            src={snapshot.thumbnail}
-                            alt={snapshot?.title || ""}
-                            className="h-12 w-12 shrink-0 rounded-lg border border-gray-100 object-cover"
-                          />
-                        ) : (
-                          <div className="h-12 w-12 shrink-0 rounded-lg bg-gray-100" />
-                        )}
-
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-bold text-gray-950">
-                            {snapshot?.title || "-"}
+                      return (
+                        <div
+                          key={
+                            item?.lineId ||
+                            `${orderId}-${index}`
+                          }
+                          className="flex items-center justify-between gap-3 text-[11px]"
+                        >
+                          <p className="min-w-0 truncate text-gray-700">
+                            <b>{snap?.title || "-"}</b>
+                            {" · "}
+                            {snap?.productCode || "-"}
+                            {" · "}
+                            {item?.selectedSize || "-"}
+                            {" · "}
+                            Qty {item?.quantity || 1}
                           </p>
 
-                          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-gray-500">
-                            <span>
-                              Code:{" "}
-                              {snapshot?.productCode ||
-                                "-"}
-                            </span>
-
-                            <span>
-                              SKU:{" "}
-                              {item?.variant?.sku ||
-                                "-"}
-                            </span>
-
-                            <span>
-                              Size:{" "}
-                              {item?.selectedSize ||
-                                "-"}
-                            </span>
-
-                            <span>
-                              Qty:{" "}
-                              {item?.quantity || 1}
-                            </span>
-                          </div>
+                          <span className="shrink-0 font-semibold text-gray-900">
+                            {money(
+                              Number(item?.price || 0) *
+                              Number(item?.quantity || 1),
+                            )}
+                          </span>
                         </div>
-
-                        <p className="shrink-0 font-mono text-xs font-black text-gray-950">
-                          {money(
-                            Number(item?.price || 0) *
-                            Number(
-                              item?.quantity || 1
-                            )
-                          )}
-                        </p>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
-              {/* ISSUES */}
-              <div className="mt-4">
-                <p className="mb-2 text-xs font-black text-gray-950">
-                  AUDIT CHECKS
-                </p>
-
-                {health.issues.length ? (
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    {health.issues.map((issue) => (
-                      <div
-                        key={issue.key}
-                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${issue.type === "error"
-                            ? "border-red-200 bg-red-50 text-red-700"
-                            : "border-amber-200 bg-amber-50 text-amber-700"
-                          }`}
-                      >
-                        <CircleAlert size={13} />
-                        {issue.label}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-700">
-                    ✓ All essential delivery data is available.
-                  </div>
-                )}
-              </div>
+              {health.issues.length ? (
+                <div className="mt-3 flex flex-wrap gap-1.5 border-t border-gray-100 pt-2">
+                  {health.issues.map((issue) => (
+                    <span
+                      key={issue.key}
+                      className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium ${issue.type === "error"
+                          ? "bg-red-50 text-red-700"
+                          : "bg-amber-50 text-amber-700"
+                        }`}
+                    >
+                      <CircleAlert size={10} />
+                      {issue.label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </td>
         </tr>
       ) : null}
     </>
+  );
+}
+
+function Info({ label, value, mono = false }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+        {label}
+      </p>
+
+      <p
+        className={`mt-0.5 truncate font-medium text-gray-800 ${mono ? "font-mono" : ""
+          }`}
+        title={String(value || "-")}
+      >
+        {value || "-"}
+      </p>
+    </div>
   );
 }
