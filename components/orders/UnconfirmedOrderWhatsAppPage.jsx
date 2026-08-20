@@ -280,9 +280,10 @@ Hope you're loving your *OATCLUB* order *#${getOrderNumber(order)}*.
 
 We'd love to hear what you think!
 
-You can simply reply here on WhatsApp with your review or upload your review from the Profile section on oatclub.in.
+You can simply reply here on WhatsApp with your review or upload your review from the Profile section:
+https://www.oatclub.in/profile/orders
 
-Once you share your review, we'll send you a surprise coupon for your next purchase. 
+Once you share your review, we'll send you a surprise coupon for your next purchase.
 
 Thank you for being a part of OATCLUB.
 
