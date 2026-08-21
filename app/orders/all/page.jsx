@@ -125,7 +125,7 @@ const escapeCSV = (value) => {
 const formatDateISO = (d) => {
   if (!d) return "";
   const dt = new Date(d);
-  return Number.isNaN(dt.getTime()) ? "" : dt.toISOString();
+  return Number.isNaN(dt.getTime()) ? "" : ymdInTZ(dt, IST_TZ);
 };
 
 const money = (n) => {
