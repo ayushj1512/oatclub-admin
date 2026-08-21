@@ -165,8 +165,8 @@ export default function ProductOrderAnalytics({
         const qty = Number(it?.quantity ?? 0);
         const subtotal = Number(
           it?.subtotal ??
-            (Number(it?.price ?? 0) * Number(it?.quantity ?? 0)) ??
-            0
+          (Number(it?.price ?? 0) * Number(it?.quantity ?? 0)) ??
+          0
         );
         const price = Number(it?.price ?? 0);
 
@@ -204,8 +204,8 @@ export default function ProductOrderAnalytics({
         r.qtySold > 0
           ? r.revenue / r.qtySold
           : r.priceCount
-          ? r.priceSum / r.priceCount
-          : 0;
+            ? r.priceSum / r.priceCount
+            : 0;
 
       return {
         ...r,
@@ -258,6 +258,39 @@ export default function ProductOrderAnalytics({
   }, [rows, effectiveExpanded, topN, defaultTopN]);
 
   const effectiveHiddenCount = Math.max(0, rows.length - effectiveVisibleRows.length);
+
+  const downloadExcel = () => {
+    const data = rows.map((r) => [
+      r.productCode,
+      r.title,
+      Math.round(r.avgPrice),
+      r.qtySold,
+      Math.round(r.revenue),
+      r.ordersCount,
+    ]);
+
+    const csv = [
+      ["Product Code", "Product", "Avg Price", "Qty", "Revenue", "Orders"],
+      ...data,
+    ]
+      .map((row) =>
+        row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")
+      )
+      .join("\n");
+
+    const blob = new Blob(["\uFEFF" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = `product-analytics-${toYMD(new Date())}.csv`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <section style={s.card}>
@@ -346,6 +379,15 @@ export default function ProductOrderAnalytics({
             <option value="revenue">Sort: Revenue</option>
             <option value="orders">Sort: Orders</option>
           </select>
+
+          <button
+            type="button"
+            onClick={downloadExcel}
+            disabled={!rows.length}
+            style={s.downloadBtn}
+          >
+            Download Excel
+          </button>
 
           <label style={s.chk}>
             <input
@@ -642,6 +684,18 @@ const s = {
     background: "rgba(34,197,94,0.12)",
     color: "#166534",
     fontWeight: 950,
+  },
+
+  downloadBtn: {
+    height: 34,
+    border: 0,
+    borderRadius: 10,
+    padding: "0 12px",
+    background: "#0f172a",
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: 900,
+    cursor: "pointer",
   },
 
   foot: { marginTop: 10, fontSize: 11, color: "#64748b" },
