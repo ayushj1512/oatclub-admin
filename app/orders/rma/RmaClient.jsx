@@ -9,6 +9,7 @@ import {
   Download,
   Loader2,
   RotateCcw,
+  PackagePlus
 } from "lucide-react";
 import axios from "axios";
 
@@ -19,6 +20,7 @@ import {
   formatOrderNumber,
   formatRmaNumber,
 } from "@/utils/formatters";
+import { useOrderStore } from "@/store/orderStore";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:9000";
@@ -93,6 +95,10 @@ export default function RmaClient() {
   const [sortDir, setSortDir] = useState("desc");
   const [updating, setUpdating] = useState([]);
   const [creatingPickup, setCreatingPickup] = useState([]);
+  const duplicateExchangeOrder =
+    useOrderStore((s) => s.duplicateExchangeOrder);
+
+  const [creatingExchange, setCreatingExchange] = useState([]);
 
   const {
     rmas,
@@ -343,6 +349,59 @@ export default function RmaClient() {
     } finally {
       setCreatingPickup((current) =>
         current.filter((x) => x !== key)
+      );
+    }
+  };
+
+  const createExchangeOrder = async (rma) => {
+    const key = getKey(rma);
+
+    const exchange =
+      rma?.exchangeTo ||
+      rma?.exchangeRequest ||
+      {};
+
+    if (!exchange?.productId || !exchange?.variantId) {
+      return alert("Exchange product or size missing");
+    }
+
+    try {
+      setCreatingExchange((s) => [...s, key]);
+
+      const order = await duplicateExchangeOrder(
+        rma.orderId,
+        {
+          rmaNumber: rma.rmaNumber,
+          reason: rma?.reason || "other",
+          items: [
+            {
+              productId: exchange.productId,
+              variantId: exchange.variantId,
+              quantity: Math.max(
+                1,
+                (rma?.items || []).reduce(
+                  (sum, item) =>
+                    sum + Number(item?.quantity || 1),
+                  0
+                )
+              ),
+            },
+          ],
+        }
+      );
+
+      await fetchAllRmas();
+
+      alert(
+        `Exchange order created: ${formatOrderNumber(
+          order?.orderNumber
+        )}`
+      );
+    } catch (e) {
+      alert(e?.message || "Failed to create exchange order");
+    } finally {
+      setCreatingExchange((s) =>
+        s.filter((x) => x !== key)
       );
     }
   };
@@ -911,6 +970,12 @@ export default function RmaClient() {
                       const isCreatingPickup =
                         creatingPickup.includes(rowKey);
 
+                      const isCreatingExchange =
+                        creatingExchange.includes(rowKey);
+
+                      const isExchange =
+                        norm(rma?.type) === "exchange";
+
                       const hasReturnPickup = Boolean(
                         reverseShipment?.orderId ||
                         reverseShipment?.shipmentId ||
@@ -1031,6 +1096,24 @@ export default function RmaClient() {
                                       ? "Creating..."
                                       : "Create Pickup"}
                                 </button>
+
+                                {isExchange && (
+                                  <button
+                                    disabled={isCreatingExchange}
+                                    onClick={() => createExchangeOrder(rma)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+                                  >
+                                    {isCreatingExchange ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <PackagePlus size={14} />
+                                    )}
+
+                                    {isCreatingExchange
+                                      ? "Creating..."
+                                      : "Create Exchange Order"}
+                                  </button>
+                                )}
 
                                 <button
                                   disabled={isUpdating}
