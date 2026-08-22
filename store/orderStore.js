@@ -134,6 +134,9 @@ export const useOrderStore = create((set, get) => ({
   paymentRecoveryResult: null,
   shippingOrders: [],
   shippingOrdersMeta: null,
+  prepaidConfirmationLoading: false,
+  prepaidConfirmationError: null,
+  prepaidConfirmationResult: null,
 
   _start: () => set({ loading: true, error: null }),
   _success: () => set({ loading: false }),
@@ -1191,6 +1194,57 @@ export const useOrderStore = create((set, get) => ({
     }
   },
 
+
+  /* ============================================================
+   MANUAL PREPAID CONFIRMATION
+============================================================ */
+
+  resendPrepaidConfirmation: async (orderId) => {
+    const id = String(orderId || "").trim();
+
+    if (!id) {
+      throw new Error("Order ID is required");
+    }
+
+    set({
+      prepaidConfirmationLoading: true,
+      prepaidConfirmationError: null,
+      prepaidConfirmationResult: null,
+    });
+
+    try {
+      const data = await get()._post(
+        `/api/razorpay/admin/resend-confirmation/${encodeURIComponent(id)}`,
+        {},
+        { silent: true }
+      );
+
+      set({
+        prepaidConfirmationLoading: false,
+        prepaidConfirmationError: null,
+        prepaidConfirmationResult: data,
+      });
+
+      return data;
+    } catch (error) {
+      set({
+        prepaidConfirmationLoading: false,
+        prepaidConfirmationError:
+          error?.message || "Failed to send prepaid confirmation",
+        prepaidConfirmationResult: null,
+      });
+
+      throw error;
+    }
+  },
+
+  clearPrepaidConfirmationResult: () =>
+    set({
+      prepaidConfirmationLoading: false,
+      prepaidConfirmationError: null,
+      prepaidConfirmationResult: null,
+    }),
+
   sendBulkOrderPaymentRecoveryEmails: async (
     orderIds = [],
   ) => {
@@ -1926,5 +1980,9 @@ export const useOrderStore = create((set, get) => ({
       invoiceMissingOrderNumbers: [],
       shippingOrders: [],
       shippingOrdersMeta: null,
+
+      prepaidConfirmationLoading: false,
+      prepaidConfirmationError: null,
+      prepaidConfirmationResult: null,
     }),
 }));

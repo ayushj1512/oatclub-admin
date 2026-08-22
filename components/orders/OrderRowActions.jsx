@@ -30,6 +30,9 @@ import {
   canMarkAsTestingOrder,
   canSendPaymentRecoveryEmail,
   canSendPaymentRecoveryWhatsApp,
+  canSendPrepaidConfirmation,
+  canSendPrepaidConfirmationEmail,
+  canSendPrepaidConfirmationWhatsApp,
 } from "@/services/order.service";
 
 import { toast } from "react-hot-toast";
@@ -347,6 +350,10 @@ export default function OrderRowActions({
     (state) => state.sendOrderPaymentRecoveryEmail,
   );
 
+  const resendPrepaidConfirmation = useOrderStore(
+    (state) => state.resendPrepaidConfirmation,
+  );
+
   const syncTracking = useShiprocketStore(
     (state) => state.syncTracking
   );
@@ -388,6 +395,17 @@ export default function OrderRowActions({
   const [isTestingOrder, setIsTestingOrder] = useState(
     order?.isTestingOrder === true,
   );
+  const [prepaidConfirmationLoading, setPrepaidConfirmationLoading] =
+    useState(false);
+
+  const prepaidConfirmationAvailable =
+    canSendPrepaidConfirmation(order);
+
+  const prepaidConfirmationEmailAvailable =
+    canSendPrepaidConfirmationEmail(order);
+
+  const prepaidConfirmationWhatsAppAvailable =
+    canSendPrepaidConfirmationWhatsApp(order);
 
   const orderId = safe(order?._id || order?.id);
   const orderNumber = safe(order?.orderNumber);
@@ -572,6 +590,48 @@ export default function OrderRowActions({
 
   const handleDownloadInvoice = () => {
     prepareInvoice("download");
+  };
+
+  const handlePrepaidConfirmation = async () => {
+    if (
+      !orderId ||
+      prepaidConfirmationLoading ||
+      !prepaidConfirmationAvailable
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Resend prepaid confirmation for order ${orderNumber || orderId
+      }?`
+    );
+
+    if (!confirmed) return;
+
+    setOpen(false);
+    setPrepaidConfirmationLoading(true);
+
+    try {
+      const result =
+        await resendPrepaidConfirmation(orderId);
+
+      toast.success(
+        result?.message ||
+        "Confirmation email & WhatsApp triggered"
+      );
+    } catch (error) {
+      console.error(
+        "Prepaid confirmation error:",
+        error
+      );
+
+      toast.error(
+        error?.message ||
+        "Failed to send prepaid confirmation"
+      );
+    } finally {
+      setPrepaidConfirmationLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -1354,6 +1414,7 @@ export default function OrderRowActions({
     influencerLoading ||
     testingLoading ||
     paymentRecoveryLoading ||
+    prepaidConfirmationLoading ||
     syncing;
 
   return (
@@ -1665,6 +1726,60 @@ export default function OrderRowActions({
               </div>
 
               {!paymentRecoveryEmailAvailable && (
+                <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
+                  UNAVAILABLE
+                </span>
+              )}
+            </button>
+
+            {/* Prepaid Confirmation */}
+
+            <button
+              type="button"
+              onClick={handlePrepaidConfirmation}
+              disabled={
+                isBusy ||
+                !orderId ||
+                !prepaidConfirmationAvailable
+              }
+              title={
+                prepaidConfirmationAvailable
+                  ? "Resend paid order confirmation"
+                  : "Only paid Razorpay orders are eligible"
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                {prepaidConfirmationLoading ? (
+                  <Loader2
+                    size={15}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <BadgeCheck
+                    size={15}
+                    className="text-emerald-600"
+                  />
+                )}
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    {prepaidConfirmationLoading
+                      ? "Sending Confirmation..."
+                      : "Resend Prepaid Confirmation"}
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {prepaidConfirmationAvailable
+                      ? `Email ${prepaidConfirmationEmailAvailable ? "✓" : "✕"
+                      } · WhatsApp ${prepaidConfirmationWhatsAppAvailable ? "✓" : "✕"
+                      }`
+                      : "Paid Razorpay orders only"}
+                  </div>
+                </div>
+              </div>
+
+              {!prepaidConfirmationAvailable && (
                 <span className="rounded-full bg-zinc-100 px-2 py-1 text-[9px] font-bold text-zinc-500">
                   UNAVAILABLE
                 </span>

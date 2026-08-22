@@ -175,6 +175,7 @@ export const canSendPaymentRecovery = (order = {}) => {
   return ["shipment", "parent"].includes(orderType);
 };
 
+
 /* ============================================================
    PAYMENT RECOVERY EMAIL
 ============================================================ */
@@ -205,6 +206,82 @@ export const canSendPaymentRecoveryWhatsApp = (
   order = {},
 ) => {
   if (!canSendPaymentRecovery(order)) {
+    return false;
+  }
+
+  const phone = normalizePhoneNumber(
+    getCustomerPhone(order),
+  );
+
+  return Boolean(phone);
+};
+
+/* ============================================================
+   PREPAID CONFIRMATION
+============================================================ */
+
+export const canSendPrepaidConfirmation = (order = {}) => {
+  const paymentMethod = safeString(
+    order?.paymentMethod,
+  ).toLowerCase();
+
+  const paymentStatus = safeString(
+    order?.paymentStatus,
+  ).toLowerCase();
+
+  const fulfillmentStatus = safeString(
+    order?.fulfillmentStatus,
+  ).toLowerCase();
+
+  const orderType = safeString(
+    order?.orderType || "shipment",
+  ).toLowerCase();
+
+  const isCancelled =
+    order?.cancellation?.isCancelled === true ||
+    fulfillmentStatus === "cancelled";
+
+  if (isCancelled) return false;
+
+  // Split child ko customer confirmation nahi bhejni.
+  if (order?.parentOrderId) return false;
+
+  if (paymentMethod !== "razorpay") return false;
+  if (paymentStatus !== "paid") return false;
+
+  return ["shipment", "parent"].includes(orderType);
+};
+
+/* ============================================================
+   PREPAID CONFIRMATION EMAIL
+============================================================ */
+
+export const canSendPrepaidConfirmationEmail = (
+  order = {},
+) => {
+  if (!canSendPrepaidConfirmation(order)) {
+    return false;
+  }
+
+  const email = safeString(
+    order?.customerId?.email ||
+    order?.customer?.email ||
+    order?.customerEmail ||
+    order?.shippingAddressSnapshot?.email ||
+    order?.billingAddressSnapshot?.email,
+  );
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+/* ============================================================
+   PREPAID CONFIRMATION WHATSAPP
+============================================================ */
+
+export const canSendPrepaidConfirmationWhatsApp = (
+  order = {},
+) => {
+  if (!canSendPrepaidConfirmation(order)) {
     return false;
   }
 
