@@ -976,6 +976,13 @@ export default function RmaClient() {
                       const isExchange =
                         norm(rma?.type) === "exchange";
 
+                      const hasExchangeOrder =
+                        rma?.hasExchangeOrder === true ||
+                        rma?.isExchangeOrderCreated === true;
+
+                      const isExchangeOrder =
+                        rma?.isExchangeOrder === true;
+
                       const hasReturnPickup = Boolean(
                         reverseShipment?.orderId ||
                         reverseShipment?.shipmentId ||
@@ -1098,21 +1105,28 @@ export default function RmaClient() {
                                 </button>
 
                                 {isExchange && (
-                                  <button
-                                    disabled={isCreatingExchange}
-                                    onClick={() => createExchangeOrder(rma)}
-                                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
-                                  >
-                                    {isCreatingExchange ? (
-                                      <Loader2 size={14} className="animate-spin" />
-                                    ) : (
-                                      <PackagePlus size={14} />
-                                    )}
+                                  hasExchangeOrder || isExchangeOrder ? (
+                                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+                                      <Check size={14} />
+                                      Exchange Order Already Created
+                                    </span>
+                                  ) : (
+                                    <button
+                                      disabled={isCreatingExchange}
+                                      onClick={() => createExchangeOrder(rma)}
+                                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+                                    >
+                                      {isCreatingExchange ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                      ) : (
+                                        <PackagePlus size={14} />
+                                      )}
 
-                                    {isCreatingExchange
-                                      ? "Creating..."
-                                      : "Create Exchange Order"}
-                                  </button>
+                                      {isCreatingExchange
+                                        ? "Creating..."
+                                        : "Create Exchange Order"}
+                                    </button>
+                                  )
                                 )}
 
                                 <button
