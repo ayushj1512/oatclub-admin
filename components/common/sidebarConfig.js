@@ -384,6 +384,8 @@
       { label: "Confirmed Orders", href: "/orders/confirmed-orders" },
       { label: "Unconfirmed Orders", href: "/orders/unconfirmed-orders" },
       { label: "Influencer Orders", href: "/orders/influencer-orders" },
+      { label: "Exchange Orders", href: "/orders/exchange-orders" },
+
       {
         label: "WhatsApp Confirmations",
         href: "/orders/unconfirmed-order-whatsappmessage",
