@@ -8,12 +8,30 @@ const controlClass =
 const excludeClass =
   "w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100";
 
+const option = (value, label) => ({ value, label });
+
+
+const EXCHANGE_ORDER = [
+  option("", "All Orders"),
+  option("true", "Exchange Orders"),
+  option("false", "Non Exchange Orders"),
+];
+
+const CALL_CONFIRMATION = [
+  option("", "All Orders"),
+  option("true", "Call Confirmation"),
+];
+
+const READY_TO_FULFILL = [
+  option("", "All Orders"),
+  option("true", "Ready to Fulfill"),
+];
+
 const Field = ({ label, children, exclude = false }) => (
   <div>
     <label
-      className={`mb-1 block text-xs font-semibold ${
-        exclude ? "text-red-700" : "text-gray-700"
-      }`}
+      className={`mb-1 block text-xs font-semibold ${exclude ? "text-red-700" : "text-gray-700"
+        }`}
     >
       {label}
     </label>
@@ -65,7 +83,6 @@ const Input = ({
   </Field>
 );
 
-const option = (value, label) => ({ value, label });
 
 const QUICK_DATE = [
   option("", "All Dates"),
@@ -280,6 +297,30 @@ export default function OrderAdvancedFilters({
             name="isInfluencerOrder"
             value={filters.isInfluencerOrder}
             options={INFLUENCER}
+            setFilter={setFilter}
+          />
+
+          <Select
+            label="Exchange Order"
+            name="isExchangeOrder"
+            value={filters.isExchangeOrder}
+            options={EXCHANGE_ORDER}
+            setFilter={setFilter}
+          />
+
+          <Select
+            label="Call Confirmation"
+            name="callConfirmation"
+            value={filters.callConfirmation}
+            options={CALL_CONFIRMATION}
+            setFilter={setFilter}
+          />
+
+          <Select
+            label="Ready to Fulfill"
+            name="readyToFulfill"
+            value={filters.readyToFulfill}
+            options={READY_TO_FULFILL}
             setFilter={setFilter}
           />
 

@@ -408,7 +408,7 @@ const INITIAL_ORDER_FILTERS = {
 
   paymentMethod: "",
   excludePaymentMethod: "",
-
+  isExchangeOrder: "",
   fulfillmentStatus: "",
   excludeFulfillmentStatus: "",
 
@@ -894,26 +894,36 @@ export default function OrdersListPage() {
   ]);
 
   const getParentOrderNumber = (order = {}) => {
-    const orderNumber = String(
-      order?.orderNumber || "",
-    ).trim();
+    const orderNumber = String(order?.orderNumber || "").trim();
 
-    // 000089-A -> 000089
-    const match = orderNumber.match(
-      /^(.+)-([A-Z])$/i,
-    );
+    if (
+      order?.isExchangeOrder === true ||
+      norm(order?.paymentMethod) === "exchange" ||
+      orderNumber.toUpperCase().endsWith("-E")
+    ) {
+      return "";
+    }
+
+    const match = orderNumber.match(/^(.+)-([A-Z])$/i);
 
     return match ? match[1] : "";
   };
 
   const isSplitChildOrder = (order = {}) => {
+    // Exchange replacement is NOT a split child
+    if (
+      order?.isExchangeOrder === true ||
+      norm(order?.paymentMethod) === "exchange" ||
+      String(order?.orderNumber || "").toUpperCase().endsWith("-E")
+    ) {
+      return false;
+    }
+
     if (order?.parentOrderId) {
       return true;
     }
 
-    return Boolean(
-      getParentOrderNumber(order),
-    );
+    return Boolean(getParentOrderNumber(order));
   };
 
 
@@ -1764,6 +1774,8 @@ export default function OrdersListPage() {
           >
             🔥 Ready to Fulfill
           </button>
+
+
 
           <button
             type="button"

@@ -815,6 +815,14 @@ export const useOrderStore = create((set, get) => ({
     });
   },
 
+  // ✅ EXCHANGE ORDERS
+  fetchExchangeOrders: async (filters = {}) => {
+    return get().fetchAllOrders({
+      ...(filters || {}),
+      isExchangeOrder: true,
+    });
+  },
+
   // ✅ NORMAL / NON-INFLUENCER ORDERS
   fetchNonInfluencerOrders: async (filters = {}) => {
     return get().fetchAllOrders({
@@ -1492,12 +1500,18 @@ export const useOrderStore = create((set, get) => ({
       `/api/orders/${orderId}/duplicate-exchange`,
       payload,
     );
+
     const newOrder = get()._normalizeOrder(data);
 
     if (newOrder?._id) {
-      set({ order: newOrder });
       set((s) => ({
-        orders: [newOrder, ...(s.orders || [])],
+        order: newOrder,
+        orders: [
+          newOrder,
+          ...(s.orders || []).filter(
+            (o) => String(o?._id) !== String(newOrder._id),
+          ),
+        ],
       }));
     }
 

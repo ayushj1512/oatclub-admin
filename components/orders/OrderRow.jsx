@@ -216,6 +216,17 @@ function OrderRow({
                 </>
               )}
 
+            {(
+              order?.isExchangeOrder === true ||
+              String(order?.paymentMethod || "").toLowerCase() === "exchange" ||
+              String(order?.orderNumber || "").toUpperCase().endsWith("-E")
+            ) && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-orange-700 shadow-sm">
+                  <RefreshCw size={11} strokeWidth={2.5} />
+                  Exchange Order
+                </span>
+              )}
+
             {order?.isInfluencerOrder && (
               <span className="inline-flex rounded-md border border-pink-200 bg-pink-50 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-pink-700">
                 Influencer
