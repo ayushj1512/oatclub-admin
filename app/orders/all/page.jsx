@@ -412,6 +412,12 @@ const INITIAL_ORDER_FILTERS = {
   fulfillmentStatus: "",
   excludeFulfillmentStatus: "",
 
+  // ✅ REFUND / RMA
+  refundStatus: "",
+  excludeRefundStatus: "",
+  eligibleForRefund: "",
+  isRefunded: "",
+
   priority: "",
   excludePriority: "",
 
@@ -935,9 +941,20 @@ export default function OrdersListPage() {
 
   const INVALID_REVENUE_STATUSES = new Set([
     "failed",
+
+    // return lifecycle
     "return_requested",
+    "return_pickup_completed",
+    "returned",
+    "refunded",
+
+    // exchange original order lifecycle
     "exchange_requested",
+    "exchanged",
+
+    // failed completion
     "cancelled",
+    "rto",
   ]);
 
   const isValidRevenueOrder = (order = {}) => {

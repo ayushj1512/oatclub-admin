@@ -13,6 +13,7 @@ import {
   RefreshCcw,
   BadgeCheck,
   Undo2,
+  CircleX,
 } from "lucide-react";
 
 const STEPS = [
@@ -20,64 +21,107 @@ const STEPS = [
   { key: "packedAt", status: "packed", label: "Packed", icon: Box },
   { key: "pickedAt", status: "picked", label: "Picked", icon: PackageCheck },
   { key: "shippedAt", status: "shipped", label: "Shipped", icon: Truck },
-  { key: "outForDeliveryAt", status: "out_for_delivery", label: "Out for Delivery", icon: MapPin },
-  { key: "deliveredAt", status: "delivered", label: "Delivered", icon: CheckCircle2 },
+  {
+    key: "outForDeliveryAt",
+    status: "out_for_delivery",
+    label: "Out for Delivery",
+    icon: MapPin,
+  },
+  {
+    key: "deliveryFailedAt",
+    status: "delivery_failed",
+    label: "Delivery Failed",
+    icon: CircleX,
+  },
+  {
+    key: "deliveredAt",
+    status: "delivered",
+    label: "Delivered",
+    icon: CheckCircle2,
+  },
 
-  { key: "returnRequestedAt", status: "return_requested", label: "Return Requested", icon: Undo2 },
-  { key: "exchangeRequestedAt", status: "exchange_requested", label: "Exchange Requested", icon: RefreshCcw },
-  { key: "pickupInitiatedAt", status: "pickup_initiated", label: "Pickup Initiated", icon: Truck },
-
-  { key: "returnedAt", status: "returned", label: "Returned", icon: RotateCcw },
-  { key: "refundedAt", status: "refunded", label: "Refunded", icon: BadgeCheck },
-  { key: "exchangedAt", status: "exchanged", label: "Exchanged", icon: PackageCheck },
+  {
+    key: "returnRequestedAt",
+    status: "return_requested",
+    label: "Return Requested",
+    icon: Undo2,
+  },
+  {
+    key: "exchangeRequestedAt",
+    status: "exchange_requested",
+    label: "Exchange Requested",
+    icon: RefreshCcw,
+  },
+  {
+    key: "pickupInitiatedAt",
+    status: "pickup_initiated",
+    label: "Pickup Initiated",
+    icon: Truck,
+  },
+  {
+    key: "returnPickupCompletedAt",
+    status: "return_pickup_completed",
+    label: "Pickup Completed",
+    icon: PackageCheck,
+  },
+  {
+    key: "returnedAt",
+    status: "returned",
+    label: "Returned",
+    icon: RotateCcw,
+  },
+  {
+    key: "refundedAt",
+    status: "refunded",
+    label: "Refunded",
+    icon: BadgeCheck,
+  },
+  {
+    key: "exchangedAt",
+    status: "exchanged",
+    label: "Exchanged",
+    icon: PackageCheck,
+  },
 
   { key: "rtoAt", status: "rto", label: "RTO", icon: RotateCcw },
   { key: "cancelledAt", status: "cancelled", label: "Cancelled", icon: XCircle },
   { key: "failedAt", status: "failed", label: "Failed", icon: AlertCircle },
 ];
 
-const styleByStatus = (status, active) => {
-  if (!active) return "bg-neutral-100 text-neutral-400 ring-1 ring-neutral-200";
+const STYLE = {
+  processing: "bg-yellow-50 text-yellow-700 ring-yellow-200",
+  packed: "bg-indigo-50 text-indigo-700 ring-indigo-200",
+  picked: "bg-cyan-50 text-cyan-700 ring-cyan-200",
+  shipped: "bg-blue-50 text-blue-700 ring-blue-200",
+  out_for_delivery: "bg-purple-50 text-purple-700 ring-purple-200",
+  delivery_failed: "bg-rose-50 text-rose-700 ring-rose-200",
+  delivered: "bg-green-50 text-green-700 ring-green-200",
 
-  switch (status) {
-    case "delivered":
-      return "bg-green-50 text-green-700 ring-1 ring-green-200";
-    case "cancelled":
-      return "bg-red-50 text-red-700 ring-1 ring-red-200";
-    case "failed":
-      return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
-    case "refunded":
-      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
-    case "returned":
-    case "return_requested":
-      return "bg-orange-50 text-orange-700 ring-1 ring-orange-200";
-    case "exchange_requested":
-    case "exchanged":
-      return "bg-pink-50 text-pink-700 ring-1 ring-pink-200";
-    case "pickup_initiated":
-      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
-    case "packed":
-      return "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200";
-    case "picked":
-      return "bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200";
-    case "shipped":
-      return "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
-    case "out_for_delivery":
-      return "bg-purple-50 text-purple-700 ring-1 ring-purple-200";
-    case "processing":
-      return "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200";
-    case "rto":
-      return "bg-gray-200 text-gray-800 ring-1 ring-gray-300";
-    default:
-      return "bg-neutral-950 text-white";
-  }
+  return_requested: "bg-orange-50 text-orange-700 ring-orange-200",
+  pickup_initiated: "bg-amber-50 text-amber-700 ring-amber-200",
+  return_pickup_completed: "bg-teal-50 text-teal-700 ring-teal-200",
+  returned: "bg-orange-50 text-orange-700 ring-orange-200",
+  refunded: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+
+  exchange_requested: "bg-pink-50 text-pink-700 ring-pink-200",
+  exchanged: "bg-pink-50 text-pink-700 ring-pink-200",
+
+  cancelled: "bg-red-50 text-red-700 ring-red-200",
+  failed: "bg-rose-50 text-rose-700 ring-rose-200",
+  rto: "bg-gray-200 text-gray-800 ring-gray-300",
 };
+
+const styleByStatus = (status, active) =>
+  active
+    ? `${STYLE[status] || "bg-neutral-950 text-white ring-neutral-950"} ring-1`
+    : "bg-neutral-100 text-neutral-400 ring-1 ring-neutral-200";
 
 const lineColor = (status, active) => {
   if (!active) return "bg-neutral-200";
   if (status === "delivered") return "bg-green-300";
-  if (status === "cancelled") return "bg-red-300";
-  if (status === "failed") return "bg-rose-300";
+  if (["cancelled", "failed", "delivery_failed"].includes(status)) {
+    return "bg-red-300";
+  }
   return "bg-neutral-900";
 };
 
@@ -97,22 +141,30 @@ const formatIST = (date) => {
 
 export default function OrderFulfillmentTimeline({ order }) {
   const dates = order?.fulfillmentDates || {};
-  const currentStatus = String(order?.fulfillmentStatus || "").toLowerCase();
+  const currentStatus = String(
+    order?.fulfillmentStatus || "",
+  ).toLowerCase();
 
-  const steps = STEPS.filter((step) => {
-    const forward = [
-      "processing",
-      "packed",
-      "picked",
-      "shipped",
-      "out_for_delivery",
-      "delivered",
-    ].includes(step.status);
+  const forwardStatuses = new Set([
+    "processing",
+    "packed",
+    "picked",
+    "shipped",
+    "out_for_delivery",
+    "delivery_failed",
+    "delivered",
+  ]);
 
-    return forward || dates?.[step.key] || currentStatus === step.status;
-  });
+  const steps = STEPS.filter(
+    (step) =>
+      forwardStatuses.has(step.status) ||
+      dates?.[step.key] ||
+      currentStatus === step.status,
+  );
 
-  const currentIndex = steps.findIndex((step) => step.status === currentStatus);
+  const currentIndex = steps.findIndex(
+    (step) => step.status === currentStatus,
+  );
 
   return (
     <section className="rounded-2xl bg-white p-4 shadow-[0_10px_35px_rgba(0,0,0,0.05)]">
@@ -122,14 +174,14 @@ export default function OrderFulfillmentTimeline({ order }) {
             Fulfillment Timeline
           </h3>
           <p className="mt-0.5 text-xs text-neutral-500">
-            Compact IST timeline
+            IST timeline
           </p>
         </div>
 
         <span
           className={`rounded-full px-3 py-1 text-[11px] font-semibold capitalize ${styleByStatus(
             currentStatus,
-            true
+            true,
           )}`}
         >
           {currentStatus?.replaceAll("_", " ") || "N/A"}
@@ -142,28 +194,30 @@ export default function OrderFulfillmentTimeline({ order }) {
           {steps.map((step, index) => {
             const Icon = step.icon;
             const date = dates?.[step.key];
-
             const isDone = Boolean(date);
             const isCurrent = currentStatus === step.status;
             const isActive = isDone || isCurrent;
             const isPast = currentIndex >= 0 && index <= currentIndex;
 
             return (
-              <div key={step.key} className="relative flex min-w-[130px] flex-1 flex-col">
+              <div
+                key={step.key}
+                className="relative flex min-w-[130px] flex-1 flex-col"
+              >
                 {index !== steps.length - 1 && (
                   <div
                     className={`absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-[18px] h-px ${lineColor(
                       step.status,
-                      isPast
+                      isPast,
                     )}`}
                   />
                 )}
 
                 <div className="relative z-10 flex flex-col items-center text-center">
                   <div
-                    className={`flex h-9 w-9 items-center justify-center rounded-full transition ${styleByStatus(
+                    className={`flex h-9 w-9 items-center justify-center rounded-full ${styleByStatus(
                       step.status,
-                      isActive
+                      isActive,
                     )}`}
                   >
                     <Icon size={16} />
@@ -188,10 +242,9 @@ export default function OrderFulfillmentTimeline({ order }) {
         {steps.map((step, index) => {
           const Icon = step.icon;
           const date = dates?.[step.key];
-
-          const isDone = Boolean(date);
-          const isCurrent = currentStatus === step.status;
-          const isActive = isDone || isCurrent;
+          const isActive =
+            Boolean(date) ||
+            currentStatus === step.status;
 
           return (
             <div key={step.key} className="relative flex gap-3">
@@ -199,7 +252,7 @@ export default function OrderFulfillmentTimeline({ order }) {
                 <div
                   className={`absolute left-[17px] top-9 h-full w-px ${lineColor(
                     step.status,
-                    isActive
+                    isActive,
                   )}`}
                 />
               )}
@@ -207,7 +260,7 @@ export default function OrderFulfillmentTimeline({ order }) {
               <div
                 className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${styleByStatus(
                   step.status,
-                  isActive
+                  isActive,
                 )}`}
               >
                 <Icon size={16} />
@@ -217,6 +270,7 @@ export default function OrderFulfillmentTimeline({ order }) {
                 <p className="text-xs font-semibold text-neutral-950">
                   {step.label}
                 </p>
+
                 <p className="mt-0.5 text-[11px] text-neutral-500">
                   {formatIST(date)}
                 </p>

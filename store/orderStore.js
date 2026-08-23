@@ -568,6 +568,31 @@ export const useOrderStore = create((set, get) => ({
     return orders;
   },
 
+  fetchAdvancedFilteredOrders: async (filters = {}) => {
+    const f = { ...(filters || {}) };
+
+    if (f.page == null) f.page = 1;
+    if (f.limit == null) f.limit = 100;
+
+    const qs = buildQueryString(f);
+
+    const data = await get()._get(
+      `/api/orders/advanced-filter${qs}`,
+    );
+
+    const { orders, meta } = normalizeOrdersPayload(data);
+
+    set({
+      orders,
+      ordersMeta: meta || null,
+    });
+
+    return {
+      orders,
+      meta: meta || null,
+    };
+  },
+
   /* ============================================================
      INVOICES
   ============================================================ */
