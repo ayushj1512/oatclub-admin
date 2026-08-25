@@ -21,7 +21,9 @@
     formatRmaNumber,
   } from "@/utils/formatters";
   import { useOrderStore } from "@/store/orderStore";
-  import RmaRow from "@/components/orders/RmaRow";
+import RmaRow from "@/components/orders/RmaRow";
+import { useShiprocketStore } from "@/store/ShipRocketStore";
+import RmaRefundModal from "@/components/orders/RmaRefundModal";
 
   const API_BASE =
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:9000";
@@ -100,10 +102,18 @@
     const duplicateExchangeOrder =
       useOrderStore((s) => s.duplicateExchangeOrder);
 
+    const syncReversePickup =
+      useShiprocketStore((s) => s.syncReversePickup);
+
+    const [syncingReverse, setSyncingReverse] = useState([]);
+    const [bulkSyncingReverse, setBulkSyncingReverse] = useState(false);
+
     const [creatingExchange, setCreatingExchange] = useState([]);
     const [creditAmount, setCreditAmount] = useState({});
     const [creditNote, setCreditNote] = useState({});
     const [creditLoading, setCreditLoading] = useState([]);
+    const [refundRma, setRefundRma] = useState(null);
+
     const {
       rmas,
       loading,
@@ -359,6 +369,97 @@
         );
       }
     };
+    const handleReverseSync = async (rma) => {
+      const key = getKey(rma);
+
+      if (!rma?.orderId || !rma?.rmaNumber) {
+        return alert("Order ID or RMA number missing");
+      }
+
+      try {
+        setSyncingReverse((s) => [...s, key]);
+
+        const data = await syncReversePickup(
+          rma.orderId,
+          rma.rmaNumber
+        );
+
+        await fetchAllRmas();
+
+        alert(
+          data?.message ||
+          "Reverse shipment synced"
+        );
+      } catch (err) {
+        alert(
+          err?.message ||
+          "Reverse shipment sync failed"
+        );
+      } finally {
+        setSyncingReverse((s) =>
+          s.filter((x) => x !== key)
+        );
+      }
+    };
+
+    const bulkSyncReversePickups = async () => {
+      const targets = filteredRmas.filter(
+        (rma) =>
+          !rma?.returnPickupCompleted &&
+          (
+            rma?.reverseShipment?.shipmentId ||
+            rma?.reverseShipment?.orderId
+          )
+      );
+
+      if (!targets.length) {
+        return alert("No pending reverse pickups to sync");
+      }
+
+      try {
+        setBulkSyncingReverse(true);
+
+        const keys = targets.map(getKey);
+        setSyncingReverse(keys);
+
+        let synced = 0;
+        let completed = 0;
+        let failed = 0;
+
+        // sequential = safer for Shiprocket rate limits
+        for (const rma of targets) {
+          try {
+            const data = await syncReversePickup(
+              rma.orderId,
+              rma.rmaNumber
+            );
+
+            synced++;
+
+            if (data?.reverseShipment?.pickupCompleted) {
+              completed++;
+            }
+          } catch (err) {
+            failed++;
+
+            console.error(
+              `Reverse sync failed: ${rma?.rmaNumber}`,
+              err
+            );
+          }
+        }
+
+        await fetchAllRmas();
+
+        alert(
+          `Sync complete\nSynced: ${synced}\nPickup completed: ${completed}\nFailed: ${failed}`
+        );
+      } finally {
+        setBulkSyncingReverse(false);
+        setSyncingReverse([]);
+      }
+    };
+
 
     const createExchangeOrder = async (rma) => {
       const key = getKey(rma);
@@ -766,6 +867,22 @@
             )}
 
             <button
+              onClick={bulkSyncReversePickups}
+              disabled={bulkSyncingReverse}
+              className="inline-flex items-center gap-2 rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {bulkSyncingReverse ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RotateCcw size={16} />
+              )}
+
+              {bulkSyncingReverse
+                ? "Syncing Reverse..."
+                : "Sync All Reverse"}
+            </button>
+
+            <button
               onClick={downloadExcel}
               className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
@@ -971,8 +1088,14 @@
                         Fulfilled
                     </th>
                     <th className="p-4 text-left">Pickup</th>
+
+                    <th className="p-4 text-left">
+                      Reverse Shipment
+                    </th>
+
                     <th className="p-4 text-left">Refund Eligible</th>
                     <th className="p-4 text-left">Refunded</th>
+
 
                       <th className="p-4 text-left">
                         Customer
@@ -1002,6 +1125,7 @@
                         key={rowKey}
                         rma={rma}
                         rowKey={rowKey}
+
                         isOpen={expanded === rowKey}
                         selected={selected}
                         toggleSelected={toggleSelected}
@@ -1011,9 +1135,14 @@
                         creatingPickup={creatingPickup}
                         creatingExchange={creatingExchange}
 
+                        syncingReverse={syncingReverse}
+                        syncReversePickup={handleReverseSync}
+
                         createReturnPickup={createReturnPickup}
                         createExchangeOrder={createExchangeOrder}
                         updateFulfilled={updateFulfilled}
+
+                        openRefundModal={setRefundRma}
 
                         fetchAllRmas={fetchAllRmas}
 
@@ -1033,6 +1162,16 @@
               </div>
             </div>
           )}
+
+        <RmaRefundModal
+          rma={refundRma}
+          open={Boolean(refundRma)}
+          onClose={() => setRefundRma(null)}
+          onSuccess={async () => {
+            setRefundRma(null);
+            await fetchAllRmas();
+          }}
+        />
       </div>
     );
   }

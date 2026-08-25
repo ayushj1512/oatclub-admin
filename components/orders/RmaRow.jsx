@@ -18,11 +18,11 @@ import {
 
 const str = (v) => (v == null ? "" : String(v));
 const norm = (v) => str(v).trim().toLowerCase();
-const pick = (...values) =>
-  values.find((v) => str(v).trim()) || "";
+const pick = (...values) => values.find((v) => str(v).trim()) || "";
 
 const formatDate = (value) => {
   if (!value) return "-";
+
   const date = new Date(value);
 
   return Number.isNaN(date.getTime())
@@ -42,15 +42,19 @@ const statusBadge = (status) => {
   if (value === "rejected")
     return "bg-red-50 text-red-700 ring-red-100";
 
+  if (value === "picked")
+    return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+
+  if (value === "pickup_scheduled")
+    return "bg-blue-50 text-blue-700 ring-blue-100";
+
   return "bg-gray-100 text-gray-700 ring-gray-200";
 };
 
-const typeBadge = (type) => {
-  if (norm(type) === "exchange")
-    return "bg-amber-50 text-amber-800 ring-amber-100";
-
-  return "bg-sky-50 text-sky-700 ring-sky-100";
-};
+const typeBadge = (type) =>
+  norm(type) === "exchange"
+    ? "bg-amber-50 text-amber-800 ring-amber-100"
+    : "bg-sky-50 text-sky-700 ring-sky-100";
 
 const fulfilledBadge = (value) =>
   value
@@ -60,6 +64,7 @@ const fulfilledBadge = (value) =>
 export default function RmaRow({
   rma,
   rowKey,
+
   isOpen,
   selected,
   toggleSelected,
@@ -68,10 +73,14 @@ export default function RmaRow({
   updating,
   creatingPickup,
   creatingExchange,
+  syncingReverse,
 
   createReturnPickup,
   createExchangeOrder,
+  syncReversePickup,
   updateFulfilled,
+
+  openRefundModal,
 
   fetchAllRmas,
 
@@ -82,23 +91,13 @@ export default function RmaRow({
   creditLoading,
   addRefundCredit,
 }) {
-  const address =
-    rma?.shippingAddressSnapshot || {};
+  const address = rma?.shippingAddressSnapshot || {};
+  const customer = rma?.customer || {};
+  const orderItems = rma?.orderItems || [];
+  const reverseShipment = rma?.reverseShipment || {};
 
-  const customer =
-    rma?.customer || {};
-
-  const orderItems =
-    rma?.orderItems || [];
-
-  const reverseShipment =
-    rma?.reverseShipment || {};
-
-  const orderNumber =
-    formatOrderNumber(rma?.orderNumber);
-
-  const rmaNumber =
-    formatRmaNumber(rma?.rmaNumber);
+  const orderNumber = formatOrderNumber(rma?.orderNumber);
+  const rmaNumber = formatRmaNumber(rma?.rmaNumber);
 
   const customerName = pick(
     address?.fullName,
@@ -116,17 +115,12 @@ export default function RmaRow({
     customer?.email
   );
 
-  const isUpdating =
-    updating.includes(rowKey);
+  const isUpdating = updating.includes(rowKey);
+  const isCreatingPickup = creatingPickup.includes(rowKey);
+  const isCreatingExchange = creatingExchange.includes(rowKey);
+  const isSyncingReverse = syncingReverse?.includes(rowKey);
 
-  const isCreatingPickup =
-    creatingPickup.includes(rowKey);
-
-  const isCreatingExchange =
-    creatingExchange.includes(rowKey);
-
-  const isExchange =
-    norm(rma?.type) === "exchange";
+  const isExchange = norm(rma?.type) === "exchange";
 
   const hasExchangeOrder =
     rma?.hasExchangeOrder === true ||
@@ -140,6 +134,13 @@ export default function RmaRow({
     reverseShipment?.shipmentId ||
     reverseShipment?.awb
   );
+
+  const reverseAwb = str(reverseShipment?.awb).trim();
+  const reverseCourier = str(reverseShipment?.courierName).trim();
+
+  const isRefunded =
+    rma?.isRefunded === true ||
+    rma?.refund?.status === "completed";
 
   return (
     <React.Fragment>
@@ -197,12 +198,11 @@ export default function RmaRow({
               rma?.isFulfilled
             )}`}
           >
-            {rma?.isFulfilled
-              ? "Fulfilled"
-              : "Pending"}
+            {rma?.isFulfilled ? "Fulfilled" : "Pending"}
           </span>
         </td>
 
+        {/* PICKUP */}
         <td className="p-4">
           {rma?.returnPickupCompleted ? (
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
@@ -219,21 +219,70 @@ export default function RmaRow({
           )}
         </td>
 
+        {/* REVERSE SHIPMENT */}
+        <td className="p-4">
+          {hasReturnPickup ? (
+            <div className="min-w-[170px] space-y-1">
+              <p className="text-xs font-medium text-gray-900">
+                {reverseCourier || "Courier pending"}
+              </p>
+
+              <p className="font-mono text-[11px] text-gray-500">
+                {reverseAwb || "AWB pending"}
+              </p>
+
+              <button
+                type="button"
+                disabled={isSyncingReverse}
+                onClick={() => syncReversePickup(rma)}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {isSyncingReverse ? (
+                  <Loader2
+                    size={12}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <RotateCcw size={12} />
+                )}
+
+                {isSyncingReverse
+                  ? "Syncing..."
+                  : "Sync"}
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">
+              Not created
+            </span>
+          )}
+        </td>
+
+        {/* REFUND ELIGIBLE */}
         <td className="p-4">
           {rma?.eligibleForRefund ? (
-            <span className="font-semibold text-amber-600">
-              ✓
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+              ✓ Eligible
             </span>
           ) : (
             <span className="text-gray-300">-</span>
           )}
         </td>
 
+        {/* REFUNDED / REFUND BUTTON */}
         <td className="p-4">
-          {rma?.isRefunded ? (
-            <span className="font-semibold text-emerald-600">
-              ✓
+          {isRefunded ? (
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+              ✓ Refunded
             </span>
+          ) : rma?.eligibleForRefund ? (
+            <button
+              type="button"
+              onClick={() => openRefundModal?.(rma)}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+            >
+              Refund
+            </button>
           ) : (
             <span className="text-gray-300">-</span>
           )}
@@ -251,6 +300,7 @@ export default function RmaRow({
           {formatDate(rma?.createdAt)}
         </td>
 
+        {/* ACTIONS */}
         <td className="p-4">
           <div className="flex justify-end gap-2">
             <button
@@ -283,8 +333,7 @@ export default function RmaRow({
             </button>
 
             {isExchange &&
-              (hasExchangeOrder ||
-                isExchangeOrder ? (
+              (hasExchangeOrder || isExchangeOrder ? (
                 <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
                   <Check size={14} />
                   Exchange Order Created
@@ -350,23 +399,26 @@ export default function RmaRow({
       {isOpen && (
         <tr>
           <td
-            colSpan={14}
+            colSpan={15}
             className="px-6 py-5"
           >
             <div className="space-y-5">
-              <div className="grid gap-4 text-xs lg:grid-cols-4">
+              <div className="grid gap-4 text-xs lg:grid-cols-5">
                 <InfoCard title="Order">
                   <p>
                     <b>Order #:</b> {orderNumber}
                   </p>
+
                   <p>
                     <b>Fulfillment:</b>{" "}
                     {rma?.fulfillmentStatus || "-"}
                   </p>
+
                   <p>
                     <b>Payment:</b>{" "}
                     {rma?.paymentMethod || "-"}
                   </p>
+
                   <p>
                     <b>Total:</b>{" "}
                     {formatCurrency(
@@ -391,8 +443,10 @@ export default function RmaRow({
                   <p className="font-medium">
                     {customerName}
                   </p>
+
                   <p>{customerPhone || "-"}</p>
                   <p>{customerEmail || "-"}</p>
+
                   <p>
                     {[
                       address?.line1,
@@ -409,19 +463,44 @@ export default function RmaRow({
                   <p>
                     <b>RMA #:</b> {rmaNumber}
                   </p>
+
                   <p>
                     <b>Reason:</b>{" "}
                     {rma?.reason || "-"}
                   </p>
+
                   <p>
                     <b>Note:</b>{" "}
                     {rma?.customerNote || "-"}
                   </p>
+
                   <p>
                     <b>Fulfilled:</b>{" "}
                     {rma?.isFulfilled
                       ? "Yes"
                       : "No"}
+                  </p>
+                </InfoCard>
+
+                <InfoCard title="Reverse Shipment">
+                  <p>
+                    <b>Courier:</b>{" "}
+                    {reverseCourier || "-"}
+                  </p>
+
+                  <p>
+                    <b>AWB:</b>{" "}
+                    {reverseAwb || "-"}
+                  </p>
+
+                  <p>
+                    <b>Status:</b>{" "}
+                    {reverseShipment?.status || "-"}
+                  </p>
+
+                  <p>
+                    <b>Shipment ID:</b>{" "}
+                    {reverseShipment?.shipmentId || "-"}
                   </p>
                 </InfoCard>
               </div>
@@ -456,7 +535,7 @@ export default function RmaRow({
 
                     <p>
                       <b>Refunded:</b>{" "}
-                      {rma?.isRefunded
+                      {isRefunded
                         ? "Yes"
                         : "No"}
                     </p>
@@ -465,6 +544,7 @@ export default function RmaRow({
                       <b>Amount:</b>{" "}
                       {formatCurrency(
                         rma?.refundEligibleAmount ||
+                        rma?.refund?.amount ||
                         0
                       )}
                     </p>
@@ -503,8 +583,7 @@ export default function RmaRow({
                       onChange={(e) =>
                         setCreditAmount((s) => ({
                           ...s,
-                          [rowKey]:
-                            e.target.value,
+                          [rowKey]: e.target.value,
                         }))
                       }
                       placeholder="Amount"
@@ -519,8 +598,7 @@ export default function RmaRow({
                       onChange={(e) =>
                         setCreditNote((s) => ({
                           ...s,
-                          [rowKey]:
-                            e.target.value,
+                          [rowKey]: e.target.value,
                         }))
                       }
                       placeholder="Note / reason"
@@ -529,19 +607,15 @@ export default function RmaRow({
 
                     <button
                       disabled={
-                        creditLoading.includes(
-                          rowKey
-                        ) ||
-                        rma?.isRefunded
+                        creditLoading.includes(rowKey) ||
+                        isRefunded
                       }
                       onClick={() =>
                         addRefundCredit(rma)
                       }
                       className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
                     >
-                      {creditLoading.includes(
-                        rowKey
-                      )
+                      {creditLoading.includes(rowKey)
                         ? "Adding..."
                         : "Add Credit"}
                     </button>
@@ -549,8 +623,7 @@ export default function RmaRow({
                     <p className="text-[11px] text-gray-500">
                       Current Credit:{" "}
                       {formatCurrency(
-                        customer?.credits
-                          ?.balance || 0
+                        customer?.credits?.balance || 0
                       )}
                     </p>
                   </div>
@@ -603,9 +676,7 @@ function ItemsCard({
                   String(x?.lineId) ===
                   String(item?.orderLineId)
               ) ||
-              orderItems[
-              item?.orderItemIndex
-              ]
+              orderItems[item?.orderItemIndex]
               : item;
 
             const image =
@@ -615,7 +686,7 @@ function ItemsCard({
                 ?.images?.[0] ||
               "";
 
-            const title =
+            const itemTitle =
               item?.title ||
               matchedItem?.productSnapshot
                 ?.title ||
@@ -634,7 +705,7 @@ function ItemsCard({
                   {image ? (
                     <img
                       src={image}
-                      alt={title}
+                      alt={itemTitle}
                       className="h-12 w-12 rounded-lg object-cover"
                     />
                   ) : (
@@ -643,16 +714,14 @@ function ItemsCard({
 
                   <div>
                     <p className="font-medium">
-                      {title}
+                      {itemTitle}
                     </p>
 
                     <p className="text-xs text-gray-500">
-                      Qty:{" "}
-                      {item?.quantity || 1}
+                      Qty: {item?.quantity || 1}
 
                       {!isRma &&
-                        matchedItem
-                          ?.selectedSize &&
+                        matchedItem?.selectedSize &&
                         ` · ${matchedItem.selectedSize}`}
                     </p>
                   </div>
@@ -662,8 +731,7 @@ function ItemsCard({
                   {isRma
                     ? item?.variantSku || "-"
                     : formatCurrency(
-                      matchedItem
-                        ?.subtotal ??
+                      matchedItem?.subtotal ??
                       matchedItem?.price ??
                       0
                     )}

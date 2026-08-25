@@ -80,6 +80,10 @@ export const useShiprocketStore = create((set, get) => ({
   syncErrorCode: null,
   syncResult: null,
 
+  reverseSyncLoading: false,
+  reverseSyncError: null,
+  reverseSyncResult: null,
+
   /* ============================================================
      INTERNAL SETTERS
   ============================================================ */
@@ -117,6 +121,26 @@ export const useShiprocketStore = create((set, get) => ({
       syncError: null,
       syncErrorCode: null,
     }),
+
+  _startReverseSync: () =>
+    set({
+      reverseSyncLoading: true,
+      reverseSyncError: null,
+    }),
+
+  _successReverseSync: () =>
+    set({
+      reverseSyncLoading: false,
+    }),
+
+  _errorReverseSync: (err) =>
+    set({
+      reverseSyncLoading: false,
+      reverseSyncError:
+        err?.message || "Reverse pickup sync failed",
+    }),
+
+
   _successSync: () => set({ syncLoading: false }),
   _errorSync: (err) =>
     set({
@@ -300,6 +324,49 @@ export const useShiprocketStore = create((set, get) => ({
   },
 
   /* ============================================================
+   SYNC REVERSE PICKUP (RMA)
+   POST /api/shiprocket/return/:orderId/:rmaNumber/sync
+============================================================ */
+  syncReversePickup: async (orderId, rmaNumber) => {
+    if (!orderId) throw new Error("orderId is required");
+    if (!rmaNumber) throw new Error("rmaNumber is required");
+
+    get()._startReverseSync();
+
+    try {
+      const res = await fetch(
+        buildUrl(
+          `/api/shiprocket/return/${orderId}/${encodeURIComponent(rmaNumber)}/sync`
+        ),
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+          },
+          credentials: "include",
+        }
+      );
+
+      const data = await safeJson(res);
+
+      if (!res.ok) {
+        throw normalizeError(res, data);
+      }
+
+      set({
+        reverseSyncResult: data,
+      });
+
+      get()._successReverseSync();
+
+      return data;
+    } catch (e) {
+      get()._errorReverseSync(e);
+      throw e;
+    }
+  },
+
+  /* ============================================================
      BULK BOOKING (optional)
      POST /api/orders/shiprocket/book-missing
   ============================================================ */
@@ -338,6 +405,16 @@ export const useShiprocketStore = create((set, get) => ({
   clearServiceabilityResult: () => set({ serviceabilityResult: null }),
   clearSyncResult: () => set({ syncResult: null }),
 
+  clearReverseSyncError: () =>
+    set({
+      reverseSyncError: null,
+    }),
+
+  clearReverseSyncResult: () =>
+    set({
+      reverseSyncResult: null,
+    }),
+
   resetStore: () =>
     set({
       loading: false,
@@ -355,6 +432,10 @@ export const useShiprocketStore = create((set, get) => ({
       result: null,
       bulkResult: null,
       reverseResult: null,
+
+      reverseSyncLoading: false,
+      reverseSyncError: null,
+      reverseSyncResult: null,
 
       syncLoading: false,
       syncError: null,
