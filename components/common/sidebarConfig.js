@@ -242,6 +242,11 @@
         href: "/products/product-production-lifecycle",
       },
 
+      {
+        label: "Fabric Consumption",
+        href: "/products/add-fabric-consumption",
+      },
+
       { label: "Bestsellers", href: "/products/bestseller" },
       { label: "Trending", href: "/products/trending" },
 

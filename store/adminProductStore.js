@@ -3788,6 +3788,150 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
+
+  /* ============================================================
+  ✅ UPDATE FABRIC + AVG FABRIC CONSUMPTION
+  SINGLE + BULK
+============================================================ */
+  updateFabricConsumption: async ({
+    ids = [],
+    id = null,
+    fabrics,
+    avgFabricConsumption,
+  } = {}) => {
+    try {
+      set({ saving: true, error: null });
+
+      const productIds = id
+        ? [String(id)]
+        : [...new Set((Array.isArray(ids) ? ids : [ids]).map(String).filter(Boolean))];
+
+      if (!productIds.length) {
+        throw new Error("Select at least one product");
+      }
+
+      const payload = {};
+
+      if (fabrics !== undefined) {
+        payload.fabrics = normalizeFabricsPayload(fabrics);
+      }
+
+      if (avgFabricConsumption !== undefined) {
+        const value = Number(avgFabricConsumption?.value);
+        const unit = String(avgFabricConsumption?.unit || "meter")
+          .trim()
+          .toLowerCase();
+
+        if (!Number.isFinite(value) || value < 0) {
+          throw new Error("Valid average fabric consumption required");
+        }
+
+        if (!["meter", "gram"].includes(unit)) {
+          throw new Error("Unit must be meter or gram");
+        }
+
+        payload.avgFabricConsumption = {
+          value,
+          unit,
+        };
+      }
+
+      if (
+        payload.fabrics === undefined &&
+        payload.avgFabricConsumption === undefined
+      ) {
+        throw new Error("Fabric or average consumption required");
+      }
+
+      const isBulk = productIds.length > 1;
+
+      const url = isBulk
+        ? `${API}/bulk/fabric-consumption`
+        : `${API}/${productIds[0]}/fabric-consumption`;
+
+      const body = isBulk
+        ? {
+          ids: productIds,
+          ...payload,
+        }
+        : payload;
+
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message || "Fabric consumption update failed",
+        );
+      }
+
+      const updatedProducts = Array.isArray(data?.products)
+        ? data.products
+        : data?.product
+          ? [data.product]
+          : [];
+
+      const updatedMap = new Map(
+        updatedProducts.map((product) => [
+          String(product?._id),
+          product,
+        ]),
+      );
+
+      set((state) => ({
+        products: (state.products || []).map((product) => {
+          const updated = updatedMap.get(String(product?._id));
+
+          if (!updated) return product;
+
+          return {
+            ...product,
+            ...updated,
+          };
+        }),
+
+        product:
+          state.product &&
+            updatedMap.has(String(state.product?._id))
+            ? {
+              ...state.product,
+              ...updatedMap.get(String(state.product?._id)),
+            }
+            : state.product,
+      }));
+
+      toast.success(
+        isBulk
+          ? `${productIds.length} products updated ✅`
+          : "Fabric consumption updated ✅",
+      );
+
+      return data;
+    } catch (e) {
+      console.error("❌ updateFabricConsumption:", e);
+
+      set({
+        error: e.message,
+      });
+
+      toast.error(e.message || "Fabric consumption update failed");
+
+      throw e;
+    } finally {
+      set({
+        saving: false,
+      });
+    }
+  },
+
   clearInventory: () =>
     set({
       inventoryProducts: [],
