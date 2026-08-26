@@ -27,13 +27,16 @@ const normalizePriority = (v) => {
 };
 
 const normalizePaymentMethod = (v) => {
-  const pm = String(v ?? "")
-    .trim()
-    .toLowerCase();
+  const pm = String(v ?? "").trim().toLowerCase();
 
-  return ["cod", "razorpay", "wallet", "exchange", "manual_prepaid"].includes(
-    pm,
-  )
+  return [
+    "cod",
+    "partial_cod", // ✅ already here
+    "razorpay",
+    "wallet",
+    "exchange",
+    "manual_prepaid",
+  ].includes(pm)
     ? pm
     : "";
 };

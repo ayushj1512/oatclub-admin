@@ -48,29 +48,69 @@ const buildProductUrl = (item) => {
 };
 
 const paymentMethodMeta = (method) => {
-  const key = String(method || "cod").toLowerCase();
+  const key = String(method || "cod")
+    .trim()
+    .toLowerCase();
 
-  if (key === "razorpay") {
-    return {
+  const map = {
+    cod: {
+      label: "COD",
+      icon: Banknote,
+      className:
+        "bg-white text-gray-800 border-gray-200",
+    },
+
+    partial_cod: {
+      label: "Partial COD",
+      icon: Banknote,
+      className:
+        "bg-amber-50 text-amber-700 border-amber-200",
+    },
+
+    razorpay: {
       label: "Razorpay",
       icon: CreditCard,
-      className: "bg-gray-950 text-white border-gray-950",
-    };
-  }
+      className:
+        "bg-gray-950 text-white border-gray-950",
+    },
 
-  if (key === "exchange") {
-    return {
+    manual_prepaid: {
+      label: "Prepaid",
+      icon: CreditCard,
+      className:
+        "bg-blue-50 text-blue-700 border-blue-200",
+    },
+
+    wallet: {
+      label: "Wallet",
+      icon: CreditCard,
+      className:
+        "bg-emerald-50 text-emerald-700 border-emerald-200",
+    },
+
+    exchange: {
       label: "Exchange",
       icon: RefreshCw,
-      className: "bg-gray-100 text-gray-800 border-gray-200",
-    };
-  }
+      className:
+        "bg-gray-100 text-gray-800 border-gray-200",
+    },
 
-  return {
-    label: "COD",
-    icon: Banknote,
-    className: "bg-white text-gray-800 border-gray-200",
+    complimentary: {
+      label: "Complimentary",
+      icon: CreditCard,
+      className:
+        "bg-violet-50 text-violet-700 border-violet-200",
+    },
   };
+
+  return (
+    map[key] || {
+      label: key || "N/A",
+      icon: CreditCard,
+      className:
+        "bg-gray-50 text-gray-700 border-gray-200",
+    }
+  );
 };
 
 function OrderRow({
