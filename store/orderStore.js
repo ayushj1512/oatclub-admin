@@ -1347,12 +1347,46 @@ export const useOrderStore = create((set, get) => ({
       paymentRecoveryResult: null,
     }),
 
+
+
   markCodOrderAsPaid: async (orderId) => {
     if (!orderId) {
       throw new Error("Order ID is required");
     }
 
     const data = await get()._patch(`/api/orders/${orderId}/mark-cod-paid`, {});
+
+    const order = get()._normalizeOrder(data);
+
+    if (order?._id) {
+      set({ order });
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return order;
+  },
+
+
+  /* ============================================================
+   RTO RECEIVED
+============================================================ */
+
+  updateRtoReceivedStatus: async (orderId, isRtoReceived = true) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    if (typeof isRtoReceived !== "boolean") {
+      throw new Error("isRtoReceived must be a boolean");
+    }
+
+    const data = await get()._patch(
+      `/api/orders/${encodeURIComponent(orderId)}/rto-received`,
+      {
+        isRtoReceived,
+      },
+    );
 
     const order = get()._normalizeOrder(data);
 

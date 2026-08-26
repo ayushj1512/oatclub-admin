@@ -46,6 +46,7 @@
       { label: "All Production Jobs", href: "/production/all-production-job" },
       { label: "Confirmed Production Jobs", href: "/production/production-job" },
       { label: "Packed Orders", href: "/production/packed" },
+      { label: "RTO Received", href: "/production/rto-recieved" },
       { label: "Sampling", href: "/production/sampling" },
       { label: "Stock Update", href: "/production/stock-update" },
       { label: "Pattern Number", href: "/production/pattern-number" },
@@ -365,6 +366,10 @@
         href: "/dispatching/shipped",
       },
       {
+        label: "RTO Received",
+        href: "/dispatching/rto-recieved",
+      },
+      {
         label: "Invoices",
         href: "/dispatching/invoices",
       },
@@ -418,6 +423,7 @@
       { label: "Cancelled", href: "/orders/cancelled" },
       { label: "Refunded", href: "/orders/refunded" },
       { label: "RTO / NDR", href: "/orders/rto" },
+      { label: "RTO Received", href: "/orders/rto-recieved" },
 
       // ✅ misc
       { label: "Order Remark", href: "/orders/remark" },
