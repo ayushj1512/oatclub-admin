@@ -16,13 +16,16 @@ import {
   Truck,
   X,
   TimerReset,
+  UsersRound,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 import { useOrderStore } from "@/store/orderStore";
+import { useCustomerStore } from "@/store/customerStore";
 import ConfirmationTab from "./ConfirmationTab";
 import ShippingTab from "./ShippingTab";
 import ReviewTab from "./ReviewTab";
+import CustomerLeadsTab from "./CustomerLeadsTab";
 
 const PAGE_SIZE = 20;
 const LATE_ORDER_DAYS = 7;
@@ -331,29 +334,45 @@ export default function UnconfirmedOrderWhatsAppPage({
     clearOrders,
   } = useOrderStore();
 
+  const {
+    zeroOrderCustomers,
+    zeroOrderCustomersTotal,
+    loadingZeroOrderCustomers,
+    fetchZeroOrderCustomers,
+  } = useCustomerStore();
+
   const [activeTab, setActiveTab] = useState("confirmation");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [openingOrderId, setOpeningOrderId] = useState("");
+  const [openingCustomerId, setOpeningCustomerId] = useState("");
   const [showMobileOnly, setShowMobileOnly] = useState(false);
 
   const loadOrders = useCallback(async () => {
     try {
       await fetchAllOrdersAllPages({ limit: 200 });
     } catch (error) {
-      toast.error(
-        error?.message || "Unable to fetch WhatsApp orders",
-      );
+      toast.error(error?.message || "Unable to fetch WhatsApp orders");
     }
   }, [fetchAllOrdersAllPages]);
 
+  const loadLeads = useCallback(async () => {
+    await fetchZeroOrderCustomers({ minOrders: 0, maxOrders: 0, limit: 100 });
+  }, [fetchZeroOrderCustomers]);
+
+  const refreshCurrentQueue = useCallback(() => {
+    if (activeTab === "leads") return loadLeads();
+    return loadOrders();
+  }, [activeTab, loadLeads, loadOrders]);
+
   useEffect(() => {
     loadOrders();
+    loadLeads();
 
     return () => {
       clearOrders();
     };
-  }, [loadOrders, clearOrders]);
+  }, [loadOrders, loadLeads, clearOrders]);
 
   const allOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
@@ -439,6 +458,8 @@ export default function UnconfirmedOrderWhatsAppPage({
     [allOrders],
   );
 
+  const isLeadsTab = activeTab === "leads";
+
   const selectedOrders =
     activeTab === "shipping"
       ? shippingOrders
@@ -448,43 +469,61 @@ export default function UnconfirmedOrderWhatsAppPage({
           ? reviewOrders
           : confirmationOrders;
 
-  const filteredOrders = useMemo(() => {
+  const selectedQueue = isLeadsTab ? zeroOrderCustomers : selectedOrders;
+
+  const filteredQueue = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return selectedOrders.filter((order) => {
-      const phone = getRawPhone(order);
-      const hasValidPhone = Boolean(
-        normalizeWhatsAppPhone(phone),
-      );
+    return selectedQueue.filter((item) => {
+      if (isLeadsTab) {
+        const phone = String(item?.phone || "");
+        const hasValidPhone = Boolean(normalizeWhatsAppPhone(phone));
+
+        if (showMobileOnly && !hasValidPhone) return false;
+        if (!query) return true;
+
+        return [
+          item?.customerId,
+          item?.name,
+          item?.email,
+          phone,
+          item?.city,
+          item?.state,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      }
+
+      const phone = getRawPhone(item);
+      const hasValidPhone = Boolean(normalizeWhatsAppPhone(phone));
 
       if (showMobileOnly && !hasValidPhone) return false;
       if (!query) return true;
 
       return [
-        getOrderNumber(order),
-        getCustomerName(order),
+        getOrderNumber(item),
+        getCustomerName(item),
         phone,
-        order?.customerId?.email,
-        order?.shippingAddressSnapshot?.city,
-        order?.shippingAddressSnapshot?.state,
-        ...getItems(order).map(getItemTitle),
+        item?.customerId?.email,
+        item?.shippingAddressSnapshot?.city,
+        item?.shippingAddressSnapshot?.state,
+        ...getItems(item).map(getItemTitle),
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
         .includes(query);
     });
-  }, [selectedOrders, search, showMobileOnly]);
+  }, [selectedQueue, search, showMobileOnly, isLeadsTab]);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredOrders.length / PAGE_SIZE),
-  );
+  const totalPages = Math.max(1, Math.ceil(filteredQueue.length / PAGE_SIZE));
 
-  const paginatedOrders = useMemo(() => {
+  const paginatedQueue = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return filteredOrders.slice(start, start + PAGE_SIZE);
-  }, [filteredOrders, page]);
+    return filteredQueue.slice(start, start + PAGE_SIZE);
+  }, [filteredQueue, page]);
 
   useEffect(() => {
     setPage(1);
@@ -494,14 +533,15 @@ export default function UnconfirmedOrderWhatsAppPage({
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const validPhoneCount = selectedOrders.filter((order) =>
-    Boolean(normalizeWhatsAppPhone(getRawPhone(order))),
+  const validPhoneCount = selectedQueue.filter((item) =>
+    Boolean(
+      normalizeWhatsAppPhone(isLeadsTab ? item?.phone : getRawPhone(item)),
+    ),
   ).length;
 
-  const totalQueueValue = selectedOrders.reduce(
-    (sum, order) => sum + getOrderTotal(order),
-    0,
-  );
+  const totalQueueValue = isLeadsTab
+    ? 0
+    : selectedOrders.reduce((sum, order) => sum + getOrderTotal(order), 0);
 
   const handleOpenWhatsApp = (order, type = activeTab) => {
     const whatsappLink = createWhatsAppLink(order, type);
@@ -529,8 +569,52 @@ export default function UnconfirmedOrderWhatsAppPage({
     window.setTimeout(() => setOpeningOrderId(""), 700);
   };
 
+  const createCustomerLeadMessage = (customer = {}) => `Hi ${customer?.name || "there"},
+
+A warm welcome from *OATCLUB*.
+
+We're delighted to have you with us and wanted to personally invite you to explore our latest collection.
+
+Discover OATCLUB:
+https://www.oatclub.in
+
+If there's anything we can help you with — whether it's finding the right size, choosing a style, or simply answering a question — please feel free to reply to us here. Our team would be happy to assist you personally.
+
+We hope you find something you truly love.
+
+Warm regards,
+*Team OATCLUB*
+Own All Trends`;
+
+  const handleOpenLeadWhatsApp = (customer) => {
+    const phone = normalizeWhatsAppPhone(customer?.phone);
+
+    if (!phone) {
+      toast.error("Valid customer phone number is unavailable");
+      return;
+    }
+
+    const message = createCustomerLeadMessage(customer);
+
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(
+      message
+    )}`;
+
+    console.log("Opening WhatsApp:", whatsappUrl);
+
+    setOpeningCustomerId(String(customer?._id || ""));
+
+    window.open(whatsappUrl, "_blank");
+
+    toast.success("Customer WhatsApp opened");
+
+    window.setTimeout(() => {
+      setOpeningCustomerId("");
+    }, 700);
+  };
+
   const commonTabProps = {
-    orders: paginatedOrders,
+    orders: paginatedQueue,
     openingOrderId,
     orderDetailsBasePath,
     onOpenWhatsApp: handleOpenWhatsApp,
@@ -552,18 +636,18 @@ export default function UnconfirmedOrderWhatsAppPage({
   };
 
   const startResult =
-    filteredOrders.length > 0
+    filteredQueue.length > 0
       ? (page - 1) * PAGE_SIZE + 1
       : 0;
 
   const endResult = Math.min(
     page * PAGE_SIZE,
-    filteredOrders.length,
+    filteredQueue.length,
   );
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f6f6f4] px-3 py-4 sm:px-5 lg:px-6 lg:py-6">
-      <div className="mx-auto w-full max-w-[1500px] space-y-4">
+      <div className="mx-auto w-full space-y-4">
         <section className="relative overflow-hidden rounded-[24px] border border-gray-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.05)]">
           <div className="absolute -right-16 -top-20 h-52 w-52 rounded-full bg-gray-100/80 blur-3xl" />
           <div className="absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-gray-100/70 blur-3xl" />
@@ -586,15 +670,15 @@ export default function UnconfirmedOrderWhatsAppPage({
 
             <button
               type="button"
-              onClick={loadOrders}
-              disabled={loading}
+              onClick={refreshCurrentQueue}
+              disabled={isLeadsTab ? loadingZeroOrderCustomers : loading}
               className="inline-flex h-10 w-fit shrink-0 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-900 shadow-sm transition hover:border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw
                 size={15}
-                className={loading ? "animate-spin" : ""}
+                className={(isLeadsTab ? loadingZeroOrderCustomers : loading) ? "animate-spin" : ""}
               />
-              Refresh Orders
+              {isLeadsTab ? "Refresh Leads" : "Refresh Orders"}
             </button>
           </div>
         </section>
@@ -602,30 +686,36 @@ export default function UnconfirmedOrderWhatsAppPage({
         <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard
             icon={
-              activeTab === "shipping"
-                ? Truck
-                : activeTab === "late"
-                  ? TimerReset
-                  : activeTab === "review"
-                    ? MessageCircle
-                    : Clock3
+              activeTab === "leads"
+                ? UsersRound
+                : activeTab === "shipping"
+                  ? Truck
+                  : activeTab === "late"
+                    ? TimerReset
+                    : activeTab === "review"
+                      ? MessageCircle
+                      : Clock3
             }
             label={
-              activeTab === "shipping"
-                ? "Shipping Ready"
-                : activeTab === "late"
-                  ? "Delayed Orders"
-                  : activeTab === "review"
-                    ? "Review Ready"
-                    : "Pending Confirmation"
+              activeTab === "leads"
+                ? "Zero-order Leads"
+                : activeTab === "shipping"
+                  ? "Shipping Ready"
+                  : activeTab === "late"
+                    ? "Delayed Orders"
+                    : activeTab === "review"
+                      ? "Review Ready"
+                      : "Pending Confirmation"
             }
-            value={selectedOrders.length}
+            value={selectedQueue.length}
             helper={
-              activeTab === "late"
-                ? "Processing for 7+ days"
-                : activeTab === "review"
-                  ? "Return window closed"
-                  : "Orders in selected queue"
+              activeTab === "leads"
+                ? "Customers yet to place first order"
+                : activeTab === "late"
+                  ? "Processing for 7+ days"
+                  : activeTab === "review"
+                    ? "Return window closed"
+                    : "Orders in selected queue"
             }
           />
 
@@ -633,21 +723,21 @@ export default function UnconfirmedOrderWhatsAppPage({
             icon={Smartphone}
             label="WhatsApp Ready"
             value={validPhoneCount}
-            helper="Orders with valid phone"
+            helper={isLeadsTab ? "Leads with valid phone" : "Orders with valid phone"}
           />
 
           <StatCard
             icon={ShoppingBag}
-            label="Queue Value"
-            value={formatCurrency(totalQueueValue)}
-            helper="Combined order value"
+            label={isLeadsTab ? "Potential Buyers" : "Queue Value"}
+            value={isLeadsTab ? zeroOrderCustomersTotal : formatCurrency(totalQueueValue)}
+            helper={isLeadsTab ? "Zero-order customer pool" : "Combined order value"}
           />
 
           <StatCard
             icon={Package}
-            label="Fetched Orders"
-            value={allOrders.length}
-            helper="All order pages loaded"
+            label={isLeadsTab ? "Fetched Leads" : "Fetched Orders"}
+            value={isLeadsTab ? zeroOrderCustomers.length : allOrders.length}
+            helper={isLeadsTab ? "All lead pages loaded" : "All order pages loaded"}
           />
         </section>
 
@@ -737,24 +827,46 @@ export default function UnconfirmedOrderWhatsAppPage({
                   {reviewOrders.length}
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("leads")}
+                className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:min-w-52 ${activeTab === "leads"
+                  ? "border border-gray-200 bg-white text-gray-950 shadow-sm"
+                  : "border border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-900"
+                  }`}
+              >
+                <UsersRound size={15} />
+                Leads
+                <span
+                  className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeTab === "leads"
+                    ? "bg-gray-900 text-white"
+                    : "bg-white text-gray-600"
+                    }`}
+                >
+                  {zeroOrderCustomersTotal}
+                </span>
+              </button>
             </div>
           </div>
 
           <div className="flex flex-col gap-4 border-b border-gray-100 px-4 py-4 sm:px-5 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-tight text-gray-950">
-                {activeTab === "shipping"
-                  ? "Shipping Queue"
-                  : activeTab === "late"
-                    ? "Late Order Queue"
-                    : activeTab === "review"
-                      ? "Review Queue"
-                      : "Confirmation Queue"}
+                {activeTab === "leads"
+                  ? "Customer Leads"
+                  : activeTab === "shipping"
+                    ? "Shipping Queue"
+                    : activeTab === "late"
+                      ? "Late Order Queue"
+                      : activeTab === "review"
+                        ? "Review Queue"
+                        : "Confirmation Queue"}
               </h2>
 
               <p className="mt-1 text-xs text-gray-500">
-                {filteredOrders.length} order
-                {filteredOrders.length === 1 ? "" : "s"} visible
+                {filteredQueue.length} {isLeadsTab ? "customer" : "order"}
+                {filteredQueue.length === 1 ? "" : "s"} visible
               </p>
             </div>
 
@@ -768,7 +880,7 @@ export default function UnconfirmedOrderWhatsAppPage({
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search order, customer, phone..."
+                  placeholder={isLeadsTab ? "Search customer, phone, email..." : "Search order, customer, phone..."}
                   className="h-10 w-full rounded-xl border border-gray-200 bg-[#fafafa] pl-10 pr-10 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-black focus:bg-white"
                 />
 
@@ -800,12 +912,13 @@ export default function UnconfirmedOrderWhatsAppPage({
           </div>
 
           <div className="min-w-0">
-            {loading && !allOrders.length ? (
+            {(isLeadsTab ? loadingZeroOrderCustomers : loading) &&
+              !(isLeadsTab ? zeroOrderCustomers.length : allOrders.length) ? (
               <div className="flex min-h-[360px] items-center justify-center gap-3 text-sm font-medium text-gray-600">
                 <Loader2 size={23} className="animate-spin" />
-                Loading orders...
+                {isLeadsTab ? "Loading leads..." : "Loading orders..."}
               </div>
-            ) : error && !allOrders.length ? (
+            ) : error && !(isLeadsTab ? zeroOrderCustomers.length : allOrders.length) ? (
               <div className="flex min-h-[360px] flex-col items-center justify-center px-4 text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50">
                   <CircleAlert
@@ -815,13 +928,20 @@ export default function UnconfirmedOrderWhatsAppPage({
                 </div>
 
                 <p className="mt-3 font-semibold text-gray-950">
-                  Unable to load orders
+                  {isLeadsTab ? "Unable to load leads" : "Unable to load orders"}
                 </p>
 
                 <p className="mt-1 max-w-md text-sm text-gray-500">
                   {error}
                 </p>
               </div>
+            ) : activeTab === "leads" ? (
+              <CustomerLeadsTab
+                customers={paginatedQueue}
+                openingCustomerId={openingCustomerId}
+                onOpenWhatsApp={handleOpenLeadWhatsApp}
+                normalizeWhatsAppPhone={normalizeWhatsAppPhone}
+              />
             ) : activeTab === "shipping" ? (
               <ShippingTab {...commonTabProps} />
             ) : activeTab === "review" ? (
@@ -830,7 +950,7 @@ export default function UnconfirmedOrderWhatsAppPage({
               <ConfirmationTab {...commonTabProps} />
             )}
 
-            {filteredOrders.length > 0 ? (
+            {filteredQueue.length > 0 ? (
               <div className="flex flex-col gap-3 border-t border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <p className="text-xs text-gray-500">
                   Showing{" "}
@@ -839,7 +959,7 @@ export default function UnconfirmedOrderWhatsAppPage({
                   </span>{" "}
                   of{" "}
                   <span className="font-semibold text-gray-800">
-                    {filteredOrders.length}
+                    {filteredQueue.length}
                   </span>
                 </p>
 

@@ -15,6 +15,10 @@ export const useCustomerStore = create((set, get) => ({
   pages: 1,
   limit: 20,
 
+  zeroOrderCustomers: [],
+  zeroOrderCustomersTotal: 0,
+  loadingZeroOrderCustomers: false,
+
   customerAnalyticsSummary: null,
   loadingSummary: false,
   syncingAnalytics: false,
@@ -784,4 +788,56 @@ export const useCustomerStore = create((set, get) => ({
       set({ saving: false });
     }
   },
+
+  /* ----------------------------------------------------
+   ZERO ORDER CUSTOMERS / WHATSAPP LEADS
+   GET /api/customers?minOrders=0&maxOrders=0
+---------------------------------------------------- */
+  fetchZeroOrderCustomers: async (params = {}) => {
+    if (!API) return [];
+
+    set({
+      loadingZeroOrderCustomers: true,
+      error: "",
+    });
+
+    try {
+      const url = get().buildUrl("/api/customers", {
+        page: 1,
+        limit: 100,
+        minOrders: 0,
+        maxOrders: 0,
+        sortBy: "createdAt",
+        sortOrder: "desc",
+        ...params,
+      });
+
+      const res = await fetch(url, {
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to load leads");
+      }
+
+      set({
+        zeroOrderCustomers: data?.items || [],
+        zeroOrderCustomersTotal: data?.total || 0,
+      });
+
+      return data?.items || [];
+    } catch (err) {
+      const msg = err?.message || "Failed to load leads";
+
+      set({ error: msg });
+
+      return [];
+    } finally {
+      set({ loadingZeroOrderCustomers: false });
+    }
+  },
+
+  
 }));
