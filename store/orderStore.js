@@ -1987,6 +1987,39 @@ export const useOrderStore = create((set, get) => ({
     return data;
   },
 
+  cancelChildOrder: async (
+    orderId,
+    reason = ""
+  ) => {
+    if (!orderId) {
+      throw new Error(
+        "Child order ID is required"
+      );
+    }
+
+    const data = await get()._post(
+      `/api/orders/${orderId}/cancel-child`,
+      {
+        reason:
+          String(reason || "").trim() ||
+          "Split child cancelled by admin",
+      },
+      {
+        silent: true,
+      }
+    );
+
+    const order =
+      get()._normalizeOrder(data);
+
+    if (order?._id) {
+      get()._syncOrderInList(order);
+      get()._syncCustomerSupportDetail(order);
+    }
+
+    return order;
+  },
+
   /* ---------------- DUPLICATE ORDER ALERTS ---------------- */
 
   // fetch only (no marking)

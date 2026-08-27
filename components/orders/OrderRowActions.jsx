@@ -11,6 +11,7 @@ import {
 import {
   AlertCircle,
   BadgeCheck,
+  Ban,
   CheckCircle2,
   Download,
   Loader2,
@@ -354,6 +355,10 @@ export default function OrderRowActions({
     (state) => state.resendPrepaidConfirmation,
   );
 
+  const cancelChildOrder = useOrderStore(
+    (state) => state.cancelChildOrder
+  );
+
   const syncTracking = useShiprocketStore(
     (state) => state.syncTracking
   );
@@ -398,6 +403,11 @@ export default function OrderRowActions({
   const [prepaidConfirmationLoading, setPrepaidConfirmationLoading] =
     useState(false);
 
+  const [
+    childCancelLoading,
+    setChildCancelLoading,
+  ] = useState(false);
+
   const prepaidConfirmationAvailable =
     canSendPrepaidConfirmation(order);
 
@@ -409,6 +419,15 @@ export default function OrderRowActions({
 
   const orderId = safe(order?._id || order?.id);
   const orderNumber = safe(order?.orderNumber);
+  const isChildOrder = Boolean(
+    order?.parentOrderId ||
+    order?.splitSuffix ||
+    (
+      String(order?.orderNumber || "").match(/-[A-Z]$/i) &&
+      order?.isExchangeOrder !== true &&
+      String(order?.paymentMethod || "").toLowerCase() !== "exchange"
+    )
+  );
 
   const invoiceTitle =
     orderNumber || orderId || "order";
@@ -1406,6 +1425,72 @@ export default function OrderRowActions({
 
   if (!order) return null;
 
+  const handleCancelChildOrder = async () => {
+    if (
+      !orderId ||
+      !isChildOrder ||
+      childCancelLoading
+    ) {
+      return;
+    }
+
+    const status = safe(
+      order?.fulfillmentStatus
+    ).toLowerCase();
+
+    if (status === "cancelled") {
+      toast.error(
+        "Child order is already cancelled"
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Cancel child order ${orderNumber}?\n\nOnly this shipment will be cancelled. Parent and sibling shipments will remain unchanged.`
+    );
+
+    if (!confirmed) return;
+
+    const reason =
+      window.prompt(
+        "Cancellation reason:",
+        "Cancelled by admin"
+      ) || "Cancelled by admin";
+
+    setOpen(false);
+    setChildCancelLoading(true);
+
+    try {
+      const updatedOrder =
+        await cancelChildOrder(
+          orderId,
+          reason
+        );
+
+      if (updatedOrder) {
+        onUpdated?.(updatedOrder);
+      }
+
+      toast.success(
+        `${orderNumber} cancelled successfully`
+      );
+
+      await onRefresh?.();
+    } catch (error) {
+      console.error(
+        "Child cancellation failed:",
+        error
+      );
+
+      toast.error(
+        error?.message ||
+        "Failed to cancel child order"
+      );
+    } finally {
+      setChildCancelLoading(false);
+    }
+  };
+
   const isBusy =
     invoiceLoading ||
     Boolean(pendingInvoiceAction) ||
@@ -1415,7 +1500,8 @@ export default function OrderRowActions({
     testingLoading ||
     paymentRecoveryLoading ||
     prepaidConfirmationLoading ||
-    syncing;
+    syncing ||
+    childCancelLoading;
 
   return (
     <>
@@ -1558,6 +1644,70 @@ export default function OrderRowActions({
                 </span>
               )}
             </button>
+
+
+
+
+{isChildOrder && (
+  <>
+    <MenuDivider />
+
+    <button
+      type="button"
+      onClick={handleCancelChildOrder}
+      disabled={
+        isBusy ||
+        !orderId ||
+        fulfillmentStatus === "cancelled" ||
+        [
+          "picked",
+          "shipped",
+          "out_for_delivery",
+          "delivered",
+          "rto",
+          "returned",
+          "refunded",
+        ].includes(fulfillmentStatus)
+      }
+      className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <div className="flex items-center gap-3">
+        {childCancelLoading ? (
+          <Loader2
+            size={15}
+            className="animate-spin text-red-600"
+          />
+        ) : (
+          <Ban
+            size={15}
+            className="text-red-600"
+          />
+        )}
+
+        <div>
+          <div className="text-xs font-bold text-red-700">
+            {fulfillmentStatus ===
+            "cancelled"
+              ? "Child Cancelled"
+              : "Cancel Child Order"}
+          </div>
+
+          <div className="mt-0.5 text-[10px] text-zinc-500">
+            Only cancel shipment{" "}
+            {orderNumber}
+          </div>
+        </div>
+      </div>
+
+      {fulfillmentStatus ===
+        "cancelled" && (
+        <span className="rounded-full bg-red-100 px-2 py-1 text-[9px] font-bold text-red-700">
+          DONE
+        </span>
+      )}
+    </button>
+  </>
+)}
 
             {/* WhatsApp Confirmation */}
 
@@ -2281,6 +2431,9 @@ export default function OrderRowActions({
                     </div>
                   );
                 })}
+
+
+
               </div>
               </div>
 

@@ -113,6 +113,8 @@ const paymentMethodMeta = (method) => {
   );
 };
 
+
+
 function OrderRow({
   order,
   childOrders = [],
@@ -175,6 +177,20 @@ function OrderRow({
   const handleUpdated = useCallback(
     (payload) => {
       onUpdated?.(payload?.order ?? payload);
+    },
+    [onUpdated]
+  );
+
+  const handleChildUpdated = useCallback(
+    (updatedChild) => {
+      const child = updatedChild?.order ?? updatedChild;
+
+      if (!child?._id) return;
+
+      onUpdated?.({
+        ...child,
+        __isChildOrderUpdate: true,
+      });
     },
     [onUpdated]
   );
@@ -441,19 +457,11 @@ function OrderRow({
                         .filter(Boolean);
 
                       return (
-                        <button
+                        <div
                           key={child?._id}
-                          type="button"
-                          onClick={() =>
-                            window.open(
-                              `/orders/${child._id}`,
-                              "_blank",
-                              "noopener,noreferrer",
-                            )
-                          }
-                          className={`flex min-w-0 items-center gap-4 rounded-2xl border p-4 text-left transition hover:shadow-sm ${isA
-                            ? "border-blue-200 bg-blue-50/30 hover:bg-blue-50/60"
-                            : "border-amber-200 bg-amber-50/30 hover:bg-amber-50/60"
+                          className={`flex min-w-0 items-center gap-4 rounded-2xl border p-4 text-left ${isA
+                              ? "border-blue-200 bg-blue-50/30"
+                              : "border-amber-200 bg-amber-50/30"
                             }`}
                         >
                           {/* A / B */}
@@ -469,9 +477,20 @@ function OrderRow({
                           {/* Details */}
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-base font-black text-gray-950">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  window.open(
+                                    `/orders/${child._id}`,
+                                    "_blank",
+                                    "noopener,noreferrer"
+                                  )
+                                }
+                                className="font-mono text-base font-black text-gray-950 underline underline-offset-2 decoration-black/40 hover:decoration-black"
+                                title={`Open order ${child?.orderNumber || ""}`}
+                              >
                                 {child?.orderNumber}
-                              </span>
+                              </button>
 
                               <span className="rounded-lg border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600">
                                 {qty} Items
@@ -490,25 +509,38 @@ function OrderRow({
                           </div>
 
                           {/* Amount */}
-                          <div className="shrink-0 text-right">
-                            <p className="font-mono text-base font-black text-gray-950">
-                              ₹{money(child?.finalPayable)}
-                            </p>
+                          <div className="flex shrink-0 items-center gap-3">
+                            <div className="text-right">
+                              <p className="text-[10px] text-gray-500">
+                                Shipment Total
+                              </p>
 
-                            <span
-                              className={`mt-1 inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold capitalize ${isA
-                                ? "border-blue-200 bg-blue-50 text-blue-700"
-                                : "border-amber-200 bg-amber-50 text-amber-700"
-                                }`}
-                            >
-                              {String(
-                                child?.fulfillmentStatus ||
-                                "processing",
-                              ).replaceAll("_", " ")}
-                            </span>
+                              <p className="font-mono text-base font-black text-gray-950">
+                                ₹{money(child?.finalPayable)}
+                              </p>
+                            </div>
+
+                            <OrderRowActions
+                              order={child}
+                              courierName={
+                                child?.shipment?.courierName ||
+                                child?.shipment?.shiprocket?.courierName ||
+                                child?.shipment?.xpressbees?.courierName ||
+                                child?.courierName ||
+                                ""
+                              }
+                              trackingId={
+                                child?.shipment?.awb ||
+                                child?.shipment?.shiprocket?.awb ||
+                                child?.shipment?.xpressbees?.awb ||
+                                child?.trackingId ||
+                                child?.trackingDetails?.trackingId ||
+                                ""
+                              }
+                              onUpdated={handleChildUpdated}
+                            />
                           </div>
-                        </button>
-                      );
+                        </div>                      );
                     })}
                   </div>
 
