@@ -232,6 +232,53 @@ export const useRmaStore = create((set, get) => ({
   },
 
   /* ============================================================
+   ✅ ADMIN: APPROVE RMA
+   Return   → reverse pickup automatically
+   Exchange → reverse pickup + exchange order automatically
+============================================================ */
+  approveRma: async (orderId, rmaNumber, payload = {}) => {
+    const id = norm(orderId);
+    const rn = norm(rmaNumber);
+
+    if (!id || !rn) return null;
+
+    get()._start();
+
+    try {
+      const data = await apiFetch(
+        `/api/orders/${id}/rma/${encodeURIComponent(rn)}/approve`,
+        {
+          method: "PATCH",
+          body: payload || {},
+        }
+      );
+
+      const updated = data?.rma
+        ? {
+          ...data.rma,
+          orderId: data?.rma?.orderId || id,
+        }
+        : null;
+
+      set((s) => ({
+        rma: updated,
+        rmas: updated
+          ? upsertRmaInList(s.rmas, updated, {
+            matchOrderId: s.lastOrderId,
+          })
+          : s.rmas,
+      }));
+
+      get()._success();
+
+      return data;
+    } catch (e) {
+      get()._fail(e);
+      throw e;
+    }
+  },
+
+  /* ============================================================
      ✅ Convenience actions (admin flows)
      These just call updateRma with common payloads
   ============================================================ */

@@ -5,7 +5,7 @@ import {
   Check,
   ChevronDown,
   Loader2,
-  PackagePlus,
+  LockKeyhole,
   RotateCcw,
 } from "lucide-react";
 
@@ -65,18 +65,20 @@ export default function RmaRow({
   rma,
   rowKey,
 
+  locked = false,
+  isApproved = false,
+
+  approving = [],
+  approveRma,
+
   isOpen,
   selected,
   toggleSelected,
   toggleExpand,
 
   updating,
-  creatingPickup,
-  creatingExchange,
   syncingReverse,
 
-  createReturnPickup,
-  createExchangeOrder,
   syncReversePickup,
   updateFulfilled,
 
@@ -115,9 +117,8 @@ export default function RmaRow({
     customer?.email
   );
 
-  const isUpdating = updating.includes(rowKey);
-  const isCreatingPickup = creatingPickup.includes(rowKey);
-  const isCreatingExchange = creatingExchange.includes(rowKey);
+  const isUpdating = updating?.includes(rowKey);
+  const isApproving = approving?.includes(rowKey);
   const isSyncingReverse = syncingReverse?.includes(rowKey);
 
   const isExchange = norm(rma?.type) === "exchange";
@@ -144,18 +145,30 @@ export default function RmaRow({
 
   return (
     <React.Fragment>
-      <tr className="hover:bg-gray-50">
+      <tr
+        className={
+          locked
+            ? "bg-gray-50 opacity-70"
+            : "hover:bg-gray-50"
+        }
+      >
         <td className="p-4">
           <input
             type="checkbox"
             checked={selected.includes(rowKey)}
+            disabled={locked}
             onChange={() => toggleSelected(rma)}
+            className={locked ? "cursor-not-allowed" : ""}
           />
         </td>
 
         <td
-          className="cursor-pointer p-4"
-          onClick={() => toggleExpand(rowKey)}
+          className={
+            locked
+              ? "cursor-not-allowed p-4 text-gray-300"
+              : "cursor-pointer p-4"
+          }
+          onClick={() => toggleExpand(rowKey, rma)}
         >
           <ChevronDown
             size={18}
@@ -233,8 +246,12 @@ export default function RmaRow({
 
               <button
                 type="button"
-                disabled={isSyncingReverse}
-                onClick={() => syncReversePickup(rma)}
+                disabled={locked || !isApproved || isSyncingReverse}
+                onClick={() => {
+                  if (!locked && isApproved) {
+                    syncReversePickup(rma);
+                  }
+                }}
                 className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
                 {isSyncingReverse ? (
@@ -278,8 +295,13 @@ export default function RmaRow({
           ) : rma?.eligibleForRefund ? (
             <button
               type="button"
-              onClick={() => openRefundModal?.(rma)}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+              disabled={locked || !isApproved}
+              onClick={() => {
+                if (!locked && isApproved) {
+                  openRefundModal?.(rma);
+                }
+              }}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Refund
             </button>
@@ -303,100 +325,77 @@ export default function RmaRow({
         {/* ACTIONS */}
         <td className="p-4">
           <div className="flex justify-end gap-2">
-            <button
-              disabled={
-                hasReturnPickup ||
-                isCreatingPickup
-              }
-              onClick={() =>
-                createReturnPickup(rma)
-              }
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${hasReturnPickup
-                  ? "cursor-not-allowed bg-blue-50 text-blue-700"
-                  : "bg-black text-white hover:bg-gray-800"
-                }`}
-            >
-              {isCreatingPickup ? (
-                <Loader2
-                  size={14}
-                  className="animate-spin"
-                />
-              ) : (
-                <RotateCcw size={14} />
-              )}
-
-              {hasReturnPickup
-                ? "Pickup Created"
-                : isCreatingPickup
-                  ? "Creating..."
-                  : "Create Pickup"}
-            </button>
-
-            {isExchange &&
-              (hasExchangeOrder || isExchangeOrder ? (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+            {locked ? (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-500 ring-1 ring-gray-200">
+                <LockKeyhole size={14} />
+                Fulfilled · Locked
+              </span>
+            ) : !isApproved ? (
+              <button
+                type="button"
+                disabled={isApproving}
+                onClick={() => approveRma?.(rma)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isApproving ? (
+                  <Loader2
+                    size={14}
+                    className="animate-spin"
+                  />
+                ) : (
                   <Check size={14} />
-                  Exchange Order Created
-                </span>
-              ) : (
+                )}
+
+                {isApproving
+                  ? "Approving..."
+                  : "Approve"}
+              </button>
+            ) : (
+              <>
+                {isExchange && (
+                  hasExchangeOrder || isExchangeOrder ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+                      <Check size={14} />
+                      Exchange Order Created
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+                      Exchange Order Processing
+                    </span>
+                  )
+                )}
+
                 <button
-                  disabled={
-                    isCreatingExchange ||
-                    !rma?.returnPickupCompleted
-                  }
+                  type="button"
+                  disabled={isUpdating}
                   onClick={() =>
-                    createExchangeOrder(rma)
+                    updateFulfilled(
+                      rma,
+                      true
+                    )
                   }
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isCreatingExchange ? (
+                  {isUpdating ? (
                     <Loader2
                       size={14}
                       className="animate-spin"
                     />
                   ) : (
-                    <PackagePlus size={14} />
+                    <Check size={14} />
                   )}
 
-                  {!rma?.returnPickupCompleted
-                    ? "Waiting Pickup"
-                    : isCreatingExchange
-                      ? "Creating..."
-                      : "Create Exchange Order"}
+                  {isUpdating
+                    ? "Updating..."
+                    : "Mark Fulfilled"}
                 </button>
-              ))}
-
-            <button
-              disabled={isUpdating}
-              onClick={() =>
-                updateFulfilled(
-                  rma,
-                  !rma?.isFulfilled
-                )
-              }
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${rma?.isFulfilled
-                  ? "bg-gray-100 text-gray-700"
-                  : "bg-emerald-600 text-white hover:bg-emerald-700"
-                }`}
-            >
-              {isUpdating ? (
-                <Loader2
-                  size={14}
-                  className="animate-spin"
-                />
-              ) : (
-                <Check size={14} />
-              )}
-
-              {rma?.isFulfilled
-                ? "Mark Pending"
-                : "Mark Fulfilled"}
-            </button>
+              </>
+            )}
           </div>
         </td>
       </tr>
 
-      {isOpen && (
+      {isOpen && !locked && (
         <tr>
           <td
             colSpan={15}
@@ -430,13 +429,20 @@ export default function RmaRow({
                 </InfoCard>
 
                 <InfoCard title="Update Order">
-                  <OrderStatusDropdown
-                    orderId={rma?.orderId}
-                    currentStatus={
-                      rma?.fulfillmentStatus
-                    }
-                    onUpdated={fetchAllRmas}
-                  />
+                  {locked ? (
+                    <p className="inline-flex items-center gap-1 text-gray-400">
+                      <LockKeyhole size={13} />
+                      Locked after fulfillment
+                    </p>
+                  ) : (
+                    <OrderStatusDropdown
+                      orderId={rma?.orderId}
+                      currentStatus={
+                        rma?.fulfillmentStatus
+                      }
+                      onUpdated={fetchAllRmas}
+                    />
+                  )}
                 </InfoCard>
 
                 <InfoCard title="Shipping">
@@ -472,6 +478,11 @@ export default function RmaRow({
                   <p>
                     <b>Note:</b>{" "}
                     {rma?.customerNote || "-"}
+                  </p>
+
+                  <p>
+                    <b>Approved:</b>{" "}
+                    {isApproved ? "Yes" : "No"}
                   </p>
 
                   <p>
@@ -580,6 +591,7 @@ export default function RmaRow({
                       value={
                         creditAmount[rowKey] || ""
                       }
+                      disabled={locked || !isApproved}
                       onChange={(e) =>
                         setCreditAmount((s) => ({
                           ...s,
@@ -595,6 +607,7 @@ export default function RmaRow({
                       value={
                         creditNote[rowKey] || ""
                       }
+                      disabled={locked || !isApproved}
                       onChange={(e) =>
                         setCreditNote((s) => ({
                           ...s,
@@ -607,6 +620,8 @@ export default function RmaRow({
 
                     <button
                       disabled={
+                        locked ||
+                        !isApproved ||
                         creditLoading.includes(rowKey) ||
                         isRefunded
                       }
