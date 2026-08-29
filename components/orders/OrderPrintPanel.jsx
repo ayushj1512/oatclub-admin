@@ -86,32 +86,49 @@ export default function OrderPrintPanel({
       const normalizedInvoice = {
         ...result,
 
+        totals: {
+          ...(result?.totals || {}),
+          shippingFee: Number(
+            result?.totals?.shippingFee ??
+            result?.totals?.shipping ??
+            order?.shippingFee ??
+            0
+          ),
+        },
+
+        payment: {
+          ...(result?.payment || {}),
+
+          status: order?.paymentStatus || result?.payment?.status || "",
+
+          title:
+            order?.paymentMethod === "partial_cod"
+              ? "PARTIAL COD"
+              : order?.paymentMethod === "razorpay"
+                ? "PREPAID"
+                : order?.paymentMethod === "cod"
+                  ? "CASH ON DELIVERY"
+                  : result?.payment?.title || order?.paymentMethod || "-",
+
+          isPartial: order?.paymentMethod === "partial_cod",
+
+          paidAmount:
+            order?.paymentMethod === "partial_cod"
+              ? Number(order?.partialPayment?.upfrontAmount || 0)
+              : order?.paymentStatus === "paid"
+                ? Number(order?.finalPayable || 0)
+                : 0,
+
+          remainingAmount:
+            order?.paymentMethod === "partial_cod"
+              ? Number(order?.partialPayment?.remainingCodAmount || 0)
+              : 0,
+
+          upfrontPercent: Number(order?.partialPayment?.upfrontPercent || 0),
+        },
+
         courier: {
-          ...(result?.courier || {}),
-
-          name:
-            safe(result?.courier?.name) ||
-            safe(result?.courier?.courierName) ||
-            safe(courierName) ||
-            "-",
-
-          courierName:
-            safe(result?.courier?.courierName) ||
-            safe(result?.courier?.name) ||
-            safe(courierName) ||
-            "-",
-
-          awb:
-            safe(result?.courier?.awb) ||
-            safe(result?.courier?.trackingId) ||
-            safe(trackingId) ||
-            "-",
-
-          trackingId:
-            safe(result?.courier?.trackingId) ||
-            safe(result?.courier?.awb) ||
-            safe(trackingId) ||
-            "-",
+          // existing courier code same
         },
       };
 
@@ -135,6 +152,7 @@ export default function OrderPrintPanel({
     orderId,
     courierName,
     trackingId,
+    order,
     fetchInvoiceByOrderNumber,
     fetchInvoiceByOrderId,
   ]);

@@ -228,8 +228,48 @@ export default function RmaClient() {
     sortDir,
   ]);
 
-  const getKey = (rma) =>
-    `${rma?.orderId || ""}:${rma?.rmaNumber || ""}`;
+  const getKey = useCallback(
+    (rma) =>
+      `${rma?.orderId || ""}:${rma?.rmaNumber || ""}`,
+    []
+  );
+
+  const expandedRma = useMemo(() => {
+    if (!expanded) return null;
+
+    return (
+      filteredRmas.find(
+        (rma) => getKey(rma) === expanded
+      ) || null
+    );
+  }, [expanded, filteredRmas, getKey]);
+
+
+  const qcMedia = useMemo(() => {
+    const media = safeArray(expandedRma?.media);
+
+    const types = ["front", "back", "tag"];
+
+    return types
+      .map((type, index) => {
+        const matched = media.find(
+          (m) => norm(m?.evidenceType) === type
+        );
+
+        const fallback = matched || media[index];
+
+        return fallback
+          ? {
+            ...fallback,
+            evidenceType:
+              fallback.evidenceType || type,
+          }
+          : null;
+      })
+      .filter(Boolean);
+  }, [expandedRma]);
+
+
   const toggleExpand = useCallback(
     (key, rma = null) => {
       if (rma?.isFulfilled === true) return;
@@ -299,6 +339,16 @@ export default function RmaClient() {
 
     if (rma?.isApproved === true) {
       return alert("RMA is already approved");
+    }
+
+    if (norm(rma?.type) === "return") {
+      const media = safeArray(rma?.media);
+
+      if (media.filter((m) => str(m?.url).trim()).length < 3) {
+        return alert(
+          "Front, Back and Tag images are required before approving this return."
+        );
+      }
     }
 
     try {

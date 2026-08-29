@@ -42,6 +42,10 @@ export default function InvoiceTemplate({ data }) {
 
   const orderDiscount = Number(totals.discount || 0);
 
+  const shippingFee = Number(
+    totals.shippingFee ?? totals.shipping ?? 0
+  );
+
   const payable =
     totals.finalPayable !== undefined
       ? Number(totals.finalPayable)
@@ -408,10 +412,42 @@ export default function InvoiceTemplate({ data }) {
             <span>{FORMATTERS.currency(totalTax)}</span>
           </div>
 
+          {shippingFee > 0 ? (
+            <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
+              <span>Shipping</span>
+              <span>{FORMATTERS.currency(shippingFee)}</span>
+            </div>
+          ) : null}
+
           <div className="mt-1 flex justify-between border-t border-zinc-200 pt-[11px] text-[15px] font-black">
-            <span>Final Payable</span>
+            <span>Order Total</span>
             <span>{FORMATTERS.currency(payable)}</span>
           </div>
+
+          {payment?.isPartial ? (
+            <>
+              <div className="flex justify-between border-t border-zinc-100 py-[7px] text-[11px]">
+                <span>
+                  Paid Online
+                  {payment?.upfrontPercent > 0
+                    ? ` (${payment.upfrontPercent}%)`
+                    : ""}
+                </span>
+
+                <span className="font-black">
+                  {FORMATTERS.currency(payment?.paidAmount || 0)}
+                </span>
+              </div>
+
+              <div className="flex justify-between border-t border-zinc-200 pt-[10px] text-[14px] font-black">
+                <span>Remaining COD</span>
+
+                <span>
+                  {FORMATTERS.currency(payment?.remainingAmount || 0)}
+                </span>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
 

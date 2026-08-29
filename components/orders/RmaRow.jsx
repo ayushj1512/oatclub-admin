@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Check,
   ChevronDown,
@@ -101,6 +102,8 @@ export default function RmaRow({
   const orderNumber = formatOrderNumber(rma?.orderNumber);
   const rmaNumber = formatRmaNumber(rma?.rmaNumber);
 
+  const [previewImage, setPreviewImage] = useState(null);
+
   const customerName = pick(
     address?.fullName,
     customer?.name,
@@ -144,14 +147,9 @@ export default function RmaRow({
     rma?.refund?.status === "completed";
 
   return (
-    <React.Fragment>
-      <tr
-        className={
-          locked
-            ? "bg-gray-50 opacity-70"
-            : "hover:bg-gray-50"
-        }
-      >
+    <>
+      {/* MAIN ROW */}
+      <tr className={locked ? "bg-gray-50 opacity-70" : "hover:bg-gray-50"}>
         <td className="p-4">
           <input
             type="checkbox"
@@ -172,18 +170,12 @@ export default function RmaRow({
         >
           <ChevronDown
             size={18}
-            className={`transition-transform ${isOpen ? "rotate-180" : ""
-              }`}
+            className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
           />
         </td>
 
-        <td className="p-4 font-medium">
-          {orderNumber}
-        </td>
-
-        <td className="p-4">
-          {rmaNumber}
-        </td>
+        <td className="p-4 font-medium">{orderNumber}</td>
+        <td className="p-4">{rmaNumber}</td>
 
         <td className="p-4">
           <span
@@ -226,9 +218,7 @@ export default function RmaRow({
               Pickup Created
             </span>
           ) : (
-            <span className="text-xs text-gray-400">
-              Pending
-            </span>
+            <span className="text-xs text-gray-400">Pending</span>
           )}
         </td>
 
@@ -248,30 +238,21 @@ export default function RmaRow({
                 type="button"
                 disabled={locked || !isApproved || isSyncingReverse}
                 onClick={() => {
-                  if (!locked && isApproved) {
-                    syncReversePickup(rma);
-                  }
+                  if (!locked && isApproved) syncReversePickup(rma);
                 }}
                 className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
                 {isSyncingReverse ? (
-                  <Loader2
-                    size={12}
-                    className="animate-spin"
-                  />
+                  <Loader2 size={12} className="animate-spin" />
                 ) : (
                   <RotateCcw size={12} />
                 )}
 
-                {isSyncingReverse
-                  ? "Syncing..."
-                  : "Sync"}
+                {isSyncingReverse ? "Syncing..." : "Sync"}
               </button>
             </div>
           ) : (
-            <span className="text-xs text-gray-400">
-              Not created
-            </span>
+            <span className="text-xs text-gray-400">Not created</span>
           )}
         </td>
 
@@ -286,7 +267,7 @@ export default function RmaRow({
           )}
         </td>
 
-        {/* REFUNDED / REFUND BUTTON */}
+        {/* REFUNDED */}
         <td className="p-4">
           {isRefunded ? (
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
@@ -296,12 +277,8 @@ export default function RmaRow({
             <button
               type="button"
               disabled={locked || !isApproved}
-              onClick={() => {
-                if (!locked && isApproved) {
-                  openRefundModal?.(rma);
-                }
-              }}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => !locked && isApproved && openRefundModal?.(rma)}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
             >
               Refund
             </button>
@@ -310,13 +287,8 @@ export default function RmaRow({
           )}
         </td>
 
-        <td className="p-4">
-          {customerName}
-        </td>
-
-        <td className="p-4">
-          {customerPhone || "-"}
-        </td>
+        <td className="p-4">{customerName}</td>
+        <td className="p-4">{customerPhone || "-"}</td>
 
         <td className="p-4 text-gray-500">
           {formatDate(rma?.createdAt)}
@@ -335,59 +307,43 @@ export default function RmaRow({
                 type="button"
                 disabled={isApproving}
                 onClick={() => approveRma?.(rma)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
               >
                 {isApproving ? (
-                  <Loader2
-                    size={14}
-                    className="animate-spin"
-                  />
+                  <Loader2 size={14} className="animate-spin" />
                 ) : (
                   <Check size={14} />
                 )}
 
-                {isApproving
-                  ? "Approving..."
-                  : "Approve"}
+                {isApproving ? "Approving..." : "Approve"}
               </button>
             ) : (
               <>
-                {isExchange && (
-                  hasExchangeOrder || isExchangeOrder ? (
+                {isExchange &&
+                  (hasExchangeOrder || isExchangeOrder ? (
                     <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
                       <Check size={14} />
                       Exchange Order Created
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+                    <span className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
                       Exchange Order Processing
                     </span>
-                  )
-                )}
+                  ))}
 
                 <button
                   type="button"
                   disabled={isUpdating}
-                  onClick={() =>
-                    updateFulfilled(
-                      rma,
-                      true
-                    )
-                  }
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => updateFulfilled(rma, true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
                 >
                   {isUpdating ? (
-                    <Loader2
-                      size={14}
-                      className="animate-spin"
-                    />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
                     <Check size={14} />
                   )}
 
-                  {isUpdating
-                    ? "Updating..."
-                    : "Mark Fulfilled"}
+                  {isUpdating ? "Updating..." : "Mark Fulfilled"}
                 </button>
               </>
             )}
@@ -395,61 +351,41 @@ export default function RmaRow({
         </td>
       </tr>
 
+      {/* EXPANDED ROW */}
       {isOpen && !locked && (
         <tr>
-          <td
-            colSpan={15}
-            className="px-6 py-5"
-          >
+          <td colSpan={15} className="px-6 py-5">
             <div className="space-y-5">
+              {/* INFO */}
               <div className="grid gap-4 text-xs lg:grid-cols-5">
                 <InfoCard title="Order">
                   <p>
                     <b>Order #:</b> {orderNumber}
                   </p>
-
                   <p>
-                    <b>Fulfillment:</b>{" "}
-                    {rma?.fulfillmentStatus || "-"}
+                    <b>Fulfillment:</b> {rma?.fulfillmentStatus || "-"}
                   </p>
-
                   <p>
-                    <b>Payment:</b>{" "}
-                    {rma?.paymentMethod || "-"}
+                    <b>Payment:</b> {rma?.paymentMethod || "-"}
                   </p>
-
                   <p>
                     <b>Total:</b>{" "}
                     {formatCurrency(
-                      rma?.finalPayable ??
-                      rma?.totalAmount ??
-                      0
+                      rma?.finalPayable ?? rma?.totalAmount ?? 0
                     )}
                   </p>
                 </InfoCard>
 
                 <InfoCard title="Update Order">
-                  {locked ? (
-                    <p className="inline-flex items-center gap-1 text-gray-400">
-                      <LockKeyhole size={13} />
-                      Locked after fulfillment
-                    </p>
-                  ) : (
-                    <OrderStatusDropdown
-                      orderId={rma?.orderId}
-                      currentStatus={
-                        rma?.fulfillmentStatus
-                      }
-                      onUpdated={fetchAllRmas}
-                    />
-                  )}
+                  <OrderStatusDropdown
+                    orderId={rma?.orderId}
+                    currentStatus={rma?.fulfillmentStatus}
+                    onUpdated={fetchAllRmas}
+                  />
                 </InfoCard>
 
                 <InfoCard title="Shipping">
-                  <p className="font-medium">
-                    {customerName}
-                  </p>
-
+                  <p className="font-medium">{customerName}</p>
                   <p>{customerPhone || "-"}</p>
                   <p>{customerEmail || "-"}</p>
 
@@ -469,46 +405,31 @@ export default function RmaRow({
                   <p>
                     <b>RMA #:</b> {rmaNumber}
                   </p>
-
                   <p>
-                    <b>Reason:</b>{" "}
-                    {rma?.reason || "-"}
+                    <b>Reason:</b> {rma?.reason || "-"}
                   </p>
-
                   <p>
-                    <b>Note:</b>{" "}
-                    {rma?.customerNote || "-"}
+                    <b>Note:</b> {rma?.customerNote || "-"}
                   </p>
-
                   <p>
-                    <b>Approved:</b>{" "}
-                    {isApproved ? "Yes" : "No"}
+                    <b>Approved:</b> {isApproved ? "Yes" : "No"}
                   </p>
-
                   <p>
                     <b>Fulfilled:</b>{" "}
-                    {rma?.isFulfilled
-                      ? "Yes"
-                      : "No"}
+                    {rma?.isFulfilled ? "Yes" : "No"}
                   </p>
                 </InfoCard>
 
                 <InfoCard title="Reverse Shipment">
                   <p>
-                    <b>Courier:</b>{" "}
-                    {reverseCourier || "-"}
+                    <b>Courier:</b> {reverseCourier || "-"}
                   </p>
-
                   <p>
-                    <b>AWB:</b>{" "}
-                    {reverseAwb || "-"}
+                    <b>AWB:</b> {reverseAwb || "-"}
                   </p>
-
                   <p>
-                    <b>Status:</b>{" "}
-                    {reverseShipment?.status || "-"}
+                    <b>Status:</b> {reverseShipment?.status || "-"}
                   </p>
-
                   <p>
                     <b>Shipment ID:</b>{" "}
                     {reverseShipment?.shipmentId || "-"}
@@ -516,6 +437,7 @@ export default function RmaRow({
                 </InfoCard>
               </div>
 
+              {/* ITEMS */}
               <div className="grid gap-4 md:grid-cols-2">
                 <ItemsCard
                   title="Order Items"
@@ -530,25 +452,25 @@ export default function RmaRow({
                 />
               </div>
 
+              {/* QC */}
+              <QcImagesCard
+                media={rma?.media}
+                onPreview={setPreviewImage}
+              />
+
+              {/* REFUND */}
               <div className="grid gap-4 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100 md:grid-cols-2">
                 <div>
-                  <p className="text-xs font-semibold text-gray-900">
-                    Refund Details
-                  </p>
+                  <p className="text-xs font-semibold">Refund Details</p>
 
                   <div className="mt-2 space-y-1 text-xs text-gray-600">
                     <p>
                       <b>Eligible:</b>{" "}
-                      {rma?.eligibleForRefund
-                        ? "Yes"
-                        : "No"}
+                      {rma?.eligibleForRefund ? "Yes" : "No"}
                     </p>
 
                     <p>
-                      <b>Refunded:</b>{" "}
-                      {isRefunded
-                        ? "Yes"
-                        : "No"}
+                      <b>Refunded:</b> {isRefunded ? "Yes" : "No"}
                     </p>
 
                     <p>
@@ -562,36 +484,31 @@ export default function RmaRow({
 
                     <p>
                       <b>UPI:</b>{" "}
-                      {customer?.payoutDetails?.upi
-                        ?.upiId || "-"}
+                      {customer?.payoutDetails?.upi?.upiId || "-"}
                     </p>
 
                     <p>
                       <b>Bank:</b>{" "}
-                      {customer?.payoutDetails?.bank
-                        ?.accountNumber || "-"}
+                      {customer?.payoutDetails?.bank?.accountNumber || "-"}
                     </p>
 
                     <p>
                       <b>IFSC:</b>{" "}
-                      {customer?.payoutDetails?.bank
-                        ?.ifscCode || "-"}
+                      {customer?.payoutDetails?.bank?.ifscCode || "-"}
                     </p>
                   </div>
                 </div>
 
                 <div>
-                  <p className="text-xs font-semibold text-gray-900">
+                  <p className="text-xs font-semibold">
                     Add Customer Credit
                   </p>
 
                   <div className="mt-2 space-y-2">
                     <input
                       type="number"
-                      value={
-                        creditAmount[rowKey] || ""
-                      }
-                      disabled={locked || !isApproved}
+                      value={creditAmount[rowKey] || ""}
+                      disabled={!isApproved}
                       onChange={(e) =>
                         setCreditAmount((s) => ({
                           ...s,
@@ -603,11 +520,8 @@ export default function RmaRow({
                     />
 
                     <input
-                      type="text"
-                      value={
-                        creditNote[rowKey] || ""
-                      }
-                      disabled={locked || !isApproved}
+                      value={creditNote[rowKey] || ""}
+                      disabled={!isApproved}
                       onChange={(e) =>
                         setCreditNote((s) => ({
                           ...s,
@@ -619,15 +533,13 @@ export default function RmaRow({
                     />
 
                     <button
+                      type="button"
                       disabled={
-                        locked ||
                         !isApproved ||
                         creditLoading.includes(rowKey) ||
                         isRefunded
                       }
-                      onClick={() =>
-                        addRefundCredit(rma)
-                      }
+                      onClick={() => addRefundCredit(rma)}
                       className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
                     >
                       {creditLoading.includes(rowKey)
@@ -637,9 +549,7 @@ export default function RmaRow({
 
                     <p className="text-[11px] text-gray-500">
                       Current Credit:{" "}
-                      {formatCurrency(
-                        customer?.credits?.balance || 0
-                      )}
+                      {formatCurrency(customer?.credits?.balance || 0)}
                     </p>
                   </div>
                 </div>
@@ -648,7 +558,41 @@ export default function RmaRow({
           </td>
         </tr>
       )}
-    </React.Fragment>
+
+      {/* LIGHTBOX — PORTAL, NOT INSIDE TBODY */}
+      {previewImage &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+            onClick={() => setPreviewImage(null)}
+          >
+            <div
+              className="relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="absolute -right-3 -top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-xl text-black shadow-lg"
+              >
+                ×
+              </button>
+
+              <img
+                src={previewImage.url}
+                alt={previewImage.evidenceType || "QC Image"}
+                className="max-h-[75vh] max-w-[90vw] rounded-xl object-contain shadow-2xl sm:max-w-[650px]"
+              />
+
+              <p className="mt-2 text-center text-xs font-semibold capitalize text-white">
+                {previewImage.evidenceType || "QC"} Image
+              </p>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 
@@ -755,6 +699,79 @@ function ItemsCard({
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+function QcImagesCard({ media = [], onPreview }) {
+  const list = Array.isArray(media)
+    ? media.filter((m) => m?.url)
+    : [];
+
+  const types = ["front", "back", "tag"];
+
+  const images = types
+    .map((type, index) => {
+      const matched = list.find(
+        (m) => norm(m?.evidenceType) === type
+      );
+
+      const image = matched || list[index];
+
+      return image
+        ? {
+          ...image,
+          evidenceType: image.evidenceType || type,
+        }
+        : null;
+    })
+    .filter(Boolean);
+
+  return (
+    <div className="rounded-xl bg-white p-4 ring-1 ring-gray-100">
+      <div className="flex items-center gap-3">
+        <p className="text-xs font-semibold text-gray-900">
+          QC Images
+        </p>
+
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${images.length === 3
+              ? "bg-green-50 text-green-700"
+              : "bg-red-50 text-red-600"
+            }`}
+        >
+          {images.length}/3
+        </span>
+      </div>
+
+      {images.length ? (
+        <div className="mt-3 flex flex-wrap gap-3">
+          {images.map((image) => (
+            <button
+              key={image.evidenceType}
+              type="button"
+              onClick={() => onPreview?.(image)}
+              className="group text-left"
+            >
+              <div className="h-20 w-20 overflow-hidden rounded-lg bg-gray-100 ring-1 ring-gray-200 sm:h-24 sm:w-24">
+                <img
+                  src={image.url}
+                  alt={image.evidenceType}
+                  className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
+                />
+              </div>
+
+              <p className="mt-1 text-center text-[10px] font-medium capitalize text-gray-500">
+                {image.evidenceType}
+              </p>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-gray-400">
+          No QC images uploaded.
+        </p>
       )}
     </div>
   );

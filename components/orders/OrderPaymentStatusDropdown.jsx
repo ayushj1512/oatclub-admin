@@ -6,6 +6,7 @@ import { useOrderStore } from "@/store/orderStore";
 
 const PAYMENT_STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
+  { value: "partially_paid", label: "Partially Paid" },
   { value: "paid", label: "Paid" },
   { value: "failed", label: "Failed" },
   { value: "refund_pending", label: "Refund Pending" },
@@ -17,16 +18,23 @@ const paymentStatusStyle = (status) => {
   switch (status) {
     case "paid":
       return "bg-green-50 text-green-700 ring-1 ring-green-200";
+
+    case "partially_paid":
+      return "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
+
     case "pending":
       return "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200";
+
     case "failed":
       return "bg-red-50 text-red-700 ring-1 ring-red-200";
+
     case "refund_pending":
       return "bg-orange-50 text-orange-700 ring-1 ring-orange-200";
+
     case "refunded":
       return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+
     case "not_applicable":
-      return "bg-gray-100 text-gray-700 ring-1 ring-gray-200";
     default:
       return "bg-gray-100 text-gray-700 ring-1 ring-gray-200";
   }
