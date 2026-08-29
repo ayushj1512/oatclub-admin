@@ -1132,12 +1132,12 @@ export const useOrderStore = create((set, get) => ({
 
     const allowedStatuses = [
       "pending",
+      "partially_paid",
       "paid",
       "failed",
-      "refunded",
-      "partially_refunded",
-
       "refund_pending",
+      "partially_refunded",
+      "refunded",
       "not_applicable",
     ];
 
@@ -1145,9 +1145,10 @@ export const useOrderStore = create((set, get) => ({
       throw new Error("Invalid payment status");
     }
 
-    const data = await get()._patch(`/api/orders/${orderId}/payment-status`, {
-      paymentStatus: status,
-    });
+    const data = await get()._patch(
+      `/api/orders/${orderId}/payment-status`,
+      { paymentStatus: status }
+    );
 
     const order = get()._normalizeOrder(data);
 
