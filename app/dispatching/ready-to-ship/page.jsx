@@ -5,6 +5,8 @@ import {
   AlertCircle,
   Check,
   ChevronDown,
+  Download,
+  FileText,
   ReceiptIndianRupee,
   Loader2,
   PackageCheck,
@@ -12,6 +14,9 @@ import {
   Search,
   Truck,
   X,
+  CalendarClock,
+  Radar,
+
 } from "lucide-react";
 
 import { useOrderStore } from "@/store/orderStore";
@@ -195,6 +200,65 @@ async function request(path, options = {}) {
   return data;
 }
 
+const findLabelUrl = (value) => {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    return /^https?:\/\//i.test(value) ? value : "";
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const url = findLabelUrl(item);
+      if (url) return url;
+    }
+
+    return "";
+  }
+
+  if (typeof value === "object") {
+    const preferredKeys = [
+      "pdf_download_link",
+      "pdf_url",
+      "pdfUrl",
+      "download_url",
+      "downloadUrl",
+      "label_url",
+      "labelUrl",
+      "url",
+    ];
+
+    for (const key of preferredKeys) {
+      const url = findLabelUrl(value[key]);
+      if (url) return url;
+    }
+
+    for (const item of Object.values(value)) {
+      const url = findLabelUrl(item);
+      if (url) return url;
+    }
+  }
+
+  return "";
+};
+
+const downloadUrl = (url, fileName = "delhivery-label.pdf") => {
+  if (!url) return false;
+
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = fileName;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  return true;
+};
+
 function StatusBadge({ provider }) {
   const classes = {
     unassigned: "border-zinc-200 bg-zinc-50 text-zinc-600",
@@ -231,6 +295,21 @@ export default function ReadyToShipPage() {
   const checkDelhiveryServiceability =
     useDelhiveryStore((state) => state.checkServiceability);
 
+  const trackDelhiveryShipment =
+    useDelhiveryStore(
+      (state) => state.trackShipment,
+    );
+
+  const syncAllDelhiveryTracking =
+    useDelhiveryStore(
+      (state) => state.syncAllTracking,
+    );
+
+  const createDelhiveryPickup =
+    useDelhiveryStore(
+      (state) => state.createPickup,
+    );
+
   const checkShiprocketServiceability =
     useShiprocketStore((state) => state.checkServiceability);
 
@@ -238,7 +317,8 @@ export default function ReadyToShipPage() {
     useShiprocketStore((state) => state.bookShipment);
 
   const [search, setSearch] = useState("");
-  const [providerFilter, setProviderFilter] = useState("");
+  const [activeTab, setActiveTab] = useState("all");
+  const [sortOrder, setSortOrder] = useState("oldest");
   const [selectedIds, setSelectedIds] = useState([]);
   const [rates, setRates] = useState({});
   const [selectedShiprocketCourier, setSelectedShiprocketCourier] = useState({});
@@ -246,6 +326,39 @@ export default function ReadyToShipPage() {
   const [booking, setBooking] = useState({});
   const [bulkBookingProvider, setBulkBookingProvider] = useState("");
   const [message, setMessage] = useState(null);
+  const [labelLoading, setLabelLoading] = useState({});
+  const [bulkLabelLoading, setBulkLabelLoading] = useState(false);
+  const [trackingLoading, setTrackingLoading] =
+    useState({});
+
+  const [
+    trackingSyncLoading,
+    setTrackingSyncLoading,
+  ] = useState(false);
+
+  const [pickupOpen, setPickupOpen] =
+    useState(false);
+
+  const [pickupLoading, setPickupLoading] =
+    useState(false);
+
+  const [pickupForm, setPickupForm] =
+    useState({
+      pickupDate: "",
+      pickupTime: "15:00",
+      packageCount: 1,
+    });
+
+
+  const getDelhiveryAwb = (order) =>
+    String(
+      order?.shipment?.delhivery?.waybill ||
+      order?.shipment?.delhivery?.awb ||
+      (getProvider(order) === PROVIDERS.DELHIVERY
+        ? order?.shipment?.awb
+        : "") ||
+      "",
+    ).trim();
 
   const showMessage = useCallback((type, text) => {
     setMessage({ type, text });
@@ -259,7 +372,6 @@ export default function ReadyToShipPage() {
     try {
       await fetchPackedOrdersForShipping({
         search: search || undefined,
-        provider: providerFilter || undefined,
         page: 1,
         limit: 200,
       });
@@ -269,12 +381,273 @@ export default function ReadyToShipPage() {
         requestError?.message || "Unable to load packed orders.",
       );
     }
-  }, [
-    fetchPackedOrdersForShipping,
-    providerFilter,
-    search,
-    showMessage,
-  ]);
+  }, [fetchPackedOrdersForShipping, search, showMessage]);
+
+  const downloadDelhiveryLabel = async (order) => {
+    const orderId = String(order?._id || "");
+    const awb = getDelhiveryAwb(order);
+
+    if (!awb) {
+      showMessage(
+        "error",
+        `Order #${order?.orderNumber} does not have a Delhivery AWB.`,
+      );
+      return;
+    }
+
+    setLabelLoading((current) => ({
+      ...current,
+      [orderId]: true,
+    }));
+
+    try {
+      const response = await fetch(
+        `${API}/api/delhivery/label/${encodeURIComponent(awb)}?pdf=true`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+
+        throw new Error(
+          data?.message || "Unable to download Delhivery label.",
+        );
+      }
+
+      const blob = await response.blob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `Delhivery-${order?.orderNumber || awb}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showMessage(
+        "error",
+        error?.message || "Unable to download label.",
+      );
+    } finally {
+      setLabelLoading((current) => ({
+        ...current,
+        [orderId]: false,
+      }));
+    }
+  };
+
+  const downloadBulkDelhiveryLabels = async () => {
+    const shipments = selectedOrders
+      .map((order) => ({
+        orderNumber: order?.orderNumber,
+        awb: getDelhiveryAwb(order),
+      }))
+      .filter((item) => item.awb);
+
+    if (!shipments.length) {
+      showMessage(
+        "error",
+        "Selected orders do not have Delhivery AWBs.",
+      );
+      return;
+    }
+
+    setBulkLabelLoading(true);
+
+    try {
+      const response = await fetch(
+        `${API}/api/delhivery/labels/bulk`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ shipments }),
+        },
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+
+        throw new Error(
+          data?.message || "Unable to generate bulk labels.",
+        );
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `Delhivery-Labels-${shipments.length}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+
+      showMessage(
+        "success",
+        `${shipments.length} Delhivery labels downloaded.`,
+      );
+    } catch (error) {
+      showMessage(
+        "error",
+        error?.message || "Bulk label download failed.",
+      );
+    } finally {
+      setBulkLabelLoading(false);
+    }
+  };
+
+  const syncTrackingForOrder = async (
+    order,
+  ) => {
+    const orderId = String(
+      order?._id || "",
+    );
+
+    const awb = getDelhiveryAwb(order);
+
+    if (!awb) {
+      showMessage(
+        "error",
+        "Delhivery AWB is missing.",
+      );
+      return;
+    }
+
+    setTrackingLoading((current) => ({
+      ...current,
+      [orderId]: true,
+    }));
+
+    try {
+      const result =
+        await trackDelhiveryShipment(awb);
+
+      const synced =
+        result?.sync?.[0];
+
+      showMessage(
+        "success",
+        synced?.fulfillmentChanged
+          ? `Updated to ${String(
+            synced.fulfillmentStatus,
+          ).replaceAll("_", " ")}.`
+          : "Tracking synced successfully.",
+      );
+
+      await loadOrders();
+    } catch (error) {
+      showMessage(
+        "error",
+        error?.message ||
+        "Tracking sync failed.",
+      );
+    } finally {
+      setTrackingLoading(
+        (current) => ({
+          ...current,
+          [orderId]: false,
+        }),
+      );
+    }
+  };
+
+  const handleSyncAllTracking =
+    async () => {
+      setTrackingSyncLoading(true);
+
+      try {
+        const result =
+          await syncAllDelhiveryTracking();
+
+        showMessage(
+          "success",
+          `${Number(
+            result?.synced || 0,
+          )} synced, ${Number(
+            result?.changed || 0,
+          )} updated, ${Number(
+            result?.failed || 0,
+          )} failed.`,
+        );
+
+        await loadOrders();
+      } catch (error) {
+        showMessage(
+          "error",
+          error?.message ||
+          "Tracking sync failed.",
+        );
+      } finally {
+        setTrackingSyncLoading(false);
+      }
+    };
+
+  const scheduleDelhiveryPickup =
+    async () => {
+      const packageCount = Math.max(
+        1,
+        Number(
+          pickupForm.packageCount || 1,
+        ),
+      );
+
+      if (!pickupForm.pickupDate) {
+        showMessage(
+          "error",
+          "Select pickup date.",
+        );
+        return;
+      }
+
+      if (!pickupForm.pickupTime) {
+        showMessage(
+          "error",
+          "Select pickup time.",
+        );
+        return;
+      }
+
+      setPickupLoading(true);
+
+      try {
+        await createDelhiveryPickup({
+          pickupDate:
+            pickupForm.pickupDate,
+          pickupTime:
+            pickupForm.pickupTime,
+          packageCount,
+        });
+
+        setPickupOpen(false);
+
+        showMessage(
+          "success",
+          `Pickup scheduled for ${packageCount} packages.`,
+        );
+      } catch (error) {
+        showMessage(
+          "error",
+          error?.message ||
+          "Pickup scheduling failed.",
+        );
+      } finally {
+        setPickupLoading(false);
+      }
+    };
+
+
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -288,6 +661,110 @@ export default function ReadyToShipPage() {
     () => (Array.isArray(shippingOrders) ? shippingOrders : []),
     [shippingOrders],
   );
+
+  const getOrderRateState = useCallback(
+    (order) => {
+      const orderId = String(order?._id || "");
+      const orderRates = rates[orderId];
+
+      if (!orderRates) {
+        return {
+          checked: false,
+          shiprocketAvailable: false,
+          delhiveryAvailable: false,
+          notServiceable: false,
+          needsAttention: false,
+        };
+      }
+
+      const shiprocketAvailable =
+        Array.isArray(orderRates?.shiprocket) &&
+        orderRates.shiprocket.length > 0;
+
+      const delhiveryOption = orderRates?.delhivery;
+      const delhiveryAvailable =
+        delhiveryOption?.serviceable === true &&
+        delhiveryOption?.pricingAvailable === true &&
+        Number(delhiveryOption?.rate || 0) > 0;
+
+      const shiprocketError = String(orderRates?.shiprocketError || "").trim();
+      const delhiveryError = String(orderRates?.delhiveryError || "").trim();
+
+      const shiprocketHardError =
+        Boolean(shiprocketError) &&
+        shiprocketError !== "No Shiprocket courier available.";
+
+      const pricingProblem =
+        delhiveryOption?.serviceable === true &&
+        delhiveryOption?.pricingAvailable !== true;
+
+      const needsAttention =
+        shiprocketHardError || Boolean(delhiveryError) || pricingProblem;
+
+      return {
+        checked: true,
+        shiprocketAvailable,
+        delhiveryAvailable,
+        notServiceable:
+          !needsAttention && !shiprocketAvailable && !delhiveryAvailable,
+        needsAttention,
+      };
+    },
+    [rates],
+  );
+
+  const tabCounts = useMemo(() => {
+    const counts = {
+      all: orders.length,
+      unassigned: 0,
+      shiprocket: 0,
+      delhivery: 0,
+      not_serviceable: 0,
+      attention: 0,
+    };
+
+    orders.forEach((order) => {
+      const provider = getProvider(order);
+      const rateState = getOrderRateState(order);
+
+      if (provider === PROVIDERS.UNASSIGNED) counts.unassigned += 1;
+      if (provider === PROVIDERS.SHIPROCKET) counts.shiprocket += 1;
+      if (provider === PROVIDERS.DELHIVERY) counts.delhivery += 1;
+      if (rateState.notServiceable) counts.not_serviceable += 1;
+      if (rateState.needsAttention) counts.attention += 1;
+    });
+
+    return counts;
+  }, [orders, getOrderRateState]);
+
+  const visibleOrders = useMemo(() => {
+    const filtered = orders.filter((order) => {
+      const provider = getProvider(order);
+      const rateState = getOrderRateState(order);
+
+      switch (activeTab) {
+        case "unassigned":
+          return provider === PROVIDERS.UNASSIGNED;
+        case "shiprocket":
+          return provider === PROVIDERS.SHIPROCKET;
+        case "delhivery":
+          return provider === PROVIDERS.DELHIVERY;
+        case "not_serviceable":
+          return rateState.notServiceable;
+        case "attention":
+          return rateState.needsAttention;
+        default:
+          return true;
+      }
+    });
+
+    return [...filtered].sort((a, b) => {
+      const aTime = new Date(a?.fulfillmentDates?.packedAt || 0).getTime();
+      const bTime = new Date(b?.fulfillmentDates?.packedAt || 0).getTime();
+
+      return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
+    });
+  }, [orders, activeTab, sortOrder, getOrderRateState]);
 
   useEffect(() => {
     const availableIds = new Set(orders.map((order) => String(order._id)));
@@ -303,35 +780,43 @@ export default function ReadyToShipPage() {
     return orders.filter((order) => selectedSet.has(String(order._id)));
   }, [orders, selectedIds]);
 
-  const selectedShiprocketEligibleCount =
-    selectedOrders.filter((order) => {
-      const orderId = String(order._id);
-      const orderRates = rates[orderId];
+  const selectedShiprocketEligibleCount = selectedOrders.filter((order) => {
+    const orderId = String(order._id);
+    const orderRates = rates[orderId];
 
-      return (
-        Array.isArray(orderRates?.shiprocket) &&
-        orderRates.shiprocket.length > 0 &&
-        Boolean(selectedShiprocketCourier[orderId])
-      );
-    }).length;
+    return (
+      Array.isArray(orderRates?.shiprocket) &&
+      orderRates.shiprocket.length > 0 &&
+      Boolean(selectedShiprocketCourier[orderId])
+    );
+  }).length;
 
-  const selectedDelhiveryEligibleCount =
-    selectedOrders.filter((order) => {
-      const option =
-        rates[String(order._id)]?.delhivery;
+  const selectedDelhiveryEligibleCount = selectedOrders.filter((order) => {
+    const option = rates[String(order._id)]?.delhivery;
 
-      return (
-        option?.serviceable === true &&
-        option?.pricingAvailable === true &&
-        Number(option?.rate || 0) > 0
-      );
-    }).length;
+    return (
+      option?.serviceable === true &&
+      option?.pricingAvailable === true &&
+      Number(option?.rate || 0) > 0
+    );
+  }).length;
 
+  const selectedDelhiveryLabelCount = selectedOrders.filter(
+    (order) => Boolean(getDelhiveryAwb(order)),
+  ).length;
+
+  const visibleIds = visibleOrders.map((order) => String(order._id));
   const allSelected =
-    orders.length > 0 && selectedIds.length === orders.length;
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
   const toggleAll = () => {
-    setSelectedIds(allSelected ? [] : orders.map((order) => String(order._id)));
+    setSelectedIds((current) => {
+      if (allSelected) {
+        return current.filter((id) => !visibleIds.includes(String(id)));
+      }
+
+      return Array.from(new Set([...current, ...visibleIds]));
+    });
   };
 
   const toggleOrder = (orderId) => {
@@ -698,8 +1183,10 @@ export default function ReadyToShipPage() {
         throw new Error("Invalid courier provider.");
       }
 
-      // Assign only after successful booking
-      await assignCourierToOrder(orderId, provider);
+      await assignCourierToOrder(
+        orderId,
+        provider,
+      );
 
       setSelectedIds((current) =>
         current.filter(
@@ -809,7 +1296,7 @@ export default function ReadyToShipPage() {
 
   return (
     <main className="min-h-screen bg-zinc-50 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-[1600px]">
+      <div className="w-full">
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-zinc-500">
@@ -874,6 +1361,15 @@ export default function ReadyToShipPage() {
 
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Not booked
+            </p>
+            <p className="mt-2 text-2xl font-bold text-zinc-950">
+              {tabCounts.unassigned}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
               Selected
             </p>
             <p className="mt-2 text-2xl font-bold text-zinc-950">
@@ -883,34 +1379,51 @@ export default function ReadyToShipPage() {
 
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Shiprocket
+              Needs attention
             </p>
-            <p className="mt-2 text-2xl font-bold text-blue-700">
-              {
-                orders.filter(
-                  (order) =>
-                    getProvider(order) === PROVIDERS.SHIPROCKET,
-                ).length
-              }
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Delhivery
-            </p>
-            <p className="mt-2 text-2xl font-bold text-emerald-700">
-              {
-                orders.filter(
-                  (order) =>
-                    getProvider(order) === PROVIDERS.DELHIVERY,
-                ).length
-              }
+            <p className="mt-2 text-2xl font-bold text-red-600">
+              {tabCounts.attention}
             </p>
           </div>
         </section>
 
         <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+          <div className="border-b border-zinc-200 px-4 pt-4">
+            <div className="flex gap-1 overflow-x-auto">
+              {[
+                ["all", "All", tabCounts.all],
+                ["unassigned", "Not Booked", tabCounts.unassigned],
+                ["shiprocket", "Booked · Shiprocket", tabCounts.shiprocket],
+                ["delhivery", "Booked · Delhivery", tabCounts.delhivery],
+                ["not_serviceable", "Not Serviceable", tabCounts.not_serviceable],
+                ["attention", "Needs Attention", tabCounts.attention],
+              ].map(([value, label, count]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(value);
+                    setSelectedIds([]);
+                  }}
+                  className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition ${activeTab === value
+                      ? "border-zinc-950 text-zinc-950"
+                      : "border-transparent text-zinc-500 hover:text-zinc-800"
+                    }`}
+                >
+                  {label}
+                  <span
+                    className={`ml-2 rounded-full px-2 py-0.5 text-xs ${activeTab === value
+                        ? "bg-zinc-950 text-white"
+                        : "bg-zinc-100 text-zinc-600"
+                      }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="flex flex-col gap-3 border-b border-zinc-200 p-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-1 flex-col gap-3 sm:flex-row">
               <div className="relative max-w-md flex-1">
@@ -926,16 +1439,12 @@ export default function ReadyToShipPage() {
 
               <div className="relative">
                 <select
-                  value={providerFilter}
-                  onChange={(event) =>
-                    setProviderFilter(event.target.value)
-                  }
-                  className="h-10 min-w-44 appearance-none rounded-lg border border-zinc-200 bg-white pl-3 pr-9 text-sm font-medium text-zinc-700 outline-none focus:border-zinc-400"
+                  value={sortOrder}
+                  onChange={(event) => setSortOrder(event.target.value)}
+                  className="h-10 min-w-40 appearance-none rounded-lg border border-zinc-200 bg-white pl-3 pr-9 text-sm font-medium text-zinc-700 outline-none focus:border-zinc-400"
                 >
-                  <option value="">All couriers</option>
-                  <option value="unassigned">Unassigned</option>
-                  <option value="shiprocket">Shiprocket</option>
-                  <option value="delhivery">Delhivery</option>
+                  <option value="oldest">Oldest Packed</option>
+                  <option value="newest">Newest Packed</option>
                 </select>
 
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
@@ -945,52 +1454,41 @@ export default function ReadyToShipPage() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={checkSelectedRates}
-                disabled={!selectedIds.length}
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={handleSyncAllTracking}
+                disabled={trackingSyncLoading}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50"
               >
-                <ReceiptIndianRupee className="h-4 w-4" />
-                Check Prices
+                {trackingSyncLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Radar className="h-4 w-4" />
+                )}
+
+                Sync Tracking
               </button>
 
               <button
                 type="button"
-                onClick={() => bulkBook(PROVIDERS.SHIPROCKET)}
-                disabled={
-                  selectedShiprocketEligibleCount === 0 ||
-                  Boolean(bulkBookingProvider)
+                onClick={() =>
+                  setPickupOpen(true)
                 }
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
               >
-                {bulkBookingProvider === PROVIDERS.SHIPROCKET ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <PackageCheck className="h-4 w-4" />
-                )}
-                Book with Shiprocket
-                {selectedIds.length
-                  ? ` (${selectedShiprocketEligibleCount})`
-                  : ""}
+                <CalendarClock className="h-4 w-4" />
+                Schedule Pickup
               </button>
 
               <button
                 type="button"
-                onClick={() => bulkBook(PROVIDERS.DELHIVERY)}
-                disabled={
-                  selectedDelhiveryEligibleCount === 0 ||
-                  Boolean(bulkBookingProvider)
-                }
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={loadOrders}
+                disabled={loading}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:opacity-60"
               >
-                {bulkBookingProvider === PROVIDERS.DELHIVERY ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Truck className="h-4 w-4" />
-                )}
-                Book with Delhivery
-                {selectedIds.length
-                  ? ` (${selectedDelhiveryEligibleCount})`
-                  : ""}
+                <RefreshCcw
+                  className={`h-4 w-4 ${loading ? "animate-spin" : ""
+                    }`}
+                />
+                Refresh
               </button>
             </div>
           </div>
@@ -1002,7 +1500,7 @@ export default function ReadyToShipPage() {
           ) : null}
 
           <div className="overflow-x-auto">
-            <table className="min-w-[1450px] w-full border-collapse">
+            <table className="min-w-[1450px] w-full table-auto border-collapse">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50">
                   <th className="w-12 px-4 py-3 text-left">
@@ -1023,14 +1521,12 @@ export default function ReadyToShipPage() {
                     "Payment",
                     "Packed At",
                     "Assigned",
-                    "Shiprocket Options",
-                    "Delhivery Price",
+                    "Courier Availability",
                     "Actions",
                   ].map((heading) => (
                     <th
                       key={heading}
-                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-zinc-500"
-                    >
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-zinc-500 last:min-w-[210px]"                    >
                       {heading}
                     </th>
                   ))}
@@ -1040,7 +1536,7 @@ export default function ReadyToShipPage() {
               <tbody>
                 {loading && !orders.length ? (
                   <tr>
-                    <td colSpan={12} className="px-4 py-20 text-center">
+                    <td colSpan={11} className="px-4 py-20 text-center">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin text-zinc-400" />
                       <p className="mt-3 text-sm text-zinc-500">
                         Loading packed orders...
@@ -1049,9 +1545,9 @@ export default function ReadyToShipPage() {
                   </tr>
                 ) : null}
 
-                {!loading && !orders.length ? (
+                {!loading && !visibleOrders.length ? (
                   <tr>
-                    <td colSpan={12} className="px-4 py-20 text-center">
+                    <td colSpan={11} className="px-4 py-20 text-center">
                       <PackageCheck className="mx-auto h-9 w-9 text-zinc-300" />
                       <p className="mt-3 font-semibold text-zinc-700">
                         No packed orders found
@@ -1064,7 +1560,7 @@ export default function ReadyToShipPage() {
                   </tr>
                 ) : null}
 
-                {orders.map((order) => {
+                {visibleOrders.map((order) => {
                   const orderId = String(order._id);
                   const provider = getProvider(order);
                   const orderRates = rates[orderId] || {};
@@ -1104,6 +1600,15 @@ export default function ReadyToShipPage() {
                     delhiveryOption?.serviceable === true &&
                     delhiveryOption?.pricingAvailable === true &&
                     Number(delhiveryOption?.rate || 0) > 0;
+
+                  const delhiveryAwb = getDelhiveryAwb(order);
+
+                  const syncingTracking =
+                    trackingLoading[orderId] === true;
+
+
+                  const downloadingLabel =
+                    labelLoading[orderId] === true;
 
                   return (
                     <tr
@@ -1206,146 +1711,126 @@ export default function ReadyToShipPage() {
                         <StatusBadge provider={provider} />
                       </td>
 
-                      {/* Shiprocket options */}
                       <td className="px-4 py-4">
                         {ratesChecking ? (
                           <div className="flex items-center gap-2 text-xs text-zinc-500">
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            Checking...
+                            Checking courier availability...
                           </div>
-                        ) : shiprocketAvailable ? (
-                          <div className="min-w-60">
-                            <div className="relative">
-                              <select
-                                value={
-                                  selectedCourierId ||
-                                  shiprocketOptions[0]?.id ||
-                                  ""
-                                }
-                                onChange={(event) =>
-                                  setSelectedShiprocketCourier((current) => ({
-                                    ...current,
-                                    [orderId]: event.target.value,
-                                  }))
-                                }
-                                className="h-9 w-full appearance-none rounded-lg border border-zinc-200 bg-white pl-3 pr-8 text-xs font-semibold text-zinc-700 outline-none focus:border-blue-400"
-                              >
-                                {shiprocketOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.name} ·{" "}
+                        ) : (
+                          <div className="min-w-72 space-y-3">
+                            <div>
+                              <div className="mb-1.5 flex items-center justify-between gap-3">
+                                <p className="text-xs font-bold text-blue-700">Shiprocket</p>
+                                {shiprocketAvailable && selectedCourier ? (
+                                  <span className="text-xs font-bold text-blue-700">
                                     {money(
-                                      Number(option.rate || 0) +
-                                      Number(option.codCharges || 0),
+                                      Number(selectedCourier.rate || 0) +
+                                      Number(selectedCourier.codCharges || 0),
                                     )}
-                                  </option>
-                                ))}
-                              </select>
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-semibold text-red-600">
+                                    Unavailable
+                                  </span>
+                                )}
+                              </div>
 
-                              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                              {shiprocketAvailable ? (
+                                <>
+                                  <div className="relative">
+                                    <select
+                                      value={
+                                        selectedCourierId ||
+                                        shiprocketOptions[0]?.id ||
+                                        ""
+                                      }
+                                      onChange={(event) =>
+                                        setSelectedShiprocketCourier((current) => ({
+                                          ...current,
+                                          [orderId]: event.target.value,
+                                        }))
+                                      }
+                                      className="h-8 w-full appearance-none rounded-lg border border-zinc-200 bg-white pl-2.5 pr-8 text-xs font-semibold text-zinc-700 outline-none focus:border-blue-400"
+                                    >
+                                      {shiprocketOptions.map((option) => (
+                                        <option key={option.id} value={option.id}>
+                                          {option.name} · {money(
+                                            Number(option.rate || 0) +
+                                            Number(option.codCharges || 0),
+                                          )}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                                  </div>
+                                  <p className="mt-1 text-xs text-zinc-500">
+                                    {selectedCourier?.estimatedDays
+                                      ? `${selectedCourier.estimatedDays} days`
+                                      : "ETA unavailable"}
+                                  </p>
+                                </>
+                              ) : (
+                                <p className="text-xs text-zinc-500">
+                                  {orderRates.shiprocketError ||
+                                    "No Shiprocket courier available."}
+                                </p>
+                              )}
                             </div>
 
-                            {selectedCourier ? (
-                              <div className="mt-2 flex items-center justify-between gap-3 text-xs">
-                                <span className="text-zinc-500">
-                                  {selectedCourier.estimatedDays
-                                    ? `${selectedCourier.estimatedDays} days`
-                                    : "ETA unavailable"}
-                                </span>
+                            <div className="border-t border-zinc-100 pt-2.5">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-xs font-bold text-emerald-700">
+                                    Delhivery Direct
+                                  </p>
+                                  <p className="mt-1 text-xs text-zinc-500">
+                                    {delhiveryAvailable
+                                      ? delhiveryOption?.estimatedDays
+                                        ? `${delhiveryOption.estimatedDays} days`
+                                        : "Serviceable"
+                                      : delhiveryOption?.unavailableReason ||
+                                      orderRates.delhiveryError ||
+                                      "Not serviceable"}
+                                  </p>
+                                </div>
 
-                                <span className="font-bold text-blue-700">
-                                  {money(
-                                    Number(selectedCourier.rate || 0) +
-                                    Number(selectedCourier.codCharges || 0),
-                                  )}
+                                <span
+                                  className={`text-xs font-bold ${delhiveryAvailable
+                                      ? "text-emerald-700"
+                                      : "text-red-600"
+                                    }`}
+                                >
+                                  {delhiveryAvailable
+                                    ? money(
+                                      Number(delhiveryOption.rate || 0) +
+                                      Number(delhiveryOption.codCharges || 0),
+                                    )
+                                    : "Unavailable"}
                                 </span>
                               </div>
+                            </div>
+
+                            {!shiprocketAvailable && !delhiveryAvailable ? (
+                              <button
+                                type="button"
+                                onClick={() => checkRatesForOrder(order)}
+                                className="text-xs font-semibold text-zinc-700 hover:underline"
+                              >
+                                Retry availability check
+                              </button>
                             ) : null}
-                          </div>
-                        ) : (
-                          <div className="min-w-44">
-                            <p className="text-xs font-semibold text-red-600">
-                              No courier available
-                            </p>
-
-                            <button
-                              type="button"
-                              onClick={() => checkRatesForOrder(order)}
-                              className="mt-1 text-xs font-semibold text-blue-700 hover:underline"
-                            >
-                              Retry check
-                            </button>
-                          </div>
-                        )}
-
-                        {orderRates.shiprocketError ? (
-                          <p className="mt-1 max-w-52 text-xs text-red-600">
-                            {orderRates.shiprocketError}
-                          </p>
-                        ) : null}
-                      </td>
-
-                      {/* Delhivery direct */}
-                      <td className="px-4 py-4">
-                        {ratesChecking ? (
-                          <div className="flex items-center gap-2 text-xs text-zinc-500">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Checking...
-                          </div>
-                        ) : delhiveryAvailable ? (
-                          <div className="min-w-40">
-                            <p className="text-xs font-semibold text-zinc-700">
-                              {delhiveryOption.name}
-                            </p>
-
-                            <p className="mt-1 font-bold text-emerald-700">
-                              {money(
-                                Number(delhiveryOption.rate || 0) +
-                                Number(delhiveryOption.codCharges || 0),
-                              )}
-                            </p>
-
-                            <p className="mt-1 text-xs font-medium text-emerald-600">
-                              Serviceable
-                            </p>
-
-                            {delhiveryOption.estimatedDays ? (
-                              <p className="mt-1 text-xs text-zinc-500">
-                                {delhiveryOption.estimatedDays} days
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <div className="min-w-44">
-                            <p className="text-xs font-semibold text-red-600">
-                              Not serviceable
-                            </p>
-
-                            <p className="mt-1 max-w-48 text-xs text-zinc-500">
-                              {delhiveryOption?.unavailableReason ||
-                                orderRates.delhiveryError ||
-                                "Delhivery unavailable for this order."}
-                            </p>
-
-                            <button
-                              type="button"
-                              onClick={() => checkRatesForOrder(order)}
-                              className="mt-1 text-xs font-semibold text-emerald-700 hover:underline"
-                            >
-                              Retry check
-                            </button>
                           </div>
                         )}
                       </td>
 
                       <td className="px-4 py-4">
-                        <div className="flex min-w-40 flex-col gap-2">
+                        <div className="grid min-w-48 grid-cols-2 gap-2">
+                          {/* Shiprocket */}
                           <button
                             type="button"
                             onClick={() =>
-                              bookOrder(
-                                order,
-                                PROVIDERS.SHIPROCKET,
-                              )
+                              bookOrder(order, PROVIDERS.SHIPROCKET)
                             }
                             disabled={
                               ratesChecking ||
@@ -1354,23 +1839,24 @@ export default function ReadyToShipPage() {
                               delhiveryBooking ||
                               Boolean(bulkBookingProvider)
                             }
-                            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="col-span-2 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-500"
                           >
                             {shiprocketBooking ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
                               <PackageCheck className="h-3.5 w-3.5" />
                             )}
-                            Shiprocket
+
+                            {shiprocketAvailable
+                              ? "Shiprocket"
+                              : "Unavailable"}
                           </button>
 
+                          {/* Delhivery */}
                           <button
                             type="button"
                             onClick={() =>
-                              bookOrder(
-                                order,
-                                PROVIDERS.DELHIVERY,
-                              )
+                              bookOrder(order, PROVIDERS.DELHIVERY)
                             }
                             disabled={
                               ratesChecking ||
@@ -1379,17 +1865,63 @@ export default function ReadyToShipPage() {
                               delhiveryBooking ||
                               Boolean(bulkBookingProvider)
                             }
-                            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-zinc-950 px-3 text-xs font-bold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold transition disabled:cursor-not-allowed ${delhiveryAvailable
+                                ? "bg-zinc-950 text-white hover:bg-zinc-800"
+                                : "bg-zinc-200 text-zinc-500"
+                              }`}
                           >
                             {delhiveryBooking ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
                               <Truck className="h-3.5 w-3.5" />
                             )}
-                            {!ratesChecking && !delhiveryAvailable
-                              ? "Unavailable"
-                              : "Delhivery"}
+
+                            {delhiveryAvailable
+                              ? "Delhivery"
+                              : "Unavailable"}
                           </button>
+
+                          {/* Label */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              downloadDelhiveryLabel(order)
+                            }
+                            disabled={
+                              !delhiveryAwb ||
+                              downloadingLabel
+                            }
+                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-300"
+                          >
+                            {downloadingLabel ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Download className="h-3.5 w-3.5" />
+                            )}
+
+                            Label
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              syncTrackingForOrder(order)
+                            }
+                            disabled={
+                              !delhiveryAwb ||
+                              syncingTracking
+                            }
+                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:text-zinc-300"
+                          >
+                            {syncingTracking ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Radar className="h-3.5 w-3.5" />
+                            )}
+
+                            Track
+                          </button>
+
                         </div>
                       </td>
                     </tr>
@@ -1401,8 +1933,7 @@ export default function ReadyToShipPage() {
 
           <footer className="flex flex-col gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
             <span>
-              Showing {orders.length} of{" "}
-              {shippingOrdersMeta?.totalCount ?? orders.length} packed orders
+              Showing {visibleOrders.length} of {orders.length} loaded packed orders
             </span>
 
             <span>
@@ -1412,6 +1943,124 @@ export default function ReadyToShipPage() {
           </footer>
         </section>
       </div>
+
+      {pickupOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-bold text-zinc-950">
+                  Schedule Delhivery Pickup
+                </h2>
+
+                <p className="mt-1 text-xs text-zinc-500">
+                  Warehouse-level pickup request
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPickupOpen(false)
+                }
+                className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-zinc-700">
+                  Pickup Date
+                </label>
+
+                <input
+                  type="date"
+                  value={
+                    pickupForm.pickupDate
+                  }
+                  onChange={(e) =>
+                    setPickupForm(
+                      (current) => ({
+                        ...current,
+                        pickupDate:
+                          e.target.value,
+                      }),
+                    )
+                  }
+                  className="h-10 w-full rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-zinc-700">
+                  Pickup Time
+                </label>
+
+                <input
+                  type="time"
+                  value={
+                    pickupForm.pickupTime
+                  }
+                  onChange={(e) =>
+                    setPickupForm(
+                      (current) => ({
+                        ...current,
+                        pickupTime:
+                          e.target.value,
+                      }),
+                    )
+                  }
+                  className="h-10 w-full rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-zinc-700">
+                  Package Count
+                </label>
+
+                <input
+                  type="number"
+                  min="1"
+                  value={
+                    pickupForm.packageCount
+                  }
+                  onChange={(e) =>
+                    setPickupForm(
+                      (current) => ({
+                        ...current,
+                        packageCount:
+                          e.target.value,
+                      }),
+                    )
+                  }
+                  className="h-10 w-full rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  scheduleDelhiveryPickup
+                }
+                disabled={pickupLoading}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-zinc-950 text-sm font-bold text-white transition hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {pickupLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CalendarClock className="h-4 w-4" />
+                )}
+
+                Schedule Pickup
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
     </main>
   );
 }
