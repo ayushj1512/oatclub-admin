@@ -204,13 +204,27 @@ const findLabelUrl = (value) => {
   if (!value) return "";
 
   if (typeof value === "string") {
-    return /^https?:\/\//i.test(value) ? value : "";
+    const url = value.trim();
+
+    if (!/^https?:\/\//i.test(url)) {
+      return "";
+    }
+
+    const looksLikeLabel =
+      /\.pdf($|\?)/i.test(url) ||
+      /label/i.test(url) ||
+      /waybill/i.test(url);
+
+    return looksLikeLabel ? url : "";
   }
 
   if (Array.isArray(value)) {
     for (const item of value) {
       const url = findLabelUrl(item);
-      if (url) return url;
+
+      if (url) {
+        return url;
+      }
     }
 
     return "";
@@ -219,23 +233,44 @@ const findLabelUrl = (value) => {
   if (typeof value === "object") {
     const preferredKeys = [
       "pdf_download_link",
+      "pdfDownloadLink",
       "pdf_url",
       "pdfUrl",
       "download_url",
       "downloadUrl",
       "label_url",
       "labelUrl",
-      "url",
+      "label",
+      "labels",
+      "waybill_url",
+      "waybillUrl",
     ];
 
     for (const key of preferredKeys) {
+      if (value[key] == null) {
+        continue;
+      }
+
       const url = findLabelUrl(value[key]);
-      if (url) return url;
+
+      if (url) {
+        return url;
+      }
     }
 
-    for (const item of Object.values(value)) {
+    // Search nested objects but ignore random image/logo keys
+    for (const [key, item] of Object.entries(value)) {
+      if (
+        /logo|image|icon|banner|static/i.test(key)
+      ) {
+        continue;
+      }
+
       const url = findLabelUrl(item);
-      if (url) return url;
+
+      if (url) {
+        return url;
+      }
     }
   }
 
@@ -408,31 +443,45 @@ export default function ReadyToShipPage() {
         },
       );
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
+      const data = await response.json().catch(() => ({}));
 
+      if (!response.ok) {
         throw new Error(
-          data?.message || "Unable to download Delhivery label.",
+          data?.message ||
+          "Unable to generate Delhivery label.",
         );
       }
 
-      const blob = await response.blob();
+      const labelUrl =
+        data?.data?.labelUrl ||
+        data?.labelUrl ||
+        "";
 
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
+      if (!labelUrl) {
+        console.log(
+          "Delhivery single label response:",
+          data,
+        );
 
-      link.href = url;
-      link.download = `Delhivery-${order?.orderNumber || awb}.pdf`;
+        throw new Error(
+          "Delhivery label URL not found.",
+        );
+      }
 
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      downloadUrl(
+        labelUrl,
+        `Delhivery-${order?.orderNumber || awb}.pdf`,
+      );
 
-      URL.revokeObjectURL(url);
+      showMessage(
+        "success",
+        `Label generated for #${order?.orderNumber}.`,
+      );
     } catch (error) {
       showMessage(
         "error",
-        error?.message || "Unable to download label.",
+        error?.message ||
+        "Unable to download label.",
       );
     } finally {
       setLabelLoading((current) => ({
@@ -443,14 +492,17 @@ export default function ReadyToShipPage() {
   };
 
   const downloadBulkDelhiveryLabels = async () => {
-    const shipments = selectedOrders
-      .map((order) => ({
-        orderNumber: order?.orderNumber,
-        awb: getDelhiveryAwb(order),
-      }))
-      .filter((item) => item.awb);
+    const waybills = [
+      ...new Set(
+        selectedOrders
+          .map((order) =>
+            getDelhiveryAwb(order),
+          )
+          .filter(Boolean),
+      ),
+    ];
 
-    if (!shipments.length) {
+    if (!waybills.length) {
       showMessage(
         "error",
         "Selected orders do not have Delhivery AWBs.",
@@ -466,42 +518,78 @@ export default function ReadyToShipPage() {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
-          body: JSON.stringify({ shipments }),
+          body: JSON.stringify({
+            waybills,
+          }),
         },
       );
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
+        const data =
+          await response
+            .json()
+            .catch(() => ({}));
 
         throw new Error(
-          data?.message || "Unable to generate bulk labels.",
+          data?.message ||
+          "Unable to generate bulk labels.",
         );
       }
 
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+      const blob =
+        await response.blob();
 
-      const link = document.createElement("a");
+      if (!blob.size) {
+        throw new Error(
+          "Empty label PDF received.",
+        );
+      }
+
+      const url =
+        URL.createObjectURL(blob);
+
+      const link =
+        document.createElement("a");
 
       link.href = url;
-      link.download = `Delhivery-Labels-${shipments.length}.pdf`;
+      link.download =
+        `Delhivery-Labels-${waybills.length}.pdf`;
 
       document.body.appendChild(link);
+
       link.click();
       link.remove();
 
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 1000);
+
+      const generated = Number(
+        response.headers.get(
+          "X-Labels-Generated",
+        ) || waybills.length,
+      );
+
+      const failed = Number(
+        response.headers.get(
+          "X-Labels-Failed",
+        ) || 0,
+      );
 
       showMessage(
-        "success",
-        `${shipments.length} Delhivery labels downloaded.`,
+        failed ? "error" : "success",
+        failed
+          ? `${generated} labels downloaded, ${failed} failed.`
+          : `${generated} Delhivery labels downloaded.`,
       );
     } catch (error) {
       showMessage(
         "error",
-        error?.message || "Bulk label download failed.",
+        error?.message ||
+        "Bulk label download failed.",
       );
     } finally {
       setBulkLabelLoading(false);
@@ -1155,6 +1243,13 @@ export default function ReadyToShipPage() {
           );
         }
 
+        // Assign first
+        await assignCourierToOrder(
+          orderId,
+          PROVIDERS.SHIPROCKET,
+        );
+
+        // Then book
         await bookShiprocketShipment(orderId);
       } else if (provider === PROVIDERS.DELHIVERY) {
         const delhiveryOption =
@@ -1172,6 +1267,13 @@ export default function ReadyToShipPage() {
           );
         }
 
+        // Assign first
+        await assignCourierToOrder(
+          orderId,
+          PROVIDERS.DELHIVERY,
+        );
+
+        // Then book
         await request(
           `/api/orders/${orderId}/delhivery/book`,
           {
@@ -1182,11 +1284,6 @@ export default function ReadyToShipPage() {
       } else {
         throw new Error("Invalid courier provider.");
       }
-
-      await assignCourierToOrder(
-        orderId,
-        provider,
-      );
 
       setSelectedIds((current) =>
         current.filter(
@@ -1884,22 +1981,23 @@ export default function ReadyToShipPage() {
                           {/* Label */}
                           <button
                             type="button"
-                            onClick={() =>
-                              downloadDelhiveryLabel(order)
-                            }
+                            onClick={downloadBulkDelhiveryLabels}
                             disabled={
-                              !delhiveryAwb ||
-                              downloadingLabel
+                              !selectedDelhiveryLabelCount ||
+                              bulkLabelLoading
                             }
-                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-300"
+                            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {downloadingLabel ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            {bulkLabelLoading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
-                              <Download className="h-3.5 w-3.5" />
+                              <Download className="h-4 w-4" />
                             )}
 
-                            Label
+                            Download Labels
+                            {selectedDelhiveryLabelCount > 0
+                              ? ` (${selectedDelhiveryLabelCount})`
+                              : ""}
                           </button>
 
                           <button
