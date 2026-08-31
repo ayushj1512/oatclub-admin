@@ -40,7 +40,6 @@ export default function InvoiceTemplate({ data }) {
     totalTax = +(grandTotal - taxableAmount).toFixed(2);
   }
 
-  const orderDiscount = Number(totals.discount || 0);
 
   const shippingFee = Number(
     totals.shippingFee ?? totals.shipping ?? 0
@@ -49,12 +48,9 @@ export default function InvoiceTemplate({ data }) {
   const payable =
     totals.finalPayable !== undefined
       ? Number(totals.finalPayable)
-      : grandTotal - orderDiscount;
+      : grandTotal + shippingFee;
 
-  const baseTotal = items.reduce(
-    (s, it) => s + Number(it.priceIncl || it.price || 0) * Number(it.qty || 0),
-    0
-  );
+
 
   const getHsn = (it) =>
     String(
@@ -290,9 +286,7 @@ export default function InvoiceTemplate({ data }) {
             <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
               Price
             </th>
-            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
-              Disc.
-            </th>
+
             <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
               GST
             </th>
@@ -306,30 +300,7 @@ export default function InvoiceTemplate({ data }) {
           {items.map((it, idx) => {
             const unit = Number(it.priceIncl || it.price || 0);
             const qty = Number(it.qty || 0);
-            const sub = +(unit * qty).toFixed(2);
-
-            const itemDisc =
-              it.discountType === "PERCENT"
-                ? +(sub * (Number(it.discountPct || 0) / 100)).toFixed(2)
-                : Number(it.discountAmount || it.discount || 0);
-
-            const allocatedDisc =
-              itemDisc > 0
-                ? +itemDisc.toFixed(2)
-                : !orderDiscount || !baseTotal
-                  ? 0
-                  : idx === items.length - 1
-                    ? +(
-                      orderDiscount -
-                      items.slice(0, idx).reduce((sum, x) => {
-                        const u = Number(x.priceIncl || x.price || 0);
-                        const q = Number(x.qty || 0);
-                        return sum + +((orderDiscount * (u * q)) / baseTotal).toFixed(2);
-                      }, 0)
-                    ).toFixed(2)
-                    : +((orderDiscount * sub) / baseTotal).toFixed(2);
-
-            const total = +(sub - allocatedDisc).toFixed(2);
+            const total = +(unit * qty).toFixed(2);
 
             return (
               <tr key={idx}>
@@ -337,6 +308,7 @@ export default function InvoiceTemplate({ data }) {
                   <div className="font-black mb-[3px]">
                     {it.name || it.title || "-"}
                   </div>
+
                   <div className="text-[9px] text-zinc-500">
                     {it.sku || it.productCode || ""}
                   </div>
@@ -356,12 +328,6 @@ export default function InvoiceTemplate({ data }) {
 
                 <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
                   {FORMATTERS.currency(unit)}
-                </td>
-
-                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
-                  {allocatedDisc > 0
-                    ? `-${FORMATTERS.currency(allocatedDisc)}`
-                    : "-"}
                 </td>
 
                 <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
@@ -396,16 +362,7 @@ export default function InvoiceTemplate({ data }) {
           <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
             <span>Taxable</span>
             <span>{FORMATTERS.currency(taxableAmount)}</span>
-          </div>
-
-          {orderDiscount > 0 ? (
-            <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
-              <span>
-                Discount {totals.couponCode ? totals.couponCode : ""}
-              </span>
-              <span>-{FORMATTERS.currency(orderDiscount)}</span>
-            </div>
-          ) : null}
+          </div>  
 
           <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
             <span>Tax</span>
