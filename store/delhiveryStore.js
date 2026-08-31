@@ -15,11 +15,12 @@ const request = async (
     `${API_URL}/api/delhivery${url}`,
     {
       cache: "no-store",
+      ...options,
+
       headers: {
         "Content-Type": "application/json",
         ...(options.headers || {}),
       },
-      ...options,
     },
   );
 
@@ -33,6 +34,7 @@ const request = async (
   ) {
     throw new Error(
       result?.message ||
+      result?.error ||
       "Delhivery request failed",
     );
   }
@@ -230,13 +232,34 @@ export const useDelhiveryStore = create(
       }
     },
 
-    createPickup: async (payload) => {
+    createPickup: async ({
+      pickupDate,
+      pickupTime,
+      packageCount = 1,
+    }) => {
       set({
         loading: true,
         error: null,
       });
 
       try {
+        const payload = {
+          pickupDate: String(
+            pickupDate || "",
+          ).trim(),
+
+          pickupTime: String(
+            pickupTime || "",
+          ).trim(),
+
+          packageCount: Math.max(
+            1,
+            Math.floor(
+              Number(packageCount) || 1,
+            ),
+          ),
+        };
+
         const data = await request(
           "/pickup",
           {
@@ -246,9 +269,15 @@ export const useDelhiveryStore = create(
         );
 
         set({ pickup: data });
+
         return data;
       } catch (error) {
-        set({ error: error.message });
+        set({
+          error:
+            error?.message ||
+            "Pickup scheduling failed",
+        });
+
         throw error;
       } finally {
         set({ loading: false });
