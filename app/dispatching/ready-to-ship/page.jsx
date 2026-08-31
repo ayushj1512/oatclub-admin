@@ -1549,41 +1549,61 @@ export default function ReadyToShipPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* Bulk Shiprocket */}
               <button
                 type="button"
-                onClick={handleSyncAllTracking}
-                disabled={trackingSyncLoading}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50"
+                onClick={() => bulkBook(PROVIDERS.SHIPROCKET)}
+                disabled={
+                  !selectedIds.length ||
+                  bulkBookingProvider ||
+                  selectedShiprocketEligibleCount === 0
+                }
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {trackingSyncLoading ? (
+                {bulkBookingProvider === PROVIDERS.SHIPROCKET ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Radar className="h-4 w-4" />
+                  <Truck className="h-4 w-4" />
                 )}
 
-                Sync Tracking
+                Book Shiprocket
+                {selectedIds.length > 0
+                  ? ` (${selectedShiprocketEligibleCount})`
+                  : ""}
               </button>
 
+              {/* Bulk Delhivery */}
               <button
                 type="button"
-                onClick={() =>
-                  setPickupOpen(true)
+                onClick={() => bulkBook(PROVIDERS.DELHIVERY)}
+                disabled={
+                  !selectedIds.length ||
+                  bulkBookingProvider ||
+                  selectedDelhiveryEligibleCount === 0
                 }
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <CalendarClock className="h-4 w-4" />
-                Schedule Pickup
+                {bulkBookingProvider === PROVIDERS.DELHIVERY ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PackageCheck className="h-4 w-4" />
+                )}
+
+                Book Delhivery
+                {selectedIds.length > 0
+                  ? ` (${selectedDelhiveryEligibleCount})`
+                  : ""}
               </button>
 
+              {/* Refresh */}
               <button
                 type="button"
                 onClick={loadOrders}
                 disabled={loading}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:opacity-60"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCcw
-                  className={`h-4 w-4 ${loading ? "animate-spin" : ""
-                    }`}
+                  className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
                 />
                 Refresh
               </button>
