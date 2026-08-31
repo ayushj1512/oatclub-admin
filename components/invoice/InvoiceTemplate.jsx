@@ -27,28 +27,69 @@ export default function InvoiceTemplate({ data }) {
     seller.logo ||
     "http://res.cloudinary.com/dpsvrt4sd/image/upload/v1781123546/odb5ckquouajjzfbxin0.webp";
 
-  const grandTotal =
-    totals.grandTotal !== undefined
-      ? Number(totals.grandTotal)
-      : Number(totals.taxable || 0);
+  const n = (v) => Number(v || 0);
+  const round2 = (v) => Math.round((n(v) + Number.EPSILON) * 100) / 100;
 
-  let taxableAmount = Number(totals.taxable || 0);
-  let totalTax = Number(totals.tax || 0);
+  const originalProductValue = round2(
+    items.reduce((sum, it) => {
+      const qty = Math.max(1, n(it.qty || it.quantity || 1));
 
-  if (totalTax === 0 && grandTotal > 0) {
-    taxableAmount = +(grandTotal / 1.05).toFixed(2);
-    totalTax = +(grandTotal - taxableAmount).toFixed(2);
+      const originalUnit =
+        n(it.originalPrice) ||
+        n(it.compareAtPrice) ||
+        n(it.priceIncl) ||
+        n(it.price);
+
+      return sum + (n(it.originalSubtotal) || originalUnit * qty);
+    }, 0)
+  );
+
+  const finalProductValue = round2(
+    items.reduce((sum, it) => {
+      const qty = Math.max(1, n(it.qty || it.quantity || 1));
+
+      return (
+        sum +
+        (n(it.subtotal) ||
+          n(it.priceIncl || it.price) * qty)
+      );
+    }, 0)
+  );
+
+  const discountAmount = round2(
+    Math.max(
+      0,
+      n(totals.discount) ||
+      items.reduce((sum, it) => sum + n(it.discountAmount), 0) ||
+      originalProductValue - finalProductValue
+    )
+  );
+
+  let taxableAmount = round2(
+    items.reduce((sum, it) => sum + n(it.taxableValue), 0)
+  );
+
+  let totalTax = round2(
+    items.reduce((sum, it) => sum + n(it.taxAmount), 0)
+  );
+
+  if (!taxableAmount && finalProductValue > 0) {
+    taxableAmount = round2(finalProductValue / 1.05);
   }
 
+  if (!totalTax && finalProductValue > 0) {
+    totalTax = round2(finalProductValue - taxableAmount);
+  }
 
-  const shippingFee = Number(
+  const shippingFee = round2(
     totals.shippingFee ?? totals.shipping ?? 0
   );
 
-  const payable =
-    totals.finalPayable !== undefined
-      ? Number(totals.finalPayable)
-      : grandTotal + shippingFee;
+  const payable = round2(
+    totals.finalPayable ??
+    totals.grandTotal ??
+    finalProductValue + shippingFee
+  );
 
 
 
@@ -298,9 +339,33 @@ export default function InvoiceTemplate({ data }) {
 
         <tbody>
           {items.map((it, idx) => {
-            const unit = Number(it.priceIncl || it.price || 0);
-            const qty = Number(it.qty || 0);
-            const total = +(unit * qty).toFixed(2);
+            const qty = Math.max(
+              1,
+              Number(it.qty || it.quantity || 1)
+            );
+
+            const originalUnit = Number(
+              it.originalPrice ||
+              it.compareAtPrice ||
+              it.priceIncl ||
+              it.price ||
+              0
+            );
+
+            const unit = Number(
+              it.priceIncl ||
+              it.price ||
+              originalUnit
+            );
+
+            const itemDiscount = Number(
+              it.discountAmount ||
+              Math.max(0, (originalUnit - unit) * qty)
+            );
+
+            const total = Number(
+              it.subtotal || unit * qty
+            );
 
             return (
               <tr key={idx}>
@@ -312,6 +377,14 @@ export default function InvoiceTemplate({ data }) {
                   <div className="text-[9px] text-zinc-500">
                     {it.sku || it.productCode || ""}
                   </div>
+
+                    {itemDiscount > 0 ? (
+                    <div className="mt-1 text-[9px] font-bold text-zinc-500">
+                      Original {FORMATTERS.currency(originalUnit)} · Discount{" "}
+                      -{FORMATTERS.currency(itemDiscount)}
+                    </div>
+                  ) : null}
+
                 </td>
 
                 <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-[11px]">
@@ -360,12 +433,31 @@ export default function InvoiceTemplate({ data }) {
 
         <div className="ml-auto w-[285px] border border-zinc-200 px-[14px] py-3">
           <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
-            <span>Taxable</span>
-            <span>{FORMATTERS.currency(taxableAmount)}</span>
-          </div>  
+            <span>Original Product Value</span>
+            <span>{FORMATTERS.currency(originalProductValue)}</span>
+          </div>
 
           <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
-            <span>Tax</span>
+            <span>Discount</span>
+            <span className="font-bold">
+              {discountAmount > 0
+                ? `-${FORMATTERS.currency(discountAmount)}`
+                : FORMATTERS.currency(0)}
+            </span>
+          </div>
+
+          <div className="flex justify-between border-b border-zinc-200 py-[7px] text-[11px] font-black">
+            <span>Final Product Value</span>
+            <span>{FORMATTERS.currency(finalProductValue)}</span>
+          </div>
+
+          <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
+            <span>Taxable Value</span>
+            <span>{FORMATTERS.currency(taxableAmount)}</span>
+          </div>
+
+          <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
+            <span>GST (5% Included)</span>
             <span>{FORMATTERS.currency(totalTax)}</span>
           </div>
 
@@ -376,7 +468,7 @@ export default function InvoiceTemplate({ data }) {
             </div>
           ) : null}
 
-          <div className="mt-1 flex justify-between border-t border-zinc-200 pt-[11px] text-[15px] font-black">
+          <div className="mt-1 flex justify-between border-t border-zinc-300 pt-[11px] text-[15px] font-black">
             <span>Order Total</span>
             <span>{FORMATTERS.currency(payable)}</span>
           </div>
@@ -398,7 +490,6 @@ export default function InvoiceTemplate({ data }) {
 
               <div className="flex justify-between border-t border-zinc-200 pt-[10px] text-[14px] font-black">
                 <span>Remaining COD</span>
-
                 <span>
                   {FORMATTERS.currency(payment?.remainingAmount || 0)}
                 </span>
