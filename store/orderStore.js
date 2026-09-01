@@ -2021,6 +2021,44 @@ export const useOrderStore = create((set, get) => ({
     return order;
   },
 
+  /* ============================================================
+   CLONE ORDER
+============================================================ */
+
+  cloneOrder: async (orderId) => {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
+
+    const data = await get()._post(
+      `/api/orders/${encodeURIComponent(orderId)}/clone`,
+      {},
+    );
+
+    const clonedOrder =
+      data?.order ||
+      data?.clonedOrder ||
+      get()._normalizeOrder(data);
+
+    if (clonedOrder?._id) {
+      set((state) => ({
+        order: clonedOrder,
+        orders: [
+          clonedOrder,
+          ...(state.orders || []).filter(
+            (o) =>
+              String(o?._id) !==
+              String(clonedOrder._id),
+          ),
+        ],
+      }));
+
+      get()._syncCustomerSupportDetail(clonedOrder);
+    }
+
+    return clonedOrder;
+  },
+
   /* ---------------- DUPLICATE ORDER ALERTS ---------------- */
 
   // fetch only (no marking)

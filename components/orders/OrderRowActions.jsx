@@ -18,6 +18,7 @@ import {
   Megaphone,
   MoreVertical,
   PackageOpen,
+  Copy,
   Printer,
   RefreshCw,
   Truck,
@@ -343,6 +344,10 @@ export default function OrderRowActions({
     (state) => state.confirmOrder
   );
 
+  const cloneOrder = useOrderStore(
+    (state) => state.cloneOrder
+  );
+
   const splitOrderIntoShipments = useOrderStore(
     (state) => state.splitOrderIntoShipments,
   );
@@ -407,6 +412,9 @@ export default function OrderRowActions({
     childCancelLoading,
     setChildCancelLoading,
   ] = useState(false);
+
+  const [cloneLoading, setCloneLoading] =
+    useState(false);
 
   const prepaidConfirmationAvailable =
     canSendPrepaidConfirmation(order);
@@ -832,6 +840,49 @@ export default function OrderRowActions({
       );
     } finally {
       setConfirmLoading(false);
+    }
+  };
+
+  const handleCloneOrder = async () => {
+    if (!orderId || cloneLoading) return;
+
+    const confirmed = window.confirm(
+      `Clone order ${orderNumber || orderId}?\n\nA new independent order copy will be created.`
+    );
+
+    if (!confirmed) return;
+
+    setOpen(false);
+    setCloneLoading(true);
+
+    try {
+      const clonedOrder = await cloneOrder(orderId);
+
+      if (!clonedOrder?._id) {
+        throw new Error("Clone order was not returned");
+      }
+
+      toast.success(
+        `Order cloned as ${clonedOrder.orderNumber}`
+      );
+
+      await onRefresh?.();
+
+      if (typeof window !== "undefined") {
+        window.open(
+          `/orders/${clonedOrder._id}`,
+          "_blank",
+          "noopener,noreferrer"
+        );
+      }
+    } catch (error) {
+      console.error("Clone order error:", error);
+
+      toast.error(
+        error?.message || "Failed to clone order"
+      );
+    } finally {
+      setCloneLoading(false);
     }
   };
 
@@ -1495,6 +1546,7 @@ export default function OrderRowActions({
     invoiceLoading ||
     Boolean(pendingInvoiceAction) ||
     confirmLoading ||
+    cloneLoading ||
     splitLoading ||
     influencerLoading ||
     testingLoading ||
@@ -1586,6 +1638,42 @@ export default function OrderRowActions({
                   DONE
                 </span>
               )}
+            </button>
+
+            {/* Clone Order */}
+
+            <button
+              type="button"
+              onClick={handleCloneOrder}
+              disabled={isBusy || !orderId}
+              title="Create a copy of this order"
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                {cloneLoading ? (
+                  <Loader2
+                    size={15}
+                    className="animate-spin text-blue-600"
+                  />
+                ) : (
+                  <Copy
+                    size={15}
+                    className="text-blue-600"
+                  />
+                )}
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    {cloneLoading
+                      ? "Cloning Order..."
+                      : "Clone Order"}
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    Create independent order copy
+                  </div>
+                </div>
+              </div>
             </button>
 
             {/* Split Order */}
