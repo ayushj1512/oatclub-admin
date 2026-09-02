@@ -30,17 +30,33 @@ export default function InvoiceTemplate({ data }) {
   const n = (v) => Number(v || 0);
   const round2 = (v) => Math.round((n(v) + Number.EPSILON) * 100) / 100;
 
-  const originalProductValue = round2(
+  const mrpProductValue = round2(
     items.reduce((sum, it) => {
       const qty = Math.max(1, n(it.qty || it.quantity || 1));
 
-      const originalUnit =
-        n(it.originalPrice) ||
+      const mrpUnit =
         n(it.compareAtPrice) ||
+        n(it.originalPrice) ||
         n(it.priceIncl) ||
         n(it.price);
 
-      return sum + (n(it.originalSubtotal) || originalUnit * qty);
+      return sum + mrpUnit * qty;
+    }, 0)
+  );
+
+  const subtotalProductValue = round2(
+    items.reduce((sum, it) => {
+      const qty = Math.max(1, n(it.qty || it.quantity || 1));
+
+      const beforeDiscountUnit =
+        n(it.originalPrice) ||
+        n(it.priceIncl) ||
+        n(it.price);
+
+      return (
+        sum +
+        (n(it.originalSubtotal) || beforeDiscountUnit * qty)
+      );
     }, 0)
   );
 
@@ -56,12 +72,22 @@ export default function InvoiceTemplate({ data }) {
     }, 0)
   );
 
+  const productMarkdown = round2(
+    Math.max(
+      0,
+      mrpProductValue - subtotalProductValue
+    )
+  );
+
   const discountAmount = round2(
     Math.max(
       0,
       n(totals.discount) ||
-      items.reduce((sum, it) => sum + n(it.discountAmount), 0) ||
-      originalProductValue - finalProductValue
+      items.reduce(
+        (sum, it) => sum + n(it.discountAmount),
+        0
+      ) ||
+      subtotalProductValue - finalProductValue
     )
   );
 
@@ -132,141 +158,289 @@ export default function InvoiceTemplate({ data }) {
       style={{
         width: "210mm",
         minHeight: "297mm",
-        padding: 26,
+        padding: "20px 24px",
+        boxSizing: "border-box",
         fontFamily: "Lato, Arial, sans-serif",
+        fontSize: "10px",
       }}
     >
-      {/* HERO */}
+      {/* =========================
+        HERO
+    ========================= */}
       <div
         className="bg-black text-white"
-        style={{ margin: "-26px -26px 22px", padding: 20 }}
+        style={{
+          margin: "-20px -24px 12px",
+          padding: "14px 18px 12px",
+          height: "118px",
+          boxSizing: "border-box",
+        }}
       >
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center">
-          <div className="text-[10px] font-black text-zinc-300">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            alignItems: "center",
+            height: "62px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "8px",
+              fontWeight: 900,
+              color: "#d4d4d8",
+            }}
+          >
             ORDER #{orderNumber || "-"}
           </div>
 
-          <div className="text-center">
+          {/* LOGO */}
+          <div style={{ textAlign: "center" }}>
             <img
               src={logo}
               alt={seller.name || "OATCLUB"}
-              className="mx-auto block w-[150px] object-contain"
+              style={{
+                display: "block",
+                width: "125px",
+                maxWidth: "125px",
+                height: "42px",
+                maxHeight: "42px",
+                objectFit: "contain",
+                margin: "0 auto",
+              }}
             />
-            <div className="mt-[5px] text-[9px] font-black tracking-[3px] text-zinc-300">
+
+            <div
+              style={{
+                marginTop: "3px",
+                fontSize: "7px",
+                lineHeight: 1,
+                fontWeight: 900,
+                letterSpacing: "2.5px",
+                color: "#d4d4d8",
+              }}
+            >
               OWN ALL TREND
             </div>
           </div>
 
-          <div className="text-right text-[10px] font-black text-zinc-300">
+          <div
+            style={{
+              textAlign: "right",
+              fontSize: "8px",
+              fontWeight: 900,
+              color: "#d4d4d8",
+            }}
+          >
             {FORMATTERS.date(orderDate)}
           </div>
         </div>
 
-        <div className="my-[18px] h-px bg-zinc-700" />
+        <div
+          style={{
+            height: "1px",
+            background: "#3f3f46",
+            margin: "8px 0",
+          }}
+        />
 
-        <div className="text-center text-[11px] font-black tracking-[2px]">
+        <div
+          style={{
+            textAlign: "center",
+            fontSize: "9px",
+            fontWeight: 900,
+            letterSpacing: "1.8px",
+            lineHeight: 1.2,
+          }}
+        >
           TAX INVOICE / ORDER RECEIPT
         </div>
       </div>
 
-      {/* META */}
-      <div className="grid grid-cols-4 gap-[10px] mt-4">
-        <div className="border border-zinc-200 bg-zinc-50 p-[10px]">
-          <span className="block text-[9px] tracking-[0.8px] text-zinc-500 mb-1">
-            Order
-          </span>
-          <span className="text-[11px] font-black">{orderNumber || "-"}</span>
-        </div>
+      {/* =========================
+        META
+    ========================= */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: "7px",
+          marginBottom: "10px",
+        }}
+      >
+        {[
+          {
+            label: "Order",
+            value: orderNumber || "-",
+          },
+          {
+            label: "Payment",
+            value:
+              payment?.status ||
+              payment?.title ||
+              "-",
+          },
+          {
+            label: "Method",
+            value: payment?.title || "-",
+          },
+          {
+            label: "Invoice",
+            value: invoiceNumber || "-",
+          },
+        ].map((meta) => (
+          <div
+            key={meta.label}
+            style={{
+              border: "1px solid #e4e4e7",
+              background: "#fafafa",
+              padding: "7px 8px",
+              minHeight: "39px",
+              boxSizing: "border-box",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "7px",
+                color: "#71717a",
+                letterSpacing: "0.7px",
+                marginBottom: "3px",
+                lineHeight: 1,
+              }}
+            >
+              {meta.label}
+            </div>
 
-        <div className="border border-zinc-200 bg-zinc-50 p-[10px]">
-          <span className="block text-[9px] tracking-[0.8px] text-zinc-500 mb-1">
-            Payment
-          </span>
-          <span className="text-[11px] font-black">
-            {payment?.status || payment?.title || "-"}
-          </span>
-        </div>
-
-        <div className="border border-zinc-200 bg-zinc-50 p-[10px]">
-          <span className="block text-[9px] tracking-[0.8px] text-zinc-500 mb-1">
-            Method
-          </span>
-          <span className="text-[11px] font-black">
-            {payment?.title || "-"}
-          </span>
-        </div>
-
-        <div className="border border-zinc-200 bg-zinc-50 p-[10px]">
-          <span className="block text-[9px] tracking-[0.8px] text-zinc-500 mb-1">
-            Invoice
-          </span>
-          <span className="text-[11px] font-black">
-            {invoiceNumber || "-"}
-          </span>
-        </div>
+            <div
+              style={{
+                fontSize: "9px",
+                fontWeight: 900,
+                lineHeight: 1.2,
+              }}
+            >
+              {meta.value}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* SELLER DETAILS */}
-      <div className="border border-zinc-200 p-[14px] mt-[18px]">
+      {/* =========================
+        SELLER DETAILS
+    ========================= */}
+      <div
+        style={{
+          border: "1px solid #e4e4e7",
+          padding: "9px 11px",
+          marginBottom: "10px",
+        }}
+      >
         <div
-          className="mb-2 text-[10px] font-black tracking-[0.6px]"
-          style={{ fontFamily: "Nunito Sans, Arial, sans-serif" }}
+          style={{
+            marginBottom: "5px",
+            fontSize: "8px",
+            fontWeight: 900,
+            letterSpacing: "0.6px",
+            fontFamily:
+              "Nunito Sans, Arial, sans-serif",
+          }}
         >
           Seller Details
         </div>
 
-        <div className="grid grid-cols-2 gap-8 text-[10px] leading-[1.7] text-zinc-500">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            columnGap: "28px",
+            fontSize: "8px",
+            lineHeight: 1.4,
+            color: "#71717a",
+          }}
+        >
           <div>
-            <p className="font-black text-black mb-1">
-              {seller.name || seller.brand || "OATCLUB"}
+            <p
+              style={{
+                margin: "0 0 2px",
+                color: "#000",
+                fontWeight: 900,
+              }}
+            >
+              {seller.name ||
+                seller.brand ||
+                "OATCLUB"}
             </p>
 
-            {seller.address ? <p>{seller.address}</p> : null}
-            {seller.addressLine2 ? (
-              <p>{seller.addressLine2}</p>
+            {seller.address ? (
+              <p style={{ margin: 0 }}>
+                {seller.address}
+              </p>
             ) : null}
 
-            <p>
-              {[seller.city, seller.state, seller.pincode]
+            {seller.addressLine2 ? (
+              <p style={{ margin: 0 }}>
+                {seller.addressLine2}
+              </p>
+            ) : null}
+
+            <p style={{ margin: 0 }}>
+              {[
+                seller.city,
+                seller.state,
+                seller.pincode,
+              ]
                 .filter(Boolean)
                 .join(", ")}
             </p>
 
-            {seller.country ? <p>{seller.country}</p> : null}
+            {seller.country ? (
+              <p style={{ margin: 0 }}>
+                {seller.country}
+              </p>
+            ) : null}
           </div>
 
           <div>
             {seller.gstin ? (
-              <p>
-                <span className="font-black text-black">GSTIN:</span>{" "}
+              <p style={{ margin: 0 }}>
+                <strong style={{ color: "#000" }}>
+                  GSTIN:
+                </strong>{" "}
                 {seller.gstin}
               </p>
             ) : null}
 
             {seller.pan ? (
-              <p>
-                <span className="font-black text-black">PAN:</span>{" "}
+              <p style={{ margin: 0 }}>
+                <strong style={{ color: "#000" }}>
+                  PAN:
+                </strong>{" "}
                 {seller.pan}
               </p>
             ) : null}
 
             {seller.phone ? (
-              <p>
-                <span className="font-black text-black">Phone:</span>{" "}
+              <p style={{ margin: 0 }}>
+                <strong style={{ color: "#000" }}>
+                  Phone:
+                </strong>{" "}
                 {seller.phone}
               </p>
             ) : null}
 
             {seller.email ? (
-              <p>
-                <span className="font-black text-black">Email:</span>{" "}
+              <p style={{ margin: 0 }}>
+                <strong style={{ color: "#000" }}>
+                  Email:
+                </strong>{" "}
                 {seller.email}
               </p>
             ) : null}
 
             {seller.website ? (
-              <p>
-                <span className="font-black text-black">Website:</span>{" "}
+              <p style={{ margin: 0 }}>
+                <strong style={{ color: "#000" }}>
+                  Website:
+                </strong>{" "}
                 {seller.website}
               </p>
             ) : null}
@@ -274,64 +448,231 @@ export default function InvoiceTemplate({ data }) {
         </div>
       </div>
 
-      {/* CUSTOMER */}
-      <div className="border border-zinc-200 p-[14px] my-[18px]">
+      {/* =========================
+        CUSTOMER
+    ========================= */}
+      <div
+        style={{
+          border: "1px solid #e4e4e7",
+          padding: "9px 11px",
+          marginBottom: "10px",
+        }}
+      >
         <div
-          className="mb-2 text-[10px] font-black tracking-[0.6px]"
-          style={{ fontFamily: "Nunito Sans, Arial, sans-serif" }}
+          style={{
+            marginBottom: "5px",
+            fontSize: "8px",
+            fontWeight: 900,
+            letterSpacing: "0.6px",
+            fontFamily:
+              "Nunito Sans, Arial, sans-serif",
+          }}
         >
           Customer / Shipping Details
         </div>
 
-        <div className="grid grid-cols-2 gap-8 text-[10px] leading-[1.7] text-zinc-500">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            columnGap: "28px",
+            fontSize: "8px",
+            lineHeight: 1.4,
+            color: "#71717a",
+          }}
+        >
+          {/* BILLING */}
           <div>
-            <p className="font-black text-black mb-1">Bill To</p>
-            <p>{bill.fullName}</p>
-            <p>{bill.line1}</p>
-            {bill.line2 ? <p>{bill.line2}</p> : null}
-            <p>
-              {bill.city}, {bill.state} - {bill.pincode}
+            <p
+              style={{
+                margin: "0 0 2px",
+                color: "#000",
+                fontWeight: 900,
+              }}
+            >
+              Bill To
             </p>
-            {bill.phone ? <p>Phone : {bill.phone}</p> : null}
-            {bill.email ? <p>Email : {bill.email}</p> : null}
+
+            <p style={{ margin: 0 }}>
+              {bill.fullName}
+            </p>
+
+            <p style={{ margin: 0 }}>
+              {bill.line1}
+            </p>
+
+            {bill.line2 ? (
+              <p style={{ margin: 0 }}>
+                {bill.line2}
+              </p>
+            ) : null}
+
+            <p style={{ margin: 0 }}>
+              {bill.city}, {bill.state} -{" "}
+              {bill.pincode}
+            </p>
+
+            {bill.phone ? (
+              <p style={{ margin: 0 }}>
+                Phone: {bill.phone}
+              </p>
+            ) : null}
+
+            {bill.email ? (
+              <p style={{ margin: 0 }}>
+                Email: {bill.email}
+              </p>
+            ) : null}
           </div>
 
+          {/* SHIPPING */}
           <div>
-            <p className="font-black text-black mb-1">Ship To</p>
-            <p>{ship.fullName}</p>
-            <p>{ship.line1}</p>
-            {ship.line2 ? <p>{ship.line2}</p> : null}
-            <p>
-              {ship.city}, {ship.state} - {ship.pincode}
+            <p
+              style={{
+                margin: "0 0 2px",
+                color: "#000",
+                fontWeight: 900,
+              }}
+            >
+              Ship To
+            </p>
+
+            <p style={{ margin: 0 }}>
+              {ship.fullName}
+            </p>
+
+            <p style={{ margin: 0 }}>
+              {ship.line1}
+            </p>
+
+            {ship.line2 ? (
+              <p style={{ margin: 0 }}>
+                {ship.line2}
+              </p>
+            ) : null}
+
+            <p style={{ margin: 0 }}>
+              {ship.city}, {ship.state} -{" "}
+              {ship.pincode}
             </p>
           </div>
         </div>
       </div>
 
-      {/* ITEMS */}
-      <table className="w-full border-collapse">
+      {/* =========================
+        ITEMS
+    ========================= */}
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          tableLayout: "fixed",
+        }}
+      >
         <thead>
           <tr>
-            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-left text-[10px]">
+            <th
+              style={{
+                width: "43%",
+                borderTop:
+                  "1px solid #e4e4e7",
+                borderBottom:
+                  "1px solid #e4e4e7",
+                padding: "6px",
+                textAlign: "left",
+                fontSize: "8px",
+              }}
+            >
               Product
             </th>
-            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-left text-[10px]">
+
+            <th
+              style={{
+                width: "13%",
+                borderTop:
+                  "1px solid #e4e4e7",
+                borderBottom:
+                  "1px solid #e4e4e7",
+                padding: "6px",
+                textAlign: "left",
+                fontSize: "8px",
+              }}
+            >
               HSN
             </th>
-            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-left text-[10px]">
+
+            <th
+              style={{
+                width: "8%",
+                borderTop:
+                  "1px solid #e4e4e7",
+                borderBottom:
+                  "1px solid #e4e4e7",
+                padding: "6px",
+                textAlign: "left",
+                fontSize: "8px",
+              }}
+            >
               Size
             </th>
-            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
+
+            <th
+              style={{
+                width: "7%",
+                borderTop:
+                  "1px solid #e4e4e7",
+                borderBottom:
+                  "1px solid #e4e4e7",
+                padding: "6px",
+                textAlign: "right",
+                fontSize: "8px",
+              }}
+            >
               Qty
             </th>
-            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
+
+            <th
+              style={{
+                width: "11%",
+                borderTop:
+                  "1px solid #e4e4e7",
+                borderBottom:
+                  "1px solid #e4e4e7",
+                padding: "6px",
+                textAlign: "right",
+                fontSize: "8px",
+              }}
+            >
               Price
             </th>
 
-            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
+            <th
+              style={{
+                width: "7%",
+                borderTop:
+                  "1px solid #e4e4e7",
+                borderBottom:
+                  "1px solid #e4e4e7",
+                padding: "6px",
+                textAlign: "right",
+                fontSize: "8px",
+              }}
+            >
               GST
             </th>
-            <th className="border-y border-zinc-200 px-[6px] py-[10px] text-right text-[10px]">
+
+            <th
+              style={{
+                width: "11%",
+                borderTop:
+                  "1px solid #e4e4e7",
+                borderBottom:
+                  "1px solid #e4e4e7",
+                padding: "6px",
+                textAlign: "right",
+                fontSize: "8px",
+              }}
+            >
               Total
             </th>
           </tr>
@@ -341,74 +682,179 @@ export default function InvoiceTemplate({ data }) {
           {items.map((it, idx) => {
             const qty = Math.max(
               1,
-              Number(it.qty || it.quantity || 1)
+              Number(
+                it.qty ||
+                it.quantity ||
+                1
+              )
             );
 
-            const originalUnit = Number(
-              it.originalPrice ||
+            const mrpUnit = Number(
               it.compareAtPrice ||
+              it.originalPrice ||
               it.priceIncl ||
               it.price ||
               0
             );
 
+            const beforeDiscountUnit =
+              Number(
+                it.originalPrice ||
+                (it.originalSubtotal &&
+                  qty
+                  ? Number(
+                    it.originalSubtotal
+                  ) / qty
+                  : 0) ||
+                it.priceIncl ||
+                it.price ||
+                0
+              );
+
             const unit = Number(
               it.priceIncl ||
               it.price ||
-              originalUnit
+              beforeDiscountUnit
             );
 
-            const itemDiscount = Number(
-              it.discountAmount ||
-              Math.max(0, (originalUnit - unit) * qty)
-            );
+            const markdownAmount =
+              Math.max(
+                0,
+                (mrpUnit -
+                  beforeDiscountUnit) *
+                qty
+              );
+
+            const itemDiscount =
+              Number(
+                it.discountAmount ||
+                Math.max(
+                  0,
+                  (beforeDiscountUnit -
+                    unit) *
+                  qty
+                )
+              );
 
             const total = Number(
-              it.subtotal || unit * qty
+              it.subtotal ||
+              unit * qty
             );
+
+            const cellStyle = {
+              borderBottom:
+                "1px solid #f4f4f5",
+              padding: "7px 6px",
+              verticalAlign: "top",
+              fontSize: "9px",
+              lineHeight: 1.3,
+            };
 
             return (
               <tr key={idx}>
-                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-[11px]">
-                  <div className="font-black mb-[3px]">
-                    {it.name || it.title || "-"}
+                <td style={cellStyle}>
+                  <div
+                    style={{
+                      fontWeight: 900,
+                      marginBottom: "2px",
+                    }}
+                  >
+                    {it.name ||
+                      it.title ||
+                      "-"}
                   </div>
 
-                  <div className="text-[9px] text-zinc-500">
-                    {it.sku || it.productCode || ""}
+                  <div
+                    style={{
+                      fontSize: "7px",
+                      color: "#71717a",
+                    }}
+                  >
+                    {it.sku ||
+                      it.productCode ||
+                      ""}
                   </div>
 
-                    {itemDiscount > 0 ? (
-                    <div className="mt-1 text-[9px] font-bold text-zinc-500">
-                      Original {FORMATTERS.currency(originalUnit)} · Discount{" "}
-                      -{FORMATTERS.currency(itemDiscount)}
-                    </div>
-                  ) : null}
+                  <div
+                    style={{
+                      fontSize: "7px",
+                      color: "#71717a",
+                      fontWeight: 700,
+                      marginTop: "2px",
+                      lineHeight: 1.25,
+                    }}
+                  >
+                    MRP{" "}
+                    {FORMATTERS.currency(
+                      mrpUnit
+                    )}
 
+                    {markdownAmount > 0
+                      ? ` · Selling ${FORMATTERS.currency(
+                        beforeDiscountUnit
+                      )}`
+                      : ""}
+
+                    {itemDiscount > 0
+                      ? ` · Discount -${FORMATTERS.currency(
+                        itemDiscount
+                      )}`
+                      : ""}
+                  </div>
                 </td>
 
-                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-[11px]">
+                <td style={cellStyle}>
                   {getHsn(it)}
                 </td>
 
-                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-[11px]">
-                  {it.size || it.selectedSize || "-"}
+                <td style={cellStyle}>
+                  {it.size ||
+                    it.selectedSize ||
+                    "-"}
                 </td>
 
-                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
+                <td
+                  style={{
+                    ...cellStyle,
+                    textAlign: "right",
+                  }}
+                >
                   {qty}
                 </td>
 
-                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
-                  {FORMATTERS.currency(unit)}
+                <td
+                  style={{
+                    ...cellStyle,
+                    textAlign: "right",
+                  }}
+                >
+                  {FORMATTERS.currency(
+                    unit
+                  )}
                 </td>
 
-                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px]">
-                  {it.gstRate || 5}%
+                <td
+                  style={{
+                    ...cellStyle,
+                    textAlign: "right",
+                  }}
+                >
+                  {it.gstRate ||
+                    it.taxRate ||
+                    5}
+                  %
                 </td>
 
-                <td className="border-b border-zinc-100 px-[6px] py-3 align-top text-right text-[11px] font-black">
-                  {FORMATTERS.currency(total)}
+                <td
+                  style={{
+                    ...cellStyle,
+                    textAlign: "right",
+                    fontWeight: 900,
+                  }}
+                >
+                  {FORMATTERS.currency(
+                    total
+                  )}
                 </td>
               </tr>
             );
@@ -416,82 +862,206 @@ export default function InvoiceTemplate({ data }) {
         </tbody>
       </table>
 
-      {/* SUMMARY */}
-      <div className="mt-4 flex justify-between items-start">
-        <div>
+      {/* =========================
+        SUMMARY AREA
+    ========================= */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent:
+            "space-between",
+          gap: "20px",
+          marginTop: "10px",
+        }}
+      >
+        {/* AWB */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            paddingTop: "2px",
+          }}
+        >
           {courier?.awb ? (
             <>
               <img
                 src={`https://barcode.tec-it.com/barcode.ashx?data=${courier.awb}&code=Code128&dpi=300`}
                 alt="AWB Barcode"
-                className="h-16 w-60 object-contain"
+                style={{
+                  width: "170px",
+                  maxWidth: "170px",
+                  height: "45px",
+                  objectFit: "contain",
+                  objectPosition: "left center",
+                  display: "block",
+                }}
               />
-              <p className="text-[10px] text-zinc-500">{courier.awb}</p>
+
+              <p
+                style={{
+                  margin: "2px 0 0",
+                  fontSize: "8px",
+                  color: "#71717a",
+                }}
+              >
+                {courier.awb}
+              </p>
             </>
           ) : null}
         </div>
 
-        <div className="ml-auto w-[285px] border border-zinc-200 px-[14px] py-3">
-          <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
-            <span>Original Product Value</span>
-            <span>{FORMATTERS.currency(originalProductValue)}</span>
-          </div>
+        {/* SUMMARY BOX */}
+        <div
+          style={{
+            width: "270px",
+            flexShrink: 0,
+            border: "1px solid #e4e4e7",
+            padding: "7px 11px",
+            boxSizing: "border-box",
+          }}
+        >
+          <SummaryRow
+            label="MRP Value"
+            value={FORMATTERS.currency(
+              mrpProductValue
+            )}
+          />
 
-          <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
-            <span>Discount</span>
-            <span className="font-bold">
-              {discountAmount > 0
-                ? `-${FORMATTERS.currency(discountAmount)}`
-                : FORMATTERS.currency(0)}
+          {productMarkdown > 0 ? (
+            <SummaryRow
+              label="Product Markdown"
+              value={`-${FORMATTERS.currency(
+                productMarkdown
+              )}`}
+            />
+          ) : null}
+
+          <SummaryRow
+            label="Subtotal"
+            value={FORMATTERS.currency(
+              subtotalProductValue
+            )}
+          />
+
+          {discountAmount > 0 ? (
+            <SummaryRow
+              label="Coupon / Order Discount"
+              value={`-${FORMATTERS.currency(
+                discountAmount
+              )}`}
+              bold
+            />
+          ) : null}
+
+          <SummaryRow
+            label="Final Product Value"
+            value={FORMATTERS.currency(
+              finalProductValue
+            )}
+            bold
+            strongBorder
+          />
+
+          <SummaryRow
+            label="Taxable Value"
+            value={FORMATTERS.currency(
+              taxableAmount
+            )}
+          />
+
+          <SummaryRow
+            label="GST (5% Included)"
+            value={FORMATTERS.currency(
+              totalTax
+            )}
+          />
+
+          {shippingFee > 0 ? (
+            <SummaryRow
+              label="Shipping"
+              value={FORMATTERS.currency(
+                shippingFee
+              )}
+            />
+          ) : null}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent:
+                "space-between",
+              alignItems: "center",
+              borderTop:
+                "1px solid #a1a1aa",
+              marginTop: "3px",
+              paddingTop: "7px",
+              fontSize: "12px",
+              fontWeight: 900,
+            }}
+          >
+            <span>Order Total</span>
+
+            <span>
+              {FORMATTERS.currency(
+                payable
+              )}
             </span>
           </div>
 
-          <div className="flex justify-between border-b border-zinc-200 py-[7px] text-[11px] font-black">
-            <span>Final Product Value</span>
-            <span>{FORMATTERS.currency(finalProductValue)}</span>
-          </div>
-
-          <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
-            <span>Taxable Value</span>
-            <span>{FORMATTERS.currency(taxableAmount)}</span>
-          </div>
-
-          <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
-            <span>GST (5% Included)</span>
-            <span>{FORMATTERS.currency(totalTax)}</span>
-          </div>
-
-          {shippingFee > 0 ? (
-            <div className="flex justify-between border-b border-zinc-100 py-[7px] text-[11px]">
-              <span>Shipping</span>
-              <span>{FORMATTERS.currency(shippingFee)}</span>
-            </div>
-          ) : null}
-
-          <div className="mt-1 flex justify-between border-t border-zinc-300 pt-[11px] text-[15px] font-black">
-            <span>Order Total</span>
-            <span>{FORMATTERS.currency(payable)}</span>
-          </div>
-
+          {/* PARTIAL PAYMENT */}
           {payment?.isPartial ? (
             <>
-              <div className="flex justify-between border-t border-zinc-100 py-[7px] text-[11px]">
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent:
+                    "space-between",
+                  borderTop:
+                    "1px solid #e4e4e7",
+                  marginTop: "6px",
+                  paddingTop: "6px",
+                  fontSize: "9px",
+                }}
+              >
                 <span>
                   Paid Online
-                  {payment?.upfrontPercent > 0
+                  {payment?.upfrontPercent >
+                    0
                     ? ` (${payment.upfrontPercent}%)`
                     : ""}
                 </span>
 
-                <span className="font-black">
-                  {FORMATTERS.currency(payment?.paidAmount || 0)}
-                </span>
+                <strong>
+                  {FORMATTERS.currency(
+                    payment?.paidAmount ||
+                    0
+                  )}
+                </strong>
               </div>
 
-              <div className="flex justify-between border-t border-zinc-200 pt-[10px] text-[14px] font-black">
-                <span>Remaining COD</span>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent:
+                    "space-between",
+                  borderTop:
+                    "1px solid #e4e4e7",
+                  marginTop: "5px",
+                  paddingTop: "6px",
+                  fontSize: "11px",
+                  fontWeight: 900,
+                }}
+              >
                 <span>
-                  {FORMATTERS.currency(payment?.remainingAmount || 0)}
+                  Remaining COD
+                </span>
+
+                <span>
+                  {FORMATTERS.currency(
+                    payment?.remainingAmount ||
+                    0
+                  )}
                 </span>
               </div>
             </>
@@ -499,21 +1069,76 @@ export default function InvoiceTemplate({ data }) {
         </div>
       </div>
 
-      {/* FOOTER */}
-      <p className="text-[10px] leading-[1.7] text-zinc-500">
-        {seller.email || "HEY@OATCLUB.IN"}
+      {/* =========================
+        FOOTER
+    ========================= */}
+      <div
+        style={{
+          marginTop: "12px",
+          fontSize: "8px",
+          lineHeight: 1.5,
+          color: "#71717a",
+        }}
+      >
+        {seller.email ||
+          "HEY@OATCLUB.IN"}
         <br />
 
         {seller.website
-          ? seller.website.replace(/^https?:\/\//, "").replace(/\/$/, "")
+          ? seller.website
+            .replace(
+              /^https?:\/\//,
+              ""
+            )
+            .replace(/\/$/, "")
           : "OATCLUB.IN"}
 
         <br />
 
-        {[seller.city, seller.state, seller.country]
+        {[
+          seller.city,
+          seller.state,
+          seller.country,
+        ]
           .filter(Boolean)
           .join(", ")}
-      </p>
+      </div>
+    </div>
+  );
+}
+
+
+function SummaryRow({
+  label,
+  value,
+  bold = false,
+  strongBorder = false,
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: "12px",
+        padding: "4px 0",
+        borderBottom: strongBorder
+          ? "1px solid #d4d4d8"
+          : "1px solid #f4f4f5",
+        fontSize: "9px",
+        lineHeight: 1.2,
+        fontWeight: bold ? 900 : 400,
+      }}
+    >
+      <span>{label}</span>
+      <span
+        style={{
+          flexShrink: 0,
+          fontWeight: bold ? 900 : 600,
+        }}
+      >
+        {value}
+      </span>
     </div>
   );
 }
