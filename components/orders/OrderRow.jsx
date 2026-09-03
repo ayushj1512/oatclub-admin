@@ -8,7 +8,22 @@ import {
   CreditCard,
   Banknote,
   RefreshCw,
+  MousePointer2,
+  Globe2,
+  Search,
+  Mail,
+  Link2,
 } from "lucide-react";
+
+import {
+  FaInstagram,
+  FaFacebookF,
+  FaGoogle,
+  FaYoutube,
+  FaSnapchatGhost,
+  FaWhatsapp,
+  FaTiktok,
+} from "react-icons/fa";
 
 import OrderStatusDropdown from "@/components/orders/OrderStatusDropdown";
 import OrderPriorityDropdown from "@/components/orders/OrderPriorityDropdown";
@@ -113,6 +128,199 @@ const paymentMethodMeta = (method) => {
   );
 };
 
+const attributionSourceMeta = (order) => {
+  const attr = order?.attribution || {};
+
+  const rawSource =
+    attr?.source ||
+    attr?.lastTouch?.source ||
+    attr?.firstTouch?.source ||
+    attr?.session?.source ||
+    "";
+
+  const referrer = String(attr?.referrer || "").toLowerCase();
+
+  const source = String(rawSource)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+  // Instagram
+  if (
+    source.includes("instagram") ||
+    source === "ig" ||
+    referrer.includes("instagram.com")
+  ) {
+    return {
+      label: "Instagram",
+      icon: FaInstagram,
+      className: "text-pink-600",
+    };
+  }
+
+  // Facebook / Meta
+  if (
+    source.includes("facebook") ||
+    source === "fb" ||
+    source === "meta" ||
+    referrer.includes("facebook.com") ||
+    referrer.includes("fb.com")
+  ) {
+    return {
+      label: "Facebook",
+      icon: FaFacebookF,
+      className: "text-blue-600",
+    };
+  }
+
+  // Snapchat
+  if (
+    source.includes("snapchat") ||
+    source === "snap" ||
+    referrer.includes("snapchat.com")
+  ) {
+    return {
+      label: "Snapchat",
+      icon: FaSnapchatGhost,
+      className: "text-yellow-500",
+    };
+  }
+
+  // Google
+  if (
+    source.includes("google") ||
+    source === "gads" ||
+    source === "googleads" ||
+    attr?.clickIds?.gclid ||
+    referrer.includes("google.")
+  ) {
+    return {
+      label: "Google",
+      icon: FaGoogle,
+      className: "text-gray-900",
+    };
+  }
+
+  // YouTube
+  if (
+    source.includes("youtube") ||
+    source === "yt" ||
+    referrer.includes("youtube.com") ||
+    referrer.includes("youtu.be")
+  ) {
+    return {
+      label: "YouTube",
+      icon: FaYoutube,
+      className: "text-red-600",
+    };
+  }
+
+  // WhatsApp
+  if (
+    source.includes("whatsapp") ||
+    source === "wa" ||
+    referrer.includes("whatsapp")
+  ) {
+    return {
+      label: "WhatsApp",
+      icon: FaWhatsapp,
+      className: "text-green-600",
+    };
+  }
+
+  // TikTok
+  if (
+    source.includes("tiktok") ||
+    referrer.includes("tiktok.com")
+  ) {
+    return {
+      label: "TikTok",
+      icon: FaTiktok,
+      className: "text-black",
+    };
+  }
+
+  // Email
+  if (
+    source.includes("email") ||
+    source.includes("mail")
+  ) {
+    return {
+      label: "Email",
+      icon: Mail,
+      className: "text-violet-600",
+    };
+  }
+
+  // Organic
+  if (
+    source.includes("organic") ||
+    String(attr?.medium || "").toLowerCase() === "organic"
+  ) {
+    return {
+      label: "Organic",
+      icon: Search,
+      className: "text-emerald-600",
+    };
+  }
+
+  // Referral
+  if (
+    source.includes("referral") ||
+    source.includes("affiliate")
+  ) {
+    return {
+      label: "Referral",
+      icon: Link2,
+      className: "text-amber-600",
+    };
+  }
+
+  // Website
+  if (
+    source === "website" ||
+    source === "web"
+  ) {
+    return {
+      label: "Website",
+      icon: Globe2,
+      className: "text-gray-700",
+    };
+  }
+
+  // Direct
+  return {
+    label: "Direct",
+    icon: MousePointer2,
+    className: "text-gray-500",
+  };
+};
+
+const AttributionSourceBadge = ({ order }) => {
+  const meta = attributionSourceMeta(order);
+  const Icon = meta.icon;
+
+  const medium = order?.attribution?.medium || "";
+  const campaign = order?.attribution?.campaign || "";
+
+  const title = [
+    `Source: ${meta.label}`,
+    medium && `Medium: ${medium}`,
+    campaign && `Campaign: ${campaign}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return (
+    <span
+      title={title}
+      aria-label={meta.label}
+      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition hover:bg-black/[0.04] ${meta.className}`}
+    >
+      <Icon size={16} />
+    </span>
+  );
+};
 
 
 function OrderRow({
@@ -221,17 +429,22 @@ function OrderRow({
               {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </button>
 
-            <button
-              type="button"
-              onClick={goToOrder}
-              title="Open order"
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-left transition hover:bg-black/[0.04] focus:outline-none focus:ring-2 focus:ring-black/10"
-            >
-              <span className="font-mono text-sm tracking-wide text-gray-950 underline underline-offset-2 decoration-black/25 hover:decoration-black">
-                {order?.orderNumber || "-"}
-              </span>
-              <ExternalLink size={14} className="opacity-70" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={goToOrder}
+                title="Open order"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-left transition hover:bg-black/[0.04] focus:outline-none focus:ring-2 focus:ring-black/10"
+              >
+                <span className="font-mono text-sm tracking-wide text-gray-950 underline underline-offset-2 decoration-black/25 hover:decoration-black">
+                  {order?.orderNumber || "-"}
+                </span>
+
+                <ExternalLink size={14} className="opacity-70" />
+              </button>
+
+              <AttributionSourceBadge order={order} />
+            </div>
           </div>
 
           <p className="mt-1 max-w-[280px] truncate text-xs text-gray-500">
