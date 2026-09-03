@@ -22,6 +22,7 @@ import {
 import { useOrderStore } from "@/store/orderStore";
 import useDelhiveryStore from "@/store/delhiveryStore";
 import { useShiprocketStore } from "@/store/ShipRocketStore";
+import toast from "react-hot-toast";
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").trim();
 
@@ -391,7 +392,6 @@ export default function ReadyToShipPage() {
   const [checkingRates, setCheckingRates] = useState({});
   const [booking, setBooking] = useState({});
   const [bulkBookingProvider, setBulkBookingProvider] = useState("");
-  const [message, setMessage] = useState(null);
   const [labelLoading, setLabelLoading] = useState({});
   const [bulkLabelLoading, setBulkLabelLoading] = useState(false);
   const [trackingLoading, setTrackingLoading] =
@@ -427,12 +427,17 @@ export default function ReadyToShipPage() {
     ).trim();
 
   const showMessage = useCallback((type, text) => {
-    setMessage({ type, text });
+    if (!text) return;
 
-    window.setTimeout(() => {
-      setMessage(null);
-    }, 3500);
+    if (type === "success") {
+      toast.success(text);
+      return;
+    }
+
+    toast.error(text);
   }, []);
+
+
 
   const loadOrders = useCallback(async () => {
     try {
@@ -1281,7 +1286,15 @@ export default function ReadyToShipPage() {
         );
 
         // Then book
-        await bookShiprocketShipment(orderId);
+        // Then book exact selected Shiprocket courier
+        await bookShiprocketShipment(orderId, {
+          courier_company_id: Number(courierId),
+          courierCompanyId: Number(courierId),
+
+          courier_name: selectedOption?.name || "",
+          courierName: selectedOption?.name || "",
+        });
+
       } else if (provider === PROVIDERS.DELHIVERY) {
         const delhiveryOption =
           orderRates?.delhivery;
@@ -1358,13 +1371,16 @@ export default function ReadyToShipPage() {
         const orderRates = rates[orderId];
 
         if (provider === PROVIDERS.SHIPROCKET) {
-          return (
-            Array.isArray(orderRates?.shiprocket) &&
-            orderRates.shiprocket.length > 0 &&
-            Boolean(
-              selectedShiprocketCourier[orderId],
-            )
-          );
+          const courierId =
+            selectedShiprocketCourier[orderId];
+
+          const selectedOption =
+            orderRates?.shiprocket?.find(
+              (option) =>
+                String(option.id) === String(courierId),
+            );
+
+          return Boolean(selectedOption);
         }
 
         if (provider === PROVIDERS.DELHIVERY) {
@@ -1454,28 +1470,6 @@ export default function ReadyToShipPage() {
           </button>
         </header>
 
-        {message ? (
-          <div
-            className={`mb-4 flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium ${message.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-red-200 bg-red-50 text-red-800"
-              }`}
-          >
-            <div className="flex items-center gap-2">
-              {message.type === "success" ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <AlertCircle className="h-4 w-4" />
-              )}
-
-              {message.text}
-            </div>
-
-            <button type="button" onClick={() => setMessage(null)}>
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ) : null}
 
         <section className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -1534,15 +1528,15 @@ export default function ReadyToShipPage() {
                     setSelectedIds([]);
                   }}
                   className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition ${activeTab === value
-                      ? "border-zinc-950 text-zinc-950"
-                      : "border-transparent text-zinc-500 hover:text-zinc-800"
+                    ? "border-zinc-950 text-zinc-950"
+                    : "border-transparent text-zinc-500 hover:text-zinc-800"
                     }`}
                 >
                   {label}
                   <span
                     className={`ml-2 rounded-full px-2 py-0.5 text-xs ${activeTab === value
-                        ? "bg-zinc-950 text-white"
-                        : "bg-zinc-100 text-zinc-600"
+                      ? "bg-zinc-950 text-white"
+                      : "bg-zinc-100 text-zinc-600"
                       }`}
                   >
                     {count}
@@ -1983,8 +1977,8 @@ export default function ReadyToShipPage() {
 
                                 <span
                                   className={`text-xs font-bold ${delhiveryAvailable
-                                      ? "text-emerald-700"
-                                      : "text-red-600"
+                                    ? "text-emerald-700"
+                                    : "text-red-600"
                                     }`}
                                 >
                                   {delhiveryAvailable
@@ -2052,8 +2046,8 @@ export default function ReadyToShipPage() {
                               Boolean(bulkBookingProvider)
                             }
                             className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold transition disabled:cursor-not-allowed ${delhiveryAvailable
-                                ? "bg-zinc-950 text-white hover:bg-zinc-800"
-                                : "bg-zinc-200 text-zinc-500"
+                              ? "bg-zinc-950 text-white hover:bg-zinc-800"
+                              : "bg-zinc-200 text-zinc-500"
                               }`}
                           >
                             {delhiveryBooking ? (

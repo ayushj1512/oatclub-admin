@@ -224,22 +224,62 @@ export const useShiprocketStore = create((set, get) => ({
      BOOK SHIPROCKET (ADMIN)
      POST /api/orders/:id/ship
   ============================================================ */
-  bookShipment: async (orderId) => {
-    if (!orderId) throw new Error("orderId is required");
+  bookShipment: async (orderId, payload = {}) => {
+    if (!orderId) {
+      throw new Error("orderId is required");
+    }
 
     get()._start();
+
     try {
-      const res = await fetch(buildUrl(`/api/orders/${orderId}/ship`), {
-        method: "POST",
-        headers: { Accept: "application/json" },
-        credentials: "include",
-      });
+      const res = await fetch(
+        buildUrl(`/api/orders/${orderId}/ship`),
+        {
+          method: "POST",
+
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            courier_company_id:
+              payload?.courier_company_id ??
+              payload?.courierCompanyId ??
+              null,
+
+            courierCompanyId:
+              payload?.courierCompanyId ??
+              payload?.courier_company_id ??
+              null,
+
+            courier_name:
+              payload?.courier_name ??
+              payload?.courierName ??
+              "",
+
+            courierName:
+              payload?.courierName ??
+              payload?.courier_name ??
+              "",
+          }),
+        },
+      );
 
       const data = await safeJson(res);
-      if (!res.ok) throw normalizeError(res, data);
 
-      set({ result: data });
+      if (!res.ok) {
+        throw normalizeError(res, data);
+      }
+
+      set({
+        result: data,
+      });
+
       get()._success();
+
       return data;
     } catch (e) {
       get()._error(e);
