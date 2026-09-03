@@ -75,6 +75,37 @@ const getProvider = (order) =>
     .trim()
     .toLowerCase();
 
+const getShipmentAwb = (order) =>
+  String(
+    order?.shipment?.awb ||
+    order?.courierSummary?.awb ||
+    order?.shipment?.delhivery?.waybill ||
+    order?.shipment?.delhivery?.awb ||
+    order?.shipment?.shiprocket?.awb ||
+    "",
+  ).trim();
+
+const getCourierName = (order) => {
+  const provider = getProvider(order);
+
+  return String(
+    order?.shipment?.courierName ||
+    (provider === PROVIDERS.DELHIVERY
+      ? order?.shipment?.delhivery?.courierName
+      : "") ||
+    (provider === PROVIDERS.SHIPROCKET
+      ? order?.shipment?.shiprocket?.courierName
+      : "") ||
+    "",
+  ).trim();
+};
+
+const formatProviderName = (provider) => {
+  if (provider === PROVIDERS.SHIPROCKET) return "Shiprocket";
+  if (provider === PROVIDERS.DELHIVERY) return "Delhivery";
+  return "Unassigned";
+};
+
 const getShiprocketOptions = (data) => {
   const candidates =
     data?.couriers ||
@@ -1680,6 +1711,9 @@ export default function ReadyToShipPage() {
                 {visibleOrders.map((order) => {
                   const orderId = String(order._id);
                   const provider = getProvider(order);
+                  const shipmentAwb = getShipmentAwb(order);
+                  const courierName = getCourierName(order);
+                  const providerName = formatProviderName(provider);
                   const orderRates = rates[orderId] || {};
                   const shiprocketOptions =
                     orderRates.shiprocket || [];
@@ -1825,7 +1859,42 @@ export default function ReadyToShipPage() {
                       </td>
 
                       <td className="px-4 py-4">
-                        <StatusBadge provider={provider} />
+                        {shipmentAwb ? (
+                          <div className="min-w-44">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <StatusBadge provider={provider} />
+
+                              {courierName ? (
+                                <span className="text-xs font-semibold text-zinc-700">
+                                  {courierName}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-2">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">
+                                AWB
+                              </p>
+
+                              <p
+                                className="mt-0.5 max-w-44 truncate font-mono text-xs font-semibold text-zinc-800"
+                                title={shipmentAwb}
+                              >
+                                {shipmentAwb}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <StatusBadge provider={provider} />
+
+                            {provider !== PROVIDERS.UNASSIGNED ? (
+                              <p className="mt-1.5 text-xs text-zinc-400">
+                                AWB not assigned
+                              </p>
+                            ) : null}
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-4 py-4">
