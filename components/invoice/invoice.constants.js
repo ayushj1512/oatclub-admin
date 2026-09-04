@@ -14,7 +14,7 @@ export const SELLER = {
   brand: "OATCLUB",
 
   // Assets
-logo: "http://res.cloudinary.com/dpsvrt4sd/image/upload/v1781123546/odb5ckquouajjzfbxin0.webp",  signature: "",
+  logo: "https%3A%2F%2Fres.cloudinary.com%2Fdpsvrt4sd%2Fimage%2Fupload%2Fv1781123545%2Fbd7ip3bphemzjoul4ixp.webp",  signature: "",
 
   // Address & Contact
   address: "house no. 1033, 2nd floor Gali no.15, lakhapat colony part2 meethapur extension, badarpur, South Delhi",

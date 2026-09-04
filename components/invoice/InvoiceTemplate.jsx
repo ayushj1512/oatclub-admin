@@ -18,115 +18,266 @@ export default function InvoiceTemplate({ data }) {
     payment = {},
   } = data;
 
-  const seller = {
-    ...SELLER,
-    ...invoiceSeller,
+  const seller = { ...SELLER, ...invoiceSeller };
+
+  const n = (v) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : 0;
   };
 
-  const logo =
-    seller.logo ||
-    "http://res.cloudinary.com/dpsvrt4sd/image/upload/v1781123546/odb5ckquouajjzfbxin0.webp";
+  const round2 = (v) =>
+    Math.round((n(v) + Number.EPSILON) * 100) / 100;
 
-  const n = (v) => Number(v || 0);
-  const round2 = (v) => Math.round((n(v) + Number.EPSILON) * 100) / 100;
+  const money = (v) => FORMATTERS.currency(round2(v));
+
+  const logo =
+
+    "https://res.cloudinary.com/znyqjoop/image/upload/v1785576332/oatclub/media/pxof76tqepbgg574zjgd.png";
+
+  /* =========================================================
+     ITEMS
+  ========================================================= */
+
+  const normalizedItems = items.map((it, index) => {
+    const qty = Math.max(
+      1,
+      n(it.qty || it.quantity || 1)
+    );
+
+    const mrpUnit =
+      n(it.compareAtPrice) ||
+      n(it.originalPrice) ||
+      n(it.priceIncl) ||
+      n(it.price);
+
+    const sellingBeforeCouponUnit =
+      n(it.originalPrice) ||
+      (n(it.originalSubtotal) && qty
+        ? n(it.originalSubtotal) / qty
+        : 0) ||
+      n(it.priceIncl) ||
+      n(it.price);
+
+    const mrpSubtotal = round2(mrpUnit * qty);
+
+    const markdownAmount = round2(
+      Math.max(
+        0,
+        (mrpUnit - sellingBeforeCouponUnit) * qty
+      )
+    );
+
+    const originalSubtotal =
+      n(it.originalSubtotal) ||
+      n(it.originalPrice) * qty ||
+      n(it.subtotal) ||
+      n(it.priceIncl || it.price) * qty;
+
+    const finalSubtotal =
+      n(it.subtotal) ||
+      n(it.priceIncl || it.price) * qty;
+
+    const discountAmount =
+      n(it.discountAmount) ||
+      Math.max(0, originalSubtotal - finalSubtotal);
+
+    const unitPrice =
+      qty > 0 ? round2(finalSubtotal / qty) : 0;
+
+    const discountPercent =
+      originalSubtotal > 0
+        ? round2((discountAmount / originalSubtotal) * 100)
+        : 0;
+
+    const gstRate = n(it.taxRate || it.gstRate || 5);
+
+    let taxableValue = n(it.taxableValue);
+    let taxAmount = n(it.taxAmount);
+
+    if (!taxableValue && finalSubtotal > 0) {
+      taxableValue = round2(
+        finalSubtotal / (1 + gstRate / 100)
+      );
+    }
+
+    if (!taxAmount && finalSubtotal > 0) {
+      taxAmount = round2(
+        finalSubtotal - taxableValue
+      );
+    }
+
+    const hsn = String(
+      it.hsnCode ||
+      it.productSnapshot?.hsnCode ||
+      it.product?.hsnCode ||
+      it.productId?.hsnCode ||
+      "62105000"
+    ).trim();
+
+    return {
+      id:
+        it.productCode ||
+        it.sku ||
+        it.productSnapshot?.productCode ||
+        it.productSnapshot?.sku ||
+        String(index + 1).padStart(3, "0"),
+
+      name:
+        it.name ||
+        it.title ||
+        it.productSnapshot?.title ||
+        "-",
+
+      size:
+        it.size ||
+        it.selectedSize ||
+        "-",
+
+      hsn,
+
+      qty,
+      gstRate,
+      unitPrice,
+      originalSubtotal,
+      finalSubtotal,
+      discountAmount,
+      discountPercent,
+      taxableValue,
+      taxAmount,
+      mrpSubtotal,
+      markdownAmount,
+    };
+  });
+
+  /* =========================================================
+     TOTALS
+  ========================================================= */
 
   const mrpProductValue = round2(
-    items.reduce((sum, it) => {
-      const qty = Math.max(1, n(it.qty || it.quantity || 1));
-
-      const mrpUnit =
-        n(it.compareAtPrice) ||
-        n(it.originalPrice) ||
-        n(it.priceIncl) ||
-        n(it.price);
-
-      return sum + mrpUnit * qty;
-    }, 0)
-  );
-
-  const subtotalProductValue = round2(
-    items.reduce((sum, it) => {
-      const qty = Math.max(1, n(it.qty || it.quantity || 1));
-
-      const beforeDiscountUnit =
-        n(it.originalPrice) ||
-        n(it.priceIncl) ||
-        n(it.price);
-
-      return (
-        sum +
-        (n(it.originalSubtotal) || beforeDiscountUnit * qty)
-      );
-    }, 0)
-  );
-
-  const finalProductValue = round2(
-    items.reduce((sum, it) => {
-      const qty = Math.max(1, n(it.qty || it.quantity || 1));
-
-      return (
-        sum +
-        (n(it.subtotal) ||
-          n(it.priceIncl || it.price) * qty)
-      );
-    }, 0)
+    normalizedItems.reduce(
+      (sum, it) => sum + it.mrpSubtotal,
+      0
+    )
   );
 
   const productMarkdown = round2(
-    Math.max(
-      0,
-      mrpProductValue - subtotalProductValue
+    normalizedItems.reduce(
+      (sum, it) => sum + it.markdownAmount,
+      0
     )
   );
 
-  const discountAmount = round2(
-    Math.max(
-      0,
-      n(totals.discount) ||
-      items.reduce(
-        (sum, it) => sum + n(it.discountAmount),
-        0
-      ) ||
-      subtotalProductValue - finalProductValue
+
+  const originalProductValue = round2(
+    normalizedItems.reduce(
+      (sum, it) => sum + it.originalSubtotal,
+      0
     )
   );
 
-  let taxableAmount = round2(
-    items.reduce((sum, it) => sum + n(it.taxableValue), 0)
+  const finalProductValue = round2(
+    normalizedItems.reduce(
+      (sum, it) => sum + it.finalSubtotal,
+      0
+    )
   );
 
-  let totalTax = round2(
-    items.reduce((sum, it) => sum + n(it.taxAmount), 0)
+  const calculatedDiscount = round2(
+    normalizedItems.reduce(
+      (sum, it) => sum + it.discountAmount,
+      0
+    )
   );
 
-  if (!taxableAmount && finalProductValue > 0) {
-    taxableAmount = round2(finalProductValue / 1.05);
-  }
-
-  if (!totalTax && finalProductValue > 0) {
-    totalTax = round2(finalProductValue - taxableAmount);
-  }
+  const discount = round2(
+    n(totals.discount) || calculatedDiscount
+  );
 
   const shippingFee = round2(
-    totals.shippingFee ?? totals.shipping ?? 0
+    totals.shippingFee ??
+    totals.shipping ??
+    0
   );
 
-  const payable = round2(
-    totals.finalPayable ??
-    totals.grandTotal ??
+  const taxableValue = round2(
+    normalizedItems.reduce(
+      (sum, it) => sum + it.taxableValue,
+      0
+    )
+  );
+
+  const totalTax = round2(
+    normalizedItems.reduce(
+      (sum, it) => sum + it.taxAmount,
+      0
+    )
+  );
+
+  const sellerState = String(seller.state || "").trim().toLowerCase();
+
+  const billingState = String(
+    billing.state || shipping.state || ""
+  ).trim().toLowerCase();
+
+  const isInterstate =
+    sellerState &&
+    billingState &&
+    sellerState !== billingState;
+
+  const igst = isInterstate ? totalTax : 0;
+
+  const cgst = !isInterstate
+    ? round2(totalTax / 2)
+    : 0;
+
+  const sgst = !isInterstate
+    ? round2(totalTax - cgst)
+    : 0;
+
+  /*
+    IMPORTANT:
+    finalProductValue already INCLUDES GST.
+    GST must NOT be added again.
+  */
+
+  const beforeWalletTotal = round2(
     finalProductValue + shippingFee
   );
 
+  const walletAmount = round2(
+    n(
+      totals.walletAmount ??
+      payment.walletAmount ??
+      0
+    )
+  );
 
+  const finalPayable = round2(
+    totals.finalPayable ??
+    totals.grandTotal ??
+    Math.max(0, beforeWalletTotal - walletAmount)
+  );
 
-  const getHsn = (it) =>
-    String(
-      it?.hsnCode ||
-      it?.productSnapshot?.hsnCode ||
-      it?.product?.hsnCode ||
-      it?.productId?.hsnCode ||
-      "62105000"
-    ).trim() || "62105000";
+  const totalQty = normalizedItems.reduce(
+    (sum, it) => sum + it.qty,
+    0
+  );
+
+  /* =========================================================
+     GST SPLIT
+
+     Same-state invoice:
+     CGST 2.5% + SGST 2.5%
+
+     Interstate:
+     IGST 5%
+
+     If you later pass totals.isInterstate,
+     this automatically handles it.
+  ========================================================= */
+  /* =========================================================
+     ADDRESS
+  ========================================================= */
 
   const getAddress = (addr = {}) => ({
     fullName: addr.fullName || "-",
@@ -140,1001 +291,688 @@ export default function InvoiceTemplate({ data }) {
   });
 
   const bill = getAddress(billing);
+
   const ship = getAddress({
     ...billing,
     ...shipping,
-    fullName: shipping.fullName || billing.fullName,
-    line1: shipping.line1 || billing.line1,
-    line2: shipping.line2 || billing.line2,
-    city: shipping.city || billing.city,
-    state: shipping.state || billing.state,
-    pincode: shipping.pincode || billing.pincode,
+    fullName:
+      shipping.fullName || billing.fullName,
+    line1:
+      shipping.line1 || billing.line1,
+    line2:
+      shipping.line2 || billing.line2,
+    city:
+      shipping.city || billing.city,
+    state:
+      shipping.state || billing.state,
+    pincode:
+      shipping.pincode || billing.pincode,
+    phone:
+      shipping.phone || billing.phone,
   });
+
+  /* =========================================================
+     PAYMENT LABEL
+  ========================================================= */
+
+  const paymentLabel = (() => {
+    const method = String(
+      payment.method ||
+      payment.title ||
+      ""
+    ).toLowerCase();
+
+    if (payment.isPartial || method === "partial_cod")
+      return "PARTIAL COD";
+
+    if (method === "razorpay")
+      return "PREPAID";
+
+    if (method === "cod")
+      return "CASH ON DELIVERY";
+
+    if (method === "wallet")
+      return "WALLET";
+
+    if (method === "manual_prepaid")
+      return "MANUAL PREPAID";
+
+    if (method === "exchange")
+      return "EXCHANGE";
+
+    if (method === "complimentary")
+      return "COMPLIMENTARY";
+
+    return payment.title || "-";
+  })();
+
+  const th = {
+    padding: "9px 7px",
+    background: "#000",
+    color: "#fff",
+    fontSize: "8px",
+    fontWeight: 800,
+    textAlign: "center",
+    borderRight: "1px solid #333",
+    whiteSpace: "nowrap",
+  };
+
+  const td = {
+    padding: "9px 7px",
+    fontSize: "8px",
+    borderRight: "1px solid #e5e5e5",
+    borderBottom: "1px solid #e5e5e5",
+    verticalAlign: "middle",
+  };
 
   return (
     <div
       id="invoice-root"
-      className="mx-auto bg-white text-black uppercase"
       style={{
         width: "210mm",
         minHeight: "297mm",
-        padding: "20px 24px",
+        margin: "0 auto",
+        padding: "14mm",
+        background: "#fff",
+        color: "#111",
         boxSizing: "border-box",
-        fontFamily: "Lato, Arial, sans-serif",
-        fontSize: "10px",
+        fontFamily: "Arial, sans-serif",
+        fontSize: "9px",
       }}
     >
-      {/* =========================
-        HERO
-    ========================= */}
+      {/* ================= HEADER ================= */}
+
       <div
-        className="bg-black text-white"
         style={{
-          margin: "-20px -24px 12px",
-          padding: "14px 18px 12px",
-          height: "118px",
-          boxSizing: "border-box",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingBottom: "12px",
+          borderBottom: "2px solid #000",
         }}
       >
-        <div
+        <img
+          src={logo}
+          alt={seller.name || "OATCLUB"}
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr auto 1fr",
-            alignItems: "center",
-            height: "62px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "8px",
-              fontWeight: 900,
-              color: "#d4d4d8",
-            }}
-          >
-            ORDER #{orderNumber || "-"}
-          </div>
-
-          {/* LOGO */}
-          <div style={{ textAlign: "center" }}>
-            <img
-              src={logo}
-              alt={seller.name || "OATCLUB"}
-              style={{
-                display: "block",
-                width: "125px",
-                maxWidth: "125px",
-                height: "42px",
-                maxHeight: "42px",
-                objectFit: "contain",
-                margin: "0 auto",
-              }}
-            />
-
-            <div
-              style={{
-                marginTop: "3px",
-                fontSize: "7px",
-                lineHeight: 1,
-                fontWeight: 900,
-                letterSpacing: "2.5px",
-                color: "#d4d4d8",
-              }}
-            >
-              OWN ALL TREND
-            </div>
-          </div>
-
-          <div
-            style={{
-              textAlign: "right",
-              fontSize: "8px",
-              fontWeight: 900,
-              color: "#d4d4d8",
-            }}
-          >
-            {FORMATTERS.date(orderDate)}
-          </div>
-        </div>
-
-        <div
-          style={{
-            height: "1px",
-            background: "#3f3f46",
-            margin: "8px 0",
+            width: "120px",
+            height: "42px",
+            objectFit: "contain",
+            objectPosition: "left center",
           }}
         />
 
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: "9px",
-            fontWeight: 900,
-            letterSpacing: "1.8px",
-            lineHeight: 1.2,
-          }}
-        >
-          TAX INVOICE / ORDER RECEIPT
+        <div style={{ textAlign: "right" }}>
+          <div
+            style={{
+              fontSize: "18px",
+              fontWeight: 900,
+              letterSpacing: "1px",
+            }}
+          >
+            TAX INVOICE
+          </div>
+
+          <div
+            style={{
+              marginTop: "4px",
+              fontSize: "8px",
+              color: "#666",
+            }}
+          >
+            ORIGINAL FOR RECIPIENT
+          </div>
         </div>
       </div>
 
-      {/* =========================
-        META
-    ========================= */}
+      {/* ================= META ================= */}
+
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          marginTop: "10px",
+        }}
+      >
+        <tbody>
+          <tr>
+            <Meta
+              label="ORDER"
+              value={`#${orderNumber || "-"}`}
+            />
+
+            <Meta
+              label="INVOICE"
+              value={invoiceNumber || "-"}
+            />
+
+            <Meta
+              label="DATE"
+              value={FORMATTERS.date(orderDate)}
+            />
+
+            <Meta
+              label="PAYMENT"
+              value={paymentLabel}
+            />
+          </tr>
+        </tbody>
+      </table>
+
+      {/* ================= ADDRESS ================= */}
+
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: "7px",
-          marginBottom: "10px",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          border: "1px solid #ddd",
+          marginTop: "10px",
         }}
       >
-        {[
-          {
-            label: "Order",
-            value: orderNumber || "-",
-          },
-          {
-            label: "Payment",
-            value:
-              payment?.status ||
-              payment?.title ||
-              "-",
-          },
-          {
-            label: "Method",
-            value: payment?.title || "-",
-          },
-          {
-            label: "Invoice",
-            value: invoiceNumber || "-",
-          },
-        ].map((meta) => (
-          <div
-            key={meta.label}
-            style={{
-              border: "1px solid #e4e4e7",
-              background: "#fafafa",
-              padding: "7px 8px",
-              minHeight: "39px",
-              boxSizing: "border-box",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "7px",
-                color: "#71717a",
-                letterSpacing: "0.7px",
-                marginBottom: "3px",
-                lineHeight: 1,
-              }}
-            >
-              {meta.label}
-            </div>
+        <AddressBox
+          title="SELLER"
+          name={seller.name || seller.brand || "OATCLUB"}
+          lines={[
+            seller.address,
+            seller.addressLine2,
+            [
+              seller.city,
+              seller.state,
+              seller.pincode,
+            ]
+              .filter(Boolean)
+              .join(", "),
+            seller.gstin
+              ? `GSTIN: ${seller.gstin}`
+              : "",
+          ]}
+        />
 
-            <div
-              style={{
-                fontSize: "9px",
-                fontWeight: 900,
-                lineHeight: 1.2,
-              }}
-            >
-              {meta.value}
-            </div>
-          </div>
-        ))}
+        <AddressBox
+          title="BILL TO"
+          name={bill.fullName}
+          lines={[
+            bill.line1,
+            bill.line2,
+            `${bill.city}, ${bill.state} - ${bill.pincode}`,
+            bill.phone
+              ? `Phone: ${bill.phone}`
+              : "",
+          ]}
+        />
+
+        <AddressBox
+          title="SHIP TO"
+          name={ship.fullName}
+          last
+          lines={[
+            ship.line1,
+            ship.line2,
+            `${ship.city}, ${ship.state} - ${ship.pincode}`,
+            ship.phone
+              ? `Phone: ${ship.phone}`
+              : "",
+          ]}
+        />
       </div>
 
-      {/* =========================
-        SELLER DETAILS
-    ========================= */}
-      <div
-        style={{
-          border: "1px solid #e4e4e7",
-          padding: "9px 11px",
-          marginBottom: "10px",
-        }}
-      >
-        <div
-          style={{
-            marginBottom: "5px",
-            fontSize: "8px",
-            fontWeight: 900,
-            letterSpacing: "0.6px",
-            fontFamily:
-              "Nunito Sans, Arial, sans-serif",
-          }}
-        >
-          Seller Details
-        </div>
+      {/* ================= ITEMS TABLE ================= */}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            columnGap: "28px",
-            fontSize: "8px",
-            lineHeight: 1.4,
-            color: "#71717a",
-          }}
-        >
-          <div>
-            <p
-              style={{
-                margin: "0 0 2px",
-                color: "#000",
-                fontWeight: 900,
-              }}
-            >
-              {seller.name ||
-                seller.brand ||
-                "OATCLUB"}
-            </p>
-
-            {seller.address ? (
-              <p style={{ margin: 0 }}>
-                {seller.address}
-              </p>
-            ) : null}
-
-            {seller.addressLine2 ? (
-              <p style={{ margin: 0 }}>
-                {seller.addressLine2}
-              </p>
-            ) : null}
-
-            <p style={{ margin: 0 }}>
-              {[
-                seller.city,
-                seller.state,
-                seller.pincode,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-            </p>
-
-            {seller.country ? (
-              <p style={{ margin: 0 }}>
-                {seller.country}
-              </p>
-            ) : null}
-          </div>
-
-          <div>
-            {seller.gstin ? (
-              <p style={{ margin: 0 }}>
-                <strong style={{ color: "#000" }}>
-                  GSTIN:
-                </strong>{" "}
-                {seller.gstin}
-              </p>
-            ) : null}
-
-            {seller.pan ? (
-              <p style={{ margin: 0 }}>
-                <strong style={{ color: "#000" }}>
-                  PAN:
-                </strong>{" "}
-                {seller.pan}
-              </p>
-            ) : null}
-
-            {seller.phone ? (
-              <p style={{ margin: 0 }}>
-                <strong style={{ color: "#000" }}>
-                  Phone:
-                </strong>{" "}
-                {seller.phone}
-              </p>
-            ) : null}
-
-            {seller.email ? (
-              <p style={{ margin: 0 }}>
-                <strong style={{ color: "#000" }}>
-                  Email:
-                </strong>{" "}
-                {seller.email}
-              </p>
-            ) : null}
-
-            {seller.website ? (
-              <p style={{ margin: 0 }}>
-                <strong style={{ color: "#000" }}>
-                  Website:
-                </strong>{" "}
-                {seller.website}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {/* =========================
-        CUSTOMER
-    ========================= */}
-      <div
-        style={{
-          border: "1px solid #e4e4e7",
-          padding: "9px 11px",
-          marginBottom: "10px",
-        }}
-      >
-        <div
-          style={{
-            marginBottom: "5px",
-            fontSize: "8px",
-            fontWeight: 900,
-            letterSpacing: "0.6px",
-            fontFamily:
-              "Nunito Sans, Arial, sans-serif",
-          }}
-        >
-          Customer / Shipping Details
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            columnGap: "28px",
-            fontSize: "8px",
-            lineHeight: 1.4,
-            color: "#71717a",
-          }}
-        >
-          {/* BILLING */}
-          <div>
-            <p
-              style={{
-                margin: "0 0 2px",
-                color: "#000",
-                fontWeight: 900,
-              }}
-            >
-              Bill To
-            </p>
-
-            <p style={{ margin: 0 }}>
-              {bill.fullName}
-            </p>
-
-            <p style={{ margin: 0 }}>
-              {bill.line1}
-            </p>
-
-            {bill.line2 ? (
-              <p style={{ margin: 0 }}>
-                {bill.line2}
-              </p>
-            ) : null}
-
-            <p style={{ margin: 0 }}>
-              {bill.city}, {bill.state} -{" "}
-              {bill.pincode}
-            </p>
-
-            {bill.phone ? (
-              <p style={{ margin: 0 }}>
-                Phone: {bill.phone}
-              </p>
-            ) : null}
-
-            {bill.email ? (
-              <p style={{ margin: 0 }}>
-                Email: {bill.email}
-              </p>
-            ) : null}
-          </div>
-
-          {/* SHIPPING */}
-          <div>
-            <p
-              style={{
-                margin: "0 0 2px",
-                color: "#000",
-                fontWeight: 900,
-              }}
-            >
-              Ship To
-            </p>
-
-            <p style={{ margin: 0 }}>
-              {ship.fullName}
-            </p>
-
-            <p style={{ margin: 0 }}>
-              {ship.line1}
-            </p>
-
-            {ship.line2 ? (
-              <p style={{ margin: 0 }}>
-                {ship.line2}
-              </p>
-            ) : null}
-
-            <p style={{ margin: 0 }}>
-              {ship.city}, {ship.state} -{" "}
-              {ship.pincode}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* =========================
-        ITEMS
-    ========================= */}
       <table
         style={{
           width: "100%",
           borderCollapse: "collapse",
           tableLayout: "fixed",
+          marginTop: "12px",
+          border: "1px solid #ddd",
         }}
       >
         <thead>
           <tr>
-            <th
-              style={{
-                width: "43%",
-                borderTop:
-                  "1px solid #e4e4e7",
-                borderBottom:
-                  "1px solid #e4e4e7",
-                padding: "6px",
-                textAlign: "left",
-                fontSize: "8px",
-              }}
-            >
-              Product
+            <th style={{ ...th, width: "8%" }}>ID</th>
+
+            <th style={{ ...th, width: "30%", textAlign: "left" }}>
+              PRODUCT NAME
             </th>
 
-            <th
-              style={{
-                width: "13%",
-                borderTop:
-                  "1px solid #e4e4e7",
-                borderBottom:
-                  "1px solid #e4e4e7",
-                padding: "6px",
-                textAlign: "left",
-                fontSize: "8px",
-              }}
-            >
-              HSN
-            </th>
+            <th style={{ ...th, width: "7%" }}>SIZE</th>
 
-            <th
-              style={{
-                width: "8%",
-                borderTop:
-                  "1px solid #e4e4e7",
-                borderBottom:
-                  "1px solid #e4e4e7",
-                padding: "6px",
-                textAlign: "left",
-                fontSize: "8px",
-              }}
-            >
-              Size
-            </th>
+            <th style={{ ...th, width: "11%" }}>MRP</th>
 
-            <th
-              style={{
-                width: "7%",
-                borderTop:
-                  "1px solid #e4e4e7",
-                borderBottom:
-                  "1px solid #e4e4e7",
-                padding: "6px",
-                textAlign: "right",
-                fontSize: "8px",
-              }}
-            >
-              Qty
-            </th>
+            <th style={{ ...th, width: "12%" }}>HSN</th>
 
-            <th
-              style={{
-                width: "11%",
-                borderTop:
-                  "1px solid #e4e4e7",
-                borderBottom:
-                  "1px solid #e4e4e7",
-                padding: "6px",
-                textAlign: "right",
-                fontSize: "8px",
-              }}
-            >
-              Price
-            </th>
+            <th style={{ ...th, width: "7%" }}>GST</th>
 
-            <th
-              style={{
-                width: "7%",
-                borderTop:
-                  "1px solid #e4e4e7",
-                borderBottom:
-                  "1px solid #e4e4e7",
-                padding: "6px",
-                textAlign: "right",
-                fontSize: "8px",
-              }}
-            >
-              GST
-            </th>
+            <th style={{ ...th, width: "13%" }}>SELLING PRICE</th>
 
-            <th
-              style={{
-                width: "11%",
-                borderTop:
-                  "1px solid #e4e4e7",
-                borderBottom:
-                  "1px solid #e4e4e7",
-                padding: "6px",
-                textAlign: "right",
-                fontSize: "8px",
-              }}
-            >
-              Total
+            <th style={{ ...th, width: "5%" }}>QTY</th>
+
+            <th style={{ ...th, width: "12%", borderRight: 0 }}>
+              TOTAL
             </th>
           </tr>
         </thead>
 
         <tbody>
-          {items.map((it, idx) => {
-            const qty = Math.max(
-              1,
-              Number(
-                it.qty ||
-                it.quantity ||
-                1
-              )
-            );
+          {normalizedItems.map((it, index) => (
+            <tr key={index}>
+              {/* ID */}
+              <td
+                style={{
+                  ...td,
+                  textAlign: "center",
+                  fontWeight: 700,
+                }}
+              >
+                {it.id}
+              </td>
 
-            const mrpUnit = Number(
-              it.compareAtPrice ||
-              it.originalPrice ||
-              it.priceIncl ||
-              it.price ||
-              0
-            );
-
-            const beforeDiscountUnit =
-              Number(
-                it.originalPrice ||
-                (it.originalSubtotal &&
-                  qty
-                  ? Number(
-                    it.originalSubtotal
-                  ) / qty
-                  : 0) ||
-                it.priceIncl ||
-                it.price ||
-                0
-              );
-
-            const unit = Number(
-              it.priceIncl ||
-              it.price ||
-              beforeDiscountUnit
-            );
-
-            const markdownAmount =
-              Math.max(
-                0,
-                (mrpUnit -
-                  beforeDiscountUnit) *
-                qty
-              );
-
-            const itemDiscount =
-              Number(
-                it.discountAmount ||
-                Math.max(
-                  0,
-                  (beforeDiscountUnit -
-                    unit) *
-                  qty
-                )
-              );
-
-            const total = Number(
-              it.subtotal ||
-              unit * qty
-            );
-
-            const cellStyle = {
-              borderBottom:
-                "1px solid #f4f4f5",
-              padding: "7px 6px",
-              verticalAlign: "top",
-              fontSize: "9px",
-              lineHeight: 1.3,
-            };
-
-            return (
-              <tr key={idx}>
-                <td style={cellStyle}>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      marginBottom: "2px",
-                    }}
-                  >
-                    {it.name ||
-                      it.title ||
-                      "-"}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: "7px",
-                      color: "#71717a",
-                    }}
-                  >
-                    {it.sku ||
-                      it.productCode ||
-                      ""}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: "7px",
-                      color: "#71717a",
-                      fontWeight: 700,
-                      marginTop: "2px",
-                      lineHeight: 1.25,
-                    }}
-                  >
-                    MRP{" "}
-                    {FORMATTERS.currency(
-                      mrpUnit
-                    )}
-
-                    {markdownAmount > 0
-                      ? ` · Selling ${FORMATTERS.currency(
-                        beforeDiscountUnit
-                      )}`
-                      : ""}
-
-                    {itemDiscount > 0
-                      ? ` · Discount -${FORMATTERS.currency(
-                        itemDiscount
-                      )}`
-                      : ""}
-                  </div>
-                </td>
-
-                <td style={cellStyle}>
-                  {getHsn(it)}
-                </td>
-
-                <td style={cellStyle}>
-                  {it.size ||
-                    it.selectedSize ||
-                    "-"}
-                </td>
-
-                <td
+              {/* PRODUCT NAME */}
+              <td style={td}>
+                <div
                   style={{
-                    ...cellStyle,
-                    textAlign: "right",
+                    fontWeight: 700,
+                    lineHeight: 1.35,
                   }}
                 >
-                  {qty}
-                </td>
+                  {it.name}
+                </div>
+              </td>
 
-                <td
-                  style={{
-                    ...cellStyle,
-                    textAlign: "right",
-                  }}
-                >
-                  {FORMATTERS.currency(
-                    unit
-                  )}
-                </td>
+              {/* SIZE */}
+              <td style={{ ...td, textAlign: "center" }}>
+                {it.size}
+              </td>
 
-                <td
-                  style={{
-                    ...cellStyle,
-                    textAlign: "right",
-                  }}
-                >
-                  {it.gstRate ||
-                    it.taxRate ||
-                    5}
-                  %
-                </td>
+              {/* MRP */}
+              <td style={{ ...td, textAlign: "right" }}>
+                {money(it.mrpSubtotal / it.qty)}
+              </td>
 
-                <td
-                  style={{
-                    ...cellStyle,
-                    textAlign: "right",
-                    fontWeight: 900,
-                  }}
-                >
-                  {FORMATTERS.currency(
-                    total
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+              {/* HSN */}
+              <td style={{ ...td, textAlign: "center" }}>
+                {it.hsn}
+              </td>
+
+              {/* GST */}
+              <td style={{ ...td, textAlign: "center" }}>
+                {it.gstRate}%
+              </td>
+
+              {/* SELLING PRICE */}
+              <td style={{ ...td, textAlign: "right" }}>
+                {money(it.unitPrice)}
+              </td>
+
+              {/* QTY */}
+              <td style={{ ...td, textAlign: "center" }}>
+                {it.qty}
+              </td>
+
+              {/* TOTAL */}
+              <td
+                style={{
+                  ...td,
+                  textAlign: "right",
+                  fontWeight: 800,
+                  borderRight: 0,
+                }}
+              >
+                {money(it.finalSubtotal)}
+              </td>
+            </tr>
+          ))}
+
+          {/* TOTAL ITEMS */}
+          <tr>
+            <td
+              colSpan={7}
+              style={{
+                padding: "10px",
+                background: "#f5f5f5",
+                fontSize: "9px",
+                fontWeight: 800,
+                textAlign: "right",
+                borderTop: "1px solid #ddd",
+              }}
+            >
+              TOTAL ITEMS IN ORDER
+            </td>
+
+            <td
+              style={{
+                padding: "10px",
+                background: "#f5f5f5",
+                fontSize: "10px",
+                fontWeight: 900,
+                textAlign: "center",
+                borderTop: "1px solid #ddd",
+              }}
+            >
+              {totalQty}
+            </td>
+
+            <td
+              style={{
+                background: "#f5f5f5",
+                borderTop: "1px solid #ddd",
+              }}
+            />
+          </tr>
         </tbody>
       </table>
 
-      {/* =========================
-        SUMMARY AREA
-    ========================= */}
+      {/* ================= SUMMARY ================= */}
+
       <div
         style={{
           display: "flex",
+          justifyContent: "space-between",
           alignItems: "flex-start",
-          justifyContent:
-            "space-between",
-          gap: "20px",
-          marginTop: "10px",
+          marginTop: "14px",
+          gap: "30px",
         }}
       >
         {/* AWB */}
-        <div
-          style={{
-            flex: 1,
-            minWidth: 0,
-            paddingTop: "2px",
-          }}
-        >
+
+        <div style={{ flex: 1 }}>
           {courier?.awb ? (
             <>
-              <img
-                src={`https://barcode.tec-it.com/barcode.ashx?data=${courier.awb}&code=Code128&dpi=300`}
-                alt="AWB Barcode"
+              <div
                 style={{
-                  width: "170px",
-                  maxWidth: "170px",
-                  height: "45px",
+                  fontSize: "7px",
+                  fontWeight: 800,
+                  color: "#666",
+                  marginBottom: "4px",
+                }}
+              >
+                AWB / TRACKING
+              </div>
+
+              <img
+                src={`https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(
+                  courier.awb
+                )}&code=Code128&dpi=300`}
+                alt="AWB"
+                style={{
+                  width: "160px",
+                  height: "42px",
                   objectFit: "contain",
                   objectPosition: "left center",
-                  display: "block",
                 }}
               />
 
-              <p
+              <div
                 style={{
-                  margin: "2px 0 0",
-                  fontSize: "8px",
-                  color: "#71717a",
+                  marginTop: "3px",
+                  fontWeight: 700,
                 }}
               >
                 {courier.awb}
-              </p>
+              </div>
             </>
           ) : null}
         </div>
 
-        {/* SUMMARY BOX */}
+        {/* TOTALS */}
+
         <div
           style={{
-            width: "270px",
-            flexShrink: 0,
-            border: "1px solid #e4e4e7",
-            padding: "7px 11px",
-            boxSizing: "border-box",
+            width: "310px",
+            borderTop: "1px solid #ddd",
           }}
         >
-          <SummaryRow
-            label="MRP Value"
-            value={FORMATTERS.currency(
-              mrpProductValue
-            )}
-          />
 
-          {productMarkdown > 0 ? (
-            <SummaryRow
-              label="Product Markdown"
-              value={`-${FORMATTERS.currency(
-                productMarkdown
-              )}`}
-            />
-          ) : null}
-
-          <SummaryRow
-            label="Subtotal"
-            value={FORMATTERS.currency(
-              subtotalProductValue
-            )}
-          />
-
-          {discountAmount > 0 ? (
-            <SummaryRow
-              label="Coupon / Order Discount"
-              value={`-${FORMATTERS.currency(
-                discountAmount
-              )}`}
-              bold
-            />
-          ) : null}
-
-          <SummaryRow
+          <TotalRow
             label="Final Product Value"
-            value={FORMATTERS.currency(
-              finalProductValue
-            )}
+            value={money(finalProductValue)}
             bold
-            strongBorder
           />
 
-          <SummaryRow
+          <TotalRow
+            label="Shipping / COD Charge"
+            value={money(shippingFee)}
+          />
+
+          <TotalRow
             label="Taxable Value"
-            value={FORMATTERS.currency(
-              taxableAmount
-            )}
+            value={money(taxableValue)}
           />
 
-          <SummaryRow
-            label="GST (5% Included)"
-            value={FORMATTERS.currency(
-              totalTax
-            )}
-          />
-
-          {shippingFee > 0 ? (
-            <SummaryRow
-              label="Shipping"
-              value={FORMATTERS.currency(
-                shippingFee
-              )}
+          {isInterstate ? (
+            <TotalRow
+              label="IGST (5% Included)"
+              value={money(igst)}
             />
-          ) : null}
+          ) : (
+            <>
+              <TotalRow
+                label="CGST (2.5% Included)"
+                value={money(cgst)}
+              />
+
+              <TotalRow
+                label="SGST (2.5% Included)"
+                value={money(sgst)}
+              />
+            </>
+          )}
+
+          {walletAmount > 0 && (
+            <TotalRow
+              label="Wallet Credit"
+              value={`-${money(walletAmount)}`}
+            />
+          )}
 
           <div
             style={{
               display: "flex",
-              justifyContent:
-                "space-between",
+              justifyContent: "space-between",
               alignItems: "center",
-              borderTop:
-                "1px solid #a1a1aa",
+              background: "#000",
+              color: "#fff",
+              padding: "11px 10px",
               marginTop: "3px",
-              paddingTop: "7px",
               fontSize: "12px",
               fontWeight: 900,
             }}
           >
-            <span>Order Total</span>
-
-            <span>
-              {FORMATTERS.currency(
-                payable
-              )}
-            </span>
+            <span>FINAL PAYABLE</span>
+            <span>{money(finalPayable)}</span>
           </div>
-
-          {/* PARTIAL PAYMENT */}
-          {payment?.isPartial ? (
-            <>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent:
-                    "space-between",
-                  borderTop:
-                    "1px solid #e4e4e7",
-                  marginTop: "6px",
-                  paddingTop: "6px",
-                  fontSize: "9px",
-                }}
-              >
-                <span>
-                  Paid Online
-                  {payment?.upfrontPercent >
-                    0
-                    ? ` (${payment.upfrontPercent}%)`
-                    : ""}
-                </span>
-
-                <strong>
-                  {FORMATTERS.currency(
-                    payment?.paidAmount ||
-                    0
-                  )}
-                </strong>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent:
-                    "space-between",
-                  borderTop:
-                    "1px solid #e4e4e7",
-                  marginTop: "5px",
-                  paddingTop: "6px",
-                  fontSize: "11px",
-                  fontWeight: 900,
-                }}
-              >
-                <span>
-                  Remaining COD
-                </span>
-
-                <span>
-                  {FORMATTERS.currency(
-                    payment?.remainingAmount ||
-                    0
-                  )}
-                </span>
-              </div>
-            </>
-          ) : null}
         </div>
       </div>
 
-      {/* =========================
-        FOOTER
-    ========================= */}
+      {/* ================= PAYMENT INFO ================= */}
+
+      {payment?.isPartial && (
+        <div
+          style={{
+            width: "310px",
+            marginLeft: "auto",
+            marginTop: "5px",
+            border: "1px solid #ddd",
+            padding: "7px 10px",
+            boxSizing: "border-box",
+          }}
+        >
+          <TotalRow
+            label="Paid Online"
+            value={money(
+              payment.paidAmount || 0
+            )}
+          />
+
+          <TotalRow
+            label="Balance Payable on Delivery"
+            value={money(
+              payment.remainingAmount || 0
+            )}
+            bold
+          />
+        </div>
+      )}
+
+      {/* ================= FOOTER ================= */}
+
       <div
         style={{
-          marginTop: "12px",
-          fontSize: "8px",
+          marginTop: "20px",
+          paddingTop: "10px",
+          borderTop: "1px solid #ddd",
+          display: "flex",
+          justifyContent: "space-between",
+          color: "#666",
+          fontSize: "7px",
           lineHeight: 1.5,
-          color: "#71717a",
         }}
       >
-        {seller.email ||
-          "HEY@OATCLUB.IN"}
-        <br />
+        <div>
+          <strong style={{ color: "#111" }}>
+            {seller.name ||
+              seller.brand ||
+              "OATCLUB"}
+          </strong>
 
-        {seller.website
-          ? seller.website
-            .replace(
-              /^https?:\/\//,
-              ""
-            )
-            .replace(/\/$/, "")
-          : "OATCLUB.IN"}
+          <br />
 
-        <br />
+          {seller.email || "HEY@OATCLUB.IN"}
 
-        {[
-          seller.city,
-          seller.state,
-          seller.country,
-        ]
-          .filter(Boolean)
-          .join(", ")}
+          <br />
+
+          {seller.website
+            ? seller.website
+              .replace(/^https?:\/\//, "")
+              .replace(/\/$/, "")
+            : "OATCLUB.IN"}
+        </div>
+
+        <div
+          style={{
+            textAlign: "right",
+            maxWidth: "280px",
+          }}
+        >
+          This is a computer generated tax invoice and
+          does not require a physical signature.
+        </div>
       </div>
     </div>
   );
 }
 
+/* =========================================================
+   SMALL COMPONENTS
+========================================================= */
 
-function SummaryRow({
+function Meta({ label, value }) {
+  return (
+    <td
+      style={{
+        width: "25%",
+        padding: "8px 10px",
+        border: "1px solid #ddd",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "6px",
+          color: "#777",
+          fontWeight: 700,
+          marginBottom: "3px",
+        }}
+      >
+        {label}
+      </div>
+
+      <div
+        style={{
+          fontSize: "9px",
+          fontWeight: 800,
+        }}
+      >
+        {value || "-"}
+      </div>
+    </td>
+  );
+}
+
+function AddressBox({
+  title,
+  name,
+  lines = [],
+  last = false,
+}) {
+  return (
+    <div
+      style={{
+        padding: "9px 10px",
+        borderRight: last
+          ? "none"
+          : "1px solid #ddd",
+        minHeight: "78px",
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "6px",
+          color: "#777",
+          fontWeight: 800,
+          marginBottom: "5px",
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          fontWeight: 900,
+          marginBottom: "3px",
+        }}
+      >
+        {name}
+      </div>
+
+      {lines.filter(Boolean).map((line, i) => (
+        <div
+          key={i}
+          style={{
+            color: "#555",
+            lineHeight: 1.4,
+          }}
+        >
+          {line}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TotalRow({
   label,
   value,
   bold = false,
-  strongBorder = false,
 }) {
   return (
     <div
       style={{
         display: "flex",
         justifyContent: "space-between",
-        alignItems: "center",
-        gap: "12px",
-        padding: "4px 0",
-        borderBottom: strongBorder
-          ? "1px solid #d4d4d8"
-          : "1px solid #f4f4f5",
+        gap: "20px",
+        padding: "7px 8px",
+        borderBottom: "1px solid #e5e5e5",
         fontSize: "9px",
-        lineHeight: 1.2,
-        fontWeight: bold ? 900 : 400,
+        fontWeight: bold ? 900 : 500,
       }}
     >
       <span>{label}</span>
+
       <span
         style={{
           flexShrink: 0,
-          fontWeight: bold ? 900 : 600,
+          fontWeight: bold ? 900 : 700,
         }}
       >
         {value}
