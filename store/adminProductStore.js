@@ -1251,10 +1251,10 @@ export const useAdminProductStore = create((set, get) => ({
         products: (state.products || []).map((p) =>
           p._id === productId
             ? {
-                ...p,
-                stock: updatedProduct.stock ?? nextStock,
-                isInStock: updatedProduct.isInStock ?? p.isInStock,
-              }
+              ...p,
+              stock: updatedProduct.stock ?? nextStock,
+              isInStock: updatedProduct.isInStock ?? p.isInStock,
+            }
             : p,
         ),
       }));
@@ -1305,11 +1305,11 @@ export const useAdminProductStore = create((set, get) => ({
         products: (state.products || []).map((p) =>
           p._id === productId
             ? {
-                ...p,
-                stock: updatedProduct.stock ?? p.stock,
-                variants: updatedProduct.variants ?? p.variants,
-                isInStock: updatedProduct.isInStock ?? p.isInStock,
-              }
+              ...p,
+              stock: updatedProduct.stock ?? p.stock,
+              variants: updatedProduct.variants ?? p.variants,
+              isInStock: updatedProduct.isInStock ?? p.isInStock,
+            }
             : p,
         ),
       }));
@@ -2352,20 +2352,20 @@ export const useAdminProductStore = create((set, get) => ({
         products: (state.products || []).map((product) =>
           String(product?._id) === id
             ? {
-                ...product,
-                ...(updated || {}),
-                availableForCollab: updated?.availableForCollab ?? nextValue,
-              }
+              ...product,
+              ...(updated || {}),
+              availableForCollab: updated?.availableForCollab ?? nextValue,
+            }
             : product,
         ),
 
         product:
           String(state.product?._id || "") === id
             ? {
-                ...state.product,
-                ...(updated || {}),
-                availableForCollab: updated?.availableForCollab ?? nextValue,
-              }
+              ...state.product,
+              ...(updated || {}),
+              availableForCollab: updated?.availableForCollab ?? nextValue,
+            }
             : state.product,
       }));
 
@@ -2506,10 +2506,10 @@ export const useAdminProductStore = create((set, get) => ({
         const current = get().product;
         const nextVariants = Array.isArray(current.variants)
           ? current.variants.map((v) => ({
-              ...v,
-              stock: 0,
-              isInStock: false,
-            }))
+            ...v,
+            stock: 0,
+            isInStock: false,
+          }))
           : current.variants;
 
         set({
@@ -2570,9 +2570,9 @@ export const useAdminProductStore = create((set, get) => ({
           : Array.isArray(payload)
             ? { productCodes: payload, isPrimaryProduct: nextValue }
             : {
-                ...(payload || {}),
-                isPrimaryProduct: nextValue,
-              };
+              ...(payload || {}),
+              isPrimaryProduct: nextValue,
+            };
 
       const res = await fetch(`${API}/primary-status`, {
         method: "PATCH",
@@ -2803,9 +2803,9 @@ export const useAdminProductStore = create((set, get) => ({
         products: (state.products || []).map((product) =>
           updatedMap.has(String(product._id))
             ? {
-                ...product,
-                ...updatedMap.get(String(product._id)),
-              }
+              ...product,
+              ...updatedMap.get(String(product._id)),
+            }
             : product,
         ),
 
@@ -2859,8 +2859,8 @@ export const useAdminProductStore = create((set, get) => ({
         typeof availableForCollab === "boolean"
           ? availableForCollab
           : ["true", "1", "yes"].includes(
-              String(availableForCollab).trim().toLowerCase(),
-            );
+            String(availableForCollab).trim().toLowerCase(),
+          );
 
       const isBulk = ids.length > 1;
 
@@ -2921,12 +2921,12 @@ export const useAdminProductStore = create((set, get) => ({
         product:
           state.product && selectedIds.has(String(state.product?._id || ""))
             ? {
-                ...state.product,
-                ...(updatedMap.get(String(state.product?._id || "")) || {}),
-                availableForCollab:
-                  updatedMap.get(String(state.product?._id || ""))
-                    ?.availableForCollab ?? nextValue,
-              }
+              ...state.product,
+              ...(updatedMap.get(String(state.product?._id || "")) || {}),
+              availableForCollab:
+                updatedMap.get(String(state.product?._id || ""))
+                  ?.availableForCollab ?? nextValue,
+            }
             : state.product,
 
         bulkSelectedIds: isBulk ? [] : state.bulkSelectedIds,
@@ -2987,8 +2987,8 @@ export const useAdminProductStore = create((set, get) => ({
         typeof isDispatchReady === "boolean"
           ? isDispatchReady
           : ["true", "1", "yes"].includes(
-              String(isDispatchReady).trim().toLowerCase(),
-            );
+            String(isDispatchReady).trim().toLowerCase(),
+          );
 
       const isBulk = ids.length > 1;
 
@@ -3013,8 +3013,8 @@ export const useAdminProductStore = create((set, get) => ({
         body: JSON.stringify({
           ...(isBulk
             ? {
-                ids,
-              }
+              ids,
+            }
             : {}),
 
           isDispatchReady: nextValue,
@@ -3060,14 +3060,14 @@ export const useAdminProductStore = create((set, get) => ({
         product:
           state.product && selectedIds.has(String(state.product?._id || ""))
             ? {
-                ...state.product,
+              ...state.product,
 
-                ...(updatedMap.get(String(state.product?._id || "")) || {}),
+              ...(updatedMap.get(String(state.product?._id || "")) || {}),
 
-                isDispatchReady:
-                  updatedMap.get(String(state.product?._id || ""))
-                    ?.isDispatchReady ?? nextValue,
-              }
+              isDispatchReady:
+                updatedMap.get(String(state.product?._id || ""))
+                  ?.isDispatchReady ?? nextValue,
+            }
             : state.product,
 
         bulkSelectedIds: isBulk ? [] : state.bulkSelectedIds,
@@ -3135,9 +3135,9 @@ export const useAdminProductStore = create((set, get) => ({
           keywords: Array.isArray(row?.keywords)
             ? row.keywords
             : String(row?.keywords || "")
-                .split(",")
-                .map((item) => item.trim())
-                .filter(Boolean),
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean),
         }))
         .filter((row) => row.productCode);
 
@@ -3244,9 +3244,9 @@ export const useAdminProductStore = create((set, get) => ({
             keywords: Array.isArray(source?.keywords)
               ? source.keywords
               : String(source?.keywords || "")
-                  .split(",")
-                  .map((value) => value.trim())
-                  .filter(Boolean),
+                .split(",")
+                .map((value) => value.trim())
+                .filter(Boolean),
           };
         })
         .filter((row) => row.productCode);
@@ -3299,12 +3299,12 @@ export const useAdminProductStore = create((set, get) => ({
 
         product:
           state.product &&
-          updatedMap.has(String(state.product?.productCode || ""))
+            updatedMap.has(String(state.product?.productCode || ""))
             ? {
-                ...state.product,
+              ...state.product,
 
-                ...updatedMap.get(String(state.product?.productCode || "")),
-              }
+              ...updatedMap.get(String(state.product?.productCode || "")),
+            }
             : state.product,
 
         metadataPreview: null,
@@ -3713,6 +3713,9 @@ export const useAdminProductStore = create((set, get) => ({
       hideFootwear: true,
       sort: "available_desc",
       ...params,
+      size: String(params.size || "")
+        .trim()
+        .toUpperCase(),
     };
 
     set({

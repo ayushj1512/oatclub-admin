@@ -2,13 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   Loader2,
   Package,
   RefreshCcw,
   Search,
+  X,
 } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -16,7 +19,29 @@ import { saveAs } from "file-saver";
 import { useAdminProductStore } from "@/store/adminProductStore";
 
 const SIZES = ["XS", "S", "M", "L", "XL"];
-const PAGE_LIMIT = 70;
+const PAGE_LIMIT = 200;
+const STOREFRONT_URL = "https://www.oatclub.in";
+
+const slugify = (value = "") =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const getProductLink = (product = {}) => {
+  const category = slugify(
+    product?.category?.name ||
+    product?.category ||
+    product?.categories?.[0] ||
+    "all-clothing",
+  );
+  const productName = slugify(product?.name || product?.title);
+  const id = product?.productCode || product?.id || product?._id;
+
+  return `${STOREFRONT_URL}/category/${category}/${productName}/${id}`;
+};
 
 const getVariantSize = (variant = {}) => {
   if (variant?.size) {
@@ -91,6 +116,7 @@ export default function AvailableInventoryPage() {
   } = useAdminProductStore();
 
   const [search, setSearch] = useState("");
+  const [size, setSize] = useState("");
   const [category, setCategory] = useState("");
   const [stockStatus, setStockStatus] = useState("all");
   const [sort, setSort] = useState("available_desc");
@@ -102,6 +128,7 @@ export default function AvailableInventoryPage() {
       page,
       limit: PAGE_LIMIT,
       q: search,
+      size,
       category,
       sort,
       hideFootwear: true,
@@ -118,7 +145,7 @@ export default function AvailableInventoryPage() {
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [search, category, stockStatus, sort]);
+  }, [size, search, category, stockStatus, sort]);
 
   const rows = useMemo(
     () =>
@@ -316,6 +343,13 @@ export default function AvailableInventoryPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <InfluencerMessageButton
+              products={rows}
+              selectedSize={size}
+              onSizeChange={setSize}
+              loading={inventoryLoading}
+            />
+
             <button
               type="button"
               onClick={() => loadInventory(currentPage)}
@@ -661,8 +695,8 @@ function SummaryCard({ label, value, dark = false }) {
   return (
     <div
       className={`rounded-2xl border p-5 shadow-sm ${dark
-          ? "border-black bg-black text-white"
-          : "border-neutral-200 bg-white text-black"
+        ? "border-black bg-black text-white"
+        : "border-neutral-200 bg-white text-black"
         }`}
     >
       <p
@@ -676,6 +710,110 @@ function SummaryCard({ label, value, dark = false }) {
         {formatNumber(value)}
       </p>
     </div>
+  );
+}
+
+function InfluencerMessageButton({
+  products,
+  selectedSize,
+  onSizeChange,
+  loading,
+}) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const links = products.map((product, index) => {
+      const name = product?.name || product?.title || "Product";
+      const code = product?.productCode ? ` (${product.productCode})` : "";
+      return `${index + 1}. ${name}${code}\n${getProductLink(product)}`;
+    });
+
+    if (!links.length) return;
+
+    const sizeText = selectedSize
+      ? `Available in size ${selectedSize}.\n\n`
+      : "";
+    const message = `Hi! Please check these OATCLUB products and share your selections.\n\n${sizeText}${links.join("\n\n")}\n\nPlease send us the selected product names or codes. Thank you!`;
+
+    await navigator.clipboard.writeText(message);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-11 items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 text-sm font-medium text-black transition hover:border-black"
+      >
+        <Copy size={16} />
+        Create Influencer List
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          onMouseDown={() => setOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Influencer Product List</h2>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Select a size to load available products.
+                </p>
+              </div>
+              <button type="button" onClick={() => setOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <select
+              value={selectedSize}
+              onChange={(event) => onSizeChange(event.target.value)}
+              className="mt-5 h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm font-semibold outline-none focus:border-black"
+            >
+              <option value="">Select Size</option>
+              {SIZES.map((item) => (
+                <option key={item} value={item}>Size {item}</option>
+              ))}
+            </select>
+
+            <p className="mt-3 text-sm text-neutral-500">
+              {loading
+                ? "Filtering products..."
+                : selectedSize
+                  ? `${products.length} available products found`
+                  : "Choose a size to continue"}
+            </p>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="h-10 rounded-lg border border-neutral-200 px-4 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCopy}
+                disabled={!selectedSize || loading || !products.length}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-black px-4 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+                {copied ? "Copied" : `Copy ${products.length} Products`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -704,8 +842,8 @@ function SizeInventoryCell({ inventory }) {
       <div className="mx-auto min-w-[105px] rounded-xl border border-neutral-200 bg-white px-3 py-2">
         <p
           className={`text-lg font-bold ${available > 0
-              ? "text-emerald-700"
-              : "text-neutral-400"
+            ? "text-emerald-700"
+            : "text-neutral-400"
             }`}
         >
           {formatNumber(available)}
