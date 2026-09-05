@@ -1013,10 +1013,16 @@ export default function ReadyToShipPage() {
     }));
 
     try {
+      const paymentMethod = String(
+        order?.paymentMethod || ""
+      )
+        .trim()
+        .toLowerCase();
+
       const isCod =
-        String(order?.paymentMethod || "")
-          .trim()
-          .toLowerCase() === "cod";
+        paymentMethod === "cod" ||
+        paymentMethod === "partial_cod";
+    
 
       const calculatedWeight = Math.max(
         0.5,
