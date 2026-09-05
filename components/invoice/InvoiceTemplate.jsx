@@ -193,24 +193,41 @@ export default function InvoiceTemplate({ data }) {
     n(totals.discount) || calculatedDiscount
   );
 
-  const shippingFee = round2(
-    totals.shippingFee ??
-    totals.shipping ??
-    0
+  const paymentMethod = String(
+    payment.method || payment.title || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const isFullCod =
+    !payment.isPartial &&
+    ["cod", "cash on delivery"].includes(paymentMethod);
+
+  const shippingFee = isFullCod
+    ? round2(totals.shippingFee ?? totals.shipping ?? 59)
+    : 0;
+
+  // ₹59 already includes 5% GST
+  const shippingTaxableValue = round2(
+    shippingFee / 1.05
+  );
+
+  const shippingTax = round2(
+    shippingFee - shippingTaxableValue
   );
 
   const taxableValue = round2(
     normalizedItems.reduce(
       (sum, it) => sum + it.taxableValue,
       0
-    )
+    ) + shippingTaxableValue
   );
 
   const totalTax = round2(
     normalizedItems.reduce(
       (sum, it) => sum + it.taxAmount,
       0
-    )
+    ) + shippingTax
   );
 
   const sellerState = String(seller.state || "").trim().toLowerCase();
@@ -218,11 +235,16 @@ export default function InvoiceTemplate({ data }) {
   const billingState = String(
     billing.state || shipping.state || ""
   ).trim().toLowerCase();
+  const hasInterstateFlag =
+    typeof totals.isInterstate === "boolean";
 
-  const isInterstate =
-    sellerState &&
-    billingState &&
-    sellerState !== billingState;
+  const isInterstate = hasInterstateFlag
+    ? totals.isInterstate
+    : Boolean(
+      sellerState &&
+      billingState &&
+      sellerState !== billingState
+    );
 
   const igst = isInterstate ? totalTax : 0;
 
@@ -739,24 +761,20 @@ export default function InvoiceTemplate({ data }) {
             value={money(taxableValue)}
           />
 
-          {isInterstate ? (
-            <TotalRow
-              label="IGST (5% Included)"
-              value={money(igst)}
-            />
-          ) : (
-            <>
-              <TotalRow
-                label="CGST (2.5% Included)"
-                value={money(cgst)}
-              />
+          <TotalRow
+            label="CGST (2.5% )"
+            value={money(cgst)}
+          />
 
-              <TotalRow
-                label="SGST (2.5% Included)"
-                value={money(sgst)}
-              />
-            </>
-          )}
+          <TotalRow
+            label="SGST (2.5% )"
+            value={money(sgst)}
+          />
+
+          <TotalRow
+            label="IGST (5% )"
+            value={money(igst)}
+          />
 
           {walletAmount > 0 && (
             <TotalRow
