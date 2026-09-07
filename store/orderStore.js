@@ -1243,7 +1243,7 @@ export const useOrderStore = create((set, get) => ({
 
     try {
       const data = await get()._post(
-        `/api/razorpay/admin/resend-confirmation/${encodeURIComponent(id)}`,
+        `/api/razorpay/resend-payment-confirmation/${encodeURIComponent(id)}`,
         {},
         { silent: true }
       );

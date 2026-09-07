@@ -227,35 +227,32 @@ export const canSendPaymentRecoveryWhatsApp = (
 ============================================================ */
 
 export const canSendPrepaidConfirmation = (order = {}) => {
-  const paymentMethod = safeString(
+  const method = safeString(
     order?.paymentMethod,
   ).toLowerCase();
 
-  const paymentStatus = safeString(
+  const status = safeString(
     order?.paymentStatus,
   ).toLowerCase();
 
-  const fulfillmentStatus = safeString(
+  const fulfillment = safeString(
     order?.fulfillmentStatus,
   ).toLowerCase();
 
-  const orderType = safeString(
-    order?.orderType || "shipment",
-  ).toLowerCase();
-
-  const isCancelled =
+  if (
     order?.cancellation?.isCancelled === true ||
-    fulfillmentStatus === "cancelled";
+    fulfillment === "cancelled" ||
+    order?.parentOrderId
+  ) {
+    return false;
+  }
 
-  if (isCancelled) return false;
-
-  // Split child ko customer confirmation nahi bhejni.
-  if (order?.parentOrderId) return false;
-
-  if (paymentMethod !== "razorpay") return false;
-  if (paymentStatus !== "paid") return false;
-
-  return ["shipment", "parent"].includes(orderType);
+  return (
+    method === "cod" ||
+    (method === "razorpay" && status === "paid") ||
+    (method === "partial_cod" &&
+      status === "partially_paid")
+  );
 };
 
 /* ============================================================
