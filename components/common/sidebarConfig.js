@@ -119,19 +119,43 @@
     ],
 
     inventory: [
-      { label: "Inventory Dashboard", href: "/inventory" },
+      {
+        label: "Inventory Dashboard",
+        href: "/inventory",
+      },
       {
         label: "Available Inventory",
         href: "/inventory/available-inventory",
       },
-      { label: "Modify Inventory", href: "/inventory/modify-inventory" },
-      { label: "Stock Update", href: "/inventory/stock-update" },
-      { label: "In-Stock Inventory", href: "/inventory/in-stock-inventory" },
-      { label: "Reserved Inventory", href: "/inventory/reserved-inventory" },
-      { label: "On Demand Inventory", href: "/inventory/on-demand-inventory" },
-      { label: "Zero Inventory", href: "/inventory/zero-inventory" },
+      {
+        label: "Modify Inventory",
+        href: "/inventory/modify-inventory",
+      },
+      {
+        label: "Stock Update",
+        href: "/inventory/stock-update",
+      },
+      {
+        label: "Inventory Logs",
+        href: "/inventory/inventory-logs",
+      },
+      {
+        label: "In-Stock Inventory",
+        href: "/inventory/in-stock-inventory",
+      },
+      {
+        label: "Reserved Inventory",
+        href: "/inventory/reserved-inventory",
+      },
+      {
+        label: "On Demand Inventory",
+        href: "/inventory/on-demand-inventory",
+      },
+      {
+        label: "Zero Inventory",
+        href: "/inventory/zero-inventory",
+      },
     ],
-
     barcodes: [
       {
         label: "Barcode Dashboard",
