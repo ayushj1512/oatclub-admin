@@ -150,6 +150,68 @@ const normalizeCategoryBanners = (banners = []) =>
   );
 
 /* =========================================================
+ NORMALIZE OAT GALLERY
+========================================================= */
+
+const normalizeOatGallery = (items = []) =>
+  sortByOrder(Array.isArray(items) ? items : []).map(
+    (item, index) => ({
+      _id: item?._id,
+
+      clientId:
+        safeText(item?.clientId) ||
+        safeText(item?._id) ||
+        `oat-gallery-${Date.now()}-${index}`,
+
+      image: safeText(item?.image),
+
+      productCode:
+        safeText(item?.productCode).toUpperCase(),
+
+      isActive: item?.isActive !== false,
+
+      sortOrder: Number.isFinite(Number(item?.sortOrder))
+        ? Number(item.sortOrder)
+        : index,
+    })
+  );
+
+/* =========================================================
+   NORMALIZE COLLECTION ROW BANNERS
+========================================================= */
+
+const normalizeCollectionRowBanners = (items = []) =>
+  sortByOrder(Array.isArray(items) ? items : []).map(
+    (item, index) => ({
+      _id: item?._id,
+
+      clientId:
+        safeText(item?.clientId) ||
+        safeText(item?._id) ||
+        `collection-row-${Date.now()}-${index}`,
+
+      image: safeText(item?.image),
+
+      collection: safeText(
+        item?.collection?._id || item?.collection
+      ),
+
+      collectionName:
+        safeText(
+          item?.collectionName ||
+          item?.collection?.name ||
+          item?.collection?.title
+        ),
+
+      isActive: item?.isActive !== false,
+
+      sortOrder: Number.isFinite(Number(item?.sortOrder))
+        ? Number(item.sortOrder)
+        : index,
+    })
+  );
+
+/* =========================================================
    SETTINGS NORMALIZER
 ========================================================= */
 
@@ -164,10 +226,21 @@ const normalizeSettings = (data = {}) => ({
     data?.mobileHeroBanners || []
   ),
 
-  categoryRow: normalizeCategoryRow(data?.categoryRow || []),
+  categoryRow: normalizeCategoryRow(
+    data?.categoryRow || []
+  ),
 
   categoryBanners: normalizeCategoryBanners(
     data?.categoryBanners || []
+  ),
+
+  collectionRowBanners:
+    normalizeCollectionRowBanners(
+      data?.collectionRowBanners || []
+    ),
+
+  oatGallery: normalizeOatGallery(
+    data?.oatGallery || []
   ),
 });
 
@@ -183,6 +256,8 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
   categoryRow: [],
   categoryBanners: [],
+  collectionRowBanners: [],
+  oatGallery: [],
 
   loading: false,
   saving: false,
@@ -236,6 +311,12 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         categoryBanners:
           normalized.categoryBanners,
+
+        collectionRowBanners:
+          normalized.collectionRowBanners,
+
+        oatGallery:
+          normalized.oatGallery,
 
         loading: false,
       });
@@ -294,10 +375,10 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         settings: state.settings
           ? {
-              ...state.settings,
-              desktopHeroBanners,
-              mobileHeroBanners,
-            }
+            ...state.settings,
+            desktopHeroBanners,
+            mobileHeroBanners,
+          }
           : state.settings,
 
         loading: false,
@@ -356,9 +437,9 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         settings: state.settings
           ? {
-              ...state.settings,
-              categoryRow,
-            }
+            ...state.settings,
+            categoryRow,
+          }
           : state.settings,
 
         loading: false,
@@ -412,9 +493,9 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         settings: state.settings
           ? {
-              ...state.settings,
-              categoryBanners,
-            }
+            ...state.settings,
+            categoryBanners,
+          }
           : state.settings,
 
         loading: false,
@@ -428,6 +509,115 @@ export const useHomepageSettingsStore = create((set, get) => ({
         error:
           error?.message ||
           "Failed to fetch category banners",
+      });
+
+      return [];
+    }
+  },
+
+  /* =======================================================
+   FETCH OAT GALLERY FOR ADMIN
+======================================================= */
+
+  fetchOatGallery: async () => {
+    try {
+      set({
+        loading: true,
+        error: null,
+      });
+
+      const response = await fetch(
+        `${API_BASE}/oat-gallery/admin`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+        }
+      );
+
+      const data = await parseResponse(response);
+
+      const oatGallery = normalizeOatGallery(
+        data?.oatGallery || []
+      );
+
+      set((state) => ({
+        oatGallery,
+
+        settings: state.settings
+          ? {
+            ...state.settings,
+            oatGallery,
+          }
+          : state.settings,
+
+        loading: false,
+      }));
+
+      return oatGallery;
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.message ||
+          "Failed to fetch OAT Gallery",
+      });
+
+      return [];
+    }
+  },
+
+  /* =======================================================
+     FETCH COLLECTION ROW BANNERS FOR ADMIN
+  ======================================================= */
+
+  fetchCollectionRowBanners: async () => {
+    try {
+      set({
+        loading: true,
+        error: null,
+      });
+
+      const response = await fetch(
+        `${API_BASE}/collection-row-banners/admin`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+        }
+      );
+
+      const data = await parseResponse(response);
+
+      const collectionRowBanners =
+        normalizeCollectionRowBanners(
+          data?.collectionRowBanners || []
+        );
+
+      set((state) => ({
+        collectionRowBanners,
+
+        settings: state.settings
+          ? {
+            ...state.settings,
+            collectionRowBanners,
+          }
+          : state.settings,
+
+        loading: false,
+      }));
+
+      return collectionRowBanners;
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.message ||
+          "Failed to fetch collection row banners",
       });
 
       return [];
@@ -474,6 +664,18 @@ export const useHomepageSettingsStore = create((set, get) => ({
           );
       }
 
+      if (hasValue(payload.collectionRowBanners)) {
+        finalPayload.collectionRowBanners =
+          normalizeCollectionRowBanners(
+            payload.collectionRowBanners
+          );
+      }
+
+      if (hasValue(payload.oatGallery)) {
+        finalPayload.oatGallery =
+          normalizeOatGallery(payload.oatGallery);
+      }
+
       const response = await fetch(API_BASE, {
         method: "PUT",
         headers: {
@@ -499,6 +701,12 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         categoryBanners:
           normalized.categoryBanners,
+
+        collectionRowBanners:
+          normalized.collectionRowBanners,
+
+        oatGallery:
+          normalized.oatGallery,
 
         saving: false,
         success: "Homepage updated ✅",
@@ -574,15 +782,15 @@ export const useHomepageSettingsStore = create((set, get) => ({
       const normalizedDesktop =
         normalizeHeroBanners(
           data?.desktopHeroBanners ||
-            payload.desktopHeroBanners ||
-            get().desktopHeroBanners
+          payload.desktopHeroBanners ||
+          get().desktopHeroBanners
         );
 
       const normalizedMobile =
         normalizeHeroBanners(
           data?.mobileHeroBanners ||
-            payload.mobileHeroBanners ||
-            get().mobileHeroBanners
+          payload.mobileHeroBanners ||
+          get().mobileHeroBanners
         );
 
       set((state) => ({
@@ -594,12 +802,12 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         settings: state.settings
           ? {
-              ...state.settings,
-              desktopHeroBanners:
-                normalizedDesktop,
-              mobileHeroBanners:
-                normalizedMobile,
-            }
+            ...state.settings,
+            desktopHeroBanners:
+              normalizedDesktop,
+            mobileHeroBanners:
+              normalizedMobile,
+          }
           : state.settings,
 
         saving: false,
@@ -668,10 +876,10 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         settings: state.settings
           ? {
-              ...state.settings,
-              desktopHeroBanners:
-                updatedDesktop,
-            }
+            ...state.settings,
+            desktopHeroBanners:
+              updatedDesktop,
+          }
           : state.settings,
 
         saving: false,
@@ -736,10 +944,10 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         settings: state.settings
           ? {
-              ...state.settings,
-              mobileHeroBanners:
-                updatedMobile,
-            }
+            ...state.settings,
+            mobileHeroBanners:
+              updatedMobile,
+          }
           : state.settings,
 
         saving: false,
@@ -801,10 +1009,10 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         settings: state.settings
           ? {
-              ...state.settings,
-              categoryRow:
-                updatedCategoryRow,
-            }
+            ...state.settings,
+            categoryRow:
+              updatedCategoryRow,
+          }
           : state.settings,
 
         saving: false,
@@ -870,10 +1078,10 @@ export const useHomepageSettingsStore = create((set, get) => ({
 
         settings: state.settings
           ? {
-              ...state.settings,
-              categoryBanners:
-                updatedCategoryBanners,
-            }
+            ...state.settings,
+            categoryBanners:
+              updatedCategoryBanners,
+          }
           : state.settings,
 
         saving: false,
@@ -888,6 +1096,137 @@ export const useHomepageSettingsStore = create((set, get) => ({
         error:
           error?.message ||
           "Failed to update category banners",
+      });
+
+      return null;
+    }
+  },
+
+  /* =======================================================
+   UPDATE OAT GALLERY
+======================================================= */
+
+  updateOatGallery: async (oatGallery = []) => {
+    try {
+      set({
+        saving: true,
+        error: null,
+        success: null,
+      });
+
+      const normalized =
+        normalizeOatGallery(oatGallery);
+
+      const response = await fetch(
+        `${API_BASE}/oat-gallery`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            oatGallery: normalized,
+          }),
+        }
+      );
+
+      const data = await parseResponse(response);
+
+      const updatedOatGallery =
+        normalizeOatGallery(
+          data?.oatGallery || normalized
+        );
+
+      set((state) => ({
+        oatGallery: updatedOatGallery,
+
+        settings: state.settings
+          ? {
+            ...state.settings,
+            oatGallery: updatedOatGallery,
+          }
+          : state.settings,
+
+        saving: false,
+        success: "OAT Gallery updated ✅",
+      }));
+
+      return updatedOatGallery;
+    } catch (error) {
+      set({
+        saving: false,
+        error:
+          error?.message ||
+          "Failed to update OAT Gallery",
+      });
+
+      return null;
+    }
+  },
+
+  /* =======================================================
+     UPDATE COLLECTION ROW BANNERS
+  ======================================================= */
+
+  updateCollectionRowBanners: async (
+    collectionRowBanners = []
+  ) => {
+    try {
+      set({
+        saving: true,
+        error: null,
+        success: null,
+      });
+
+      const normalized =
+        normalizeCollectionRowBanners(
+          collectionRowBanners
+        );
+
+      const response = await fetch(
+        `${API_BASE}/collection-row-banners`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            collectionRowBanners: normalized,
+          }),
+        }
+      );
+
+      const data = await parseResponse(response);
+
+      const updatedCollectionRowBanners =
+        normalizeCollectionRowBanners(
+          data?.collectionRowBanners || normalized
+        );
+
+      set((state) => ({
+        collectionRowBanners:
+          updatedCollectionRowBanners,
+
+        settings: state.settings
+          ? {
+            ...state.settings,
+            collectionRowBanners:
+              updatedCollectionRowBanners,
+          }
+          : state.settings,
+
+        saving: false,
+        success:
+          "Collection row banners updated ✅",
+      }));
+
+      return updatedCollectionRowBanners;
+    } catch (error) {
+      set({
+        saving: false,
+        error:
+          error?.message ||
+          "Failed to update collection row banners",
       });
 
       return null;
@@ -926,15 +1265,15 @@ export const useHomepageSettingsStore = create((set, get) => ({
       desktopHeroBanners:
         hasValue(desktopHeroBanners)
           ? normalizeHeroBanners(
-              desktopHeroBanners
-            )
+            desktopHeroBanners
+          )
           : state.desktopHeroBanners,
 
       mobileHeroBanners:
         hasValue(mobileHeroBanners)
           ? normalizeHeroBanners(
-              mobileHeroBanners
-            )
+            mobileHeroBanners
+          )
           : state.mobileHeroBanners,
     })),
 
@@ -951,6 +1290,22 @@ export const useHomepageSettingsStore = create((set, get) => ({
       categoryBanners:
         normalizeCategoryBanners(
           categoryBanners
+        ),
+    }),
+
+  setOatGalleryLocal: (oatGallery = []) =>
+    set({
+      oatGallery:
+        normalizeOatGallery(oatGallery),
+    }),
+
+  setCollectionRowBannersLocal: (
+    collectionRowBanners = []
+  ) =>
+    set({
+      collectionRowBanners:
+        normalizeCollectionRowBanners(
+          collectionRowBanners
         ),
     }),
 }));

@@ -22,12 +22,15 @@
     designing: [
       { label: "Design Home", href: "/designing" },
       { label: "Banners Manager", href: "/designing/banners" },
-
       { label: "Mobile Banners", href: "/designing/mobile-banners" },
-
       { label: "Category Banner", href: "/designing/category-banner" },
       { label: "Top Categories", href: "/designing/top-categories" },
       { label: "Collections Editor", href: "/designing/collection" },
+      {
+        label: "OAT Gallery",
+        href: "/designing/oat-gallery",
+      },
+
       { label: "Marquee Manager", href: "/designing/marquee" },
     ],
 
