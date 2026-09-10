@@ -493,9 +493,17 @@ export const useOrderStore = create((set, get) => ({
   },
 
   fetchOrderByNumber: async (orderNumber) => {
-    if (!orderNumber) return null;
+    const number = String(orderNumber || "").trim();
 
-    const data = await get()._get(`/api/orders/by-number/${orderNumber}`);
+    if (!number) {
+      set({ order: null });
+      return null;
+    }
+
+    const data = await get()._get(
+      `/api/orders/by-number/${encodeURIComponent(number)}`
+    );
+
     const order = get()._normalizeOrder(data);
 
     set({ order });

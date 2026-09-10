@@ -1,656 +1,993 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, Search, Image as ImageIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  ArrowLeftRight,
+  Check,
+  Loader2,
+  Package,
+  RotateCcw,
+  Search,
+} from "lucide-react";
 import { toast } from "react-hot-toast";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
+
+import { useOrderStore } from "@/store/orderStore";
 import { useRmaStore } from "@/store/useRmaStore";
 
-/* theme */
-const ACCENT = "#111827";
-const bg = "bg-[#f6f7f9]";
-const card = "bg-white";
-const b1 = "border border-black/10";
-const b2 = "border border-black/5";
+const SIZES = ["XS", "S", "M", "L", "XL"];
 
-/* ✅ allowed sizes only */
-const SIZE_OPTIONS = ["xs", "s", "m", "l", "xl"];
+const REASONS = [
+  {
+    value: "wrong_size",
+    label: "Size issue",
+  },
+  {
+    value: "wrong_item",
+    label: "Wrong item received",
+  },
+  {
+    value: "damaged",
+    label: "Damaged product",
+  },
+  {
+    value: "defective",
+    label: "Defective product",
+  },
+  {
+    value: "quality_issue",
+    label: "Quality issue",
+  },
+  {
+    value: "changed_mind",
+    label: "Product not as expected",
+  },
+  {
+    value: "other",
+    label: "Other",
+  },
+];
 
-/* helpers */
-const safe = (v) => (v == null ? "" : String(v));
-const lower = (v) => safe(v).trim().toLowerCase();
-const money = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-IN") : "0");
-const fmtDT = (d) => {
-  const dt = d ? new Date(d) : null;
-  return !dt || Number.isNaN(dt.getTime())
-    ? "-"
-    : dt.toLocaleString("en-IN", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-};
-const statusPill = (s) => {
-  const v = lower(s);
-  if (v === "delivered") return "bg-emerald-50 text-emerald-700";
-  if (v === "shipped") return "bg-sky-50 text-sky-700";
-  if (v === "processing" || v === "confirmed") return "bg-amber-50 text-amber-700";
-  if (v.includes("cancel")) return "bg-rose-50 text-rose-700";
-  if (v.includes("return")) return "bg-purple-50 text-purple-700";
-  if (v.includes("exchange")) return "bg-indigo-50 text-indigo-700";
-  return "bg-black/5 text-black/70";
-};
-const paymentBadge = (o) => {
-  const pm = lower(o?.paymentMethod);
-  const ps = lower(o?.paymentStatus);
-  if (pm === "exchange") return { label: "Exchange", cls: "bg-blue-50 text-blue-700" };
-  if (pm === "cod") return { label: "COD", cls: "bg-black/5 text-black/80" };
-  if (ps === "paid") return { label: "Paid", cls: "bg-emerald-50 text-emerald-700" };
-  if (ps === "pending") return { label: "Pending", cls: "bg-amber-50 text-amber-700" };
-  if (ps === "refunded") return { label: "Refunded", cls: "bg-purple-50 text-purple-700" };
-  return {
-    label: safe(o?.paymentStatus || o?.paymentMethod || "-") || "-",
-    cls: "bg-black/5 text-black/70",
-  };
-};
-const pickImage = (it) => {
-  const snap = it?.productSnapshot || {};
-  return (
-    it?.image ||
-    it?.imageUrl ||
-    it?.productImage ||
-    snap?.image ||
-    snap?.imageUrl ||
-    snap?.thumbnail ||
-    snap?.thumb ||
-    (Array.isArray(snap?.images) ? snap.images[0] : null) ||
-    null
+const normalize = (value) =>
+  String(value ?? "").trim();
+
+const lower = (value) =>
+  normalize(value).toLowerCase();
+
+const getItemTitle = (item) =>
+  normalize(
+    item?.productSnapshot?.title ||
+    item?.title ||
+    item?.productName ||
+    "Product"
   );
-};
-const pickSize = (it) => {
-  const snap = it?.productSnapshot || {};
-  const attrs = Array.isArray(it?.variant?.attributes) ? it.variant.attributes : [];
+
+const getItemImage = (item) => {
+  const snapshot = item?.productSnapshot || {};
+
+  const image =
+    item?.image ||
+    item?.imageUrl ||
+    item?.productImage ||
+    snapshot?.image ||
+    snapshot?.imageUrl ||
+    snapshot?.thumbnail ||
+    snapshot?.images?.[0];
+
+  if (typeof image === "string") {
+    return image;
+  }
+
   return (
-    attrs.find((a) => lower(a?.key) === "size")?.value ||
-    attrs.find((a) => lower(a?.attributeName) === "size")?.value ||
-    it?.size ||
-    it?.selectedSize ||
-    snap?.size ||
+    image?.url ||
+    image?.secure_url ||
+    image?.src ||
     ""
   );
 };
-const getDeliveredAt = (order) =>
-  order?.trackingDetails?.deliveredAt ||
-  order?.shipment?.deliveredAt ||
-  order?.shipment?.shiprocket?.deliveredAt ||
-  order?.shipment?.shiprocket?.delivered_date ||
-  order?.statusTimestamps?.deliveredAt ||
-  order?.deliveredAt ||
-  null;
 
-function ImgThumb({ src, alt }) {
-  const s = safe(src);
-  if (!s)
+const getItemSize = (item) => {
+  const attributes = Array.isArray(
+    item?.variant?.attributes
+  )
+    ? item.variant.attributes
+    : [];
+
+  const sizeAttribute = attributes.find(
+    (attribute) =>
+      lower(
+        attribute?.key ||
+        attribute?.attributeName ||
+        attribute?.name
+      ) === "size"
+  );
+
+  return normalize(
+    sizeAttribute?.value ||
+    sizeAttribute?.val ||
+    item?.size ||
+    item?.selectedSize ||
+    item?.productSnapshot?.size
+  );
+};
+
+const getProductId = (item) =>
+  normalize(
+    item?.productId ||
+    item?.variant?.productId ||
+    item?.productSnapshot?.productId
+  );
+
+const getSku = (item) =>
+  normalize(
+    item?.variant?.sku ||
+    item?.sku ||
+    item?.productSnapshot?.sku
+  );
+
+const getCustomerName = (order) =>
+  normalize(
+    order?.shippingAddressSnapshot?.fullName ||
+    order?.customerSnapshot?.fullName ||
+    order?.customer?.fullName ||
+    order?.customerName
+  );
+
+const getCustomerPhone = (order) =>
+  normalize(
+    order?.shippingAddressSnapshot?.phone ||
+    order?.customerSnapshot?.phone ||
+    order?.customer?.phone ||
+    order?.phone
+  );
+
+function ProductImage({ item }) {
+  const image = getItemImage(item);
+
+  if (!image) {
     return (
-      <div className="w-10 h-10 rounded-xl bg-black/5 flex items-center justify-center">
-        <ImageIcon size={16} className="text-black/40" />
+      <div className="flex h-20 w-16 shrink-0 items-center justify-center rounded-xl bg-gray-100">
+        <Package
+          size={20}
+          className="text-gray-400"
+        />
       </div>
     );
+  }
+
   return (
-    <div className="w-10 h-10 rounded-xl overflow-hidden bg-black/5">
-      <Image src={s} alt={alt || "product"} width={40} height={40} className="w-10 h-10 object-cover" unoptimized />
-    </div>
+    <img
+      src={image}
+      alt={getItemTitle(item)}
+      className="h-20 w-16 shrink-0 rounded-xl bg-gray-100 object-cover"
+    />
   );
 }
 
-function ItemRow({ it }) {
-  const snap = it?.productSnapshot || {};
-  return (
-    <div className="grid grid-cols-12 gap-2 py-2 border-b border-black/5 last:border-b-0">
-      <div className="col-span-5 flex items-center gap-2 min-w-0">
-        <ImgThumb src={pickImage(it)} alt={snap?.title || it?.title} />
-        <div className="min-w-0">
-          <div className="text-sm font-medium truncate">{safe(snap?.title || it?.title || "-")}</div>
-          <div className="text-xs text-black/55 truncate">SKU: {safe(it?.variant?.sku || it?.sku || "-")}</div>
-        </div>
-      </div>
-      <div className="col-span-2 text-sm text-black/80">{safe(it?.lineId || "-")}</div>
-      <div className="col-span-2 text-sm text-black/80">{safe(pickSize(it) || "-")}</div>
-      <div className="col-span-1 text-sm text-black/80">{Number(it?.quantity || 0)}</div>
-      <div className="col-span-2 text-sm text-black/80">₹{money(it?.price || it?.salePrice || 0)}</div>
-    </div>
+export default function CreateRmaPage() {
+  const {
+    order,
+    loading: orderLoading,
+    fetchOrderByNumber,
+  } = useOrderStore();
+
+  const {
+    createAdminRma,
+    loading: rmaLoading,
+  } = useRmaStore();
+
+  const [orderNumber, setOrderNumber] =
+    useState("");
+
+  const [type, setType] =
+    useState("return");
+
+  const [reason, setReason] =
+    useState("wrong_size");
+
+  const [adminNote, setAdminNote] =
+    useState("");
+  const [allowException, setAllowException] =
+    useState(false);
+
+  const [exceptionReason, setExceptionReason] =
+    useState("");
+
+  const [selectedItems, setSelectedItems] =
+    useState({});
+
+  const [exchangeSize, setExchangeSize] =
+    useState("");
+
+
+  const items = useMemo(
+    () =>
+      Array.isArray(order?.items)
+        ? order.items
+        : [],
+    [order]
   );
-}
 
-/**
- * ✅ Exchange rule:
- * - same productId
- * - size only (XS/S/M/L/XL)
- * - one line item at a time
- * Sends exchangeTo.attributes = [{key:"size", value:"m"}]
- */
-function RmaCreatePanel({ order }) {
-  const { createRma, loading } = useRmaStore();
-  const [type, setType] = useState("return");
-  const [reason, setReason] = useState("other");
-  const [note, setNote] = useState("");
-  const [qtyByLineId, setQtyByLineId] = useState({});
-  const [exchangeSizeByLineId, setExchangeSizeByLineId] = useState({});
+  const selectedEntries = useMemo(
+    () =>
+      Object.entries(selectedItems)
+        .filter(
+          ([, quantity]) =>
+            Number(quantity) > 0
+        )
+        .map(([orderLineId, quantity]) => ({
+          orderLineId,
+          quantity: Number(quantity),
+        })),
+    [selectedItems]
+  );
 
-  const items = Array.isArray(order?.items) ? order.items : [];
+  const selectedExchangeItem =
+    type === "exchange" &&
+      selectedEntries.length === 1
+      ? items.find(
+        (item) =>
+          normalize(item?.lineId) ===
+          selectedEntries[0].orderLineId
+      )
+      : null;
 
-  useEffect(() => {
-    const q = {};
-    const s = {};
-    for (const it of items) {
-      const id = safe(it?.lineId);
-      if (!id) continue;
-      q[id] = 0;
-      s[id] = "";
-    }
-    setQtyByLineId(q);
-    setExchangeSizeByLineId(s);
+  const resetForm = () => {
     setType("return");
-    setReason("other");
-    setNote("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order?._id]);
-
-  const selectedLines = useMemo(() => {
-    const out = [];
-    for (const [lineId, q] of Object.entries(qtyByLineId || {})) {
-      const qty = Number(q);
-      if (Number.isFinite(qty) && qty > 0) out.push({ lineId, qty });
-    }
-    return out;
-  }, [qtyByLineId]);
-
-  const canSubmit = selectedLines.length > 0;
-
-  const getProductIdForLine = (lineId) => {
-    const it = items.find((x) => safe(x?.lineId) === safe(lineId));
-    return safe(it?.variant?.productId) || safe(it?.productId) || safe(it?.productSnapshot?.productId) || "";
+    setReason("wrong_size");
+    setAdminNote("");
+    setSelectedItems({});
+    setExchangeSize("");
+    setAllowException(false);
+    setExceptionReason("");
   };
 
-  const submit = async () => {
-    if (!order?._id) return;
-    if (!canSubmit) return toast.error("Select qty");
+  const searchOrder = async (event) => {
+    event?.preventDefault();
+
+    const value = normalize(orderNumber);
+
+    if (!value) {
+      toast.error("Enter an order number");
+      return;
+    }
+
+    try {
+      resetForm();
+
+      const foundOrder =
+        await fetchOrderByNumber(value);
+
+      if (!foundOrder) {
+        toast.error("Order not found");
+        return;
+      }
+
+      toast.success(
+        `Order ${foundOrder.orderNumber} found`
+      );
+    } catch (error) {
+      toast.error(
+        error?.message ||
+        "Unable to find order"
+      );
+    }
+  };
+
+  const changeType = (nextType) => {
+    setType(nextType);
+    setSelectedItems({});
+    setExchangeSize("");
+  };
+
+  const toggleProduct = (item) => {
+    const lineId = normalize(item?.lineId);
+
+    if (!lineId) {
+      toast.error(
+        "This product does not have a line ID"
+      );
+      return;
+    }
+
+    setSelectedItems((current) => {
+      const alreadySelected =
+        Number(current[lineId]) > 0;
+
+      if (type === "exchange") {
+        return alreadySelected
+          ? {}
+          : { [lineId]: 1 };
+      }
+
+      const next = { ...current };
+
+      if (alreadySelected) {
+        delete next[lineId];
+      } else {
+        next[lineId] = 1;
+      }
+
+      return next;
+    });
+
+    if (type === "exchange") {
+      setExchangeSize("");
+    }
+  };
+
+  const changeQuantity = (
+    item,
+    nextQuantity
+  ) => {
+    const lineId = normalize(item?.lineId);
+    const purchasedQuantity = Number(
+      item?.quantity || 1
+    );
+
+    const quantity = Math.max(
+      1,
+      Math.min(
+        Number(nextQuantity || 1),
+        purchasedQuantity
+      )
+    );
+
+    setSelectedItems((current) => ({
+      ...current,
+      [lineId]: quantity,
+    }));
+  };
+
+  const submitRma = async () => {
+    if (!order?._id) {
+      toast.error("Search an order first");
+      return;
+    }
+
+    if (!selectedEntries.length) {
+      toast.error(
+        "Select at least one product"
+      );
+      return;
+    }
+
+    if (!reason) {
+      toast.error("Select a reason");
+      return;
+    }
+
+    if (!normalize(adminNote)) {
+      toast.error(
+        "Enter an internal admin note"
+      );
+      return;
+    }
+
+    if (
+      type === "exchange" &&
+      selectedEntries.length !== 1
+    ) {
+      toast.error(
+        "Select one product for exchange"
+      );
+      return;
+    }
+
+    if (
+      type === "exchange" &&
+      !exchangeSize
+    ) {
+      toast.error(
+        "Select the new exchange size"
+      );
+      return;
+    }
+
+    if (
+      type === "exchange" &&
+      !getProductId(selectedExchangeItem)
+    ) {
+      toast.error(
+        "Product ID is missing in this order item"
+      );
+      return;
+    }
+
+    if (
+      allowException &&
+      !normalize(exceptionReason)
+    ) {
+      toast.error(
+        "Enter exception approval reason"
+      );
+      return;
+    }
 
     const payload = {
       type,
       reason,
-      customerNote: note,
-      items: selectedLines.map((x) => ({ orderLineId: x.lineId, quantity: x.qty })),
+      customerNote: "",
+      adminNote: normalize(adminNote),
+      allowException,
+      exceptionReason: allowException
+        ? normalize(exceptionReason)
+        : "",
+
+      items: selectedEntries.map(
+        ({ orderLineId, quantity }) => ({
+          orderLineId,
+          quantity,
+        })
+      ),
     };
 
     if (type === "exchange") {
-      if (selectedLines.length !== 1) return toast.error("Exchange: select only 1 line item");
-      const lineId = selectedLines[0].lineId;
-
-      const productId = getProductIdForLine(lineId);
-      if (!productId) return toast.error("productId missing in order item");
-
-      const newSize = lower(exchangeSizeByLineId?.[lineId]);
-      if (!newSize) return toast.error("Select new size");
-      if (!SIZE_OPTIONS.includes(newSize)) return toast.error("Invalid size (only XS/S/M/L/XL)");
-
       payload.exchangeTo = {
-        productId,
-        variantId: "", // backend resolves by productId + attributes
-        variantSku: "",
-        note: `Size change to ${newSize.toUpperCase()}`,
-        attributes: [{ key: "size", value: newSize }],
+        productId: getProductId(
+          selectedExchangeItem
+        ),
+
+        attributes: [
+          {
+            key: "size",
+            value: lower(exchangeSize),
+          },
+        ],
+
+        note: `Admin size exchange to ${exchangeSize}`,
       };
     }
 
     try {
-      await createRma(order._id, payload);
-      toast.success("RMA created");
-    } catch (e) {
-      toast.error(e?.message || "Failed");
+      const response =
+        await createAdminRma(
+          order._id,
+          payload
+        );
+
+      toast.success(
+        `${type === "exchange" ? "Exchange" : "Return"} RMA created successfully`
+      );
+
+      setSelectedItems({});
+      setExchangeSize("");
+      setAdminNote("");
+
+      console.log(
+        "Admin RMA created:",
+        response
+      );
+    } catch (error) {
+      toast.error(
+        error?.message ||
+        "Unable to create RMA"
+      );
     }
   };
 
   return (
-    <div className={`mt-3 rounded-2xl ${b2} ${card} p-3`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="text-sm font-semibold text-black/90">Create RMA</div>
+    <main className="min-h-screen bg-gray-50 p-4 sm:p-6">
+      <div className="mx-auto max-w-5xl">
+        <div>
+          <h1 className="text-xl font-bold text-gray-950 sm:text-2xl">
+            Create RMA
+          </h1>
 
-        <select
-          className="ml-auto rounded-xl px-2 py-1 text-sm bg-white border border-black/10 focus:outline-none focus:ring-2"
-          style={{ outlineColor: ACCENT }}
-          value={type}
-          onChange={(e) => setType(e.target.value)}
+          <p className="mt-1 text-sm text-gray-500">
+            Create a return or exchange
+            request without customer photos.
+          </p>
+        </div>
+
+        {/* Search order */}
+        <form
+          onSubmit={searchOrder}
+          className="mt-6 rounded-2xl border border-gray-200 bg-white p-4"
         >
-          <option value="return">Return</option>
-          <option value="exchange">Exchange (Size)</option>
-        </select>
+          <label className="text-sm font-semibold text-gray-900">
+            Order number
+          </label>
 
-        <select
-          className="rounded-xl px-2 py-1 text-sm bg-white border border-black/10 focus:outline-none focus:ring-2"
-          style={{ outlineColor: ACCENT }}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        >
-          <option value="other">Other</option>
-          <option value="size_issue">Size issue</option>
-          <option value="damaged">Damaged</option>
-          <option value="wrong_item">Wrong item</option>
-          <option value="quality_issue">Quality issue</option>
-        </select>
-      </div>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <div className="relative flex-1">
+              <Search
+                size={17}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
 
-      <div className="mt-2 grid grid-cols-12 gap-2 text-xs font-medium text-black/55 px-1">
-        <div className="col-span-7">Item</div>
-        <div className="col-span-2">LineId</div>
-        <div className="col-span-1">Bought</div>
-        <div className="col-span-2">Request</div>
-      </div>
+              <input
+                value={orderNumber}
+                onChange={(event) =>
+                  setOrderNumber(
+                    event.target.value
+                  )
+                }
+                placeholder="Example: 000509"
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white pl-10 pr-3 text-sm outline-none transition focus:border-black"
+              />
+            </div>
 
-      <div className="mt-1">
-        {items.map((it, idx) => {
-          const lineId = safe(it?.lineId);
-          const bought = Number(it?.quantity || 0);
-          const snap = it?.productSnapshot || {};
-          const title = safe(snap?.title || it?.title || "-");
-          const currentSize = lower(pickSize(it));
+            <button
+              type="submit"
+              disabled={orderLoading}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-black px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {orderLoading ? (
+                <Loader2
+                  size={17}
+                  className="animate-spin"
+                />
+              ) : (
+                <Search size={17} />
+              )}
 
-          return (
-            <div key={`${lineId}-${idx}`} className="border-b border-black/5 last:border-b-0">
-              <div className="grid grid-cols-12 gap-2 items-center py-2">
-                <div className="col-span-7 flex items-center gap-2 min-w-0">
-                  <ImgThumb src={pickImage(it)} alt={title} />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{title}</div>
-                    <div className="text-xs text-black/55 truncate">
-                      SKU: {safe(it?.variant?.sku || "-")} • Size: {(currentSize || "-").toUpperCase()}
-                    </div>
-                  </div>
+              Search Order
+            </button>
+          </div>
+        </form>
+
+        {order ? (
+          <>
+            {/* Order summary */}
+            <section className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Order
+                  </p>
+
+                  <h2 className="mt-1 text-lg font-bold text-gray-950">
+                    #{order.orderNumber}
+                  </h2>
                 </div>
 
-                <div className="col-span-2 text-sm text-black/75">{lineId || "-"}</div>
-                <div className="col-span-1 text-sm text-black/75">{bought}</div>
-
-                <div className="col-span-2">
-                  <input
-                    className="w-full rounded-xl px-2 py-1 text-sm bg-white border border-black/10 focus:outline-none focus:ring-2"
-                    style={{ outlineColor: ACCENT }}
-                    type="number"
-                    min="0"
-                    max={bought}
-                    value={qtyByLineId?.[lineId] ?? 0}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setQtyByLineId((s) => ({
-                        ...(s || {}),
-                        [lineId]: Number.isFinite(v) ? v : 0,
-                      }));
-                    }}
-                  />
-                </div>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold capitalize text-emerald-700">
+                  {normalize(
+                    order.fulfillmentStatus
+                  ) || "Unknown"}
+                </span>
               </div>
 
-              {type === "exchange" ? (
-                <div className="pb-2 pl-12 pr-2">
-                  <div className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-12 md:col-span-6">
-                      <label className="text-xs text-black/50">New Size (XS/S/M/L/XL)</label>
-                      <select
-                        className="mt-1 w-full rounded-xl px-2 py-2 text-sm bg-white border border-black/10 focus:outline-none focus:ring-2"
-                        style={{ outlineColor: ACCENT }}
-                        value={exchangeSizeByLineId?.[lineId] || ""}
-                        onChange={(e) =>
-                          setExchangeSizeByLineId((s) => ({
-                            ...(s || {}),
-                            [lineId]: e.target.value,
-                          }))
-                        }
-                      >
-                        <option value="">Select size</option>
-                        {SIZE_OPTIONS.map((sz) => (
-                          <option key={sz} value={sz} disabled={lower(currentSize) === sz}>
-                            {sz.toUpperCase()}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-span-12 md:col-span-6 text-xs text-black/45">
-                      Same product exchange. Backend will resolve correct variant by size.
-                    </div>
-                  </div>
+              <div className="mt-4 grid gap-3 border-t border-gray-100 pt-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs text-gray-500">
+                    Customer
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium text-gray-900">
+                    {getCustomerName(order) ||
+                      "Not available"}
+                  </p>
                 </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
 
-      <textarea
-        className="mt-3 w-full rounded-2xl px-3 py-2 text-sm bg-white border border-black/10 focus:outline-none focus:ring-2"
-        style={{ outlineColor: ACCENT }}
-        placeholder="Customer note (optional)"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        rows={2}
-      />
+                <div>
+                  <p className="text-xs text-gray-500">
+                    Phone
+                  </p>
 
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          onClick={submit}
-          disabled={!canSubmit || loading}
-          className="px-3 py-2 rounded-2xl text-sm text-white disabled:opacity-60"
-          style={{ backgroundColor: ACCENT }}
-        >
-          {loading ? (
-            <span className="inline-flex items-center gap-2">
-              <Loader2 className="animate-spin" size={16} />
-              Creating...
-            </span>
-          ) : type === "exchange" ? (
-            "Request Exchange"
-          ) : (
-            "Request Return"
-          )}
-        </button>
+                  <p className="mt-1 text-sm font-medium text-gray-900">
+                    {getCustomerPhone(order) ||
+                      "Not available"}
+                  </p>
+                </div>
 
-        {type === "exchange" ? (
-          <div className="text-xs text-black/50">
-            Exchange = <b>one line</b> + only size XS/S/M/L/XL.
-          </div>
-        ) : !canSubmit ? (
-          <div className="text-xs text-black/50">Select qty to proceed</div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
+                <div>
+                  <p className="text-xs text-gray-500">
+                    Products
+                  </p>
 
-/* ============================================================
-   ✅ Page: server-side search + pagination (NO hard limit 140)
-   Uses backend getAllOrders:
-   /api/orders?fulfillmentStatus=delivered&customerName=...&page=1&limit=50
-============================================================ */
-const BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
-const API = `${BACKEND}/api/orders`;
+                  <p className="mt-1 text-sm font-medium text-gray-900">
+                    {items.length}
+                  </p>
+                </div>
+              </div>
+            </section>
 
-const buildQS = (obj = {}) => {
-  const qs = new URLSearchParams();
-  Object.entries(obj || {}).forEach(([k, v]) => {
-    if (v == null) return;
-    const s = String(v).trim();
-    if (!s) return;
-    qs.set(k, s);
-  });
-  const out = qs.toString();
-  return out ? `?${out}` : "";
-};
+            {/* Type */}
+            <section className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+              <h2 className="text-sm font-semibold text-gray-950">
+                What do you want to create?
+              </h2>
 
-async function fetchOrdersApi(params) {
-  const url = `${API}${buildQS(params)}`;
-  const res = await fetch(url, { cache: "no-store", credentials: "include" });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
-  return data;
-}
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    changeType("return")
+                  }
+                  className={`flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition ${type === "return"
+                      ? "border-black bg-black text-white"
+                      : "border-gray-200 bg-white text-gray-900 hover:border-gray-400"
+                    }`}
+                >
+                  <RotateCcw size={20} />
 
-export default function CreateRmaAdminPage() {
-  const router = useRouter();
+                  <div>
+                    <p className="text-sm font-semibold">
+                      Return
+                    </p>
 
-  const [q, setQ] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
-  const [expanded, setExpanded] = useState(() => new Set());
+                    <p
+                      className={`mt-0.5 text-xs ${type === "return"
+                          ? "text-white/70"
+                          : "text-gray-500"
+                        }`}
+                    >
+                      Select one or more products
+                    </p>
+                  </div>
+                </button>
 
-  // server pagination
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+                <button
+                  type="button"
+                  onClick={() =>
+                    changeType("exchange")
+                  }
+                  className={`flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition ${type === "exchange"
+                      ? "border-black bg-black text-white"
+                      : "border-gray-200 bg-white text-gray-900 hover:border-gray-400"
+                    }`}
+                >
+                  <ArrowLeftRight size={20} />
 
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState("");
-  const [orders, setOrders] = useState([]);
+                  <div>
+                    <p className="text-sm font-semibold">
+                      Exchange
+                    </p>
 
-  // debounce search (350ms)
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(q), 350);
-    return () => clearTimeout(t);
-  }, [q]);
+                    <p
+                      className={`mt-0.5 text-xs ${type === "exchange"
+                          ? "text-white/70"
+                          : "text-gray-500"
+                        }`}
+                    >
+                      Select one product and new size
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </section>
 
-  const load = async ({ nextPage = 1, append = false } = {}) => {
-    try {
-      append ? setLoadingMore(true) : setLoading(true);
-      setError("");
+            {/* Products */}
+            <section className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-950">
+                  Select product
+                </h2>
 
-      const data = await fetchOrdersApi({
-        fulfillmentStatus: "delivered",
-        customerName: debouncedQ, // ✅ your backend searches orderNumber/fullName/email/phone here
-        page: nextPage,
-        limit: 50,
-      });
+                <p className="mt-1 text-xs text-gray-500">
+                  {type === "exchange"
+                    ? "Only one product can be exchanged at a time."
+                    : "You can select multiple products for return."}
+                </p>
+              </div>
 
-      const list = Array.isArray(data?.orders) ? data.orders : [];
-      const meta = data?.meta || {};
-      const more = Boolean(meta?.hasMore);
+              <div className="mt-4 space-y-3">
+                {items.map((item, index) => {
+                  const lineId = normalize(
+                    item?.lineId
+                  );
 
-      setOrders((prev) => (append ? [...prev, ...list] : list));
-      setPage(nextPage);
-      setHasMore(more);
+                  const isSelected =
+                    Number(
+                      selectedItems[lineId]
+                    ) > 0;
 
-      // collapse on new search
-      if (!append) setExpanded(new Set());
-    } catch (e) {
-      setError(e?.message || "Failed to fetch orders");
-      if (!append) setOrders([]);
-    } finally {
-      append ? setLoadingMore(false) : setLoading(false);
-    }
-  };
+                  const purchasedQuantity =
+                    Number(
+                      item?.quantity || 1
+                    );
 
-  // initial + when debounced query changes
-  useEffect(() => {
-    load({ nextPage: 1, append: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQ]);
-
-  const list = useMemo(() => orders || [], [orders]);
-
-  const toggle = (id) =>
-    setExpanded((p) => {
-      const n = new Set(p);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-
-  return (
-    <div className={`${bg} min-h-screen p-4 md:p-6`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="text-xl font-semibold text-black/90">Create RMA</div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-black/40" />
-            <input
-              className="pl-9 pr-3 py-2 rounded-2xl text-sm w-[340px] max-w-[80vw] bg-white border border-black/10 focus:outline-none focus:ring-2"
-              style={{ outlineColor: ACCENT }}
-              placeholder="Search delivered: order no / phone / email / name"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-          </div>
-
-          <button
-            onClick={() => load({ nextPage: 1, append: false })}
-            disabled={loading || loadingMore}
-            className="px-3 py-2 rounded-2xl text-sm bg-white border border-black/10 hover:bg-black/[0.03] disabled:opacity-60"
-          >
-            Reload
-          </button>
-
-          <button
-            onClick={() => router.refresh?.()}
-            className="px-3 py-2 rounded-2xl text-sm bg-white border border-black/10 hover:bg-black/[0.03]"
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-2 text-sm text-black/60">
-        Showing <span className="font-semibold text-black/80">{list.length}</span> delivered orders.
-        {hasMore ? <span className="ml-2 text-xs text-black/45">(more available)</span> : null}
-      </div>
-
-      <div className={`mt-4 rounded-3xl ${b1} ${card} overflow-hidden`}>
-        <div className="overflow-auto">
-          <table className="min-w-[1100px] w-full text-sm">
-            <thead className="bg-black/[0.03]">
-              <tr className="text-left text-black/70">
-                <th className="p-3 w-[60px]"></th>
-                <th className="p-3">Order</th>
-                <th className="p-3">Customer</th>
-                <th className="p-3">Payment</th>
-                <th className="p-3">Items</th>
-                <th className="p-3">Delivered At</th>
-                <th className="p-3 text-right">Amount</th>
-              </tr>
-            </thead>
-
-            {loading ? (
-              <tbody>
-                <tr>
-                  <td className="p-4" colSpan={7}>
-                    <div className="flex items-center gap-2 text-black/60">
-                      <Loader2 className="animate-spin" size={18} />
-                      Loading orders...
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            ) : safe(error) ? (
-              <tbody>
-                <tr>
-                  <td className="p-4 text-rose-600" colSpan={7}>
-                    {safe(error)}
-                  </td>
-                </tr>
-              </tbody>
-            ) : list.length === 0 ? (
-              <tbody>
-                <tr>
-                  <td className="p-4 text-black/60" colSpan={7}>
-                    No delivered orders found
-                  </td>
-                </tr>
-              </tbody>
-            ) : (
-              list.map((o) => {
-                const id = safe(o?._id);
-                const open = expanded.has(id);
-                const pay = paymentBadge(o);
-                const deliveredAt = getDeliveredAt(o);
-
-                const itemsCount = Array.isArray(o?.items)
-                  ? o.items.reduce((a, it) => a + Number(it?.quantity || 0), 0)
-                  : 0;
-                const cust = o?.shippingAddressSnapshot || {};
-
-                return (
-                  <tbody key={id}>
-                    <tr className="border-t border-black/5">
-                      <td className="p-3 align-top">
+                  return (
+                    <div
+                      key={
+                        lineId ||
+                        `${getItemTitle(item)}-${index}`
+                      }
+                      className={`rounded-xl border p-3 transition ${isSelected
+                          ? "border-black bg-gray-50"
+                          : "border-gray-200 bg-white"
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
                         <button
-                          onClick={() => toggle(id)}
-                          className="inline-flex items-center justify-center w-9 h-9 rounded-2xl bg-white border border-black/10 hover:bg-black/[0.03]"
-                          title={open ? "Collapse" : "Expand"}
+                          type="button"
+                          onClick={() =>
+                            toggleProduct(item)
+                          }
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${isSelected
+                              ? "border-black bg-black text-white"
+                              : "border-gray-300 bg-white"
+                            }`}
                         >
-                          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          {isSelected ? (
+                            <Check size={15} />
+                          ) : null}
                         </button>
-                      </td>
 
-                      <td className="p-3 align-top">
-                        <div className="font-semibold text-black/90">{safe(o?.orderNumber || "-")}</div>
-                        <div className="text-xs text-black/50">{fmtDT(o?.createdAt)}</div>
-                        <div className={`mt-1 inline-flex px-2 py-1 rounded-full text-xs ${statusPill(o?.fulfillmentStatus)}`}>
-                          {safe(o?.fulfillmentStatus || "-")}
-                        </div>
-                      </td>
+                        <ProductImage
+                          item={item}
+                        />
 
-                      <td className="p-3 align-top">
-                        <div className="font-medium text-black/85">{safe(cust?.fullName || "-")}</div>
-                        <div className="text-xs text-black/50 truncate max-w-[320px]">
-                          {safe(cust?.phone || "-")} • {safe(cust?.email || "-")}
-                        </div>
-                      </td>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleProduct(item)
+                          }
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <p className="truncate text-sm font-semibold text-gray-950">
+                            {getItemTitle(item)}
+                          </p>
 
-                      <td className="p-3 align-top">
-                        <span className={`inline-flex px-2 py-1 rounded-full text-xs ${pay.cls}`}>{pay.label}</span>
-                      </td>
+                          <p className="mt-1 text-xs text-gray-500">
+                            SKU:{" "}
+                            {getSku(item) || "-"}
+                          </p>
 
-                      <td className="p-3 align-top text-black/80">{itemsCount}</td>
-                      <td className="p-3 align-top text-black/70">{fmtDT(deliveredAt)}</td>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className="rounded-lg bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+                              Size:{" "}
+                              {getItemSize(item) ||
+                                "-"}
+                            </span>
 
-                      <td className="p-3 align-top text-right font-semibold text-black/90">
-                        ₹{money(o?.totalAmount || o?.finalAmount || o?.grandTotal || o?.finalPayable || 0)}
-                      </td>
-                    </tr>
-
-                    {open ? (
-                      <tr className="border-t border-black/5 bg-black/[0.02]">
-                        <td className="p-3" colSpan={7}>
-                          <div className={`rounded-3xl ${b2} ${card} p-3`}>
-                            <div className="flex items-center gap-2">
-                              <div className="text-sm font-semibold text-black/90">Order Items</div>
-                              <div className="ml-auto text-xs text-black/45">OrderId: {id}</div>
-                            </div>
-
-                            <div className={`mt-2 rounded-3xl ${b2} overflow-hidden`}>
-                              <div className="grid grid-cols-12 gap-2 bg-black/[0.03] px-3 py-2 text-xs font-medium text-black/55">
-                                <div className="col-span-5">Item</div>
-                                <div className="col-span-2">LineId</div>
-                                <div className="col-span-2">Size</div>
-                                <div className="col-span-1">Qty</div>
-                                <div className="col-span-2">Price</div>
-                              </div>
-                              <div className="px-3">{(o?.items || []).map((it, idx) => <ItemRow it={it} key={`${safe(it?.lineId)}-${idx}`} />)}</div>
-                            </div>
-
-                            <RmaCreatePanel order={o} />
+                            <span className="rounded-lg bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+                              Purchased:{" "}
+                              {purchasedQuantity}
+                            </span>
                           </div>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                );
-              })
-            )}
-          </table>
-        </div>
+                        </button>
+                      </div>
 
-        {/* footer */}
-        <div className="p-3 border-t border-black/10 bg-white flex items-center justify-between">
-          <div className="text-xs text-black/45">
-            Tip: Search is server-side (works even if you have 10k delivered orders).
+                      {isSelected &&
+                        type === "return" &&
+                        purchasedQuantity > 1 ? (
+                        <div className="mt-3 border-t border-gray-200 pt-3">
+                          <label className="text-xs font-medium text-gray-700">
+                            Return quantity
+                          </label>
+
+                          <select
+                            value={
+                              selectedItems[
+                              lineId
+                              ]
+                            }
+                            onChange={(event) =>
+                              changeQuantity(
+                                item,
+                                event.target
+                                  .value
+                              )
+                            }
+                            className="mt-1 h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-black sm:w-40"
+                          >
+                            {Array.from(
+                              {
+                                length:
+                                  purchasedQuantity,
+                              },
+                              (_, quantityIndex) =>
+                                quantityIndex + 1
+                            ).map((quantity) => (
+                              <option
+                                key={quantity}
+                                value={quantity}
+                              >
+                                {quantity}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Exchange size */}
+            {type === "exchange" &&
+              selectedExchangeItem ? (
+              <section className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+                <h2 className="text-sm font-semibold text-gray-950">
+                  Select new size
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Current size:{" "}
+                  {getItemSize(
+                    selectedExchangeItem
+                  ) || "-"}
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {SIZES.map((size) => {
+                    const currentSize = lower(
+                      getItemSize(
+                        selectedExchangeItem
+                      )
+                    );
+
+                    const isCurrent =
+                      currentSize ===
+                      lower(size);
+
+                    const isActive =
+                      exchangeSize === size;
+
+                    return (
+                      <button
+                        type="button"
+                        key={size}
+                        disabled={isCurrent}
+                        onClick={() =>
+                          setExchangeSize(size)
+                        }
+                        className={`h-11 min-w-12 rounded-xl border px-4 text-sm font-semibold transition ${isActive
+                            ? "border-black bg-black text-white"
+                            : "border-gray-200 bg-white text-gray-900"
+                          } disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400`}
+                      >
+                        {size}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
+            {/* Details */}
+            <section className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-sm font-semibold text-gray-900">
+                    Reason
+                  </label>
+
+                  <select
+                    value={reason}
+                    onChange={(event) =>
+                      setReason(
+                        event.target.value
+                      )
+                    }
+                    className="mt-2 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-black"
+                  >
+                    {REASONS.map((option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold text-gray-900">
+                    Internal admin note
+                  </label>
+
+                  <textarea
+                    value={adminNote}
+                    onChange={(event) =>
+                      setAdminNote(
+                        event.target.value
+                      )
+                    }
+                    placeholder="Why is the admin creating this RMA?"
+                    rows={3}
+                    className="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={allowException}
+                      onChange={(event) => {
+                        setAllowException(
+                          event.target.checked
+                        );
+
+                        if (!event.target.checked) {
+                          setExceptionReason("");
+                        }
+                      }}
+                      className="mt-1 h-4 w-4 accent-black"
+                    />
+
+                    <div>
+                      <p className="text-sm font-semibold text-gray-950">
+                        Allow exception return
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-gray-600">
+                        Bypass the normal RMA date window for this order.
+                      </p>
+                    </div>
+                  </label>
+
+                  {allowException ? (
+                    <textarea
+                      value={exceptionReason}
+                      onChange={(event) =>
+                        setExceptionReason(
+                          event.target.value
+                        )
+                      }
+                      placeholder="Why is this exception being approved?"
+                      rows={2}
+                      className="mt-3 w-full resize-none rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
+            {/* Submit */}
+            <div className="sticky bottom-3 mt-4 rounded-2xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+              <button
+                type="button"
+                onClick={submitRma}
+                disabled={
+                  rmaLoading ||
+                  !selectedEntries.length
+                }
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-black px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {rmaLoading ? (
+                  <>
+                    <Loader2
+                      size={18}
+                      className="animate-spin"
+                    />
+                    Creating RMA...
+                  </>
+                ) : (
+                  <>
+                    {type === "exchange" ? (
+                      <ArrowLeftRight
+                        size={18}
+                      />
+                    ) : (
+                      <RotateCcw
+                        size={18}
+                      />
+                    )}
+
+                    Create{" "}
+                    {type === "exchange"
+                      ? "Exchange"
+                      : "Return"}{" "}
+                    RMA
+                  </>
+                )}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-12 text-center">
+            <Search
+              size={28}
+              className="mx-auto text-gray-300"
+            />
+
+            <p className="mt-3 text-sm font-semibold text-gray-800">
+              Search an order to continue
+            </p>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Enter the exact order number
+              above.
+            </p>
           </div>
-          <button
-            disabled={!hasMore || loadingMore || loading}
-            onClick={() => load({ nextPage: page + 1, append: true })}
-            className="px-3 py-2 rounded-2xl text-sm bg-white border border-black/10 hover:bg-black/[0.03] disabled:opacity-60"
-          >
-            {loadingMore ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="animate-spin" size={16} />
-                Loading...
-              </span>
-            ) : hasMore ? (
-              "Load more"
-            ) : (
-              "No more"
-            )}
-          </button>
-        </div>
+        )}
       </div>
-    </div>
+    </main>
   );
 }

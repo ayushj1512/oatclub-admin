@@ -5,6 +5,7 @@ import { create } from "zustand";
 /* ---------------------------------------
    API helpers
 ---------------------------------------- */
+const DEFAULT_HSN = "62105000";
 const API = (
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
@@ -165,21 +166,18 @@ const revenueCsvHeaders = [
 const salesCsvHeaders = [
   "Order ID",
   "Order Date",
-  "Status Date",
+  "Delivered Date",
   "Customer Name",
   "State",
   "Payment Type",
-  "Courier",
-  "Product Type",
+  "Courier Partner",
   "HSN Code",
   "Size",
   "Qty",
   "Unit (Inclusive Tax)",
-  "T. Discount",
-  "Net (Inclusive)",
-  "Taxable",
-  "Shipping Charges",
-  "Tax Amount",
+  "Unit (Tax Exclusive)",
+  "Shipping Taxable",
+  "Total Tax",
   "Tax Rate",
 ];
 
@@ -217,30 +215,29 @@ const revenueOrdersToCsv = (orders = []) =>
 const salesRowsToCsv = (rows = []) =>
   [
     salesCsvHeaders.join(","),
-    ...rows.map((row) =>
-      [
-        row.orderId,
-        formatCsvDate(row.orderDate),
-        formatCsvDate(row.deliveredDate),
-        row.customerName,
-        row.state,
-        row.paymentType,
-        row.courier,
-        row.productType,
-        row.hsnCode,
-        row.size,
-        row.qty,
-        row.unitInclusiveTax,
-        row.totalDiscount,
-        row.netInclusive,
-        row.taxable,
-        row.shippingCharges,
-        row.taxAmount,
-        row.taxRate,
+    ...rows.map((row) => {
+      const qty = Math.max(1, Number(row?.qty || 1));
+
+      return [
+        row?.orderId,
+        formatCsvDate(row?.orderDate),
+        formatCsvDate(row?.deliveredDate),
+        row?.customerName,
+        row?.state,
+        row?.paymentType,
+        row?.courierPartner || row?.courier || "",
+        DEFAULT_HSN,
+        row?.size,
+        qty,
+        row?.unitInclusiveTax,
+        Number((Number(row?.orderTaxable || 0) / qty).toFixed(2)),
+        row?.shippingTaxable,
+        row?.totalTaxAmount,
+        row?.taxRate,
       ]
         .map(escapeCsv)
-        .join(",")
-    ),
+        .join(",");
+    }),
   ].join("\n");
 
 const gstRowsToCsv = (rows = []) =>

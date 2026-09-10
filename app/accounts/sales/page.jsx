@@ -94,7 +94,7 @@ export default function SalesReportPage() {
       search: search || "",
       startDate: startDate || "",
       endDate: endDate || "",
-    }).catch(() => {});
+    }).catch(() => { });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -112,7 +112,7 @@ export default function SalesReportPage() {
         limit: limit || 100,
         startDate: startDate || "",
         endDate: endDate || "",
-      }).catch(() => {});
+      }).catch(() => { });
     }, 400);
 
     return () => clearTimeout(timer);
@@ -158,7 +158,7 @@ export default function SalesReportPage() {
       limit: limit || 100,
       startDate: startDate || "",
       endDate: endDate || "",
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   const handleRefresh = async () => {
@@ -169,7 +169,7 @@ export default function SalesReportPage() {
       limit: limit || 100,
       startDate: startDate || "",
       endDate: endDate || "",
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   const handlePrev = async () => {
@@ -185,7 +185,7 @@ export default function SalesReportPage() {
       limit: limit || 100,
       startDate: startDate || "",
       endDate: endDate || "",
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   const handleNext = async () => {
@@ -201,7 +201,7 @@ export default function SalesReportPage() {
       limit: limit || 100,
       startDate: startDate || "",
       endDate: endDate || "",
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   const handleDownload = async () => {
@@ -210,7 +210,7 @@ export default function SalesReportPage() {
       search: search || "",
       startDate: startDate || "",
       endDate: endDate || "",
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   return (
@@ -239,8 +239,10 @@ export default function SalesReportPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
               <input
                 value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search order, customer, state, courier, HSN, size..."
+                onChange={(event) =>
+                  setSearchInput(event.target.value)
+                }
+                placeholder="Search order, customer, state, courier partner, HSN, size..."
                 className="w-full rounded-xl border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-black"
               />
             </div>
@@ -269,35 +271,78 @@ export default function SalesReportPage() {
 
         <div className="mt-5">
           <div className="mb-2 text-sm font-semibold text-black">Sales Snapshot</div>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-            <StatCard label="Rows" value={safeTotals.rows || 0} hint="Matched dataset" />
-            <StatCard label="Orders" value={safeTotals.orders || 0} hint="Matched dataset" />
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+            <StatCard
+              label="Rows"
+              value={safeTotals.rows || 0}
+            />
+
+            <StatCard
+              label="Orders"
+              value={safeTotals.orders || 0}
+            />
+
             <StatCard
               label="T. Discount"
-              value={`₹ ${money(safeTotals.totalDiscount)}`}
-              hint="Matched dataset"
+              value={`₹ ${money(
+                safeTotals.totalDiscount
+              )}`}
             />
+
             <StatCard
-              label="Net (incl)"
-              value={`₹ ${money(safeTotals.netInclusive)}`}
-              hint="Matched dataset"
+              label="Net (Inclusive)"
+              value={`₹ ${money(
+                safeTotals.netInclusive
+              )}`}
             />
+
             <StatCard
-              label="Taxable"
-              value={`₹ ${money(safeTotals.taxable)}`}
-              hint="Matched dataset"
+              label="Order Taxable"
+              value={`₹ ${money(
+                safeTotals.orderTaxable
+              )}`}
             />
+
             <StatCard
-              label="Tax Amount"
-              value={`₹ ${money(safeTotals.taxAmount)}`}
-              hint="Matched dataset"
+              label="Shipping Charges"
+              value={`₹ ${money(
+                safeTotals.shippingCharges
+              )}`}
+            />
+
+            <StatCard
+              label="Shipping Taxable"
+              value={`₹ ${money(
+                safeTotals.shippingTaxable
+              )}`}
+            />
+
+            <StatCard
+              label="Order Tax"
+              value={`₹ ${money(
+                safeTotals.orderTaxAmount
+              )}`}
+            />
+
+            <StatCard
+              label="Shipping Tax"
+              value={`₹ ${money(
+                safeTotals.shippingTaxAmount
+              )}`}
+            />
+
+            <StatCard
+              label="Total Tax"
+              value={`₹ ${money(
+                safeTotals.totalTaxAmount
+              )}`}
             />
           </div>
         </div>
 
         <div className="mt-5 overflow-hidden rounded-2xl border border-neutral-200 bg-white">
           <div className="overflow-auto">
-            <table className="min-w-[1900px] w-full border-collapse">
+            <table className="min-w-[2200px] w-full border-collapse">
               <thead className="sticky top-0 z-10 bg-black text-white">
                 <tr>
                   <Th>Order ID</Th>
@@ -306,17 +351,16 @@ export default function SalesReportPage() {
                   <Th>Customer Name</Th>
                   <Th>State</Th>
                   <Th>Payment Type</Th>
-                  <Th>Courier</Th>
-                  <Th>Product Type</Th>
+                  <Th>Courier Partner</Th>
                   <Th>HSN Code</Th>
                   <Th>Size</Th>
                   <Th>Qty</Th>
                   <Th>Unit (Inclusive Tax)</Th>
-                  <Th>T. Discount</Th>
-                  <Th>Net (Inclusive)</Th>
-                  <Th>Taxable</Th>
-                  <Th>Shipping Charges</Th>
-                  <Th>Tax Amount</Th>
+
+                  <Th>Unit (Exclusive Tax)</Th>
+                  <Th>Shipping Taxable</Th>
+
+                  <Th>Total Tax</Th>
                   <Th>Tax Rate</Th>
                 </tr>
               </thead>
@@ -358,26 +402,44 @@ export default function SalesReportPage() {
                           {row?.orderId || "-"}
                         </span>
                       </Td>
+
                       <Td>{formatDate(row?.orderDate)}</Td>
                       <Td>{formatDate(row?.deliveredDate)}</Td>
                       <Td>{row?.customerName || "-"}</Td>
                       <Td>{row?.state || "-"}</Td>
                       <Td>{row?.paymentType || "-"}</Td>
-                      <Td>{row?.courier || "-"}</Td>
-                      <Td>{row?.productType || "-"}</Td>
+
+                      <Td className="capitalize">
+                        {row?.courierPartner ||
+                          row?.courier ||
+                          "Unassigned"}
+                      </Td>
+
                       <Td>{row?.hsnCode || DEFAULT_HSN}</Td>
                       <Td>{row?.size || "-"}</Td>
                       <Td>{row?.qty ?? 0}</Td>
-                      <Td>₹ {money(row?.unitInclusiveTax)}</Td>
+
                       <Td>
-                        <span className="inline-flex rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium">
-                          ₹ {money(row?.totalDiscount)}
-                        </span>
+                        ₹ {money(row?.unitInclusiveTax)}
                       </Td>
-                      <Td className="font-medium">₹ {money(row?.netInclusive)}</Td>
-                      <Td>₹ {money(row?.taxable)}</Td>
-                      <Td>₹ {money(row?.shippingCharges)}</Td>
-                      <Td>₹ {money(row?.taxAmount)}</Td>
+
+
+
+
+                      <Td>₹ {money(row?.orderTaxable)}</Td>
+
+
+
+                      <Td>
+                        ₹ {money(row?.shippingTaxable)}
+                      </Td>
+
+
+
+                      <Td className="font-semibold">
+                        ₹ {money(row?.totalTaxAmount)}
+                      </Td>
+
                       <Td>{row?.taxRate || "5%"}</Td>
                     </tr>
                   ))}

@@ -7,16 +7,20 @@ import {
   Download,
   Loader2,
   RotateCcw,
+  X,
 } from "lucide-react";
 import axios from "axios";
 
 import { useRmaStore } from "@/store/useRmaStore";
 import RmaRow from "@/components/orders/RmaRow";
 import { useShiprocketStore } from "@/store/ShipRocketStore";
+import { useDelhiveryStore } from "@/store/delhiveryStore";
 import RmaRefundModal from "@/components/orders/RmaRefundModal";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:9000";
+
+const RETURN_WAREHOUSE_PINCODE = "110044";
 
 const str = (v) => (v == null ? "" : String(v));
 const norm = (v) => str(v).trim().toLowerCase();
@@ -90,8 +94,40 @@ export default function RmaClient() {
   const [updating, setUpdating] = useState([]);
   const [approving, setApproving] = useState([]);
 
-  const syncReversePickup =
+  const syncShiprocketReversePickup =
     useShiprocketStore((s) => s.syncReversePickup);
+
+  const checkShiprocketServiceability =
+    useShiprocketStore((s) => s.checkServiceability);
+
+  const createShiprocketReversePickup =
+    useShiprocketStore((s) => s.createReversePickup);
+
+  const checkDelhiveryServiceability =
+    useDelhiveryStore((s) => s.checkServiceability);
+
+  const createDelhiveryReversePickup =
+    useDelhiveryStore((s) => s.createReversePickup);
+
+  const syncDelhiveryReversePickup =
+    useDelhiveryStore((s) => s.syncReversePickup);
+
+  const [pickupRma, setPickupRma] = useState(null);
+  const [pickupProvider, setPickupProvider] = useState("");
+  const [checkingPickup, setCheckingPickup] = useState(false);
+  const [bookingPickup, setBookingPickup] = useState(false);
+
+  const [pickupAvailability, setPickupAvailability] =
+    useState({
+      shiprocket: {
+        available: false,
+        error: "",
+      },
+      delhivery: {
+        available: false,
+        error: "",
+      },
+    });
 
   const [syncingReverse, setSyncingReverse] = useState([]);
   const [bulkSyncingReverse, setBulkSyncingReverse] = useState(false);
@@ -326,6 +362,182 @@ export default function RmaClient() {
     }
   };
 
+  const getCustomerPincode = (rma) =>
+    String(
+      rma?.shippingAddressSnapshot?.pincode ||
+      rma?.customer?.pincode ||
+      "",
+    ).trim();
+
+  const hasDelhiveryPickup = (result) =>
+    result?.pickupAvailable === true &&
+    result?.embargoed !== true;
+
+  const getShiprocketCouriers = (result) =>
+    result?.couriers ||
+    result?.data?.couriers ||
+    result?.data?.data?.couriers ||
+    result?.data?.data
+      ?.available_courier_companies ||
+    result?.data
+      ?.available_courier_companies ||
+    result?.available_courier_companies ||
+    [];
+
+  const hasShiprocketCourier = (result) =>
+    result?.success !== false &&
+    getShiprocketCouriers(result).length > 0;
+
+  const openPickupModal = async (rma) => {
+    const customerPincode =
+      getCustomerPincode(rma);
+
+    if (!/^\d{6}$/.test(customerPincode)) {
+      return alert(
+        "A valid 6-digit customer pincode is required.",
+      );
+    }
+
+    setPickupRma(rma);
+    setPickupProvider("");
+    setCheckingPickup(true);
+
+    setPickupAvailability({
+      shiprocket: {
+        available: false,
+        error: "",
+      },
+      delhivery: {
+        available: false,
+        error: "",
+      },
+    });
+
+    try {
+      const [
+        shiprocketResult,
+        delhiveryResult,
+      ] = await Promise.allSettled([
+        checkShiprocketServiceability({
+          pickupPincode: customerPincode,
+          deliveryPincode:
+            RETURN_WAREHOUSE_PINCODE,
+          weight: 0.5,
+          cod: false,
+        }),
+
+        checkDelhiveryServiceability(
+          customerPincode,
+        ),
+      ]);
+
+      console.log(
+        "Shiprocket serviceability:",
+        shiprocketResult,
+      );
+
+      console.log(
+        "Delhivery serviceability:",
+        delhiveryResult,
+      );
+
+      const shiprocketAvailable =
+        shiprocketResult.status ===
+        "fulfilled" &&
+        hasShiprocketCourier(
+          shiprocketResult.value,
+        );
+
+      const delhiveryAvailable =
+        delhiveryResult.status ===
+        "fulfilled" &&
+        hasDelhiveryPickup(
+          delhiveryResult.value,
+        );
+
+      const shiprocketError =
+        shiprocketResult.status === "rejected"
+          ? shiprocketResult.reason?.message ||
+          "Shiprocket serviceability check failed."
+          : shiprocketAvailable
+            ? ""
+            : "Reverse pickup is unavailable.";
+
+      const delhiveryError =
+        delhiveryResult.status === "rejected"
+          ? delhiveryResult.reason?.message ||
+          "Delhivery serviceability check failed."
+          : delhiveryAvailable
+            ? ""
+            : delhiveryResult.value
+              ?.unavailableReason ||
+            "Reverse pickup is unavailable.";
+
+      setPickupAvailability({
+        shiprocket: {
+          available: shiprocketAvailable,
+          error: shiprocketError,
+        },
+        delhivery: {
+          available: delhiveryAvailable,
+          error: delhiveryError,
+        },
+      });
+
+      if (
+        shiprocketAvailable &&
+        !delhiveryAvailable
+      ) {
+        setPickupProvider("shiprocket");
+      } else if (
+        delhiveryAvailable &&
+        !shiprocketAvailable
+      ) {
+        setPickupProvider("delhivery");
+      }
+    } finally {
+      setCheckingPickup(false);
+    }
+  };
+
+  const bookReturnPickup = async () => {
+    if (!pickupRma || !pickupProvider) {
+      return alert(
+        "Please select a courier provider.",
+      );    }
+
+    try {
+      setBookingPickup(true);
+
+      const bookingFunction =
+        pickupProvider === "shiprocket"
+          ? createShiprocketReversePickup
+          : createDelhiveryReversePickup;
+
+      const data = await bookingFunction(
+        pickupRma.orderId,
+        pickupRma.rmaNumber,
+      );
+
+      await fetchAllRmas();
+
+      setPickupRma(null);
+      setPickupProvider("");
+
+      alert(
+        data?.message ||
+        `${pickupProvider} return pickup booked successfully.`,
+      );
+    } catch (error) {
+      alert(
+        error?.message ||
+        "Return pickup booking failed.",
+      );
+    } finally {
+      setBookingPickup(false);
+    }
+  };
+
   const handleApproveRma = async (rma) => {
     const key = getKey(rma);
 
@@ -341,10 +553,21 @@ export default function RmaClient() {
       return alert("RMA is already approved");
     }
 
-    if (norm(rma?.type) === "return") {
-      const media = safeArray(rma?.media);
+    const isExceptionRma =
+      rma?.allowException === true;
 
-      if (media.filter((m) => str(m?.url).trim()).length < 3) {
+    if (
+      norm(rma?.type) === "return" &&
+      !isExceptionRma
+    ) {
+      const media =
+        safeArray(rma?.media);
+
+      if (
+        media.filter((item) =>
+          str(item?.url).trim()
+        ).length < 3
+      ) {
         return alert(
           "Front, Back and Tag images are required before approving this return."
         );
@@ -364,20 +587,26 @@ export default function RmaClient() {
 
       await fetchAllRmas();
 
-      if (norm(rma?.type) === "exchange") {
+      if (
+        norm(rma?.type) === "exchange" &&
+        data?.exchangeOrderError
+      ) {
         alert(
-          data?.exchangeOrderError
-            ? `RMA approved.\nPickup processed.\nExchange order error: ${data.exchangeOrderError}`
-            : `Exchange approved successfully.\nReverse pickup + exchange order created automatically.`
+          `RMA approved, but exchange order failed: ${data.exchangeOrderError}`,
         );
       } else {
         alert(
-          data?.reversePickup?.success === false
-            ? `Return approved, but pickup booking failed: ${data?.reversePickup?.error || "Unknown error"
-            }`
-            : "Return approved and reverse pickup created automatically."
+          norm(rma?.type) === "exchange"
+            ? "Exchange approved and replacement order created."
+            : "Return approved successfully.",
         );
       }
+
+      await openPickupModal({
+        ...rma,
+        isApproved: true,
+        status: "approved",
+      });
     } catch (error) {
       alert(
         error?.message ||
@@ -458,9 +687,18 @@ export default function RmaClient() {
     try {
       setSyncingReverse((s) => [...s, key]);
 
-      const data = await syncReversePickup(
+      const provider = norm(
+        rma?.reverseShipment?.provider,
+      );
+
+      const syncFunction =
+        provider === "delhivery"
+          ? syncDelhiveryReversePickup
+          : syncShiprocketReversePickup;
+
+      const data = await syncFunction(
         rma.orderId,
-        rma.rmaNumber
+        rma.rmaNumber,
       );
 
       await fetchAllRmas();
@@ -487,45 +725,60 @@ export default function RmaClient() {
         rma?.isApproved === true &&
         rma?.isFulfilled !== true &&
         !rma?.returnPickupCompleted &&
-        (
+        Boolean(
           rma?.reverseShipment?.shipmentId ||
-          rma?.reverseShipment?.orderId
-        )
+          rma?.reverseShipment?.orderId ||
+          rma?.reverseShipment?.awb,
+        ),
     );
 
     if (!targets.length) {
-      return alert("No pending reverse pickups to sync");
+      return alert(
+        "No pending reverse pickups are available to sync.",
+      );
     }
 
     try {
       setBulkSyncingReverse(true);
-
-      const keys = targets.map(getKey);
-      setSyncingReverse(keys);
+      setSyncingReverse(
+        targets.map(getKey),
+      );
 
       let synced = 0;
       let completed = 0;
       let failed = 0;
 
-      // sequential = safer for Shiprocket rate limits
       for (const rma of targets) {
         try {
-          const data = await syncReversePickup(
-            rma.orderId,
-            rma.rmaNumber
+          const provider = norm(
+            rma?.reverseShipment?.provider,
           );
 
-          synced++;
+          const syncFunction =
+            provider === "delhivery"
+              ? syncDelhiveryReversePickup
+              : syncShiprocketReversePickup;
 
-          if (data?.reverseShipment?.pickupCompleted) {
-            completed++;
+          const data = await syncFunction(
+            rma.orderId,
+            rma.rmaNumber,
+          );
+
+          synced += 1;
+
+          if (
+            data?.reverseShipment
+              ?.pickupCompleted ||
+            data?.pickupCompleted
+          ) {
+            completed += 1;
           }
-        } catch (err) {
-          failed++;
+        } catch (error) {
+          failed += 1;
 
           console.error(
-            `Reverse sync failed: ${rma?.rmaNumber}`,
-            err
+            `Reverse pickup sync failed for ${rma?.rmaNumber}:`,
+            error,
           );
         }
       }
@@ -533,7 +786,7 @@ export default function RmaClient() {
       await fetchAllRmas();
 
       alert(
-        `Sync complete\nSynced: ${synced}\nPickup completed: ${completed}\nFailed: ${failed}`
+        `Reverse pickup sync completed.\nSynced: ${synced}\nCompleted: ${completed}\nFailed: ${failed}`,
       );
     } finally {
       setBulkSyncingReverse(false);
@@ -1155,7 +1408,7 @@ export default function RmaClient() {
                         key={rowKey}
                         rma={rma}
                         rowKey={rowKey}
-
+                        openPickupModal={openPickupModal}
                         locked={rma?.isFulfilled === true}
                         isApproved={rma?.isApproved === true}
 
@@ -1198,6 +1451,121 @@ export default function RmaClient() {
             </div>
           </div>
         )}
+
+      {pickupRma && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Book Return Pickup
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Customer pincode:{" "}
+                  {getCustomerPincode(pickupRma)}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={bookingPickup}
+                onClick={() => setPickupRma(null)}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {checkingPickup ? (
+              <div className="flex items-center gap-2 py-8 text-sm text-gray-600">
+                <Loader2
+                  size={18}
+                  className="animate-spin"
+                />
+                Checking both couriers...
+              </div>
+            ) : (
+              <div className="mt-5 space-y-3">
+                {[
+                  {
+                    key: "shiprocket",
+                    label: "Shiprocket",
+                  },
+                  {
+                    key: "delhivery",
+                    label: "Delhivery",
+                  },
+                ].map(({ key, label }) => {
+                  const status =
+                    pickupAvailability[key];
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      disabled={!status.available}
+                      onClick={() =>
+                        setPickupProvider(key)
+                      }
+                      className={`flex w-full items-center justify-between rounded-xl border p-4 text-left ${pickupProvider === key
+                          ? "border-black bg-gray-50"
+                          : "border-gray-200"
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                    >
+                      <span className="font-medium">
+                        {label}
+                      </span>
+
+                      <span
+                        className={`text-xs font-medium ${status.available
+                            ? "text-emerald-600"
+                            : "text-red-500"
+                          }`}
+                      >
+                        {status.available
+                          ? "Available"
+                          : status.error ||
+                          "Unavailable"}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {!pickupAvailability.shiprocket
+                  .available &&
+                  !pickupAvailability.delhivery
+                    .available && (
+                    <p className="text-sm text-red-600">
+                      Return pickup is currently unavailable through both courier partners.
+                    </p>
+                  )}
+
+                <button
+                  type="button"
+                  disabled={
+                    !pickupProvider ||
+                    bookingPickup
+                  }
+                  onClick={bookReturnPickup}
+                  className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {bookingPickup && (
+                    <Loader2
+                      size={16}
+                      className="animate-spin"
+                    />
+                  )}
+
+                  {bookingPickup
+                    ? "Booking..."
+                    : "Confirm Return Pickup"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <RmaRefundModal
         rma={refundRma}

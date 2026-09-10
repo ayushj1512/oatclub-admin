@@ -144,6 +144,122 @@ export const useRmaStore = create((set, get) => ({
   },
 
   /* ============================================================
+   ✅ ADMIN: CREATE RETURN / EXCHANGE RMA
+   Photos are optional
+   POST /api/orders/:id/rma/admin
+============================================================ */
+  createAdminRma: async (orderId, payload) => {
+    const id = norm(orderId);
+
+    if (!id) {
+      throw new Error("Order id is required");
+    }
+
+    get()._start();
+
+    try {
+      const cleanPayload = {
+        type: normLower(payload?.type || "return"),
+        reason: norm(payload?.reason || "other"),
+        customerNote: norm(payload?.customerNote),
+        adminNote: norm(payload?.adminNote),
+        allowException:
+          payload?.allowException === true,
+
+        exceptionReason:
+          payload?.allowException === true
+            ? norm(payload?.exceptionReason)
+            : "",
+
+        items: Array.isArray(payload?.items)
+          ? payload.items
+            .map((item) => ({
+              orderLineId: norm(item?.orderLineId),
+              quantity: Number(item?.quantity || 0),
+            }))
+            .filter(
+              (item) =>
+                item.orderLineId &&
+                Number.isFinite(item.quantity) &&
+                item.quantity > 0
+            )
+          : [],
+
+        ...(payload?.type === "exchange"
+          ? {
+            exchangeTo: {
+              productId: norm(
+                payload?.exchangeTo?.productId
+              ),
+              variantId: norm(
+                payload?.exchangeTo?.variantId
+              ),
+              variantSku: norm(
+                payload?.exchangeTo?.variantSku
+              ),
+              attributes: Array.isArray(
+                payload?.exchangeTo?.attributes
+              )
+                ? payload.exchangeTo.attributes
+                : [],
+              note: norm(
+                payload?.exchangeTo?.note
+              ),
+            },
+          }
+          : {}),
+      };
+
+      if (!["return", "exchange"].includes(cleanPayload.type)) {
+        throw new Error("Please select return or exchange");
+      }
+
+      if (!cleanPayload.items.length) {
+        throw new Error("Please select at least one product");
+      }
+
+      const data = await apiFetch(
+        `/api/orders/${id}/rma/admin`,
+        {
+          method: "POST",
+          body: cleanPayload,
+        }
+      );
+
+      const created = data?.rma
+        ? {
+          ...data.rma,
+          orderId:
+            data?.rma?.orderId ||
+            data?.orderId ||
+            id,
+        }
+        : null;
+
+      set((state) => ({
+        rma: created,
+        rmas: created
+          ? upsertRmaInList(
+            state.rmas,
+            created,
+            {
+              matchOrderId: state.lastOrderId,
+            }
+          )
+          : state.rmas,
+        lastOrderId: id,
+      }));
+
+      get()._success();
+
+      return data;
+    } catch (error) {
+      get()._fail(error);
+      throw error;
+    }
+  },
+
+  /* ============================================================
      ✅ GET ALL RMAs OF AN ORDER
      GET /api/orders/:id/rma
   ============================================================ */

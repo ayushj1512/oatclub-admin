@@ -92,6 +92,7 @@ export default function RmaRow({
   creditNote,
   setCreditNote,
   creditLoading,
+  openPickupModal,
   addRefundCredit,
 }) {
   const address = rma?.shippingAddressSnapshot || {};
@@ -175,8 +176,23 @@ export default function RmaRow({
         </td>
 
         <td className="p-4 font-medium">{orderNumber}</td>
-        <td className="p-4">{rmaNumber}</td>
+        <td className="p-4">
+          <div className="flex flex-col items-start gap-1">
+            <span>{rmaNumber}</span>
 
+            {rma?.allowException === true && (
+              <span
+                title={
+                  rma?.exceptionReason ||
+                  "Admin-approved exception"
+                }
+                className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700 ring-1 ring-rose-200"
+              >
+                Exception
+              </span>
+            )}
+          </div>
+        </td>
         <td className="p-4">
           <span
             className={`rounded-full px-2.5 py-1 text-xs capitalize ring-1 ${typeBadge(
@@ -330,6 +346,19 @@ export default function RmaRow({
                       Exchange Order Processing
                     </span>
                   ))}
+
+                {!hasReturnPickup && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openPickupModal?.(rma)
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white"
+                  >
+                    <RotateCcw size={14} />
+                    Book Pickup
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -737,8 +766,8 @@ function QcImagesCard({ media = [], onPreview }) {
 
         <span
           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${images.length === 3
-              ? "bg-green-50 text-green-700"
-              : "bg-red-50 text-red-600"
+            ? "bg-green-50 text-green-700"
+            : "bg-red-50 text-red-600"
             }`}
         >
           {images.length}/3
