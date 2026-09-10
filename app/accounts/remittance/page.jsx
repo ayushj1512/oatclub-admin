@@ -107,6 +107,7 @@ export default function RemittancePage() {
   const [showForm, setShowForm] = useState(false);
   const [editingRow, setEditingRow] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [showHowTo, setShowHowTo] = useState(false);
   const [razorpayMonth, setRazorpayMonth] = useState(() => {
     const now = new Date();
 
@@ -259,68 +260,172 @@ export default function RemittancePage() {
 
   return (
     <div className="w-full px-4 py-4 md:px-6">
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-zinc-900">
-            Remittance Portal
-          </h1>
-          <p className="text-sm text-zinc-500">
-            Upload, track and manage remittance against delivered orders.
-          </p>
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-zinc-900">
+              Remittance Portal
+            </h1>
+
+            <p className="text-sm text-zinc-500">
+              Upload, track and manage remittance against delivered orders.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowHowTo((prev) => !prev)}
+              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              {showHowTo ? "Hide Guide" : "How to Use"}
+            </button>
+
+            <button
+              type="button"
+              onClick={openCreate}
+              className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+            >
+              Add Entry
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <input
-            type="month"
-            value={razorpayMonth}
-            onChange={(event) => setRazorpayMonth(event.target.value)}
-            disabled={razorpaySyncLoading}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 disabled:opacity-50"
-          />
+        <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-3 xl:flex-row xl:items-center xl:justify-between">
+          {/* Main tabs */}
+          <div className="inline-flex w-fit rounded-xl bg-zinc-100 p-1">
+            <button
+              type="button"
+              onClick={() => setTab("remittance")}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === "remittance"
+                  ? "bg-white text-zinc-900 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-900"
+                }`}
+            >
+              Remittance Entries
+            </button>
 
-          <button
-            type="button"
-            onClick={handleRazorpaySync}
-            disabled={!razorpayMonth || razorpaySyncLoading || busy}
-            className="rounded-xl border border-emerald-600 bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {razorpaySyncLoading ? "Syncing..." : "Sync Razorpay"}
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setTab("pending")}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === "pending"
+                  ? "bg-white text-zinc-900 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-900"
+                }`}
+            >
+              Pending Orders
+            </button>
+          </div>
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setTab("remittance")}
-            className={`rounded-xl border px-3 py-2 text-sm font-medium ${
-              tab === "remittance"
-                ? "border-black bg-black text-white"
-                : "border-zinc-200 bg-white text-zinc-700"
-            }`}
-          >
-            Remittance
-          </button>
+          {/* Razorpay action */}
+          <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-2 sm:flex-row sm:items-center">
+            <div className="px-1">
+              <p className="text-xs font-semibold text-emerald-900">
+                Razorpay Settlement
+              </p>
 
-          <button
-            onClick={() => setTab("pending")}
-            className={`rounded-xl border px-3 py-2 text-sm font-medium ${
-              tab === "pending"
-                ? "border-black bg-black text-white"
-                : "border-zinc-200 bg-white text-zinc-700"
-            }`}
-          >
-            Pending
-          </button>
+              <p className="text-[11px] text-emerald-700">
+                Select month and sync
+              </p>
+            </div>
 
-          <button
-            onClick={openCreate}
-            className="rounded-xl border border-zinc-900 bg-zinc-900 px-3 py-2 text-sm font-medium text-white"
-          >
-            Add Entry
-          </button>
+            <input
+              type="month"
+              value={razorpayMonth}
+              onChange={(event) => setRazorpayMonth(event.target.value)}
+              disabled={razorpaySyncLoading}
+              className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 disabled:opacity-50"
+            />
+
+            <button
+              type="button"
+              onClick={handleRazorpaySync}
+              disabled={!razorpayMonth || razorpaySyncLoading || busy}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {razorpaySyncLoading ? "Syncing..." : "Sync Razorpay"}
+            </button>
+          </div>
         </div>
       </div>
 
-      <RemittanceSummaryCards summary={summary} loading={summaryLoading} />
+      {showHowTo ? (
+  <div className="mb-4 rounded-2xl border border-zinc-200 bg-white p-4">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <h2 className="text-sm font-semibold text-zinc-900">
+          How to Use Remittance Portal
+        </h2>
+
+        <p className="mt-1 text-xs text-zinc-500">
+          Match received payments against delivered orders.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowHowTo(false)}
+        className="text-xs font-medium text-zinc-500 hover:text-zinc-900"
+      >
+        Close
+      </button>
+    </div>
+
+    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+        <p className="text-xs font-semibold text-zinc-900">
+          1. Delhivery
+        </p>
+        <p className="mt-1 text-xs leading-5 text-zinc-600">
+          Select Delhivery and upload the original CSV remittance report.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+        <p className="text-xs font-semibold text-zinc-900">
+          2. Shiprocket
+        </p>
+        <p className="mt-1 text-xs leading-5 text-zinc-600">
+          Download the COD remittance report and upload its original XLS or
+          XLSX file.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+        <p className="text-xs font-semibold text-emerald-900">
+          3. Razorpay
+        </p>
+        <p className="mt-1 text-xs leading-5 text-emerald-700">
+          Select the settlement month and click Sync Razorpay. No file upload
+          is required.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+        <p className="text-xs font-semibold text-zinc-900">
+          4. Manual Entry
+        </p>
+        <p className="mt-1 text-xs leading-5 text-zinc-600">
+          Use Add Entry when a payment cannot be imported or requires a manual
+          adjustment.
+        </p>
+      </div>
+    </div>
+
+    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+      <p className="text-xs leading-5 text-amber-800">
+        Always upload the original courier report without renaming columns.
+        Review Unmapped, Review and Failed counts after every import.
+      </p>
+    </div>
+  </div>
+) : null}
+
+<RemittanceSummaryCards
+  summary={summary}
+  loading={summaryLoading}
+/>
+
 
       {razorpaySyncResult?.stats ? (
         <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
