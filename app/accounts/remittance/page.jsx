@@ -9,10 +9,31 @@ import RemittanceUploadCard from "@/components/accounts/remittance/RemittanceUpl
 import RemittanceTable from "@/components/accounts/remittance/RemittanceTable";
 import PendingRemittanceTable from "@/components/accounts/remittance/PendingRemittanceTable";
 
-const normalizeOrderType = (value) => {
-  const v = String(value || "").trim().toLowerCase();
-  if (v === "cod") return "cod";
-  if (v === "razorpay" || v === "prepaid") return "razorpay";
+const normalizeOrderType = (
+  value
+) => {
+  const type = String(
+    value || ""
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+
+  if (type === "cod") {
+    return "cod";
+  }
+
+  if (type === "partial_cod") {
+    return "partial_cod";
+  }
+
+  if (
+    type === "razorpay" ||
+    type === "prepaid"
+  ) {
+    return "razorpay";
+  }
+
   return "";
 };
 
@@ -39,6 +60,9 @@ export default function RemittancePage() {
     filters,
     pendingFilters,
 
+    importSources,
+    importResult,
+
     loading,
     summaryLoading,
     pendingLoading,
@@ -46,6 +70,7 @@ export default function RemittancePage() {
     updateLoading,
     deleteLoading,
     importLoading,
+    sourcesLoading,
     exportLoading,
 
     error,
@@ -54,16 +79,27 @@ export default function RemittancePage() {
 
     setFilters,
     setPendingFilters,
+
     fetchRemittances,
     fetchSummary,
     fetchPendingRemittances,
+    fetchImportSources,
+
     createRemittance,
     updateRemittance,
     deleteRemittance,
-    importCsv,
+
+    importReport,
+    clearImportResult,
+
     exportCsv,
     exportExcel,
     exportPendingCsv,
+    razorpaySyncLoading,
+    razorpaySyncResult,
+    syncRazorpayRemittance,
+    clearRazorpaySyncResult,
+
     clearErrors,
   } = useRemittanceStore();
 
@@ -71,12 +107,26 @@ export default function RemittancePage() {
   const [showForm, setShowForm] = useState(false);
   const [editingRow, setEditingRow] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [razorpayMonth, setRazorpayMonth] = useState(() => {
+    const now = new Date();
+
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}`;
+  });
 
   useEffect(() => {
     fetchSummary();
     fetchRemittances();
     fetchPendingRemittances();
-  }, [fetchSummary, fetchRemittances, fetchPendingRemittances]);
+    fetchImportSources();
+  }, [
+    fetchSummary,
+    fetchRemittances,
+    fetchPendingRemittances,
+    fetchImportSources,
+  ]);
 
   const heading = useMemo(
     () => (editingRow ? "Edit Remittance" : "Add Remittance"),
@@ -91,6 +141,8 @@ export default function RemittancePage() {
 
   const openCreate = () => {
     clearErrors();
+    clearImportResult();
+
     setEditingRow(null);
     setForm(emptyForm);
     setShowForm(true);
@@ -156,11 +208,34 @@ export default function RemittancePage() {
     } catch {}
   };
 
-  const onUpload = async (file) => {
+  const onUpload = async (
+    source,
+    file
+  ) => {
     try {
-      await importCsv(file);
+      await importReport(
+        source,
+        file
+      );
+
       setTab("remittance");
-    } catch {}
+    } catch { }
+  };
+
+  const handleRazorpaySync = async () => {
+    const [year, month] = razorpayMonth.split("-").map(Number);
+
+    clearErrors();
+    clearRazorpaySyncResult();
+
+    try {
+      await syncRazorpayRemittance({
+        year,
+        month,
+      });
+
+      setTab("remittance");
+    } catch { }
   };
 
   const openPendingToCreate = (row) => {
@@ -192,6 +267,25 @@ export default function RemittancePage() {
           <p className="text-sm text-zinc-500">
             Upload, track and manage remittance against delivered orders.
           </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="month"
+            value={razorpayMonth}
+            onChange={(event) => setRazorpayMonth(event.target.value)}
+            disabled={razorpaySyncLoading}
+            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 disabled:opacity-50"
+          />
+
+          <button
+            type="button"
+            onClick={handleRazorpaySync}
+            disabled={!razorpayMonth || razorpaySyncLoading || busy}
+            className="rounded-xl border border-emerald-600 bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {razorpaySyncLoading ? "Syncing..." : "Sync Razorpay"}
+          </button>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -227,6 +321,38 @@ export default function RemittancePage() {
       </div>
 
       <RemittanceSummaryCards summary={summary} loading={summaryLoading} />
+
+      {razorpaySyncResult?.stats ? (
+        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-emerald-900">
+                Razorpay sync completed
+              </p>
+
+              <p className="mt-1 text-xs text-emerald-700">
+                Processed: {razorpaySyncResult.stats.processed || 0}
+                {" · "}
+                Existing: {razorpaySyncResult.stats.duplicates || 0}
+                {" · "}
+                Unmapped: {razorpaySyncResult.stats.unmapped || 0}
+                {" · "}
+                Review: {razorpaySyncResult.stats.needsReview || 0}
+                {" · "}
+                Failed: {razorpaySyncResult.stats.failed || 0}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={clearRazorpaySyncResult}
+              className="text-xs font-medium text-emerald-800"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="min-w-0 space-y-4">
@@ -284,12 +410,29 @@ export default function RemittancePage() {
 
                     <select
                       value={form.orderType}
-                      onChange={(e) => onChange("orderType", e.target.value)}
+                      onChange={(event) =>
+                        onChange(
+                          "orderType",
+                          event.target.value
+                        )
+                      }
                       className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400"
                     >
-                      <option value="">Select Order Type</option>
-                      <option value="cod">COD</option>
-                      <option value="razorpay">Prepaid</option>
+                      <option value="">
+                        Select Payment Type
+                      </option>
+
+                      <option value="cod">
+                        COD
+                      </option>
+
+                      <option value="partial_cod">
+                        Partial COD
+                      </option>
+
+                      <option value="razorpay">
+                        Prepaid
+                      </option>
                     </select>
 
                     <input
@@ -429,9 +572,23 @@ export default function RemittancePage() {
 
         <div className="min-w-0">
           <RemittanceUploadCard
-            onUpload={onUpload}
+            sources={importSources}
+            sourcesLoading={
+              sourcesLoading
+            }
+            importResult={importResult}
             loading={importLoading}
             busy={busy}
+            error={
+              showForm
+                ? ""
+                : actionError
+            }
+            onUpload={onUpload}
+            onManual={openCreate}
+            onClearResult={
+              clearImportResult
+            }
           />
         </div>
       </div>

@@ -1,140 +1,328 @@
 "use client";
 
-import React, { useRef, useState } from "react";
-import * as XLSX from "xlsx";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-const csvToFile = (csvText, originalName = "remittance.csv") => {
-  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
-  return new File([blob], originalName.replace(/\.(xlsx|xls)$/i, ".csv"), {
-    type: "text/csv",
-  });
-};
-
-const downloadSampleCsv = () => {
-  const sample = [
-    [
-      "eway bill id",
-      "shipping no",
-      "order number",
-      "delivered date",
-      "order type",
-      "remittance date",
-      "remitted amount",
-    ],
-    [
-      "EWB123456",
-      "SHIP123456",
-      "000001",
-      "2026-03-20",
-      "shipment",
-      "2026-03-25",
-      "1499",
-    ],
-    [
-      "EWB123457",
-      "SHIP123457",
-      "000002",
-      "2026-03-21",
-      "shipment",
-      "2026-03-26",
-      "999",
-    ],
-  ]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-
-  const blob = new Blob([sample], { type: "text/csv;charset=utf-8;" });
-  const url = window.URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "remittance_sample.csv";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  window.URL.revokeObjectURL(url);
-};
-
-export default function RemittanceUploadCard({ onUpload, loading, busy }) {
+export default function RemittanceUploadCard({
+  sources = [],
+  sourcesLoading,
+  importResult,
+  loading,
+  busy,
+  error,
+  onLoadSources,
+  onUpload,
+  onManual,
+  onClearResult,
+}) {
   const inputRef = useRef(null);
-  const [fileName, setFileName] = useState("");
-  const [info, setInfo] = useState("");
 
-  const handleFile = async (file) => {
-    if (!file) return;
+  const [source, setSource] =
+    useState("delhivery");
 
-    try {
-      setInfo("");
-      setFileName(file.name);
+  const [file, setFile] =
+    useState(null);
 
-      const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+  const [message, setMessage] =
+    useState("");
 
-      if (!isExcel) {
-        await onUpload(file);
-        setInfo("Uploaded successfully.");
-        if (inputRef.current) inputRef.current.value = "";
-        return;
-      }
+  useEffect(() => {
+    onLoadSources?.();
+  }, [onLoadSources]);
 
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const csv = XLSX.utils.sheet_to_csv(firstSheet);
-      const csvFile = csvToFile(csv, file.name);
+  /*
+   * Razorpay has a separate page.
+   */
+  const visibleSources = useMemo(
+    () =>
+      sources.filter(
+        (item) =>
+          item.value !== "razorpay"
+      ),
+    [sources]
+  );
 
-      await onUpload(csvFile);
-      setInfo("Excel converted and uploaded successfully.");
-      if (inputRef.current) inputRef.current.value = "";
-    } catch (error) {
-      setInfo(error?.message || "Upload failed");
+  const selectedSource =
+    visibleSources.find(
+      (item) =>
+        item.value === source
+    );
+
+  const accept = useMemo(() => {
+    const formats =
+      selectedSource?.acceptedFormats;
+
+    return Array.isArray(formats)
+      ? formats.join(",")
+      : "";
+  }, [selectedSource]);
+
+  const resetFile = () => {
+    setFile(null);
+
+    if (inputRef.current) {
+      inputRef.current.value = "";
     }
   };
 
+  const handleSourceChange = (
+    event
+  ) => {
+    const value =
+      event.target.value;
+
+    setSource(value);
+    setMessage("");
+    resetFile();
+    onClearResult?.();
+
+    if (value === "manual") {
+      onManual?.();
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (
+      source === "manual"
+    ) {
+      onManual?.();
+      return;
+    }
+
+    if (!file) {
+      setMessage(
+        "Please select a report file."
+      );
+      return;
+    }
+
+    try {
+      setMessage("");
+
+      await onUpload(
+        source,
+        file
+      );
+
+      setMessage(
+        "Report processed successfully."
+      );
+
+      resetFile();
+    } catch (uploadError) {
+      setMessage(
+        uploadError?.response?.data
+          ?.message ||
+        uploadError?.message ||
+        "Upload failed."
+      );
+    }
+  };
+
+  const stats =
+    importResult?.stats;
+
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-900">Upload Remittance</h2>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">
-            CSV direct upload supported. Excel file bhi chalegi — first sheet ko CSV
-            mein convert karke upload kar denge.
-          </p>
-        </div>
+      <div>
+        <h2 className="text-sm font-semibold text-zinc-900">
+          Add Remittance
+        </h2>
 
-        <button
-          type="button"
-          onClick={downloadSampleCsv}
-          className="shrink-0 rounded-xl border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
-        >
-          Sample CSV
-        </button>
-      </div>
-
-      <div className="mt-3 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-4">
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv,.xlsx,.xls"
-          onChange={(e) => handleFile(e.target.files?.[0])}
-          disabled={loading || busy}
-          className="block w-full text-sm text-zinc-700 file:mr-3 file:rounded-xl file:border-0 file:bg-black file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
-        />
-
-        {fileName ? (
-          <p className="mt-3 text-xs text-zinc-500">Selected: {fileName}</p>
-        ) : null}
-
-        {info ? <p className="mt-2 text-xs text-zinc-600">{info}</p> : null}
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
-        <p className="text-xs font-medium text-zinc-700">Expected columns</p>
         <p className="mt-1 text-xs leading-5 text-zinc-500">
-          eway bill id, shipping no, order number, delivered date, order type,
-          remittance date, remitted amount
+          Select manual entry or upload the original courier report.
         </p>
       </div>
+
+      <div className="mt-4">
+        <label className="mb-1.5 block text-xs font-medium text-zinc-700">
+          Remittance source
+        </label>
+
+        <select
+          value={source}
+          onChange={
+            handleSourceChange
+          }
+          disabled={
+            loading ||
+            busy ||
+            sourcesLoading
+          }
+          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-zinc-400 disabled:opacity-50"
+        >
+          {visibleSources.map(
+            (item) => (
+              <option
+                key={item.value}
+                value={item.value}
+                disabled={
+                  item.enabled ===
+                  false
+                }
+              >
+                {item.label}
+              </option>
+            )
+          )}
+        </select>
+      </div>
+
+      {source === "manual" ? (
+        <button
+          type="button"
+          onClick={onManual}
+          disabled={
+            loading || busy
+          }
+          className="mt-4 w-full rounded-xl bg-black px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+        >
+          Open Manual Entry
+        </button>
+      ) : (
+        <>
+          <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-4">
+            <input
+              ref={inputRef}
+              type="file"
+              accept={accept}
+              disabled={
+                loading || busy
+              }
+              onChange={(event) => {
+                setFile(
+                  event.target
+                    .files?.[0] ||
+                  null
+                );
+
+                setMessage("");
+                onClearResult?.();
+              }}
+              className="block w-full text-sm text-zinc-700 file:mr-3 file:rounded-xl file:border-0 file:bg-black file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
+            />
+
+            {file ? (
+              <p className="mt-3 break-all text-xs text-zinc-500">
+                Selected:{" "}
+                {file.name}
+              </p>
+            ) : null}
+
+            <p className="mt-2 text-xs text-zinc-500">
+              Accepted:{" "}
+              {accept || "Report file"}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={
+              loading ||
+              busy ||
+              !file
+            }
+            className="mt-3 w-full rounded-xl bg-black px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {loading
+              ? "Processing Report..."
+              : `Upload ${selectedSource?.label ||
+              "Report"
+              }`}
+          </button>
+        </>
+      )}
+
+      {message ? (
+        <p className="mt-3 text-xs text-zinc-600">
+          {message}
+        </p>
+      ) : null}
+
+      {error && !message ? (
+        <p className="mt-3 text-xs text-red-600">
+          {error}
+        </p>
+      ) : null}
+
+      {stats ? (
+        <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+          <p className="text-xs font-semibold text-zinc-900">
+            Import Result
+          </p>
+
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <ResultItem
+              label="Processed"
+              value={
+                stats.processedRows ||
+                0
+              }
+            />
+
+            <ResultItem
+              label="Remitted"
+              value={
+                stats.fullyRemitted ||
+                0
+              }
+            />
+
+            <ResultItem
+              label="Review"
+              value={
+                stats.needsReview ||
+                0
+              }
+            />
+
+            <ResultItem
+              label="Duplicates"
+              value={
+                stats.duplicates ||
+                0
+              }
+            />
+
+            <ResultItem
+              label="Unmapped"
+              value={
+                stats.unmapped || 0
+              }
+            />
+
+            <ResultItem
+              label="Failed"
+              value={
+                stats.failedRows ||
+                0
+              }
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ResultItem({
+  label,
+  value,
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white p-2.5">
+      <p className="text-zinc-500">
+        {label}
+      </p>
+
+      <p className="mt-1 font-semibold text-zinc-900">
+        {value}
+      </p>
     </div>
   );
 }

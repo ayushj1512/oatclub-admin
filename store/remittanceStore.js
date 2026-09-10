@@ -29,7 +29,48 @@ export const useRemittanceStore = create((set, get) => ({
     pendingCount: 0,
   },
   pendingRows: [],
+  importSources: [
+    {
+      value: "manual",
+      label: "Manual Entry",
+      enabled: true,
+      requiresFile: false,
+      acceptedFormats: [],
+    },
+    {
+      value: "razorpay",
+      label: "Razorpay",
+      enabled: false,
+      requiresFile: true,
+      acceptedFormats: [
+        ".csv",
+        ".xls",
+        ".xlsx",
+      ],
+      disabledReason:
+        "Order-wise Razorpay report is not configured",
+    },
+    {
+      value: "delhivery",
+      label: "Delhivery",
+      enabled: true,
+      requiresFile: true,
+      acceptedFormats: [".csv"],
+    },
+    {
+      value: "shiprocket",
+      label: "Shiprocket",
+      enabled: true,
+      requiresFile: true,
+      acceptedFormats: [
+        ".xls",
+        ".xlsx",
+      ],
+    },
+  ],
 
+  importResult: null,
+  razorpaySyncResult: null,
   // pagination
   pagination: {
     page: 1,
@@ -52,6 +93,12 @@ export const useRemittanceStore = create((set, get) => ({
   filters: {
     search: "",
     orderType: "",
+
+    source: "",
+    reconciliationStatus: "",
+    requiresReview: "",
+    isRemitted: "",
+
     from: "",
     to: "",
     remittanceFrom: "",
@@ -80,7 +127,9 @@ export const useRemittanceStore = create((set, get) => ({
   updateLoading: false,
   deleteLoading: false,
   importLoading: false,
+  sourcesLoading: false,
   exportLoading: false,
+  razorpaySyncLoading: false,
 
   // error
   error: "",
@@ -104,6 +153,12 @@ export const useRemittanceStore = create((set, get) => ({
       filters: {
         search: "",
         orderType: "",
+
+        source: "",
+        reconciliationStatus: "",
+        requiresReview: "",
+        isRemitted: "",
+
         from: "",
         to: "",
         remittanceFrom: "",
@@ -326,6 +381,203 @@ export const useRemittanceStore = create((set, get) => ({
   },
 
   // -----------------------------
+  // fetch import sources
+  // -----------------------------
+  fetchImportSources: async () => {
+    try {
+      set({
+        sourcesLoading: true,
+        actionError: "",
+      });
+
+      const { data } =
+        await axios.get(
+          `${API}/api/remittance/import/sources`
+        );
+
+      const sources =
+        Array.isArray(data?.data)
+          ? data.data
+          : [];
+
+      set({
+        sourcesLoading: false,
+
+        importSources:
+          sources.length
+            ? sources
+            : get().importSources,
+      });
+
+      return sources;
+    } catch (error) {
+      const message =
+        getErrorMessage(
+          error,
+          "Failed to fetch import sources"
+        );
+
+      /*
+       * Keep fallback options available
+       * even when source API fails.
+       */
+      set({
+        sourcesLoading: false,
+        actionError: message,
+      });
+
+      return get().importSources;
+    }
+  },
+
+  // -----------------------------
+  // unified provider import
+  // -----------------------------
+  importReport: async (
+    source,
+    file
+  ) => {
+    try {
+      const normalizedSource =
+        String(source || "")
+          .trim()
+          .toLowerCase();
+
+      if (!normalizedSource) {
+        throw new Error(
+          "Please select a report source"
+        );
+      }
+
+      if (
+        normalizedSource === "manual"
+      ) {
+        throw new Error(
+          "Use manual entry form for manual remittance"
+        );
+      }
+
+      if (!file) {
+        throw new Error(
+          "Please select a report file"
+        );
+      }
+
+      const sourceConfig =
+        get().importSources.find(
+          (item) =>
+            item.value ===
+            normalizedSource
+        );
+
+      if (
+        sourceConfig &&
+        sourceConfig.enabled === false
+      ) {
+        throw new Error(
+          sourceConfig.disabledReason ||
+          `${sourceConfig.label} import is disabled`
+        );
+      }
+
+      const extension =
+        `.${String(
+          file.name || ""
+        )
+          .split(".")
+          .pop()
+          .toLowerCase()}`;
+
+      const acceptedFormats =
+        sourceConfig?.acceptedFormats ||
+        [];
+
+      if (
+        acceptedFormats.length &&
+        !acceptedFormats.includes(
+          extension
+        )
+      ) {
+        throw new Error(
+          `Please upload ${acceptedFormats.join(
+            ", "
+          )} file for ${sourceConfig.label
+          }`
+        );
+      }
+
+      set({
+        importLoading: true,
+        actionError: "",
+        importResult: null,
+      });
+
+      const formData =
+        new FormData();
+
+      formData.append(
+        "source",
+        normalizedSource
+      );
+
+      formData.append(
+        "file",
+        file
+      );
+
+      /*
+       * Do not manually set multipart
+       * Content-Type. Axios will include
+       * the correct boundary.
+       */
+      const { data } =
+        await axios.post(
+          `${API}/api/remittance/import`,
+          formData
+        );
+
+      set({
+        importLoading: false,
+        importResult:
+          data?.data || null,
+      });
+
+      await Promise.allSettled([
+        get().fetchRemittances({
+          page: 1,
+        }),
+
+        get().fetchSummary(),
+
+        get().fetchPendingRemittances({
+          page: 1,
+        }),
+      ]);
+
+      return data;
+    } catch (error) {
+      const message =
+        getErrorMessage(
+          error,
+          "Failed to import remittance report"
+        );
+
+      set({
+        importLoading: false,
+        importResult: null,
+        actionError: message,
+      });
+
+      throw error;
+    }
+  },
+
+  clearImportResult: () =>
+    set({
+      importResult: null,
+    }),
+
+  // -----------------------------
   // import csv
   // -----------------------------
   importCsv: async (file) => {
@@ -362,6 +614,103 @@ export const useRemittanceStore = create((set, get) => ({
   // -----------------------------
   // export helpers
   // -----------------------------
+  // -----------------------------
+  // sync Razorpay remittance
+  // -----------------------------
+  syncRazorpayRemittance: async ({
+    year,
+    month,
+    day,
+    settlementId,
+  } = {}) => {
+    try {
+      const now = new Date();
+
+      const payload = {
+        year:
+          Number(year) ||
+          now.getFullYear(),
+
+        month:
+          Number(month) ||
+          now.getMonth() + 1,
+      };
+
+      if (day) {
+        payload.day =
+          Number(day);
+      }
+
+      if (
+        String(
+          settlementId || ""
+        ).trim()
+      ) {
+        payload.settlementId =
+          String(
+            settlementId
+          ).trim();
+      }
+
+      set({
+        razorpaySyncLoading: true,
+        razorpaySyncResult: null,
+        actionError: "",
+      });
+
+      const { data } =
+        await axios.post(
+          `${API}/api/razorpay/reports/remittance/sync`,
+          payload
+        );
+
+      set({
+        razorpaySyncLoading: false,
+
+        razorpaySyncResult:
+          data?.data || null,
+      });
+
+      /*
+       * Refresh COD/general remittance
+       * data after Razorpay sync.
+       */
+      await Promise.allSettled([
+        get().fetchRemittances({
+          page: 1,
+        }),
+
+        get().fetchSummary(),
+
+        get().fetchPendingRemittances({
+          page: 1,
+        }),
+      ]);
+
+      return data;
+    } catch (error) {
+      const message =
+        getErrorMessage(
+          error,
+          "Failed to sync Razorpay remittance"
+        );
+
+      set({
+        razorpaySyncLoading: false,
+        razorpaySyncResult: null,
+        actionError: message,
+      });
+
+      throw error;
+    }
+  },
+
+  clearRazorpaySyncResult: () =>
+    set({
+      razorpaySyncResult: null,
+    }),
+
+  
   exportCsv: async (customParams = {}) => {
     try {
       set({ exportLoading: true, actionError: "" });
