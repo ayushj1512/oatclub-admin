@@ -916,7 +916,7 @@ export default function OrdersListPage() {
   };
 
   const isSplitChildOrder = (order = {}) => {
-    // Exchange replacement is NOT a split child
+    // Exchange order independent rahega
     if (
       order?.isExchangeOrder === true ||
       norm(order?.paymentMethod) === "exchange" ||
@@ -925,11 +925,13 @@ export default function OrdersListPage() {
       return false;
     }
 
-    if (order?.parentOrderId) {
-      return true;
-    }
-
-    return Boolean(getParentOrderNumber(order));
+    // Only explicitly linked/marked orders are split children.
+    // Clone orders like 000479-C must remain normal visible rows.
+    return Boolean(
+      order?.parentOrderId ||
+      order?.splitSuffix ||
+      norm(order?.orderType) === "child"
+    );
   };
 
 

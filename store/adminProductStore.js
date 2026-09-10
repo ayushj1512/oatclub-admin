@@ -46,6 +46,11 @@ const normalizeInventoryProduct = (product = {}) => {
     Math.max(0, totalInventory - reservedInventory),
   );
 
+  const stockType =
+    product.stockType === "limited"
+      ? "limited"
+      : "unlimited";
+
   return {
     ...product,
 
@@ -75,9 +80,10 @@ const normalizeInventoryProduct = (product = {}) => {
     stock: totalInventory,
     reservedStock: reservedInventory,
     availableStock: availableInventory,
-
-    isInStock: availableInventory > 0,
-
+    stockType,
+    isInStock:
+      stockType === "unlimited" ||
+      availableInventory > 0,
     variants: Array.isArray(product.variants)
       ? product.variants
       : [],
@@ -254,6 +260,11 @@ const normalizeProductPayload = (payload) => {
   }
   if (out.isPrimaryProduct !== undefined) {
     out.isPrimaryProduct = toBool(out.isPrimaryProduct);
+  }
+  if (out.stockType !== undefined) {
+    out.stockType = toStr(
+      out.stockType,
+    ).toLowerCase();
   }
 
   // allow JSON strings
@@ -1218,6 +1229,131 @@ export const useAdminProductStore = create((set, get) => ({
       console.error(e);
       toast.error(e.message);
       throw e;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
+  /* ============================================================
+   UPDATE PRODUCT STOCK TYPE
+   PATCH /api/products/:id/stock-type
+============================================================ */
+  updateProductStockType: async (
+    productId,
+    stockType,
+  ) => {
+    try {
+      const normalizedType = String(
+        stockType || "",
+      )
+        .trim()
+        .toLowerCase();
+
+      if (
+        !["unlimited", "limited"].includes(
+          normalizedType,
+        )
+      ) {
+        throw new Error(
+          "Invalid stock type",
+        );
+      }
+
+      set({
+        saving: true,
+        error: null,
+      });
+
+      const response = await fetch(
+        `${API}/${productId}/stock-type`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            stockType: normalizedType,
+          }),
+        },
+      );
+
+      const data = await safeJson(response);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+          "Failed to update stock type",
+        );
+      }
+
+      const updatedProduct =
+        data?.product || null;
+
+      if (!updatedProduct) {
+        throw new Error(
+          "Updated product missing from response",
+        );
+      }
+
+      set((state) => ({
+        product:
+          String(state.product?._id) ===
+            String(productId)
+            ? updatedProduct
+            : state.product,
+
+        products: (
+          state.products || []
+        ).map((product) =>
+          String(product._id) ===
+            String(productId)
+            ? {
+              ...product,
+              ...updatedProduct,
+            }
+            : product,
+        ),
+
+        inventoryProducts: (
+          state.inventoryProducts || []
+        ).map((product) =>
+          String(product._id) ===
+            String(productId)
+            ? normalizeInventoryProduct({
+              ...product,
+              ...updatedProduct,
+            })
+            : product,
+        ),
+      }));
+
+      toast.success(
+        normalizedType === "limited"
+          ? "Product marked as limited stock"
+          : "Product marked as unlimited stock",
+      );
+
+      return updatedProduct;
+    } catch (error) {
+      console.error(
+        "❌ updateProductStockType:",
+        error,
+      );
+
+      set({
+        error:
+          error?.message ||
+          "Failed to update stock type",
+      });
+
+      toast.error(
+        error?.message ||
+        "Failed to update stock type",
+      );
+
+      throw error;
     } finally {
       set({ saving: false });
     }

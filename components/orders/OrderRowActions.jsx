@@ -30,12 +30,17 @@ import {
 import {
   canSplitOrder,
   canMarkAsTestingOrder,
+  canEnsureInventoryReservation,
   canSendPaymentRecoveryEmail,
   canSendPaymentRecoveryWhatsApp,
   canSendPrepaidConfirmation,
   canSendPrepaidConfirmationEmail,
   canSendPrepaidConfirmationWhatsApp,
 } from "@/services/order.service";
+
+import {
+  useInventoryReservationStore,
+} from "@/store/inventoryReservationStore";
 
 import { toast } from "react-hot-toast";
 import { useReactToPrint } from "react-to-print";
@@ -347,6 +352,10 @@ export default function OrderRowActions({
   const cloneOrder = useOrderStore(
     (state) => state.cloneOrder
   );
+  const ensureOrderReservation =
+    useInventoryReservationStore(
+      (state) => state.ensureOrderReservation,
+    );
 
   const splitOrderIntoShipments = useOrderStore(
     (state) => state.splitOrderIntoShipments,
@@ -416,6 +425,11 @@ export default function OrderRowActions({
   const [cloneLoading, setCloneLoading] =
     useState(false);
 
+  const [
+    reservationLoading,
+    setReservationLoading,
+  ] = useState(false);
+
   const prepaidConfirmationAvailable =
     canSendPrepaidConfirmation(order);
 
@@ -430,11 +444,7 @@ export default function OrderRowActions({
   const isChildOrder = Boolean(
     order?.parentOrderId ||
     order?.splitSuffix ||
-    (
-      String(order?.orderNumber || "").match(/-[A-Z]$/i) &&
-      order?.isExchangeOrder !== true &&
-      String(order?.paymentMethod || "").toLowerCase() !== "exchange"
-    )
+    safe(order?.orderType).toLowerCase() === "child"
   );
 
   const invoiceTitle =
@@ -462,6 +472,12 @@ export default function OrderRowActions({
   const testingAvailable = canMarkAsTestingOrder(order);
   const paymentRecoveryEmailAvailable =
     canSendPaymentRecoveryEmail(order);
+  const reservationAvailable =
+    canEnsureInventoryReservation({
+      ...order,
+      isConfirmed,
+      isTestingOrder,
+    });
 
   const paymentRecoveryWhatsAppAvailable =
     canSendPaymentRecoveryWhatsApp(order);
@@ -840,6 +856,110 @@ export default function OrderRowActions({
       );
     } finally {
       setConfirmLoading(false);
+    }
+  };
+
+  const handleEnsureOrderReservation = async () => {
+    if (
+      !orderNumber ||
+      reservationLoading ||
+      !reservationAvailable
+    ) {
+      return;
+    }
+
+    setOpen(false);
+    setReservationLoading(true);
+
+    try {
+      const result =
+        await ensureOrderReservation(
+          orderNumber,
+          { debug: true },
+        );
+
+      const summary = result?.summary || {};
+
+      const reservedCount = Number(
+        summary?.finalReservedCount ??
+        summary?.reservedCount ??
+        0,
+      );
+
+      const pendingCount = Number(
+        summary?.finalPendingCount ??
+        summary?.pendingCount ??
+        0,
+      );
+
+      const createdCount = Number(
+        summary?.createdCount || 0,
+      );
+
+      if (
+        summary?.stoppedBecause ===
+        "not_confirmed"
+      ) {
+        toast.error(
+          "Confirm the order before reserving inventory.",
+        );
+        return;
+      }
+
+      if (
+        summary?.stoppedBecause ===
+        "status_not_allowed"
+      ) {
+        toast.error(
+          "Inventory cannot be reserved at the current order status.",
+        );
+        return;
+      }
+
+      if (
+        summary?.stoppedBecause ===
+        "split_parent"
+      ) {
+        toast.error(
+          "Split parent orders cannot hold inventory reservations.",
+        );
+        return;
+      }
+
+      if (pendingCount > 0) {
+        toast(
+          `${pendingCount} reservation${pendingCount === 1 ? "" : "s"
+          } pending due to insufficient inventory.`,
+          {
+            icon: "⚠️",
+          },
+        );
+      } else if (createdCount > 0) {
+        toast.success(
+          `Inventory reservation created successfully${reservedCount > 0
+            ? ` (${reservedCount} reserved)`
+            : ""
+          }.`,
+        );
+      } else {
+        toast.success(
+          "Inventory reservation already exists and is valid.",
+        );
+      }
+
+      await onRefresh?.();
+    } catch (error) {
+      console.error(
+        "Ensure inventory reservation error:",
+        error,
+      );
+
+      toast.error(
+        error?.message ||
+        "Failed to check inventory reservation",
+      );
+    } finally {
+      setReservationLoading(false);
     }
   };
 
@@ -1547,6 +1667,7 @@ export default function OrderRowActions({
     Boolean(pendingInvoiceAction) ||
     confirmLoading ||
     cloneLoading ||
+    reservationLoading ||
     splitLoading ||
     influencerLoading ||
     testingLoading ||
@@ -1584,7 +1705,7 @@ export default function OrderRowActions({
         {open && typeof document !== "undefined" && createPortal(
           <div
             ref={menuPanelRef}
-            className="fixed z-[9999] w-64 max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-2xl"
+            className="fixed z-[9999] w-[min(560px,calc(100vw-16px))] max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-2 shadow-2xl"
             style={{
               top: menuPosition.top,
               left: menuPosition.left,
@@ -1639,6 +1760,60 @@ export default function OrderRowActions({
                 </span>
               )}
             </button>
+
+            {/* Check / Repair Inventory Reservation */}
+
+            <button
+              type="button"
+              onClick={handleEnsureOrderReservation}
+              disabled={
+                isBusy ||
+                !orderNumber ||
+                !reservationAvailable
+              }
+              title={
+                reservationAvailable
+                  ? "Check and repair inventory reservation"
+                  : "Only confirmed processing or packed orders are eligible"
+              }
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex items-center gap-3">
+                {reservationLoading ? (
+                  <Loader2
+                    size={15}
+                    className="animate-spin text-emerald-600"
+                  />
+                ) : (
+                  <PackageOpen
+                    size={15}
+                    className="text-emerald-600"
+                  />
+                )}
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    {reservationLoading
+                      ? "Checking Reservation..."
+                      : "Check Inventory Reservation"}
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {reservationAvailable
+                      ? "Create missing or reserve pending inventory"
+                      : "Available for confirmed active orders"}
+                  </div>
+                </div>
+              </div>
+
+              {reservationAvailable && (
+                <span className="rounded-full bg-emerald-100 px-2 py-1 text-[9px] font-bold text-emerald-700">
+                  REPAIR
+                </span>
+              )}
+            </button>
+
+
 
             {/* Clone Order */}
 

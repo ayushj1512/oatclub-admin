@@ -76,6 +76,14 @@ export const useInventoryReservationStore = create((set, get) => ({
   repairSummary: null,
 
   filters: { ...DEFAULT_FILTERS },
+  loading: false,
+  actionLoading: false,
+
+  ensureOrderLoading: false,
+  ensuringOrderNumber: "",
+  lastEnsureSummary: null,
+
+  error: null,
 
   clearError: () => set({ error: null }),
 
@@ -478,6 +486,103 @@ export const useInventoryReservationStore = create((set, get) => ({
       });
 
       throw e;
+    }
+  },
+
+  /* ---------------- ensure order reservation ---------------- */
+  ensureOrderReservation: async (
+    orderNumber,
+    { debug = true } = {},
+  ) => {
+    const cleanOrderNumber = String(
+      orderNumber || "",
+    ).trim();
+
+    if (!cleanOrderNumber) {
+      throw new Error("Order number required");
+    }
+
+    if (get().ensureOrderLoading) {
+      throw new Error(
+        `Reservation check already running for ${get().ensuringOrderNumber || "another order"
+        }`,
+      );
+    }
+
+    set({
+      ensureOrderLoading: true,
+      ensuringOrderNumber: cleanOrderNumber,
+      lastEnsureSummary: null,
+      error: null,
+    });
+
+    invLog("ensureOrderReservation ->", {
+      orderNumber: cleanOrderNumber,
+    });
+
+    try {
+      const { data } = await api.post(
+        `/api/inventory-reservations/ensure-order/${encodeURIComponent(
+          cleanOrderNumber,
+        )}${debug ? "?debug=1" : ""}`,
+      );
+
+      const summary = data?.summary || null;
+
+      set({
+        ensureOrderLoading: false,
+        ensuringOrderNumber: "",
+        lastEnsureSummary: summary,
+      });
+
+      invLog("ensureOrderReservation <-", {
+        orderNumber: cleanOrderNumber,
+
+        createdCount:
+          summary?.createdCount || 0,
+
+        reservedCount:
+          summary?.finalReservedCount ??
+          summary?.reservedCount ??
+          0,
+
+        pendingCount:
+          summary?.finalPendingCount ??
+          summary?.pendingCount ??
+          0,
+
+        stoppedBecause:
+          summary?.stoppedBecause || "",
+      });
+
+      return {
+        ok: data?.ok === true,
+        message:
+          data?.message ||
+          "Inventory reservation checked successfully",
+        summary,
+      };
+    } catch (error) {
+      const message = msg(
+        error,
+        "Failed to check inventory reservation",
+      );
+
+      set({
+        ensureOrderLoading: false,
+        ensuringOrderNumber: "",
+        error: message,
+      });
+
+      invLog(
+        "ensureOrderReservation ERROR",
+        {
+          orderNumber: cleanOrderNumber,
+          message,
+        },
+      );
+
+      throw new Error(message);
     }
   },
 

@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { Pencil, Trash2, Save, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-
+import ProductStockTypeManager from "@/components/product/ProductStockTypeManager";
 import CategoryMultiSelect from "@/components/product/CategoryMultiSelect";
 import AttributeSelector from "@/components/product/AttributeSelector";
 import ProductContentEditor from "@/components/product/ProductContentEditor";
@@ -411,10 +411,18 @@ productSpotlight: [],
 
         {/* ✅ NEW: Original product link */}
         <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">
+
           <OriginalProductLinkField
             value={editing ? form.originalProductLink : s(product?.originalProductLink)}
             onChange={(next) => setForm((p) => ({ ...p, originalProductLink: next }))}
           />
+          <ProductStockTypeManager
+            product={product}
+            onUpdated={(updatedProduct) => {
+              setProduct(updatedProduct);
+            }}
+          />
+          
           {!editing && !s(product?.originalProductLink) ? (
             <p className="text-sm text-gray-500">No original link set.</p>
           ) : null}

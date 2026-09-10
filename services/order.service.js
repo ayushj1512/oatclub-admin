@@ -82,6 +82,74 @@ export const canSplitOrder = (order = {}) => {
 export const canCloneOrder = () => true;
 
 /* ============================================================
+   ENSURE INVENTORY RESERVATION
+
+   Button can be shown when:
+   - Order is confirmed
+   - Order is processing or packed
+   - Order is not a split parent
+   - Order is not cancelled/testing
+============================================================ */
+export const canEnsureInventoryReservation = (
+  order = {},
+) => {
+  const orderType = safeString(
+    order?.orderType || "shipment",
+  ).toLowerCase();
+
+  const fulfillmentStatus = safeString(
+    order?.fulfillmentStatus || "processing",
+  ).toLowerCase();
+
+  const isConfirmed =
+    order?.isConfirmed === true ||
+    Boolean(order?.confirmedAt);
+
+  const isCancelled =
+    order?.cancellation?.isCancelled === true ||
+    ["cancelled", "canceled"].includes(
+      fulfillmentStatus,
+    );
+
+  const blockedStatuses = [
+    "picked",
+    "shipped",
+    "out_for_delivery",
+    "delivered",
+    "cancelled",
+    "canceled",
+    "rto",
+    "returned",
+    "refunded",
+    "failed",
+  ];
+
+  if (!order?._id) return false;
+  if (!safeString(order?.orderNumber)) return false;
+
+  if (!isConfirmed) return false;
+  if (isCancelled) return false;
+
+  // Logical split parent must not hold inventory.
+  if (orderType === "parent") return false;
+
+  // Testing orders must not reserve inventory.
+  if (order?.isTestingOrder === true) return false;
+
+  if (
+    blockedStatuses.includes(
+      fulfillmentStatus,
+    )
+  ) {
+    return false;
+  }
+
+  return ["processing", "packed"].includes(
+    fulfillmentStatus,
+  );
+};
+
+/* ============================================================
    TESTING ORDER
 ============================================================ */
 
