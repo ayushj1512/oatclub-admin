@@ -1381,19 +1381,41 @@ export const useOrderStore = create((set, get) => ({
    RTO RECEIVED
 ============================================================ */
 
-  updateRtoReceivedStatus: async (orderId, isRtoReceived = true) => {
+  updateRtoReceivedStatus: async (
+    orderId,
+    isRtoReceived = true,
+    condition = null,
+  ) => {
     if (!orderId) {
       throw new Error("Order ID is required");
     }
 
     if (typeof isRtoReceived !== "boolean") {
-      throw new Error("isRtoReceived must be a boolean");
+      throw new Error(
+        "isRtoReceived must be a boolean",
+      );
+    }
+
+    const allowedConditions = [
+      "clean",
+      "damaged",
+      "wrong_product",
+    ];
+
+    if (
+      isRtoReceived &&
+      !allowedConditions.includes(condition)
+    ) {
+      throw new Error(
+        "Select clean, damaged or wrong product",
+      );
     }
 
     const data = await get()._patch(
       `/api/orders/${encodeURIComponent(orderId)}/rto-received`,
       {
         isRtoReceived,
+        ...(isRtoReceived && { condition }),
       },
     );
 

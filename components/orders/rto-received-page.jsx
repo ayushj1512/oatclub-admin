@@ -63,6 +63,10 @@ export default function RtoReceivedPage({
 
   const [fetching, setFetching] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkCondition, setBulkCondition] = useState("clean");
+  const [rowConditions, setRowConditions] = useState({});
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   /* ============================================================
      SEARCH DEBOUNCE
@@ -122,6 +126,10 @@ export default function RtoReceivedPage({
     fetchOrders();
   }, [fetchOrders]);
 
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [filter, page, search]);
+
   /* ============================================================
      FILTER
   ============================================================ */
@@ -143,12 +151,17 @@ export default function RtoReceivedPage({
     const nextValue =
       order?.isRtoReceived !== true;
 
+    const condition = nextValue
+      ? rowConditions[order._id] || "clean"
+      : null;
+
     try {
       setUpdatingId(order._id);
 
       await updateRtoReceivedStatus(
         order._id,
         nextValue,
+        condition,
       );
 
       await fetchOrders();
@@ -164,6 +177,69 @@ export default function RtoReceivedPage({
       );
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const pendingOrders = (orders || []).filter(
+    (order) => order?.isRtoReceived !== true,
+  );
+
+  const allPendingSelected =
+    pendingOrders.length > 0 &&
+    pendingOrders.every((order) =>
+      selectedIds.includes(order._id),
+    );
+
+  const toggleOrderSelection = (orderId) => {
+    setSelectedIds((current) =>
+      current.includes(orderId)
+        ? current.filter((id) => id !== orderId)
+        : [...current, orderId],
+    );
+  };
+
+  const toggleAllPending = () => {
+    const visibleIds = pendingOrders.map(
+      (order) => order._id,
+    );
+
+    setSelectedIds((current) =>
+      allPendingSelected
+        ? current.filter(
+          (id) => !visibleIds.includes(id),
+        )
+        : [...new Set([...current, ...visibleIds])],
+    );
+  };
+
+  const handleBulkMarkReceived = async () => {
+    if (!selectedIds.length || bulkUpdating) return;
+
+    try {
+      setBulkUpdating(true);
+
+      const result = await updateRtoReceivedStatus(
+        selectedIds,
+        true,
+        bulkCondition,
+      );
+
+      if (result?.failedCount > 0) {
+        alert(
+          `${result.successCount || 0} updated, ${result.failedCount} failed`,
+        );
+      }
+
+      setSelectedIds([]);
+      await fetchOrders();
+    } catch (error) {
+      console.error("Bulk RTO update failed:", error);
+      alert(
+        error?.message ||
+        "Failed to update selected RTO orders",
+      );
+    } finally {
+      setBulkUpdating(false);
     }
   };
 
@@ -237,8 +313,8 @@ export default function RtoReceivedPage({
                   handleFilterChange("all")
                 }
                 className={`h-7 rounded-md px-3 text-[11px] font-semibold transition ${filter === "all"
-                    ? "bg-slate-900 text-white"
-                    : "bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                   }`}
               >
                 All
@@ -250,8 +326,8 @@ export default function RtoReceivedPage({
                   handleFilterChange("pending")
                 }
                 className={`h-7 rounded-md px-3 text-[11px] font-semibold transition ${filter === "pending"
-                    ? "bg-orange-500 text-white"
-                    : "bg-white text-slate-500 hover:bg-orange-50 hover:text-orange-700"
+                  ? "bg-orange-500 text-white"
+                  : "bg-white text-slate-500 hover:bg-orange-50 hover:text-orange-700"
                   }`}
               >
                 Pending
@@ -263,8 +339,8 @@ export default function RtoReceivedPage({
                   handleFilterChange("received")
                 }
                 className={`h-7 rounded-md px-3 text-[11px] font-semibold transition ${filter === "received"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-white text-slate-500 hover:bg-emerald-50 hover:text-emerald-700"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-white text-slate-500 hover:bg-emerald-50 hover:text-emerald-700"
                   }`}
               >
                 Received
@@ -296,6 +372,43 @@ export default function RtoReceivedPage({
           </div>
         </div>
 
+        {selectedIds.length > 0 && (
+          <div className="mb-3 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[11px] font-semibold text-slate-700">
+              {selectedIds.length} order(s) selected
+            </p>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <select
+                value={bulkCondition}
+                disabled={bulkUpdating}
+                onChange={(event) =>
+                  setBulkCondition(event.target.value)
+                }
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400"
+              >
+                <option value="clean">Clean — restore inventory</option>
+                <option value="damaged">Damaged — no inventory</option>
+                <option value="wrong_product">Wrong product — no inventory</option>
+              </select>
+
+              <button
+                type="button"
+                disabled={bulkUpdating}
+                onClick={handleBulkMarkReceived}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-4 text-[11px] font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkUpdating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PackageCheck className="h-3.5 w-3.5" />
+                )}
+                Mark Selected Received
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ======================================================
             TABLE
         ====================================================== */}
@@ -303,9 +416,10 @@ export default function RtoReceivedPage({
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
 
-            <table className="w-full min-w-[1120px] table-fixed border-collapse">
+            <table className="w-full min-w-[1300px] table-fixed border-collapse">
 
               <colgroup>
+                <col style={{ width: "44px" }} />
                 <col style={{ width: "115px" }} />
                 <col style={{ width: "205px" }} />
                 <col style={{ width: "60px" }} />
@@ -313,7 +427,8 @@ export default function RtoReceivedPage({
                 <col style={{ width: "130px" }} />
                 <col style={{ width: "145px" }} />
                 <col style={{ width: "180px" }} />
-                <col style={{ width: "190px" }} />
+                <col style={{ width: "165px" }} />
+                <col style={{ width: "155px" }} />
               </colgroup>
 
               {/* ==================================================
@@ -322,6 +437,17 @@ export default function RtoReceivedPage({
 
               <thead>
                 <tr className="h-10 border-b border-slate-200 bg-slate-50">
+                  <th className="px-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={allPendingSelected}
+                      disabled={!pendingOrders.length}
+                      onChange={toggleAllPending}
+                      aria-label="Select all pending orders"
+                      className="h-3.5 w-3.5 accent-slate-900"
+                    />
+                  </th>
+
                   <th className="px-3 text-left text-[9px] font-bold uppercase tracking-wide text-slate-500">
                     Order
                   </th>
@@ -348,6 +474,10 @@ export default function RtoReceivedPage({
 
                   <th className="px-3 text-left text-[9px] font-bold uppercase tracking-wide text-slate-500">
                     Received At
+                  </th>
+
+                  <th className="px-3 text-left text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                    Condition
                   </th>
 
                   <th className="px-3 text-right text-[9px] font-bold uppercase tracking-wide text-slate-500">
@@ -410,10 +540,25 @@ export default function RtoReceivedPage({
                     <tr
                       key={order?._id}
                       className={`h-[50px] border-b border-slate-100 transition last:border-b-0 ${received
-                          ? "bg-emerald-50/40 hover:bg-emerald-50/70"
-                          : "bg-white hover:bg-slate-50"
+                        ? "bg-emerald-50/40 hover:bg-emerald-50/70"
+                        : "bg-white hover:bg-slate-50"
                         }`}
                     >
+
+                      {/* SELECT */}
+
+                      <td className="px-3 py-1.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(order._id)}
+                          disabled={received || bulkUpdating}
+                          onChange={() =>
+                            toggleOrderSelection(order._id)
+                          }
+                          aria-label={`Select order ${order?.orderNumber || ""}`}
+                          className="h-3.5 w-3.5 accent-slate-900 disabled:opacity-30"
+                        />
+                      </td>
 
                       {/* ORDER */}
 
@@ -496,6 +641,39 @@ export default function RtoReceivedPage({
                         )}
                       </td>
 
+                      {/* CONDITION */}
+
+                      <td className="px-3 py-1.5">
+                        {received ? (
+                          <span className={`inline-flex rounded-md px-2 py-1 text-[9px] font-bold ${order?.rtoReceivedCondition === "clean"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : order?.rtoReceivedCondition === "damaged"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-amber-100 text-amber-700"
+                            }`}>
+                            {cleanStatus(
+                              order?.rtoReceivedCondition || "Not recorded",
+                            )}
+                          </span>
+                        ) : (
+                          <select
+                            value={rowConditions[order._id] || "clean"}
+                            disabled={updating || bulkUpdating}
+                            onChange={(event) =>
+                              setRowConditions((current) => ({
+                                ...current,
+                                [order._id]: event.target.value,
+                              }))
+                            }
+                            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-[9px] font-semibold text-slate-700 outline-none focus:border-slate-400"
+                          >
+                            <option value="clean">Clean</option>
+                            <option value="damaged">Damaged</option>
+                            <option value="wrong_product">Wrong product</option>
+                          </select>
+                        )}
+                      </td>
+
                       {/* ==================================================
                           ACTION
                       ================================================== */}
@@ -505,14 +683,14 @@ export default function RtoReceivedPage({
 
                           <button
                             type="button"
-                            disabled={updating}
+                            disabled={updating || bulkUpdating}
                             onClick={() =>
                               handleToggle(order)
                             }
                             className={`inline-flex h-8 min-w-[136px] items-center justify-center gap-1.5 rounded-lg border px-3 text-[10px] font-bold shadow-sm transition ${received
-                                ? "border-emerald-200 bg-emerald-100 text-emerald-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                                : "border-orange-500 bg-orange-500 text-white hover:border-orange-600 hover:bg-orange-600"
-                              } ${updating
+                              ? "border-emerald-200 bg-emerald-100 text-emerald-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                              : "border-orange-500 bg-orange-500 text-white hover:border-orange-600 hover:bg-orange-600"
+                              } ${updating || bulkUpdating
                                 ? "cursor-not-allowed opacity-60"
                                 : "cursor-pointer"
                               }`}
