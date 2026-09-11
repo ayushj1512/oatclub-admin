@@ -6,9 +6,11 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   Loader2,
   PackageCheck,
   Search,
+  X,
 } from "lucide-react";
 
 import { useOrderStore } from "@/store/orderStore";
@@ -67,7 +69,8 @@ export default function RtoReceivedPage({
   const [bulkCondition, setBulkCondition] = useState("clean");
   const [rowConditions, setRowConditions] = useState({});
   const [bulkUpdating, setBulkUpdating] = useState(false);
-
+  const [showGuide, setShowGuide] =
+    useState(false);
   /* ============================================================
      SEARCH DEBOUNCE
   ============================================================ */
@@ -285,16 +288,26 @@ export default function RtoReceivedPage({
               Returns Operations
             </p>
 
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               <h1 className="text-lg font-bold text-slate-950">
                 {title}
               </h1>
 
-              <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 shadow-sm">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
                 {totalCount} orders
               </span>
-            </div>
 
+              <button
+                type="button"
+                onClick={() =>
+                  setShowGuide((current) => !current)
+                }
+                className="inline-flex h-7 items-center gap-1.5 rounded-full bg-blue-50 px-2.5 text-[10px] font-semibold text-blue-600 transition hover:bg-blue-100"
+              >
+                <CircleHelp className="h-3.5 w-3.5" />
+                How to use
+              </button>
+            </div>
             <p className="mt-1 text-[11px] text-slate-500">
               Mark any order as physically received at warehouse.
             </p>
@@ -371,6 +384,63 @@ export default function RtoReceivedPage({
             </div>
           </div>
         </div>
+
+        {showGuide && (
+          <div className="relative mb-4 overflow-hidden rounded-xl bg-blue-50/80 p-4">
+            <button
+              type="button"
+              onClick={() => setShowGuide(false)}
+              className="absolute right-3 top-3 rounded-full p-1.5 text-blue-400 transition hover:bg-blue-100 hover:text-blue-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="pr-8">
+              <p className="text-sm font-bold text-slate-900">
+                How to receive RTO orders
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Check the physical parcel before
+                selecting its condition.
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <GuideStep
+                number="1"
+                title="Select orders"
+                text="Tick one order or use the top checkbox to select all visible pending orders."
+              />
+
+              <GuideStep
+                number="2"
+                title="Choose condition"
+                text="Select Clean, Damaged or Wrong product after checking the parcel."
+              />
+
+              <GuideStep
+                number="3"
+                title="Mark received"
+                text="Use the row button for one order or the bulk button for selected orders."
+              />
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-[10px] font-bold text-emerald-700">
+                Clean → Inventory restored
+              </span>
+
+              <span className="rounded-full bg-red-100 px-3 py-1.5 text-[10px] font-bold text-red-600">
+                Damaged → No inventory
+              </span>
+
+              <span className="rounded-full bg-amber-100 px-3 py-1.5 text-[10px] font-bold text-amber-700">
+                Wrong product → No inventory
+              </span>
+            </div>
+          </div>
+        )}
 
         {selectedIds.length > 0 && (
           <div className="mb-3 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -828,6 +898,31 @@ export default function RtoReceivedPage({
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+function GuideStep({
+  number,
+  title,
+  text,
+}) {
+  return (
+    <div className="flex gap-3 rounded-xl bg-white/80 p-3">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+        {number}
+      </span>
+
+      <div>
+        <p className="text-xs font-bold text-slate-900">
+          {title}
+        </p>
+
+        <p className="mt-1 text-[10px] leading-4 text-slate-500">
+          {text}
+        </p>
       </div>
     </div>
   );
