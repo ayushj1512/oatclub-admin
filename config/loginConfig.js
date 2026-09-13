@@ -6,39 +6,32 @@ export const DOMAIN_PERMISSIONS = {
   production: "manageProduction",
   vendors: "manageVendors",
   dispatching: "manageDispatching",
-
   accounts: "manageAccounts",
   products: "manageProducts",
   barcode: "manageBarcode",
   orders: "manageOrders",
-
   refunds: "manageRefunds",
   otp: "manageOTP",
   fast2sms: "manageFast2SMS",
   shiprocket: "manageOrders",
-  delhivery: "manageOrders", // ✅ Added
-
+  delhivery: "manageOrders",
+  ndr: "manageOrders",
   reviews: "manageReviews",
   rma: "manageRMA",
   media: "manageMedia",
   email: "manageEmail",
   reels: "manageReels",
   blogs: "manageBlogs",
-
   inventory: "manageInventory",
   fabrics: "manageFabrics",
-
   marketing: "manageMarketing",
   customers: "manageCustomers",
   support: "manageSupport",
-
   reports: "viewReports",
   tickets: "manageTickets",
   coupons: "manageCoupons",
-
   collaboration: "manageInfluencerProgram",
   affiliate: "manageAffiliate",
-
   warehouse: "manageProduction",
 };
 
@@ -47,12 +40,9 @@ export const ALL_PERMISSIONS = [
 ];
 
 export const ROLE_DEFAULT_PERMS = {
-  // Full access
   superadmin: ["*"],
+  admin: ALL_PERMISSIONS,
 
-  admin: [...ALL_PERMISSIONS],
-
-  // Customer care
   customer_care: [
     "manageSupport",
     "manageOrders",
@@ -62,7 +52,6 @@ export const ROLE_DEFAULT_PERMS = {
     "manageOTP",
   ],
 
-  // Operations staff
   staff: [
     "manageOrders",
     "manageInventory",
@@ -71,10 +60,8 @@ export const ROLE_DEFAULT_PERMS = {
     "manageBarcode",
   ],
 
-  // Read only
   viewer: ["viewReports"],
 
-  // Influencer team
   influencer: [
     "manageMedia",
     "manageReels",
@@ -82,10 +69,11 @@ export const ROLE_DEFAULT_PERMS = {
     "manageAffiliate",
   ],
 
-  // Affiliate team
-  affiliate: ["manageAffiliate", "viewReports"],
+  affiliate: [
+    "manageAffiliate",
+    "viewReports",
+  ],
 
-  // Warehouse
   warehouse: [
     "manageProduction",
     "manageOrders",
@@ -93,9 +81,12 @@ export const ROLE_DEFAULT_PERMS = {
   ],
 };
 
-export const hasPermission = (permissions = [], permission) => {
-  if (!permission) return false;
-  if (permissions.includes("*")) return true;
-
-  return permissions.includes(permission);
-};
+export const hasPermission = (
+  permissions = [],
+  permission,
+) =>
+  Boolean(
+    permission &&
+    (permissions.includes("*") ||
+      permissions.includes(permission)),
+  );

@@ -59,6 +59,11 @@ export const useDelhiveryStore = create(
 
     reverseShipment: null,
     reverseSync: null,
+    ndr: null,
+    ndrStatus: null,
+
+    ndrOrders: [],
+    ndrSummary: null,
 
     clearError: () =>
       set({ error: null }),
@@ -76,6 +81,10 @@ export const useDelhiveryStore = create(
         pickup: null,
         reverseShipment: null,
         reverseSync: null,
+        ndr: null,
+        ndrStatus: null,
+        ndrOrders: [],
+        ndrSummary: null,
       }),
 
     checkServiceability: async (
@@ -425,7 +434,168 @@ export const useDelhiveryStore = create(
         set({ loading: false });
       }
     },
+
+    updateNdr: async (
+      waybill,
+      payload = {},
+    ) => {
+      set({
+        loading: true,
+        error: null,
+        ndr: null,
+      });
+
+      try {
+        const awb = String(
+          waybill || "",
+        ).trim();
+
+        const action = String(
+          payload.action || "",
+        )
+          .trim()
+          .toUpperCase();
+
+        if (!awb) {
+          throw new Error(
+            "Waybill is required",
+          );
+        }
+
+        if (
+          ![
+            "RE-ATTEMPT",
+            "PICKUP_RESCHEDULE",
+          ].includes(action)
+        ) {
+          throw new Error(
+            "Use RE-ATTEMPT or PICKUP_RESCHEDULE",
+          );
+        }
+
+        const data = await request(
+          `/ndr/${encodeURIComponent(
+            awb,
+          )}/action`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              action,
+            }),
+          },
+        );
+
+        set({ ndr: data });
+        return data;
+      } catch (error) {
+        set({
+          error:
+            error?.message ||
+            "NDR action failed",
+        });
+
+        throw error;
+      } finally {
+        set({ loading: false });
+      }
+    },
+
+    getNdrStatus: async (
+      requestId,
+    ) => {
+      set({
+        loading: true,
+        error: null,
+      });
+
+      try {
+        const id = String(
+          requestId || "",
+        ).trim();
+
+        if (!id) {
+          throw new Error(
+            "NDR request ID is required",
+          );
+        }
+
+        const data = await request(
+          `/ndr/status/${encodeURIComponent(
+            id,
+          )}`,
+        );
+
+        set({
+          ndrStatus: data,
+        });
+
+        return data;
+      } catch (error) {
+        set({
+          error:
+            error?.message ||
+            "NDR status check failed",
+        });
+
+        throw error;
+      } finally {
+        set({
+          loading: false,
+        });
+      }
+    },
+
+    syncNdrOrders: async () => {
+      set({
+        loading: true,
+        error: null,
+      });
+
+      try {
+        const data = await request(
+          "/ndr/orders/sync",
+        );
+
+        const ndrOrders = Array.isArray(
+          data?.ndrOrders,
+        )
+          ? data.ndrOrders
+          : [];
+
+        set({
+          ndrOrders,
+          ndrSummary: {
+            totalOrders:
+              Number(data?.totalOrders) || 0,
+
+            totalNdrOrders:
+              Number(data?.totalNdrOrders) ||
+              ndrOrders.length,
+
+            syncErrors: Array.isArray(
+              data?.syncErrors,
+            )
+              ? data.syncErrors
+              : [],
+          },
+        });
+
+        return data;
+      } catch (error) {
+        set({
+          error:
+            error?.message ||
+            "NDR orders sync failed",
+        });
+
+        throw error;
+      } finally {
+        set({ loading: false });
+      }
+    },
   }),
 );
+
+
 
 export default useDelhiveryStore;

@@ -31,6 +31,7 @@ import {
   Factory,
   KeyRound,
   Truck,
+  TriangleAlert,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -90,6 +91,12 @@ const DOMAIN_LIST = [
     name: "Delhivery",
     icon: Truck,
     route: "/delhivery",
+  },
+  {
+    id: "ndr",
+    name: "NDR Management",
+    icon: TriangleAlert,
+    route: "/ndr",
   },
   {
     id: "barcode",
@@ -235,6 +242,7 @@ const CARD_HINTS = {
   affiliate: "Manage affiliates, referrals, commissions and payouts",
   dispatching: "Pack, verify and dispatch ready orders",
   delhivery: "Create shipments, check pincodes, labels and tracking",
+  ndr: "Resolve failed deliveries, reattempts and address updates",
 
 };
 
@@ -245,7 +253,7 @@ const FOCUS_QUOTES = [
   "The best admin day is quiet, focused, and already moving.",
 ];
 
-const ALWAYS_VISIBLE_MODULES = ["barcode", "vendors", "otp"];
+const ALWAYS_VISIBLE_MODULES = ["barcode", "vendors", "otp", "ndr"];
 
 const isFeaturedCard = (id) => id === "design_lab";
 
