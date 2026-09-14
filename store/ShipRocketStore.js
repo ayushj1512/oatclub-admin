@@ -352,30 +352,51 @@ export const useShiprocketStore = create((set, get) => ({
      REVERSE PICKUP (RMA)
      POST /api/shiprocket/reverse/:orderId/:rmaNumber
   ============================================================ */
-  createReversePickup: async (orderId, rmaNumber) => {
-    if (!orderId) throw new Error("orderId is required");
-    if (!rmaNumber) throw new Error("rmaNumber is required");
+
+  createReversePickup: async (
+    orderId,
+    rmaNumber,
+  ) => {
+    if (!orderId) {
+      throw new Error("orderId is required");
+    }
+
+    if (!rmaNumber) {
+      throw new Error("rmaNumber is required");
+    }
 
     get()._start();
+
     try {
-      const res = await fetch(
-        buildUrl(`/api/shiprocket/reverse/${orderId}/${rmaNumber}`),
-        {
-          method: "POST",
-          headers: { Accept: "application/json" },
-          credentials: "include",
-        }
-      );
+      const url =
+        `/api/shiprocket/return/${encodeURIComponent(
+          orderId,
+        )}/${encodeURIComponent(rmaNumber)}`;
+
+      const res = await fetch(buildUrl(url), {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+        },
+        credentials: "include",
+      });
 
       const data = await safeJson(res);
-      if (!res.ok) throw normalizeError(res, data);
 
-      set({ reverseResult: data });
+      if (!res.ok) {
+        throw normalizeError(res, data);
+      }
+
+      set({
+        reverseResult: data,
+      });
+
       get()._success();
+
       return data;
-    } catch (e) {
-      get()._error(e);
-      throw e;
+    } catch (error) {
+      get()._error(error);
+      throw error;
     }
   },
 
