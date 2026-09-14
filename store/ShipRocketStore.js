@@ -87,6 +87,7 @@ export const useShiprocketStore = create((set, get) => ({
   ndrLoading: false,
   ndrError: null,
   ndrList: [],
+  ndrSummary: null,
   ndrDetail: null,
   ndrResult: null,
 
@@ -424,62 +425,104 @@ export const useShiprocketStore = create((set, get) => ({
   /* ============================================================
      SHIPROCKET NDR
   ============================================================ */
-  fetchNdrList: async (params = {}) => {
+  syncNdrOrders: async (params = {}) => {
     get()._startNdr();
+
     try {
-      const res = await fetch(buildUrl("/api/shiprocket/ndr", params), {
-        headers: { Accept: "application/json" },
-        credentials: "include",
-      });
+      const res = await fetch(
+        buildUrl(
+          "/api/shiprocket/ndr/orders/sync",
+          params,
+        ),
+        {
+          headers: { Accept: "application/json" },
+          credentials: "include",
+        },
+      );
+
       const data = await safeJson(res);
+
       if (!res.ok || data?.success === false) {
         throw normalizeError(res, data);
       }
+
       const payload = data?.data ?? data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.data || payload?.shipments || [];
-      set({ ndrList: list });
+
+      set({
+        ndrList: Array.isArray(payload?.ndrOrders)
+          ? payload.ndrOrders
+          : [],
+        ndrSummary: payload,
+      });
+
       get()._successNdr();
       return payload;
-    } catch (e) {
-      get()._errorNdr(e);
-      throw e;
+    } catch (error) {
+      get()._errorNdr(error);
+      throw error;
     }
   },
 
-  fetchNdr: async (awb) => {
+  fetchNdrStatus: async (awb) => {
     const value = String(awb || "").trim();
-    if (!value) throw new Error("AWB is required");
+
+    if (!value) {
+      throw new Error("AWB is required");
+    }
 
     get()._startNdr();
+
     try {
       const res = await fetch(
-        buildUrl(`/api/shiprocket/ndr/${encodeURIComponent(value)}`),
-        { headers: { Accept: "application/json" }, credentials: "include" },
+        buildUrl(
+          `/api/shiprocket/ndr/${encodeURIComponent(
+            value,
+          )}/status`,
+        ),
+        {
+          headers: { Accept: "application/json" },
+          credentials: "include",
+        },
       );
+
       const data = await safeJson(res);
+
       if (!res.ok || data?.success === false) {
         throw normalizeError(res, data);
       }
+
       const detail = data?.data ?? data;
+
       set({ ndrDetail: detail });
       get()._successNdr();
+
       return detail;
-    } catch (e) {
-      get()._errorNdr(e);
-      throw e;
+    } catch (error) {
+      get()._errorNdr(error);
+      throw error;
     }
   },
 
-  reattemptNdr: async (awb, payload = {}) => {
+  submitNdrAction: async (
+    awb,
+    action,
+    payload = {},
+  ) => {
     const value = String(awb || "").trim();
-    if (!value) throw new Error("AWB is required");
+
+    if (!value) {
+      throw new Error("AWB is required");
+    }
 
     get()._startNdr();
+
     try {
       const res = await fetch(
-        buildUrl(`/api/shiprocket/ndr/${encodeURIComponent(value)}/reattempt`),
+        buildUrl(
+          `/api/shiprocket/ndr/${encodeURIComponent(
+            value,
+          )}/action`,
+        ),
         {
           method: "POST",
           headers: {
@@ -487,21 +530,45 @@ export const useShiprocketStore = create((set, get) => ({
             "Content-Type": "application/json",
           },
           credentials: "include",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            action,
+            comments:
+              payload.comments ||
+              "Customer confirmed NDR action",
+          }),
         },
       );
+
       const data = await safeJson(res);
+
       if (!res.ok || data?.success === false) {
         throw normalizeError(res, data);
       }
+
       set({ ndrResult: data?.data ?? data });
       get()._successNdr();
+
       return data;
-    } catch (e) {
-      get()._errorNdr(e);
-      throw e;
+    } catch (error) {
+      get()._errorNdr(error);
+      throw error;
     }
   },
+
+  /* Temporary aliases for existing UI */
+  fetchNdrList: (params = {}) =>
+    get().syncNdrOrders(params),
+
+  fetchNdr: (awb) =>
+    get().fetchNdrStatus(awb),
+
+  reattemptNdr: (awb, payload = {}) =>
+    get().submitNdrAction(
+      awb,
+      "re-attempt",
+      payload,
+    ),
 
   /* ============================================================
      BULK BOOKING (optional)
@@ -543,7 +610,10 @@ export const useShiprocketStore = create((set, get) => ({
   clearServiceabilityResult: () => set({ serviceabilityResult: null }),
   clearSyncResult: () => set({ syncResult: null }),
   clearNdrResult: () =>
-    set({ ndrDetail: null, ndrResult: null }),
+    set({
+      ndrDetail: null,
+      ndrResult: null,
+    }),
 
   clearReverseSyncError: () =>
     set({
