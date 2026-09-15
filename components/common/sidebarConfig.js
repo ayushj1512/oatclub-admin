@@ -486,6 +486,7 @@ export const sidebarMenus = {
     { label: "Campaigns", href: "/marketing/campaigns" },
     { label: "Create Campaign", href: "/marketing/campaigns/create" },
     { label: "Email", href: "/marketing/email" },
+    { label: "Birthday Wishes", href: "/marketing/bdaywish" },
     {
       label: "Product Meta Editor",
       href: "/marketing/product-meta-editor",
