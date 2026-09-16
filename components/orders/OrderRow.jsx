@@ -524,11 +524,19 @@ function OrderRow({
         </td>
 
         <td className="px-5 py-4">
-          <div className="font-medium text-gray-900">
-            {order?.customerId?.name ||
-              order?.customerName ||
-              order?.shippingAddressSnapshot?.fullName ||
-              "Unknown"}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-gray-900">
+              {order?.customerId?.name ||
+                order?.customerName ||
+                order?.shippingAddressSnapshot?.fullName ||
+                "Unknown"}
+            </span>
+
+            {order?.isRepeatCustomer === true && (
+              <span >
+                ⭐
+              </span>
+            )}
           </div>
           <div className="text-xs text-gray-500">
             {order?.customerId?.phone ||
