@@ -32,6 +32,7 @@ import {
   KeyRound,
   Truck,
   TriangleAlert,
+  Video,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -79,6 +80,12 @@ const DOMAIN_LIST = [
     name: "Dispatching",
     icon: Truck,
     route: "/dispatching",
+  },
+  {
+    id: "packaging_evidence",
+    name: "Packaging Evidence",
+    icon: Video,
+    route: "/packaging-evidence",
   },
   {
     id: "products",
@@ -243,6 +250,8 @@ const CARD_HINTS = {
   dispatching: "Pack, verify and dispatch ready orders",
   delhivery: "Create shipments, check pincodes, labels and tracking",
   ndr: "Resolve failed deliveries, reattempts and address updates",
+  packaging_evidence:
+    "Record and manage forward and RTO packaging videos",
 
 };
 

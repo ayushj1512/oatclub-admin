@@ -552,6 +552,29 @@ export const sidebarMenus = {
     { label: "Top Categories", href: "/sales/top-categories" },
   ],
 
+  packaging_evidence: [
+    {
+      label: "Evidence Dashboard",
+      href: "/packaging-evidence",
+    },
+    {
+      label: "Record Forward Packing",
+      href: "/packaging-evidence/record?type=forward",
+    },
+    {
+      label: "Record RTO Opening",
+      href: "/packaging-evidence/record?type=rto",
+    },
+    {
+      label: "Evidence Directory",
+      href: "/packaging-evidence/directory",
+    },
+    {
+      label: "Station Setup",
+      href: "/packaging-evidence/setup",
+    },
+  ],
+
   shiprocket: [
     { label: "Shiprocket Dashboard", href: "/shiprocket" },
     { label: "Serviceability Check", href: "/shiprocket/serviceability-check" },
@@ -750,4 +773,9 @@ export const routeSidebarMap = [
     prefix: "/admin-user-tasks",
     key: "admin_user_tasks",
   },
+  {
+    prefix: "/packaging-evidence",
+    key: "packaging_evidence",
+  },
+
 ];

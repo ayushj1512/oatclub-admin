@@ -6,6 +6,9 @@ export const DOMAIN_PERMISSIONS = {
   production: "manageProduction",
   vendors: "manageVendors",
   dispatching: "manageDispatching",
+
+  packaging_evidence: "managePackagingEvidence",
+
   accounts: "manageAccounts",
   products: "manageProducts",
   barcode: "manageBarcode",
@@ -41,6 +44,8 @@ export const ALL_PERMISSIONS = [
 
 export const ROLE_DEFAULT_PERMS = {
   superadmin: ["*"],
+
+  // Automatically includes managePackagingEvidence
   admin: ALL_PERMISSIONS,
 
   customer_care: [
@@ -58,6 +63,7 @@ export const ROLE_DEFAULT_PERMS = {
     "manageFabrics",
     "manageReviews",
     "manageBarcode",
+    "managePackagingEvidence",
   ],
 
   viewer: ["viewReports"],
@@ -78,6 +84,7 @@ export const ROLE_DEFAULT_PERMS = {
     "manageProduction",
     "manageOrders",
     "manageBarcode",
+    "managePackagingEvidence",
   ],
 };
 
