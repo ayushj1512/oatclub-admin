@@ -125,6 +125,10 @@ function PackagingEvidenceRecording() {
   const animationFrameRef = useRef(null);
   const timerRef = useRef(null);
   const saveInProgressRef = useRef(false);
+  const locationRef = useRef(null);
+
+  const recordingStartedAtRef =
+    useRef("");
 
   const {
     order,
@@ -416,101 +420,376 @@ function PackagingEvidenceRecording() {
     }
   };
 
-  const drawCanvasFrame = useCallback(() => {
-    const canvas = canvasRef.current;
-    const video = cameraVideoRef.current;
+  const drawCanvasFrame =
+    useCallback(() => {
+      const canvas =
+        canvasRef.current;
 
-    if (!canvas || !video || video.readyState < 2) {
+      const video =
+        cameraVideoRef.current;
+
+      if (
+        !canvas ||
+        !video ||
+        video.readyState < 2
+      ) {
+        animationFrameRef.current =
+          requestAnimationFrame(
+            drawCanvasFrame,
+          );
+
+        return;
+      }
+
+      const context =
+        canvas.getContext("2d");
+
+      const width = canvas.width;
+      const height = canvas.height;
+
+      /*
+       * Draw live camera frame.
+       */
+      context.drawImage(
+        video,
+        0,
+        0,
+        width,
+        height,
+      );
+
+      const location =
+        locationRef.current;
+
+      const orderText =
+        order?.orderNumber ||
+        orderNumber ||
+        "NO ORDER";
+
+      /*
+       * Live India timestamp.
+       */
+      const timestamp =
+        new Intl.DateTimeFormat(
+          "en-IN",
+          {
+            timeZone:
+              "Asia/Kolkata",
+
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+
+            hour12: false,
+          },
+        ).format(new Date());
+
+      const latitude =
+        Number.isFinite(
+          Number(
+            location?.latitude,
+          ),
+        )
+          ? Number(
+            location.latitude,
+          ).toFixed(6)
+          : "UNAVAILABLE";
+
+      const longitude =
+        Number.isFinite(
+          Number(
+            location?.longitude,
+          ),
+        )
+          ? Number(
+            location.longitude,
+          ).toFixed(6)
+          : "UNAVAILABLE";
+
+      const accuracy =
+        Number.isFinite(
+          Number(
+            location
+              ?.accuracyMeters,
+          ),
+        )
+          ? Math.round(
+            Number(
+              location
+                .accuracyMeters,
+            ),
+          )
+          : 0;
+
+      /*
+       * Compact bottom-right overlay.
+       */
+      const fontSize =
+        Math.max(
+          14,
+          Math.round(
+            height * 0.022,
+          ),
+        );
+
+      const lineHeight =
+        Math.round(
+          fontSize * 1.45,
+        );
+
+      const horizontalPadding =
+        Math.round(
+          fontSize * 0.8,
+        );
+
+      const verticalPadding =
+        Math.round(
+          fontSize * 0.65,
+        );
+
+      const lines = [
+        `ORDER #${orderText}`,
+        `${timestamp} IST`,
+        `GEO ${latitude}, ${longitude}`,
+        `ACCURACY ±${accuracy}m`,
+      ];
+
+      context.font =
+        `500 ${fontSize}px Arial`;
+
+      const widestLine =
+        Math.max(
+          ...lines.map(
+            (line) =>
+              context.measureText(
+                line,
+              ).width,
+          ),
+        );
+
+      const boxWidth =
+        widestLine +
+        horizontalPadding * 2;
+
+      const boxHeight =
+        lineHeight *
+        lines.length +
+        verticalPadding * 2;
+
+      const rightMargin =
+        Math.max(
+          14,
+          Math.round(
+            width * 0.015,
+          ),
+        );
+
+      const bottomMargin =
+        Math.max(
+          14,
+          Math.round(
+            height * 0.02,
+          ),
+        );
+
+      const boxX =
+        width -
+        boxWidth -
+        rightMargin;
+
+      const boxY =
+        height -
+        boxHeight -
+        bottomMargin;
+
+      /*
+       * Transparent black background.
+       */
+      context.fillStyle =
+        "rgba(0, 0, 0, 0.48)";
+
+      context.fillRect(
+        boxX,
+        boxY,
+        boxWidth,
+        boxHeight,
+      );
+
+      /*
+       * Small white text.
+       */
+      context.textAlign =
+        "right";
+
+      context.textBaseline =
+        "top";
+
+      lines.forEach(
+        (line, index) => {
+          context.font =
+            index === 0
+              ? `700 ${fontSize}px Arial`
+              : `500 ${fontSize}px Arial`;
+
+          context.fillStyle =
+            index === 0
+              ? "#ffffff"
+              : "rgba(255, 255, 255, 0.88)";
+
+          context.fillText(
+            line,
+            width -
+            rightMargin -
+            horizontalPadding,
+            boxY +
+            verticalPadding +
+            index *
+            lineHeight,
+          );
+        },
+      );
+
+      /*
+       * Reset alignment for any
+       * future canvas drawing.
+       */
+      context.textAlign =
+        "left";
+
+      context.textBaseline =
+        "alphabetic";
+
       animationFrameRef.current =
-        requestAnimationFrame(drawCanvasFrame);
-      return;
-    }
+        requestAnimationFrame(
+          drawCanvasFrame,
+        );
+    }, [
+      order?.orderNumber,
+      orderNumber,
+    ]);
 
-    const context = canvas.getContext("2d");
-    const width = canvas.width;
-    const height = canvas.height;
+  const captureCurrentLocation =
+    useCallback(() => {
+      return new Promise(
+        (resolve, reject) => {
+          if (
+            typeof navigator ===
+            "undefined" ||
+            !navigator.geolocation
+          ) {
+            reject(
+              new Error(
+                "Geolocation is not supported on this computer.",
+              ),
+            );
 
-    context.drawImage(video, 0, 0, width, height);
+            return;
+          }
 
-    const overlayHeight = Math.max(
-      115,
-      Math.round(height * 0.17),
-    );
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const location = {
+                latitude:
+                  position.coords
+                    .latitude,
 
-    context.fillStyle = "rgba(0, 0, 0, 0.72)";
-    context.fillRect(
-      0,
-      height - overlayHeight,
-      width,
-      overlayHeight,
-    );
+                longitude:
+                  position.coords
+                    .longitude,
 
-    const orderText =
-      order?.orderNumber || orderNumber || "NO ORDER";
+                accuracyMeters:
+                  position.coords
+                    .accuracy || 0,
 
-    const awbText =
-      effectiveAwb || "NO AWB";
+                altitude:
+                  position.coords
+                    .altitude ?? null,
 
-    const stationText =
-      stationConfig?.stationName || "NO STATION";
+                capturedAt:
+                  new Date(
+                    position.timestamp ||
+                    Date.now(),
+                  ).toISOString(),
 
-    const currentTime = new Date().toLocaleString(
-      "en-IN",
-      {
-        dateStyle: "medium",
-        timeStyle: "medium",
-      },
-    );
+                permissionStatus:
+                  "granted",
+              };
 
-    context.fillStyle = "#ffffff";
-    context.font = `700 ${Math.round(
-      height * 0.034,
-    )}px Arial`;
+              locationRef.current =
+                location;
 
-    context.fillText(
-      `OATCLUB • ${evidenceType === "rto"
-        ? "RTO OPENING"
-        : "FORWARD PACKING"
-      }`,
-      28,
-      height - overlayHeight + 38,
-    );
+              resolve(location);
+            },
 
-    context.font = `500 ${Math.round(
-      height * 0.026,
-    )}px Arial`;
+            (locationError) => {
+              locationRef.current =
+                null;
 
-    context.fillText(
-      `Order #${orderText}  •  AWB ${awbText}`,
-      28,
-      height - overlayHeight + 75,
-    );
+              if (
+                locationError.code === 1
+              ) {
+                reject(
+                  new Error(
+                    "Location permission is blocked. Please allow Location from browser settings.",
+                  ),
+                );
 
-    context.fillStyle = "rgba(255,255,255,0.72)";
-    context.font = `400 ${Math.round(
-      height * 0.021,
-    )}px Arial`;
+                return;
+              }
 
-    context.fillText(
-      `${stationText}  •  ${currentTime}`,
-      28,
-      height - overlayHeight + 104,
-    );
+              if (
+                locationError.code === 2
+              ) {
+                reject(
+                  new Error(
+                    "Current location is unavailable. Check Windows Location Services.",
+                  ),
+                );
 
-    animationFrameRef.current =
-      requestAnimationFrame(drawCanvasFrame);
-  }, [
-    evidenceType,
-    order?.orderNumber,
-    orderNumber,
-    effectiveAwb,    stationConfig?.stationName,
-  ]);
+                return;
+              }
+
+              if (
+                locationError.code === 3
+              ) {
+                reject(
+                  new Error(
+                    "Location request timed out. Please try again.",
+                  ),
+                );
+
+                return;
+              }
+
+              reject(
+                new Error(
+                  "Unable to capture current location.",
+                ),
+              );
+            },
+
+            {
+              enableHighAccuracy: true,
+              timeout: 15000,
+              maximumAge: 0,
+            },
+          );
+        },
+      );
+    }, []);
 
   const startRecording = async () => {
     if (!order) {
-      setError("Fetch an order before recording.");
+      setError(
+        "Fetch an order before recording.",
+      );
       return;
     }
+
     if (!effectiveAwb) {
       setError(
         "AWB was not found on the order. Please enter AWB manually.",
@@ -518,27 +797,71 @@ function PackagingEvidenceRecording() {
       return;
     }
 
-
-    if (!helperConnected || !stationConfig) {
+    if (
+      !helperConnected ||
+      !stationConfig
+    ) {
       setError(
         "Local Evidence Helper is not connected or configured.",
       );
       return;
     }
 
-    if (!cameraActive || !sourceStreamRef.current) {
-      setError("Start the camera first.");
+    if (
+      !cameraActive ||
+      !sourceStreamRef.current
+    ) {
+      setError(
+        "Start the camera first.",
+      );
       return;
     }
 
     setError("");
-    setMessage("");
+    setMessage(
+      "Capturing current location...",
+    );
+
     setSavedResult(null);
     clearRecording();
 
     try {
+      /*
+       * Location is captured immediately
+       * before recording starts.
+       */
+      const capturedLocation =
+        await captureCurrentLocation();
+
+      if (
+        !Number.isFinite(
+          capturedLocation?.latitude,
+        ) ||
+        !Number.isFinite(
+          capturedLocation?.longitude,
+        )
+      ) {
+        throw new Error(
+          "A valid location could not be captured.",
+        );
+      }
+
+      /*
+       * Keep the actual recording start time.
+       */
+      recordingStartedAtRef.current =
+        new Date().toISOString();
+
+      setMessage(
+        `Location captured • Accuracy ±${Math.round(
+          capturedLocation.accuracyMeters ||
+          0,
+        )}m`,
+      );
+
       const videoTrack =
-        sourceStreamRef.current.getVideoTracks()[0];
+        sourceStreamRef.current
+          .getVideoTracks()[0];
 
       const settings = videoTrack?.getSettings?.() || {};
 
@@ -915,8 +1238,37 @@ function PackagingEvidenceRecording() {
 
         hasAudio:
           Boolean(stationConfig.hasAudio),
+        /*
+         * Actual recording start time.
+         */
+        recordedAt:
+          recordingStartedAtRef.current ||
+          new Date().toISOString(),
 
-        recordedAt: new Date().toISOString(),
+        latitude:
+          locationRef.current
+            ?.latitude ?? null,
+
+        longitude:
+          locationRef.current
+            ?.longitude ?? null,
+
+        accuracyMeters:
+          locationRef.current
+            ?.accuracyMeters ?? 0,
+
+        altitude:
+          locationRef.current
+            ?.altitude ?? null,
+
+        locationCapturedAt:
+          locationRef.current
+            ?.capturedAt ?? null,
+
+        locationPermissionStatus:
+          locationRef.current
+            ?.permissionStatus ||
+          "unknown",
 
         notes:
           pauseCount > 0
@@ -953,6 +1305,10 @@ function PackagingEvidenceRecording() {
 
   const startNextOrder = () => {
     clearRecording();
+    locationRef.current = null;
+
+    recordingStartedAtRef.current =
+      "";
     clearCurrentOrder();
     clearMessages();
 
@@ -1244,36 +1600,36 @@ function PackagingEvidenceRecording() {
                     </p>
                   </div>
 
-                    <div className="rounded-2xl bg-zinc-50 p-4">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                        AWB
-                      </p>
+                  <div className="rounded-2xl bg-zinc-50 p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                      AWB
+                    </p>
 
-                      {recordingDetails?.awb ? (
-                        <p className="mt-1 break-all text-sm font-semibold text-zinc-950">
-                          {recordingDetails.awb}
-                        </p>
-                      ) : (
-                        <input
-                          type="text"
-                          value={manualAwb}
-                          onChange={(event) =>
-                            setManualAwb(
-                              event.target.value
-                                .trimStart()
-                                .toUpperCase(),
-                            )
-                          }
-                          disabled={
-                            isRecording ||
-                            isPaused ||
-                            isStopped
-                          }
-                          placeholder="Enter AWB manually"
-                          className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-sm font-semibold text-zinc-950 outline-none ring-1 ring-zinc-200 focus:ring-zinc-400 disabled:opacity-60"
-                        />
-                      )}
-                    </div>
+                    {recordingDetails?.awb ? (
+                      <p className="mt-1 break-all text-sm font-semibold text-zinc-950">
+                        {recordingDetails.awb}
+                      </p>
+                    ) : (
+                      <input
+                        type="text"
+                        value={manualAwb}
+                        onChange={(event) =>
+                          setManualAwb(
+                            event.target.value
+                              .trimStart()
+                              .toUpperCase(),
+                          )
+                        }
+                        disabled={
+                          isRecording ||
+                          isPaused ||
+                          isStopped
+                        }
+                        placeholder="Enter AWB manually"
+                        className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-sm font-semibold text-zinc-950 outline-none ring-1 ring-zinc-200 focus:ring-zinc-400 disabled:opacity-60"
+                      />
+                    )}
+                  </div>
 
                   <div className="rounded-2xl bg-zinc-50 p-4">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
@@ -1457,7 +1813,7 @@ function PackagingEvidenceRecording() {
 
                     <p className="mt-1 text-xs text-white/80">
                       Order #{order.orderNumber} • AWB{" "}
-                    {effectiveAwb || "Not assigned"}
+                      {effectiveAwb || "Not assigned"}
                     </p>
 
                     <p className="mt-1 text-[10px] text-white/50">

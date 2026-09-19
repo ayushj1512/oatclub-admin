@@ -191,7 +191,7 @@ export const usePackagingEvidenceStore = create((set, get) => ({
    * Call this only after local recorder confirms
    * that the video has been written successfully.
    */
-  createEvidence: async (payload) => {
+  createEvidence: async (payload = {}) => {
     set({
       savingEvidence: true,
       error: "",
@@ -199,12 +199,55 @@ export const usePackagingEvidenceStore = create((set, get) => ({
     });
 
     try {
-      const response = await api.post("/", payload);
-      const evidence = response.data?.data;
+      /*
+       * Keep location values explicit so
+       * backend receives the exact fields
+       * expected by the controller.
+       */
+      const requestPayload = {
+        ...payload,
+
+        latitude:
+          payload.latitude ??
+          null,
+
+        longitude:
+          payload.longitude ??
+          null,
+
+        accuracyMeters:
+          payload.accuracyMeters ??
+          0,
+
+        altitude:
+          payload.altitude ??
+          null,
+
+        locationCapturedAt:
+          payload.locationCapturedAt ??
+          null,
+
+        locationPermissionStatus:
+          payload.locationPermissionStatus ||
+          "unknown",
+      };
+
+      const response =
+        await api.post(
+          "/",
+          requestPayload,
+        );
+
+      const evidence =
+        response.data?.data ||
+        null;
 
       set((state) => ({
         savingEvidence: false,
-        selectedEvidence: evidence || null,
+
+        selectedEvidence:
+          evidence,
+
         successMessage:
           response.data?.message ||
           "Packaging evidence saved successfully.",
@@ -213,7 +256,9 @@ export const usePackagingEvidenceStore = create((set, get) => ({
           ? [
             evidence,
             ...state.evidenceList.filter(
-              (item) => item._id !== evidence._id,
+              (item) =>
+                item._id !==
+                evidence._id,
             ),
           ]
           : state.evidenceList,
@@ -222,10 +267,14 @@ export const usePackagingEvidenceStore = create((set, get) => ({
           ? [
             evidence,
             ...state.orderEvidence.filter(
-              (item) => item._id !== evidence._id,
+              (item) =>
+                item._id !==
+                evidence._id,
             ),
           ]
           : state.orderEvidence,
+
+        error: "",
       }));
 
       return {
@@ -233,14 +282,16 @@ export const usePackagingEvidenceStore = create((set, get) => ({
         data: evidence,
       };
     } catch (error) {
-      const message = getErrorMessage(
-        error,
-        "Unable to save packaging evidence.",
-      );
+      const message =
+        getErrorMessage(
+          error,
+          "Unable to save packaging evidence.",
+        );
 
       set({
         savingEvidence: false,
         error: message,
+        successMessage: "",
       });
 
       return {
