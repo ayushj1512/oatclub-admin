@@ -369,52 +369,120 @@ function PackagingEvidenceRecording() {
 
     stopCamera();
 
+    const is1080p =
+      stationConfig.quality === "1080p";
+
+    const commonVideoConstraints = {
+      width: {
+        ideal: is1080p ? 1920 : 1280,
+      },
+      height: {
+        ideal: is1080p ? 1080 : 720,
+      },
+      frameRate: {
+        ideal:
+          Number(
+            stationConfig.framesPerSecond,
+          ) || 30,
+      },
+    };
+
     try {
-      const is1080p =
-        stationConfig.quality === "1080p";
+      let stream;
 
-      const stream =
-        await navigator.mediaDevices.getUserMedia({
-          video: {
-            deviceId: stationConfig.cameraId
-              ? {
-                exact: stationConfig.cameraId,
-              }
-              : undefined,
-
-            width: {
-              ideal: is1080p ? 1920 : 1280,
+      try {
+        /*
+         * First try configured camera.
+         * "ideal" rakhenge so stale deviceId
+         * hone par request immediately fail na ho.
+         */
+        stream =
+          await navigator.mediaDevices.getUserMedia({
+            video: {
+              ...commonVideoConstraints,
+              ...(stationConfig.cameraId
+                ? {
+                  deviceId: {
+                    ideal:
+                      stationConfig.cameraId,
+                  },
+                }
+                : {}),
             },
+            audio: Boolean(
+              stationConfig.hasAudio,
+            ),
+          });
+      } catch (configuredCameraError) {
+        console.warn(
+          "Configured camera unavailable. Trying default camera.",
+          configuredCameraError,
+        );
 
-            height: {
-              ideal: is1080p ? 1080 : 720,
-            },
-
-            frameRate: {
-              ideal:
-                Number(
-                  stationConfig.framesPerSecond,
-                ) || 30,
-            },
-          },
-
-          audio: Boolean(stationConfig.hasAudio),
-        });
+        /*
+         * Saved camera unavailable ho toh
+         * system default webcam use karo.
+         */
+        stream =
+          await navigator.mediaDevices.getUserMedia({
+            video: commonVideoConstraints,
+            audio: Boolean(
+              stationConfig.hasAudio,
+            ),
+          });
+      }
 
       sourceStreamRef.current = stream;
 
       if (cameraVideoRef.current) {
-        cameraVideoRef.current.srcObject = stream;
+        cameraVideoRef.current.srcObject =
+          stream;
+
         await cameraVideoRef.current.play();
       }
 
       setCameraActive(true);
+      setError("");
       setMessage("Camera is ready.");
     } catch (cameraError) {
-      setError(
-        cameraError?.message ||
-        "Unable to access the configured camera.",
+      console.error(
+        "Camera start failed:",
+        cameraError,
       );
+
+      setCameraActive(false);
+
+      let cameraMessage =
+        cameraError?.message ||
+        "Unable to access the configured camera.";
+
+      if (
+        cameraError?.name ===
+        "NotAllowedError"
+      ) {
+        cameraMessage =
+          "Camera permission is blocked. Please allow Camera from browser settings.";
+      } else if (
+        cameraError?.name ===
+        "NotFoundError"
+      ) {
+        cameraMessage =
+          "No webcam was detected on this computer.";
+      } else if (
+        cameraError?.name ===
+        "NotReadableError"
+      ) {
+        cameraMessage =
+          "Camera is already being used by another application or browser tab.";
+      } else if (
+        cameraError?.name ===
+        "OverconstrainedError"
+      ) {
+        cameraMessage =
+          "Saved camera is unavailable. Please detect and save the camera again.";
+      }
+
+      setError(cameraMessage);
     } finally {
       setCameraLoading(false);
     }
@@ -672,121 +740,85 @@ function PackagingEvidenceRecording() {
       orderNumber,
     ]);
 
-  const captureCurrentLocation =
-    useCallback(() => {
-      return new Promise(
-        (resolve, reject) => {
-          if (
-            typeof navigator ===
-            "undefined" ||
-            !navigator.geolocation
-          ) {
-            reject(
-              new Error(
-                "Geolocation is not supported on this computer.",
-              ),
-            );
+  const captureCurrentLocation = useCallback(async () => {
+    if (!navigator.geolocation) {
+      throw new Error(
+        "Geolocation is not supported by this browser.",
+      );
+    }
 
-            return;
+    // Already captured location ko reuse karo.
+    if (
+      Number.isFinite(locationRef.current?.latitude) &&
+      Number.isFinite(locationRef.current?.longitude)
+    ) {
+      return locationRef.current;
+    }
+
+    setError("");
+    setMessage("Capturing current location...");
+
+    return new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const capturedLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracyMeters:
+              position.coords.accuracy || 0,
+            altitude:
+              position.coords.altitude ?? null,
+            capturedAt: new Date().toISOString(),
+            permissionStatus: "granted",
+          };
+
+          locationRef.current = capturedLocation;
+
+          // Previous failed attempt ka error clear hoga.
+          setError("");
+          setMessage(
+            `Location captured successfully (±${Math.round(
+              capturedLocation.accuracyMeters,
+            )}m).`,
+          );
+
+          resolve(capturedLocation);
+        },
+
+        (locationError) => {
+          locationRef.current = null;
+          setMessage("");
+
+          let message =
+            "Unable to capture current location.";
+
+          if (locationError.code === 1) {
+            message =
+              "Location permission was denied. Please allow Location from browser settings.";
+          } else if (locationError.code === 2) {
+            message =
+              "Current location is unavailable. Please check Windows Location Services.";
+          } else if (locationError.code === 3) {
+            message =
+              "Location request timed out. Please try recording again.";
           }
 
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              const location = {
-                latitude:
-                  position.coords
-                    .latitude,
+          setError(message);
+          reject(new Error(message));
+        },
 
-                longitude:
-                  position.coords
-                    .longitude,
-
-                accuracyMeters:
-                  position.coords
-                    .accuracy || 0,
-
-                altitude:
-                  position.coords
-                    .altitude ?? null,
-
-                capturedAt:
-                  new Date(
-                    position.timestamp ||
-                    Date.now(),
-                  ).toISOString(),
-
-                permissionStatus:
-                  "granted",
-              };
-
-              locationRef.current =
-                location;
-
-              resolve(location);
-            },
-
-            (locationError) => {
-              locationRef.current =
-                null;
-
-              if (
-                locationError.code === 1
-              ) {
-                reject(
-                  new Error(
-                    "Location permission is blocked. Please allow Location from browser settings.",
-                  ),
-                );
-
-                return;
-              }
-
-              if (
-                locationError.code === 2
-              ) {
-                reject(
-                  new Error(
-                    "Current location is unavailable. Check Windows Location Services.",
-                  ),
-                );
-
-                return;
-              }
-
-              if (
-                locationError.code === 3
-              ) {
-                reject(
-                  new Error(
-                    "Location request timed out. Please try again.",
-                  ),
-                );
-
-                return;
-              }
-
-              reject(
-                new Error(
-                  "Unable to capture current location.",
-                ),
-              );
-            },
-
-            {
-              enableHighAccuracy: true,
-              timeout: 15000,
-              maximumAge: 0,
-            },
-          );
+        {
+          enableHighAccuracy: false,
+          timeout: 30000,
+          maximumAge: 60000,
         },
       );
-    }, []);
+    });
+  }, []);
 
   const startRecording = async () => {
     if (!order) {
-      setError(
-        "Fetch an order before recording.",
-      );
+      setError("Fetch an order before recording.");
       return;
     }
 
@@ -797,10 +829,7 @@ function PackagingEvidenceRecording() {
       return;
     }
 
-    if (
-      !helperConnected ||
-      !stationConfig
-    ) {
+    if (!helperConnected || !stationConfig) {
       setError(
         "Local Evidence Helper is not connected or configured.",
       );
@@ -811,25 +840,16 @@ function PackagingEvidenceRecording() {
       !cameraActive ||
       !sourceStreamRef.current
     ) {
-      setError(
-        "Start the camera first.",
-      );
+      setError("Start the camera first.");
       return;
     }
 
     setError("");
-    setMessage(
-      "Capturing current location...",
-    );
-
+    setMessage("Capturing current location...");
     setSavedResult(null);
     clearRecording();
 
     try {
-      /*
-       * Location is captured immediately
-       * before recording starts.
-       */
       const capturedLocation =
         await captureCurrentLocation();
 
@@ -842,30 +862,26 @@ function PackagingEvidenceRecording() {
         )
       ) {
         throw new Error(
-          "A valid location could not be captured.",
+          "Valid location could not be captured.",
         );
       }
 
-      /*
-       * Keep the actual recording start time.
-       */
       recordingStartedAtRef.current =
         new Date().toISOString();
 
-      setMessage(
-        `Location captured • Accuracy ±${Math.round(
-          capturedLocation.accuracyMeters ||
-          0,
-        )}m`,
-      );
-
       const videoTrack =
-        sourceStreamRef.current
-          .getVideoTracks()[0];
+        sourceStreamRef.current.getVideoTracks()[0];
 
-      const settings = videoTrack?.getSettings?.() || {};
+      const settings =
+        videoTrack?.getSettings?.() || {};
 
       const canvas = canvasRef.current;
+
+      if (!canvas) {
+        throw new Error(
+          "Recording canvas is not available.",
+        );
+      }
 
       canvas.width =
         Number(settings.width) ||
@@ -883,7 +899,9 @@ function PackagingEvidenceRecording() {
       drawCanvasFrame();
 
       const canvasStream = canvas.captureStream(
-        Number(stationConfig.framesPerSecond) || 30,
+        Number(
+          stationConfig.framesPerSecond,
+        ) || 30,
       );
 
       sourceStreamRef.current
@@ -892,10 +910,13 @@ function PackagingEvidenceRecording() {
           canvasStream.addTrack(track);
         });
 
-      recordingStreamRef.current = canvasStream;
+      recordingStreamRef.current =
+        canvasStream;
+
       chunksRef.current = [];
 
-      const mimeType = getSupportedMimeType();
+      const mimeType =
+        getSupportedMimeType();
 
       const recorder = new MediaRecorder(
         canvasStream,
@@ -903,7 +924,8 @@ function PackagingEvidenceRecording() {
           ? {
             mimeType,
             videoBitsPerSecond:
-              stationConfig.quality === "1080p"
+              stationConfig.quality ===
+                "1080p"
                 ? 5_000_000
                 : 2_500_000,
           }
@@ -912,9 +934,13 @@ function PackagingEvidenceRecording() {
 
       mediaRecorderRef.current = recorder;
 
-      recorder.ondataavailable = (event) => {
+      recorder.ondataavailable = (
+        event,
+      ) => {
         if (event.data?.size > 0) {
-          chunksRef.current.push(event.data);
+          chunksRef.current.push(
+            event.data,
+          );
         }
       };
 
@@ -936,9 +962,8 @@ function PackagingEvidenceRecording() {
 
         if (!blob.size) {
           setError(
-            "Recording empty hai. Please record again.",
+            "Recording is empty. Please record again.",
           );
-
           setRecordingStatus("idle");
           return;
         }
@@ -949,13 +974,18 @@ function PackagingEvidenceRecording() {
           );
         }
 
-        const url = URL.createObjectURL(blob);
+        const url =
+          URL.createObjectURL(blob);
 
         previewUrlRef.current = url;
 
         setRecordedBlob(blob);
         setPreviewUrl(url);
         setRecordingStatus("stopped");
+        setError("");
+        setMessage(
+          "Recording stopped. Please review and save the evidence.",
+        );
       };
 
       recorder.onerror = (event) => {
@@ -964,7 +994,9 @@ function PackagingEvidenceRecording() {
           "Recording failed unexpectedly.",
         );
 
+        setMessage("");
         stopTimer();
+        stopCanvasDrawing();
         setRecordingStatus("idle");
       };
 
@@ -973,6 +1005,13 @@ function PackagingEvidenceRecording() {
       setRecordingStatus("recording");
       setDurationSeconds(0);
       setPauseCount(0);
+      setError("");
+      setMessage(
+        `Recording started with location (±${Math.round(
+          capturedLocation.accuracyMeters ||
+          0,
+        )}m).`,
+      );
 
       startTimer();
     } catch (recordingError) {
@@ -981,27 +1020,45 @@ function PackagingEvidenceRecording() {
         "Unable to start recording.",
       );
 
+      setMessage("");
       stopTimer();
       stopCanvasDrawing();
       setRecordingStatus("idle");
     }
   };
 
+
   const pauseRecording = () => {
-    const recorder = mediaRecorderRef.current;
+    const recorder =
+      mediaRecorderRef.current;
 
     if (
       !recorder ||
       recorder.state !== "recording"
     ) {
+      setError(
+        "No active recording is available to pause.",
+      );
       return;
     }
 
-    recorder.pause();
-    stopTimer();
+    try {
+      recorder.pause();
+      stopTimer();
 
-    setPauseCount((current) => current + 1);
-    setRecordingStatus("paused");
+      setPauseCount(
+        (current) => current + 1,
+      );
+
+      setRecordingStatus("paused");
+      setError("");
+      setMessage("Recording paused.");
+    } catch (pauseError) {
+      setError(
+        pauseError?.message ||
+        "Unable to pause recording.",
+      );
+    }
   };
 
   const resumeRecording = () => {
