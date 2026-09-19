@@ -16,7 +16,7 @@ import CollectionMultiSelect from "@/components/product/CollectionMultiSelect";
 import FabricAdd from "@/components/product/FabricAdd"; // ✅ NEW (replaces ProductFabricAssignment)
 import OriginalProductLinkField from "@/components/product/OriginalProductLinkField";
 import ProductReviewManager from "@/components/product/ProductReviewManager";
-
+import ProductPriceHistory from "@/components/product/ProductPriceHistory";
 const BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
 
 /* ---------------- tiny helpers ---------------- */
@@ -422,7 +422,7 @@ productSpotlight: [],
               setProduct(updatedProduct);
             }}
           />
-          
+
           {!editing && !s(product?.originalProductLink) ? (
             <p className="text-sm text-gray-500">No original link set.</p>
           ) : null}
@@ -486,6 +486,17 @@ productSpotlight: [],
             </label>
           ) : null}
         </div>
+
+        {!editing && (
+          <ProductPriceHistory
+            priceLogs={safeArr(
+              product?.priceLogs,
+            )}
+            currentPrice={n(
+              product?.price,
+            )}
+          />
+        )}
 
         {/* Categories */}
         <div className="bg-white p-5 md:p-6 rounded-xl shadow space-y-4">

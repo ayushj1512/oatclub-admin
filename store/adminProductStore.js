@@ -1561,66 +1561,223 @@ export const useAdminProductStore = create((set, get) => ({
   /* ============================================================
     INLINE PRICE UPDATE (grid)
   ============================================================ */
-  updatePriceInline: async (id, price) => {
+  updatePriceInline: async (
+    id,
+    price,
+  ) => {
     try {
-      set({ saving: true });
-
-      const res = await fetch(`${API}/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ price }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Price update failed");
-
       set({
-        products: get().products.map((p) =>
-          p._id === id ? { ...p, price } : p,
-        ),
+        saving: true,
+        error: null,
       });
 
-      toast.success("Price updated ✅");
-      return data.product;
-    } catch (e) {
-      console.error(e);
-      toast.error(e.message);
-      throw e;
+      const numericPrice =
+        Number(price);
+
+      if (
+        !Number.isFinite(
+          numericPrice,
+        ) ||
+        numericPrice < 0
+      ) {
+        throw new Error(
+          "Enter a valid price",
+        );
+      }
+
+      const res = await fetch(
+        `${API}/${id}`,
+        {
+          method: "PATCH",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            price: numericPrice,
+          }),
+        },
+      );
+
+      const data =
+        await safeJson(res);
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message ||
+          "Price update failed",
+        );
+      }
+
+      const updatedProduct =
+        data?.product || {
+          _id: id,
+          price: numericPrice,
+        };
+
+      set((state) => ({
+        products: (
+          state.products || []
+        ).map((product) =>
+          product._id === id
+            ? {
+              ...product,
+              ...updatedProduct,
+              price:
+                updatedProduct.price ??
+                numericPrice,
+            }
+            : product,
+        ),
+
+        product:
+          state.product?._id === id
+            ? {
+              ...state.product,
+              ...updatedProduct,
+            }
+            : state.product,
+      }));
+
+      toast.success(
+        "Price updated ✅",
+      );
+
+      return updatedProduct;
+    } catch (error) {
+      console.error(
+        "❌ updatePriceInline:",
+        error,
+      );
+
+      toast.error(
+        error.message ||
+        "Price update failed",
+      );
+
+      throw error;
     } finally {
-      set({ saving: false });
+      set({
+        saving: false,
+      });
     }
   },
 
-  updateComparePriceInline: async (id, compareAtPrice) => {
+  updateComparePriceInline: async (
+    id,
+    compareAtPrice,
+  ) => {
     try {
-      set({ saving: true });
-
-      const res = await fetch(`${API}/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ compareAtPrice }),
-      });
-
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.message || "Compare price update failed");
-
       set({
-        products: get().products.map((p) =>
-          p._id === id ? { ...p, compareAtPrice } : p,
-        ),
+        saving: true,
+        error: null,
       });
 
-      toast.success("Compare price updated ✅");
-      return data.product;
-    } catch (e) {
-      console.error(e);
-      toast.error(e.message);
-      throw e;
+      const normalizedValue =
+        compareAtPrice === "" ||
+          compareAtPrice === null
+          ? null
+          : Number(compareAtPrice);
+
+      if (
+        normalizedValue !== null &&
+        (
+          !Number.isFinite(
+            normalizedValue,
+          ) ||
+          normalizedValue < 0
+        )
+      ) {
+        throw new Error(
+          "Enter a valid compare price",
+        );
+      }
+
+      const res = await fetch(
+        `${API}/${id}`,
+        {
+          method: "PATCH",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            compareAtPrice:
+              normalizedValue,
+          }),
+        },
+      );
+
+      const data =
+        await safeJson(res);
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message ||
+          "Compare price update failed",
+        );
+      }
+
+      const updatedProduct =
+        data?.product || {
+          _id: id,
+          compareAtPrice:
+            normalizedValue,
+        };
+
+      set((state) => ({
+        products: (
+          state.products || []
+        ).map((product) =>
+          product._id === id
+            ? {
+              ...product,
+              ...updatedProduct,
+              compareAtPrice:
+                updatedProduct.compareAtPrice ??
+                normalizedValue,
+            }
+            : product,
+        ),
+
+        product:
+          state.product?._id === id
+            ? {
+              ...state.product,
+              ...updatedProduct,
+            }
+            : state.product,
+      }));
+
+      toast.success(
+        "Compare price updated ✅",
+      );
+
+      return updatedProduct;
+    } catch (error) {
+      console.error(
+        "❌ updateComparePriceInline:",
+        error,
+      );
+
+      toast.error(
+        error.message ||
+        "Compare price update failed",
+      );
+
+      throw error;
     } finally {
-      set({ saving: false });
+      set({
+        saving: false,
+      });
     }
   },
 
