@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Check,
   ChevronDown,
+  Copy,
   Download,
   FileText,
   ReceiptIndianRupee,
@@ -357,6 +358,7 @@ export default function ReadyToShipPage() {
     error,
     fetchPackedOrdersForShipping,
     assignCourierToOrder,
+    updateOrderStatus,
   } = useOrderStore();
 
   const checkDelhiveryServiceability =
@@ -392,6 +394,7 @@ export default function ReadyToShipPage() {
   const [checkingRates, setCheckingRates] = useState({});
   const [booking, setBooking] = useState({});
   const [bulkBookingProvider, setBulkBookingProvider] = useState("");
+  const [bulkShipping, setBulkShipping] = useState(false);
   const [labelLoading, setLabelLoading] = useState({});
   const [bulkLabelLoading, setBulkLabelLoading] = useState(false);
   const [trackingLoading, setTrackingLoading] =
@@ -953,6 +956,25 @@ export default function ReadyToShipPage() {
     );
   };
 
+  const copySelectedOrderNumbers = async () => {
+    if (!selectedOrders.length) {
+      toast.error("Select at least one order");
+      return;
+    }
+
+    const orderNumbers = selectedOrders
+      .map((order) => String(order.orderNumber || "").trim())
+      .filter(Boolean)
+      .join("\n");
+
+    try {
+      await navigator.clipboard.writeText(orderNumbers);
+      toast.success(`${selectedOrders.length} order numbers copied`);
+    } catch {
+      toast.error("Could not copy order numbers");
+    }
+  };
+
   const checkRatesForOrder = async (order) => {
     const orderId = String(order?._id || "");
 
@@ -1022,7 +1044,7 @@ export default function ReadyToShipPage() {
       const isCod =
         paymentMethod === "cod" ||
         paymentMethod === "partial_cod";
-    
+
 
       const calculatedWeight = Math.max(
         0.5,
@@ -1444,6 +1466,33 @@ export default function ReadyToShipPage() {
     }
   };
 
+  const bulkMarkShipped = async () => {
+    if (!selectedOrders.length || bulkShipping) return;
+    if (!window.confirm(`Mark ${selectedOrders.length} selected orders as shipped?`)) return;
+
+    setBulkShipping(true);
+    let shipped = 0;
+    let failed = 0;
+    const shippedIds = [];
+    try {
+      for (const order of selectedOrders) {
+        try {
+          await updateOrderStatus(String(order._id), { fulfillmentStatus: "shipped" });
+          shippedIds.push(String(order._id));
+          shipped += 1;
+        } catch (error) {
+          failed += 1;
+          console.error(`Could not ship order ${order.orderNumber}:`, error);
+        }
+      }
+      setSelectedIds((current) => current.filter((id) => !shippedIds.includes(String(id))));
+      showMessage(shipped ? "success" : "error", `${shipped} marked shipped${failed ? `, ${failed} failed` : ""}.`);
+      await loadOrders();
+    } finally {
+      setBulkShipping(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-zinc-50 p-4 sm:p-6 lg:p-8">
       <div className="w-full">
@@ -1580,6 +1629,28 @@ export default function ReadyToShipPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+
+              <button
+                type="button"
+                onClick={copySelectedOrderNumbers}
+                disabled={!selectedOrders.length}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Copy className="h-4 w-4" />
+                Copy Selected
+                {selectedOrders.length ? ` (${selectedOrders.length})` : ""}
+              </button>
+
+              
+              <button
+                type="button"
+                onClick={bulkMarkShipped}
+                disabled={!selectedIds.length || bulkShipping || Boolean(bulkBookingProvider)}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {bulkShipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
+                Mark Shipped {selectedIds.length ? `(${selectedIds.length})` : ""}
+              </button>
               {/* Bulk Shiprocket */}
               <button
                 type="button"
@@ -1779,9 +1850,25 @@ export default function ReadyToShipPage() {
                       </td>
 
                       <td className="px-4 py-4">
-                        <p className="font-bold text-zinc-950">
-                          #{order.orderNumber}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-zinc-950">#{order.orderNumber}</span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(String(order.orderNumber));
+                                toast.success(`Order ${order.orderNumber} copied`);
+                              } catch {
+                                toast.error("Could not copy order number");
+                              }
+                            }}
+                            title="Copy order number"
+                            aria-label={`Copy order number ${order.orderNumber}`}
+                            className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                         <p className="mt-1 text-xs text-zinc-500">
                           {order.shippingSummary?.totalQuantity ||
                             order.items?.reduce(
