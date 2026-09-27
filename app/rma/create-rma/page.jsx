@@ -821,14 +821,14 @@ export default function CreateRmaPage() {
                       <button
                         type="button"
                         key={size}
-                        disabled={isCurrent}
+                        
                         onClick={() =>
                           setExchangeSize(size)
                         }
                         className={`h-11 min-w-12 rounded-xl border px-4 text-sm font-semibold transition ${isActive
                             ? "border-black bg-black text-white"
                             : "border-gray-200 bg-white text-gray-900"
-                          } disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400`}
+                          } `}
                       >
                         {size}
                       </button>
