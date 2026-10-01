@@ -142,7 +142,10 @@ export default function RmaClient() {
     loading,
     error,
     fetchAllRmas,
+    fetchRmaByNumber,
     approveRma,
+    updateRma,
+    patchRmaLocal,
   } = useRmaStore();
 
   useEffect(() => {
@@ -519,8 +522,13 @@ export default function RmaClient() {
         pickupRma.rmaNumber,
       );
 
-      await fetchAllRmas();
-
+      patchRmaLocal(
+        pickupRma.orderId,
+        pickupRma.rmaNumber,
+        data?.rma || data?.updatedRma || {
+          reverseShipment: data?.reverseShipment,
+        }
+      );
       setPickupRma(null);
       setPickupProvider("");
 
@@ -585,7 +593,6 @@ export default function RmaClient() {
         rma.rmaNumber
       );
 
-      await fetchAllRmas();
 
       if (
         norm(rma?.type) === "exchange" &&
@@ -619,55 +626,25 @@ export default function RmaClient() {
     }
   };
 
-  const updateFulfilled = async (
-    rma,
-    isFulfilled
-  ) => {
+  const updateFulfilled = async (rma, isFulfilled) => {
     const key = getKey(rma);
 
-    if (rma?.isFulfilled === true) {
-      return;
-    }
+    if (rma?.isFulfilled === true) return;
 
     if (rma?.isApproved !== true) {
-      return alert(
-        "Approve RMA before marking it fulfilled"
-      );
+      return alert("Approve RMA before marking it fulfilled");
     }
 
     try {
-      setUpdating((current) => [
-        ...current,
-        key,
-      ]);
+      setUpdating((current) => [...current, key]);
 
-      await axios.patch(
-        `${API_BASE}/api/orders/${rma.orderId}/rma/${encodeURIComponent(
-          rma.rmaNumber
-        )}`,
-        {
-          isFulfilled,
-        },
-        {
-          withCredentials: true,
-        }
-      );
-
-      await fetchAllRmas();
+      await updateRma(rma.orderId, rma.rmaNumber, {
+        isFulfilled,
+      });
     } catch (error) {
-      console.error(
-        "Failed to update RMA fulfilled status:",
-        error
-      );
-
-      alert(
-        error?.response?.data?.message ||
-        "Failed to update RMA"
-      );
+      alert(error?.message || "Failed to update RMA");
     } finally {
-      setUpdating((current) =>
-        current.filter((x) => x !== key)
-      );
+      setUpdating((current) => current.filter((x) => x !== key));
     }
   };
 
@@ -701,8 +678,14 @@ export default function RmaClient() {
         rma.rmaNumber,
       );
 
-      await fetchAllRmas();
 
+      patchRmaLocal(
+        rma.orderId,
+        rma.rmaNumber,
+        data?.rma || data?.updatedRma || {
+          reverseShipment: data?.reverseShipment,
+        }
+      );
       alert(
         data?.message ||
         "Reverse shipment synced"
@@ -764,6 +747,16 @@ export default function RmaClient() {
             rma.rmaNumber,
           );
 
+          patchRmaLocal(
+            rma.orderId,
+            rma.rmaNumber,
+            data?.rma ||
+            data?.updatedRma ||
+            (data?.reverseShipment
+              ? { reverseShipment: data.reverseShipment }
+              : {})
+          );
+
           synced += 1;
 
           if (
@@ -783,7 +776,6 @@ export default function RmaClient() {
         }
       }
 
-      await fetchAllRmas();
 
       alert(
         `Reverse pickup sync completed.\nSynced: ${synced}\nCompleted: ${completed}\nFailed: ${failed}`,
@@ -855,7 +847,15 @@ export default function RmaClient() {
         [key]: "",
       }));
 
-      await fetchAllRmas();
+      patchRmaLocal(rma.orderId, rma.rmaNumber, {
+        customer: {
+          credits: {
+            balance:
+              data?.customer?.credits?.balance ??
+              Number(rma?.customer?.credits?.balance || 0) + Number(amount),
+          },
+        },
+      });
     } catch (err) {
       alert(
         err?.response?.data?.message ||
@@ -888,22 +888,13 @@ export default function RmaClient() {
 
       await Promise.all(
         targets.map((rma) =>
-          axios.patch(
-            `${API_BASE}/api/orders/${rma.orderId}/rma/${encodeURIComponent(
-              rma.rmaNumber
-            )}`,
-            {
-              isFulfilled: true,
-            },
-            {
-              withCredentials: true,
-            }
-          )
+          updateRma(rma.orderId, rma.rmaNumber, {
+            isFulfilled: true,
+          })
         )
       );
 
       setSelected([]);
-      await fetchAllRmas();
     } catch (error) {
       console.error(
         "Bulk fulfilled update failed:",
@@ -1433,8 +1424,9 @@ export default function RmaClient() {
 
                         openRefundModal={setRefundRma}
 
-                        fetchAllRmas={fetchAllRmas}
-
+                        fetchAllRmas={() =>
+                          fetchRmaByNumber(rma.orderId, rma.rmaNumber)
+                        }
                         creditAmount={creditAmount}
                         setCreditAmount={setCreditAmount}
 
@@ -1573,7 +1565,13 @@ export default function RmaClient() {
         onClose={() => setRefundRma(null)}
         onSuccess={async () => {
           setRefundRma(null);
-          await fetchAllRmas();
+
+          if (refundRma?.orderId && refundRma?.rmaNumber) {
+            await fetchRmaByNumber(
+              refundRma.orderId,
+              refundRma.rmaNumber
+            );
+          }
         }}
       />
     </div>

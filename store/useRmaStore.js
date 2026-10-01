@@ -394,6 +394,63 @@ export const useRmaStore = create((set, get) => ({
     }
   },
 
+  patchRmaLocal: (orderId, rmaNumber, patch) => {
+    const id = String(orderId);
+    const number = String(rmaNumber);
+
+    const mergeRma = (rma) => {
+      if (
+        !rma ||
+        String(rma.orderId) !== id ||
+        String(rma.rmaNumber) !== number
+      ) {
+        return rma;
+      }
+
+      return {
+        ...rma,
+        ...patch,
+        ...(patch?.reverseShipment
+          ? {
+            reverseShipment: {
+              ...rma.reverseShipment,
+              ...patch.reverseShipment,
+            },
+          }
+          : {}),
+        ...(patch?.refund
+          ? {
+            refund: {
+              ...rma.refund,
+              ...patch.refund,
+            },
+          }
+          : {}),
+        ...(patch?.customer
+          ? {
+            customer: {
+              ...rma.customer,
+              ...patch.customer,
+              credits: patch.customer.credits
+                ? {
+                  ...rma.customer?.credits,
+                  ...patch.customer.credits,
+                }
+                : rma.customer?.credits,
+            },
+          }
+          : {}),
+      };
+    };
+
+    set((state) => ({
+      rmas: (state.rmas || []).map(mergeRma),
+      rma: mergeRma(state.rma),
+    }));
+  },
+
+  
+
   /* ============================================================
      ✅ Convenience actions (admin flows)
      These just call updateRma with common payloads
