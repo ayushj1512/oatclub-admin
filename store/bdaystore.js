@@ -6,7 +6,7 @@ const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 ).replace(/\/$/, "");
 
-const useBdayStore = create((set, get) => ({
+const useBdayStore = create((set) => ({
   wishes: [],
   loading: false,
   error: "",
@@ -23,7 +23,7 @@ const useBdayStore = create((set, get) => ({
 
       const data = await response.json();
 
-      if (!response.ok) {
+      if (!response.ok || data?.success === false) {
         throw new Error(
           data?.message || "Unable to fetch birthday wishes"
         );
@@ -34,6 +34,7 @@ const useBdayStore = create((set, get) => ({
         : [];
 
       set({ wishes, loading: false });
+
       return wishes;
     } catch (error) {
       set({
@@ -46,7 +47,7 @@ const useBdayStore = create((set, get) => ({
     }
   },
 
-  createWish: async ({ name, message }) => {
+  createWish: async ({ name, email, phone, message }) => {
     set({ loading: true, error: "" });
 
     try {
@@ -56,23 +57,28 @@ const useBdayStore = create((set, get) => ({
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({ name, message }),
+        body: JSON.stringify({
+          name: String(name ?? "").trim(),
+          email: String(email ?? "").trim().toLowerCase(),
+          phone: String(phone ?? "").trim(),
+          message: String(message ?? "").trim(),
+        }),
       });
 
       const data = await response.json();
 
-      if (!response.ok) {
+      if (!response.ok || data?.success === false) {
         throw new Error(
           data?.message || "Unable to submit birthday wish"
         );
       }
 
-      set({
+      set((state) => ({
         wishes: data?.wish
-          ? [data.wish, ...get().wishes]
-          : get().wishes,
+          ? [data.wish, ...state.wishes]
+          : state.wishes,
         loading: false,
-      });
+      }));
 
       return data;
     } catch (error) {

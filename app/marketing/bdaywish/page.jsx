@@ -6,7 +6,9 @@ import {
   CalendarDays,
   Heart,
   LoaderCircle,
+  Mail,
   MessageSquareText,
+  Phone,
   RefreshCw,
   Search,
   Sparkles,
@@ -17,22 +19,36 @@ import useBdayStore from "@/store/bdaystore";
 const formatDate = (value) => {
   if (!value) return "—";
 
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+    timeZone: "Asia/Kolkata",
+  }).format(date);
+};
+
+const getDayKey = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("en-IN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Asia/Kolkata",
+  }).format(date);
 };
 
 export default function BirthdayWishesPage() {
   const wishes = useBdayStore((state) => state.wishes);
   const loading = useBdayStore((state) => state.loading);
   const error = useBdayStore((state) => state.error);
-  const fetchWishes = useBdayStore(
-    (state) => state.fetchWishes
-  );
+  const fetchWishes = useBdayStore((state) => state.fetchWishes);
 
   const [search, setSearch] = useState("");
 
@@ -45,22 +61,22 @@ export default function BirthdayWishesPage() {
 
     if (!query) return wishes;
 
-    return wishes.filter((wish) => {
-      return [wish?.name, wish?.message]
+    return wishes.filter((wish) =>
+      [wish?.name, wish?.email, wish?.phone, wish?.message]
         .filter(Boolean)
         .some((value) =>
           String(value).toLowerCase().includes(query)
-        );
-    });
+        )
+    );
   }, [wishes, search]);
 
   const todayCount = useMemo(() => {
-    const today = new Date().toDateString();
+    const today = getDayKey(new Date());
 
     return wishes.filter(
       (wish) =>
         wish?.createdAt &&
-        new Date(wish.createdAt).toDateString() === today
+        getDayKey(wish.createdAt) === today
     ).length;
   }, [wishes]);
 
@@ -87,8 +103,8 @@ export default function BirthdayWishesPage() {
             </h1>
 
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/60">
-              All the lovely birthday messages received from
-              the OATCLUB community.
+              All the lovely birthday messages received from the
+              OATCLUB community.
             </p>
           </div>
         </section>
@@ -144,7 +160,7 @@ export default function BirthdayWishesPage() {
             </div>
 
             <div className="flex gap-2">
-              <div className="relative flex-1 sm:w-72">
+              <div className="relative min-w-0 flex-1 sm:w-80">
                 <Search
                   size={17}
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400"
@@ -153,10 +169,9 @@ export default function BirthdayWishesPage() {
                 <input
                   type="search"
                   value={search}
-                  onChange={(event) =>
-                    setSearch(event.target.value)
-                  }
-                  placeholder="Search wishes..."
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search name, email, phone..."
+                  aria-label="Search birthday wishes"
                   className="h-11 w-full rounded-xl bg-neutral-100 pl-10 pr-4 text-sm outline-none transition focus:ring-2 focus:ring-black"
                 />
               </div>
@@ -177,17 +192,17 @@ export default function BirthdayWishesPage() {
           </div>
 
           {error && (
-            <div className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">
+            <div
+              role="alert"
+              className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600"
+            >
               {error}
             </div>
           )}
 
           {loading && !wishes.length ? (
             <div className="flex min-h-72 flex-col items-center justify-center text-neutral-400">
-              <LoaderCircle
-                size={28}
-                className="animate-spin"
-              />
+              <LoaderCircle size={28} className="animate-spin" />
 
               <p className="mt-3 text-sm">Loading wishes...</p>
             </div>
@@ -196,7 +211,7 @@ export default function BirthdayWishesPage() {
               {filteredWishes.map((wish) => (
                 <article
                   key={wish._id}
-                  className="group rounded-2xl bg-neutral-50 p-4 transition hover:bg-neutral-100 sm:p-5"
+                  className="group flex min-w-0 flex-col rounded-2xl bg-neutral-50 p-4 transition hover:bg-neutral-100 sm:p-5"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-black text-sm font-bold uppercase text-white">
@@ -209,16 +224,40 @@ export default function BirthdayWishesPage() {
                     />
                   </div>
 
-                  <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-neutral-700">
+                  <p className="mt-4 flex-1 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-700">
                     “{wish.message}”
                   </p>
 
                   <div className="mt-5 border-t border-neutral-200 pt-4">
-                    <p className="text-sm font-bold text-black">
+                    <p className="break-words text-sm font-bold text-black">
                       {wish.name}
                     </p>
 
-                    <p className="mt-1 text-[11px] text-neutral-400">
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-start gap-2 text-xs text-neutral-600">
+                        <Mail
+                          size={14}
+                          className="mt-0.5 shrink-0 text-neutral-400"
+                        />
+
+                        <span className="min-w-0 break-all">
+                          {wish.email || "Email not provided"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs text-neutral-600">
+                        <Phone
+                          size={14}
+                          className="shrink-0 text-neutral-400"
+                        />
+
+                        <span className="break-all">
+                          {wish.phone || "Phone not provided"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-[11px] text-neutral-400">
                       {formatDate(wish.createdAt)}
                     </p>
                   </div>
@@ -237,7 +276,7 @@ export default function BirthdayWishesPage() {
 
               <p className="mt-1 text-xs text-neutral-500">
                 {search
-                  ? "Try searching with another name or message."
+                  ? "Try another name, email, phone number or message."
                   : "Birthday wishes will appear here once submitted."}
               </p>
             </div>
