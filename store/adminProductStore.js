@@ -95,10 +95,6 @@ export const PRODUCT_LIFECYCLE_STAGES = [
   "sampling",
   "sample_approval",
   "pattern_grading",
-  "cutting",
-  "stitching",
-  "finishing",
-  "completed",
 ];
 
 const normalizeLifecycleProduct = (product) => {

@@ -49,6 +49,7 @@ import { createPortal } from "react-dom";
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { useOrderStore } from "@/store/orderStore";
 import { useShiprocketStore } from "@/store/ShipRocketStore";
+import { useCustomerStore } from "@/store/customerStore";
 
 const safe = (value) => String(value ?? "").trim();
 
@@ -268,8 +269,6 @@ const createPaymentRecoveryMessage = (order = {}) => {
   Own All Trends`;
 };
 
-
-
 const createShippingMessage = (order = {}) => {
   const {
     awb,
@@ -377,6 +376,10 @@ export default function OrderRowActions({
     (state) => state.syncTracking
   );
 
+  const toggleCustomerBlacklist = useCustomerStore(
+    (state) => state.toggleCustomerBlacklist
+  );
+
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [invoice, setInvoice] = useState(null);
@@ -440,6 +443,17 @@ export default function OrderRowActions({
     canSendPrepaidConfirmationWhatsApp(order);
 
   const orderId = safe(order?._id || order?.id);
+  const customerId =
+    typeof order?.customerId === "object"
+      ? order.customerId?._id
+      : order?.customerId;
+
+  const [isBlacklisted, setIsBlacklisted] = useState(
+    order?.customerId?.isBlacklisted === true ||
+    order?.customerIsBlacklisted === true
+  );
+
+  const [blacklistLoading, setBlacklistLoading] = useState(false);
   const orderNumber = safe(order?.orderNumber);
   const isChildOrder = Boolean(
     order?.parentOrderId ||
@@ -495,6 +509,36 @@ export default function OrderRowActions({
       "out_for_delivery",
       "delivered",
     ].includes(fulfillmentStatus);
+
+  const handleBlacklistToggle = async () => {
+    if (!customerId || blacklistLoading) return;
+
+    const nextStatus = !isBlacklisted;
+
+    setBlacklistLoading(true);
+
+    try {
+      const result = await toggleCustomerBlacklist(customerId, nextStatus);
+
+      if (!result?.success) {
+        toast.error(result?.error || "Failed to update blacklist");
+        return;
+      }
+
+      setIsBlacklisted(nextStatus);
+      toast.success(
+        nextStatus
+          ? "Customer blacklisted"
+          : "Customer removed from blacklist"
+      );
+
+      await onRefresh?.();
+    } catch (error) {
+      toast.error(error?.message || "Failed to update blacklist");
+    } finally {
+      setBlacklistLoading(false);
+    }
+  };
 
   useEffect(() => {
     setIsConfirmed(order?.isConfirmed === true);
@@ -2477,6 +2521,45 @@ export default function OrderRowActions({
                 {isTestingOrder ? "TESTING" : "NORMAL"}
               </span>
             </button>
+
+            <MenuDivider />
+
+            <button
+              type="button"
+              onClick={handleBlacklistToggle}
+              disabled={isBusy || blacklistLoading || !customerId}
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3">
+                {blacklistLoading ? (
+                  <Loader2 size={15} className="animate-spin text-red-600" />
+                ) : (
+                  <Ban size={15} className="text-red-600" />
+                )}
+
+                <div>
+                  <div className="text-xs font-bold text-zinc-800">
+                    {isBlacklisted ? "Remove from Blacklist" : "Blacklist Customer"}
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-zinc-500">
+                    {isBlacklisted
+                      ? "Allow this customer to order"
+                      : "Block this customer from ordering"}
+                  </div>
+                </div>
+              </div>
+
+              <span
+                className={`rounded-full px-2 py-1 text-[9px] font-bold ${isBlacklisted
+                    ? "bg-red-600 text-white"
+                    : "bg-zinc-100 text-zinc-500"
+                  }`}
+              >
+                {isBlacklisted ? "BLOCKED" : "OFF"}
+              </span>
+            </button>
+            
           </div>,
           document.body
         )}

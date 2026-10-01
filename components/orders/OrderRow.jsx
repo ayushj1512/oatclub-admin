@@ -382,6 +382,21 @@ function OrderRow({
     window.open(`/orders/${orderId}`, "_blank", "noopener,noreferrer");
   }, [orderId]);
 
+  const goToCustomer = useCallback(() => {
+    const customerId =
+      typeof order?.customerId === "object"
+        ? order.customerId?._id
+        : order?.customerId;
+
+    if (!customerId || typeof window === "undefined") return;
+
+    window.open(
+      `/customers/${customerId}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }, [order?.customerId]);
+
   const handleUpdated = useCallback(
     (payload) => {
       onUpdated?.(payload?.order ?? payload);
@@ -525,12 +540,24 @@ function OrderRow({
 
         <td className="px-5 py-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-gray-900">
+            <button
+              type="button"
+              onClick={goToCustomer}
+              disabled={
+                !(
+                  typeof order?.customerId === "object"
+                    ? order.customerId?._id
+                    : order?.customerId
+                )
+              }
+              title="Open customer profile"
+              className="font-medium text-gray-900 underline decoration-black/20 underline-offset-2 hover:decoration-black disabled:cursor-default disabled:no-underline"
+            >
               {order?.customerId?.name ||
                 order?.customerName ||
                 order?.shippingAddressSnapshot?.fullName ||
                 "Unknown"}
-            </span>
+            </button>
 
             {order?.isRepeatCustomer === true && (
               <span >
