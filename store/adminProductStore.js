@@ -4224,6 +4224,79 @@ export const useAdminProductStore = create((set, get) => ({
     }
   },
 
+  /* ============================================================
+   SEARCH PRODUCT FOR BARCODE PAGE
+   GET /api/products/barcode/by-code/:code
+============================================================ */
+  searchProductForBarcode: async (code) => {
+    const normalizedCode = normalizeProductCode(code);
+
+    if (!normalizedCode) return null;
+
+    try {
+      const res = await fetch(
+        `${API}/barcode/by-code/${encodeURIComponent(normalizedCode)}`,
+        {
+          credentials: "include",
+          cache: "no-store",
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to find product");
+      }
+
+      return data.product || null;
+    } catch (error) {
+      console.error("searchProductForBarcode error:", error);
+      throw error;
+    }
+  },
+
+  /* ============================================================
+     GENERATE AND SAVE PRODUCT BARCODES
+     POST /api/products/:id/barcodes/generate
+  ============================================================ */
+  generateProductBarcodes: async (productId) => {
+    if (!productId) {
+      throw new Error("Product ID is required");
+    }
+
+    try {
+      set({ saving: true, error: null });
+
+      const res = await fetch(
+        `${API}/${encodeURIComponent(productId)}/barcodes/generate`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to generate barcodes");
+      }
+
+      toast.success(data.message || "Barcodes generated");
+
+      return data;
+    } catch (error) {
+      console.error("generateProductBarcodes error:", error);
+      set({ error: error.message });
+      toast.error(error.message || "Failed to generate barcodes");
+      throw error;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
   clearInventory: () =>
     set({
       inventoryProducts: [],

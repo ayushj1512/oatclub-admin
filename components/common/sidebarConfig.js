@@ -50,6 +50,7 @@ export const sidebarMenus = {
     { label: "Confirmed Production Jobs", href: "/production/production-job" },
     { label: "Packed Orders", href: "/production/packed" },
     { label: "RTO Received", href: "/production/rto-recieved" },
+    { label: "Product Barcodes", href: "/production/product-barcodes" },
     { label: "Sampling", href: "/production/sampling" },
     { label: "Stock Update", href: "/production/stock-update" },
     { label: "Pattern Number", href: "/production/pattern-number" },
