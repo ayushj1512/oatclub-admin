@@ -145,7 +145,18 @@ export default function RmaRow({
 
   const isRefunded =
     rma?.isRefunded === true ||
-    rma?.refund?.status === "completed";
+    norm(rma?.refund?.status) === "completed";
+
+  const isPickupCompleted =
+    rma?.returnPickupCompleted === true ||
+    Boolean(reverseShipment?.pickedAt) ||
+    ["picked", "in_transit", "received"].includes(
+      norm(reverseShipment?.status)
+    );
+
+  const canShowRefund =
+    norm(rma?.type) === "return" &&
+    (rma?.eligibleForRefund === true || isPickupCompleted);
 
   return (
     <>
@@ -225,10 +236,9 @@ export default function RmaRow({
 
         {/* PICKUP */}
         <td className="p-4">
-          {rma?.returnPickupCompleted ? (
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-              ✓ Completed
-            </span>
+          {isPickupCompleted ? (<span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+            ✓ Completed
+          </span>
           ) : hasReturnPickup ? (
             <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
               Pickup Created
@@ -274,7 +284,7 @@ export default function RmaRow({
 
         {/* REFUND ELIGIBLE */}
         <td className="p-4">
-          {rma?.eligibleForRefund ? (
+          {canShowRefund ? (
             <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
               ✓ Eligible
             </span>
@@ -289,12 +299,29 @@ export default function RmaRow({
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
               ✓ Refunded
             </span>
-          ) : rma?.eligibleForRefund ? (
+          ) : canShowRefund ? (
             <button
               type="button"
-              disabled={locked || !isApproved}
-              onClick={() => !locked && isApproved && openRefundModal?.(rma)}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+              disabled={
+                locked ||
+                !isApproved ||
+                isSyncingReverse ||
+                isUpdating
+              }
+              onClick={() => {
+                if (
+                  locked ||
+                  !isApproved ||
+                  isRefunded ||
+                  isSyncingReverse ||
+                  isUpdating
+                ) {
+                  return;
+                }
+
+                openRefundModal?.(rma);
+              }}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Refund
             </button>
@@ -495,8 +522,7 @@ export default function RmaRow({
                   <div className="mt-2 space-y-1 text-xs text-gray-600">
                     <p>
                       <b>Eligible:</b>{" "}
-                      {rma?.eligibleForRefund ? "Yes" : "No"}
-                    </p>
+                      {canShowRefund ? "Yes" : "No"}                    </p>
 
                     <p>
                       <b>Refunded:</b> {isRefunded ? "Yes" : "No"}

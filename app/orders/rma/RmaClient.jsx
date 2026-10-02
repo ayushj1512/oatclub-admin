@@ -703,86 +703,168 @@ export default function RmaClient() {
   };
 
   const bulkSyncReversePickups = async () => {
+    if (bulkSyncingReverse) return;
+
     const targets = filteredRmas.filter(
       (rma) =>
         rma?.isApproved === true &&
         rma?.isFulfilled !== true &&
-        !rma?.returnPickupCompleted &&
         Boolean(
           rma?.reverseShipment?.shipmentId ||
           rma?.reverseShipment?.orderId ||
-          rma?.reverseShipment?.awb,
-        ),
+          rma?.reverseShipment?.awb
+        )
     );
 
     if (!targets.length) {
-      return alert(
-        "No pending reverse pickups are available to sync.",
-      );
+      return alert("No reverse shipments are available to sync.");
     }
+
+    let synced = 0;
+    let pickupCompleted = 0;
+    let received = 0;
+    let failed = 0;
 
     try {
       setBulkSyncingReverse(true);
-      setSyncingReverse(
-        targets.map(getKey),
-      );
 
-      let synced = 0;
-      let completed = 0;
-      let failed = 0;
+      setSyncingReverse((current) => [
+        ...new Set([...current, ...targets.map(getKey)]),
+      ]);
 
       for (const rma of targets) {
+        const key = getKey(rma);
+
         try {
-          const provider = norm(
-            rma?.reverseShipment?.provider,
-          );
+          const provider = norm(rma?.reverseShipment?.provider);
 
           const syncFunction =
             provider === "delhivery"
               ? syncDelhiveryReversePickup
-              : syncShiprocketReversePickup;
+              : provider === "shiprocket"
+                ? syncShiprocketReversePickup
+                : null;
 
-          const data = await syncFunction(
+          if (!syncFunction) {
+            throw new Error(
+              `Unsupported reverse courier: ${provider || "missing"}`
+            );
+          }
+
+          const response = await syncFunction(
             rma.orderId,
-            rma.rmaNumber,
+            rma.rmaNumber
           );
 
-          patchRmaLocal(
-            rma.orderId,
-            rma.rmaNumber,
-            data?.rma ||
-            data?.updatedRma ||
-            (data?.reverseShipment
-              ? { reverseShipment: data.reverseShipment }
-              : {})
+          // Supports store payloads, API envelopes and Axios responses.
+          if (
+            response?.success === false ||
+            response?.data?.success === false
+          ) {
+            throw new Error(
+              response?.message ||
+              response?.data?.message ||
+              "Reverse shipment sync failed."
+            );
+          }
+
+          const data =
+            response?.data?.data ??
+            response?.data ??
+            response;
+
+          if (!data || data.success === false) {
+            throw new Error(
+              data?.message || "Empty or unsuccessful sync response."
+            );
+          }
+
+          const updatedRma = data.rma || data.updatedRma;
+          const reverseShipment =
+            updatedRma?.reverseShipment || data.reverseShipment;
+
+          if (!updatedRma && !reverseShipment) {
+            throw new Error("Sync response is missing shipment data.");
+          }
+
+          const shipmentStatus = norm(
+            reverseShipment?.status || data.status
           );
+
+          const confirmsPickup = [
+            "picked",
+            "in_transit",
+            "received",
+          ].includes(shipmentStatus);
+
+          const isPickupCompleted =
+            updatedRma?.returnPickupCompleted === true ||
+            data.returnPickupCompleted === true ||
+            data.pickupCompleted === true ||
+            reverseShipment?.pickupCompleted === true ||
+            rma.returnPickupCompleted === true ||
+            confirmsPickup;
+
+          const patch = {
+            ...(updatedRma || {}),
+            returnPickupCompleted: isPickupCompleted,
+          };
+
+          if (reverseShipment) {
+            patch.reverseShipment = {
+              ...(rma.reverseShipment || {}),
+              ...reverseShipment,
+            };
+          }
+
+          if (
+            !updatedRma?.status &&
+            [
+              "pickup_scheduled",
+              "picked",
+              "in_transit",
+              "received",
+            ].includes(shipmentStatus)
+          ) {
+            patch.status = shipmentStatus;
+          }
+
+          patchRmaLocal(rma.orderId, rma.rmaNumber, patch);
 
           synced += 1;
 
-          if (
-            data?.reverseShipment
-              ?.pickupCompleted ||
-            data?.pickupCompleted
-          ) {
-            completed += 1;
-          }
+          if (isPickupCompleted) pickupCompleted += 1;
+          if (shipmentStatus === "received") received += 1;
         } catch (error) {
           failed += 1;
 
           console.error(
             `Reverse pickup sync failed for ${rma?.rmaNumber}:`,
-            error,
+            error
+          );
+        } finally {
+          // Stop this row's spinner as soon as its sync finishes.
+          setSyncingReverse((current) =>
+            current.filter((value) => value !== key)
           );
         }
       }
 
-
       alert(
-        `Reverse pickup sync completed.\nSynced: ${synced}\nCompleted: ${completed}\nFailed: ${failed}`,
+        `Reverse shipment sync completed.\n` +
+        `Synced: ${synced}\n` +
+        `Pickup completed: ${pickupCompleted}\n` +
+        `Received: ${received}\n` +
+        `Failed: ${failed}`
       );
     } finally {
       setBulkSyncingReverse(false);
-      setSyncingReverse([]);
+
+      const targetKeys = new Set(targets.map(getKey));
+
+      setSyncingReverse((current) =>
+        current.filter((key) => !targetKeys.has(key))
+      );
     }
   };
 
@@ -911,7 +993,10 @@ export default function RmaClient() {
   };
 
   const downloadExcel = () => {
-    if (!filteredRmas.length) return;
+    if (!filteredRmas.length) {
+      alert("No RMA requests to export.");
+      return;
+    }
 
     const getSizeFromAttributes = (attributes = []) =>
       pick(
@@ -920,84 +1005,170 @@ export default function RmaClient() {
           .map((attr) => attr?.value)
       );
 
+    const escapeHtml = (value) =>
+      str(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+
+    const formatDateTime = (value) => {
+      const date = parseDate(value);
+
+      return date
+        ? date.toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+        })
+        : "";
+    };
+
     const rows = filteredRmas.flatMap((rma) => {
-      const address =
-        rma?.shippingAddressSnapshot || {};
+      const address = rma?.shippingAddressSnapshot || {};
+      const customer = rma?.customer || {};
+      const reverse = rma?.reverseShipment || {};
 
-      const customer =
-        rma?.customer || {};
-
-      const orderItems =
-        safeArray(rma?.orderItems);
-
-      const rmaItems =
-        safeArray(rma?.items);
+      const orderItems = safeArray(rma?.orderItems);
+      const rmaItems = safeArray(rma?.items);
 
       const newSize =
         norm(rma?.type) === "exchange"
-          ? getSizeFromAttributes(
-            rma?.exchangeTo?.attributes
-          )
+          ? getSizeFromAttributes(rma?.exchangeTo?.attributes)
           : "";
 
+      const provider = pick(reverse?.provider);
+
+      const courierName = pick(
+        reverse?.courierName,
+        reverse?.courier_name,
+        reverse?.courier?.name,
+        typeof reverse?.courier === "string" ? reverse.courier : "",
+        norm(provider) === "delhivery" ? "Delhivery" : ""
+      );
+
+      const awb = pick(
+        reverse?.awb,
+        reverse?.awbCode,
+        reverse?.awb_code,
+        reverse?.waybill
+      );
+
+      const shipmentId = pick(
+        reverse?.shipmentId,
+        reverse?.shipment_id
+      );
+
+      const courierOrderId = pick(
+        reverse?.orderId,
+        reverse?.order_id
+      );
+
+      const courierStatus = pick(
+        reverse?.currentStatus,
+        reverse?.current_status,
+        reverse?.shipmentStatus,
+        reverse?.shipment_status,
+        reverse?.status
+      );
+
+      const trackingUrl = pick(
+        reverse?.trackingUrl,
+        reverse?.tracking_url
+      );
+
+      const hasBooking = Boolean(
+        awb || shipmentId || courierOrderId
+      );
+
       const baseRow = {
-        "Order Number": rma?.orderNumber || "",
-        "RMA Number": rma?.rmaNumber || "",
+        "Order Number": str(rma?.orderNumber),
+        "RMA Number": str(rma?.rmaNumber),
         Type: rma?.type || "",
         "RMA Status": rma?.status || "",
         Approved: rma?.isApproved ? "Yes" : "No",
-        Fulfilled: rma?.isFulfilled
-          ? "Yes"
-          : "No",
-        Customer:
-          address?.fullName ||
-          customer?.name ||
-          "",
-        Mobile:
-          address?.phone ||
-          customer?.phone ||
-          "",
-        Email:
-          address?.email ||
-          customer?.email ||
-          "",
+        Fulfilled: rma?.isFulfilled ? "Yes" : "No",
+
+        // RMA closure is separate from courier delivery status.
+        "RMA Closure": rma?.isFulfilled === true
+          ? "Closed"
+          : "Pending",
+
+        "Reverse Booking": hasBooking
+          ? "Booking reference available"
+          : "No booking reference",
+
+        "Courier Provider": provider,
+        "Courier Name": courierName,
+        "Reverse AWB / Waybill": str(awb),
+        "Reverse Shipment ID": str(shipmentId),
+        "Courier Order ID": str(courierOrderId),
+        "Courier Status": courierStatus || "Not available",
+        "Courier Status Code": str(
+          pick(reverse?.statusCode, reverse?.status_code)
+        ),
+        "Tracking URL": trackingUrl,
+
+        "Pickup Date": formatDateTime(
+          pick(
+            reverse?.pickupScheduledAt,
+            reverse?.pickupDate,
+            reverse?.pickup_date
+          )
+        ),
+
+        "Picked Up At": formatDateTime(
+          pick(reverse?.pickedUpAt, reverse?.pickupCompletedAt)
+        ),
+
+        "Delivered At": formatDateTime(reverse?.deliveredAt),
+
+        "Courier Last Synced": formatDateTime(
+          pick(reverse?.lastSyncedAt, reverse?.syncedAt)
+        ),
+
+        "Reverse Shipment Updated": formatDateTime(
+          reverse?.updatedAt
+        ),
+
+        Customer: pick(address?.fullName, customer?.name),
+        Mobile: str(pick(address?.phone, customer?.phone)),
+        Email: pick(address?.email, customer?.email),
         Reason: rma?.reason || "",
         Note: rma?.customerNote || "",
+
         Amount:
           rma?.finalPayable ??
           rma?.totalAmount ??
           0,
-        "Payment Method":
-          rma?.paymentMethod || "",
-        "Payment Status":
-          rma?.paymentStatus || "",
-        "Fulfillment Status":
-          rma?.fulfillmentStatus || "",
+
+        "Payment Method": rma?.paymentMethod || "",
+        "Payment Status": rma?.paymentStatus || "",
+        "Fulfillment Status": rma?.fulfillmentStatus || "",
         City: address?.city || "",
         State: address?.state || "",
-        Pincode: address?.pincode || "",
-        "RMA Created":
-          formatDate(rma?.createdAt),
-        "Order Date":
-          formatDate(rma?.orderDate),
+        Pincode: str(address?.pincode),
+        "RMA Created": formatDate(rma?.createdAt),
+        "Order Date": formatDate(rma?.orderDate),
       };
 
       if (!rmaItems.length) {
-        return [{
-          ...baseRow,
-          "Product Code": "",
-          "Previous Size / Size": "",
-          "New Size": newSize,
-          Qty: "",
-        }];
+        return [
+          {
+            ...baseRow,
+            "Product Code": "",
+            "Previous Size / Size": "",
+            "New Size": newSize,
+            Qty: "",
+          },
+        ];
       }
 
       return rmaItems.map((item) => {
         const matchedOrderItem =
           orderItems.find(
             (orderItem) =>
-              str(orderItem?.lineId) ===
-              str(item?.orderLineId)
+              item?.orderLineId != null &&
+              str(orderItem?.lineId) === str(item.orderLineId)
           ) ||
           orderItems[item?.orderItemIndex] ||
           null;
@@ -1009,89 +1180,94 @@ export default function RmaClient() {
           getSizeFromAttributes(
             matchedOrderItem?.variant?.attributes
           ),
-          getSizeFromAttributes(
-            matchedOrderItem?.attributes
-          )
+          getSizeFromAttributes(matchedOrderItem?.attributes)
         );
 
         const productCode = pick(
           item?.productCode,
-          matchedOrderItem?.productSnapshot
-            ?.productCode,
+          matchedOrderItem?.productSnapshot?.productCode,
           matchedOrderItem?.productCode,
           matchedOrderItem?.code
         );
 
         return {
           ...baseRow,
-          "Product Code": productCode,
+          "Product Code": str(productCode),
           "Previous Size / Size": previousSize,
           "New Size":
-            norm(rma?.type) === "exchange"
-              ? newSize
-              : "",
-          Qty: item?.quantity || 1,
+            norm(rma?.type) === "exchange" ? newSize : "",
+          Qty: item?.quantity ?? 1,
         };
       });
     });
 
     const headers = Object.keys(rows[0]);
 
+    // Keep leading zeros and long courier IDs intact in Excel.
+    const textColumns = new Set([
+      "Order Number",
+      "RMA Number",
+      "Reverse AWB / Waybill",
+      "Reverse Shipment ID",
+      "Courier Order ID",
+      "Courier Status Code",
+      "Mobile",
+      "Pincode",
+      "Product Code",
+    ]);
+
     const html = `
-        <html>
-          <head>
-            <meta charset="UTF-8" />
-          </head>
-          <body>
-            <table border="1">
-              <thead>
-                <tr>
-                  ${headers
+      <html xmlns:x="urn:schemas-microsoft-com:office:excel">
+        <head>
+          <meta charset="UTF-8" />
+        </head>
+        <body>
+          <table border="1">
+            <thead>
+              <tr>
+                ${headers
         .map(
           (header) =>
-            `<th>${header}</th>`
+            `<th style="background:#eeeeee;font-weight:bold;">${escapeHtml(header)}</th>`
         )
         .join("")}
-                </tr>
-              </thead>
-
-              <tbody>
-                ${rows
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
         .map(
           (row) => `
-                      <tr>
-                        ${headers
-              .map(
-                (header) =>
-                  `<td>${str(
-                    row[header]
-                  )
-                    .replaceAll("&", "&amp;")
-                    .replaceAll("<", "&lt;")
-                    .replaceAll(">", "&gt;")}</td>`
-              )
+                    <tr>
+                      ${headers
+              .map((header) => {
+                const style = textColumns.has(header)
+                  ? ` style='mso-number-format:"\\@";'`
+                  : "";
+
+                return `<td${style}>${escapeHtml(
+                  row[header]
+                )}</td>`;
+              })
               .join("")}
-                      </tr>
-                    `
+                    </tr>
+                  `
         )
         .join("")}
-              </tbody>
-            </table>
-          </body>
-        </html>
-      `;
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
 
-    const blob = new Blob([html], {
-      type: "application/vnd.ms-excel",
+    const blob = new Blob(["\uFEFF", html], {
+      type: "application/vnd.ms-excel;charset=utf-8",
     });
 
     const url = URL.createObjectURL(blob);
-
-    const anchor =
-      document.createElement("a");
+    const anchor = document.createElement("a");
 
     anchor.href = url;
-    anchor.download = `rma-production-${new Date()
+    anchor.download = `rma-courier-details-${new Date()
       .toISOString()
       .slice(0, 10)}.xls`;
 
@@ -1099,7 +1275,7 @@ export default function RmaClient() {
     anchor.click();
     anchor.remove();
 
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const clearFilters = () => {
