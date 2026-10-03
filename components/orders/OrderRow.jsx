@@ -63,69 +63,71 @@ const buildProductUrl = (item) => {
 };
 
 const paymentMethodMeta = (method) => {
-  const key = String(method || "cod")
-    .trim()
-    .toLowerCase();
+  const key = String(method || "cod").trim().toLowerCase();
 
   const map = {
     cod: {
       label: "COD",
       icon: Banknote,
-      className:
-        "bg-white text-gray-800 border-gray-200",
+      className: "bg-orange-100 text-orange-800 border-orange-200",
     },
-
     partial_cod: {
       label: "Partial COD",
       icon: Banknote,
-      className:
-        "bg-amber-50 text-amber-700 border-amber-200",
+      className: "bg-amber-100 text-amber-800 border-amber-200",
     },
-
     razorpay: {
       label: "Razorpay",
       icon: CreditCard,
-      className:
-        "bg-gray-950 text-white border-gray-950",
+      className: "bg-blue-100 text-blue-800 border-blue-200",
     },
-
     manual_prepaid: {
       label: "Prepaid",
       icon: CreditCard,
-      className:
-        "bg-blue-50 text-blue-700 border-blue-200",
+      className: "bg-cyan-100 text-cyan-800 border-cyan-200",
     },
-
     wallet: {
       label: "Wallet",
       icon: CreditCard,
-      className:
-        "bg-emerald-50 text-emerald-700 border-emerald-200",
+      className: "bg-emerald-100 text-emerald-800 border-emerald-200",
     },
-
     exchange: {
       label: "Exchange",
       icon: RefreshCw,
-      className:
-        "bg-gray-100 text-gray-800 border-gray-200",
+      className: "bg-violet-100 text-violet-800 border-violet-200",
     },
-
     complimentary: {
       label: "Complimentary",
       icon: CreditCard,
-      className:
-        "bg-violet-50 text-violet-700 border-violet-200",
+      className: "bg-pink-100 text-pink-800 border-pink-200",
+    },
+    wallet_razorpay: {
+      label: "Wallet + Razorpay",
+      icon: CreditCard,
+      className: "bg-teal-100 text-teal-800 border-teal-200",
+    },
+    wallet_cod: {
+      label: "Wallet + COD",
+      icon: Banknote,
+      className: "bg-orange-100 text-orange-800 border-orange-200",
+    },
+    wallet_partial_cod: {
+      label: "Wallet + Partial COD",
+      icon: Banknote,
+      className: "bg-amber-100 text-amber-800 border-amber-200",
+    },
+    wallet_manual_prepaid: {
+      label: "Wallet + Prepaid",
+      icon: CreditCard,
+      className: "bg-cyan-100 text-cyan-800 border-cyan-200",
     },
   };
 
-  return (
-    map[key] || {
-      label: key || "N/A",
-      icon: CreditCard,
-      className:
-        "bg-gray-50 text-gray-700 border-gray-200",
-    }
-  );
+  return map[key] || {
+    label: key.replace(/_/g, " ").toUpperCase(),
+    icon: CreditCard,
+    className: "bg-slate-100 text-slate-700 border-slate-200",
+  };
 };
 
 const attributionSourceMeta = (order) => {
@@ -358,10 +360,45 @@ function OrderRow({
     [order?.paymentStatus]
   );
 
-  const paymentMethod = useMemo(
-    () => paymentMethodMeta(order?.paymentMethod),
-    [order?.paymentMethod]
-  );
+  const paymentMethod = useMemo(() => {
+    const method = String(order?.paymentMethod || "cod")
+      .trim()
+      .toLowerCase();
+
+    const walletAmount = Math.max(
+      0,
+      Number(order?.walletCredit?.amount) || 0,
+      Number(order?.paymentBreakdown?.walletAmount) || 0
+    );
+
+    const base = paymentMethodMeta(method);
+
+    if (walletAmount <= 0 || method === "wallet") {
+      return base;
+    }
+
+    const labels = {
+      razorpay: "Wallet + Razorpay",
+      cod: "Wallet + COD",
+      partial_cod: "Wallet + Partial COD",
+      manual_prepaid: "Wallet + Prepaid",
+    };
+
+    if (!labels[method]) return base;
+
+    return {
+      ...base,
+      label: labels[method],
+      className:
+        method === "cod" || method === "partial_cod"
+          ? "bg-amber-50 text-amber-700 border-amber-200"
+          : "bg-emerald-50 text-emerald-700 border-emerald-200",
+    };
+  }, [
+    order?.paymentMethod,
+    order?.walletCredit?.amount,
+    order?.paymentBreakdown?.walletAmount,
+  ]);
 
   const PaymentMethodIcon = paymentMethod.icon;
 
