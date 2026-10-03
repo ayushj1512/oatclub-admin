@@ -1,6 +1,5 @@
 "use client";
-
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -16,10 +15,8 @@ import {
   getDeliveryHealth,
 } from "@/components/orders/DeliveryHealthBadge";
 import { useOrderStore } from "@/store/orderStore";
-
 const IST_TZ = "Asia/Kolkata";
 const IST_OFFSET = "+05:30";
-
 const Card = ({ children, className = "" }) => (
   <div
     className={`bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-gray-100 p-5 ${className}`}
@@ -27,7 +24,6 @@ const Card = ({ children, className = "" }) => (
     {children}
   </div>
 );
-
 const ymdInTZ = (date = new Date(), timeZone = IST_TZ) => {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -35,21 +31,17 @@ const ymdInTZ = (date = new Date(), timeZone = IST_TZ) => {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-
   const y = parts.find((p) => p.type === "year")?.value || "1970";
   const m = parts.find((p) => p.type === "month")?.value || "01";
   const d = parts.find((p) => p.type === "day")?.value || "01";
   return `${y}-${m}-${d}`;
 };
-
 const todayYMD_IST = () => ymdInTZ(new Date(), IST_TZ);
-
 const yesterdayYMD_IST = () => {
   const d = new Date();
   d.setDate(d.getDate() - 1);
   return ymdInTZ(d, IST_TZ);
 };
-
 const monthStartYMD_IST = () => {
   const now = new Date();
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -57,33 +49,26 @@ const monthStartYMD_IST = () => {
     year: "numeric",
     month: "2-digit",
   }).formatToParts(now);
-
   const y = parts.find((p) => p.type === "year")?.value || "1970";
   const m = parts.find((p) => p.type === "month")?.value || "01";
   return `${y}-${m}-01`;
 };
-
 const istStartISO = (ymd) => (ymd ? `${ymd}T00:00:00.000${IST_OFFSET}` : "");
 const istEndISO = (ymd) => (ymd ? `${ymd}T23:59:59.999${IST_OFFSET}` : "");
-
 const safe = (v) => (v === null || v === undefined ? "" : v);
-
 const toNumber = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
-
 const money = (n) => {
   const x = Number(n);
   return Number.isFinite(x) ? x : "";
 };
-
 const formatDateISO = (d) => {
   if (!d) return "";
   const dt = new Date(d);
   return Number.isNaN(dt.getTime()) ? "" : dt.toISOString();
 };
-
 const formatDateLabel = (value) => {
   if (!value) return "";
   const d = new Date(value);
@@ -96,7 +81,6 @@ const formatDateLabel = (value) => {
     minute: "2-digit",
   });
 };
-
 const formatINR = (value) => {
   const n = toNumber(value);
   return new Intl.NumberFormat("en-IN", {
@@ -105,17 +89,13 @@ const formatINR = (value) => {
     maximumFractionDigits: 0,
   }).format(n);
 };
-
 const escapeCSV = (value) => {
   if (value === null || value === undefined) return "";
   const s = String(value);
   return `"${s.replace(/"/g, '""')}"`;
 };
-
 const normalizeOrderNumber = (value = "") => String(value ?? "").trim().replace(/\s+/g, "");
-
 const normalizeSearchTerm = (value = "") => String(value || "").trim();
-
 const getOrderRevenue = (order) =>
   toNumber(
     order?.finalPayable ??
@@ -124,7 +104,6 @@ const getOrderRevenue = (order) =>
     order?.amount ??
     0
   );
-
 const getOrderDate = (order = {}) => {
   const raw =
     order?.fulfillmentDates?.deliveredAt ||
@@ -134,73 +113,58 @@ const getOrderDate = (order = {}) => {
     order?.statusTimestamps?.deliveredAt ||
     order?.createdAt ||
     order?.orderDate;
-
   const date = new Date(raw);
   return Number.isNaN(date.getTime()) ? null : date;
 };
-
 const normalizeDateStart = (dateStr) => {
   if (!dateStr) return null;
-  const d = new Date(`${dateStr}T00:00:00`);
+  const d = new Date(`${dateStr}T00:00:00${IST_OFFSET}`);
   return Number.isNaN(d.getTime()) ? null : d;
 };
-
 const normalizeDateEnd = (dateStr) => {
   if (!dateStr) return null;
-  const d = new Date(`${dateStr}T23:59:59.999`);
+  const d = new Date(`${dateStr}T23:59:59.999${IST_OFFSET}`);
   return Number.isNaN(d.getTime()) ? null : d;
 };
-
 export default function DeliveredOrdersPage() {
   const orders = useOrderStore((s) => s.orders);
   const loading = useOrderStore((s) => s.loading);
-  const ordersMeta = useOrderStore((s) => s.ordersMeta);
-
-  const fetchAllOrders = useOrderStore((s) => s.fetchAllOrders);
-  const fetchNextOrdersPage = useOrderStore((s) => s.fetchNextOrdersPage);
-  const syncOrderInList = useOrderStore((s) => s._syncOrderInList);
-
+  const fetchAllOrdersAllPages = useOrderStore((s) => s.fetchAllOrdersAllPages);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-
   const [monthInput, setMonthInput] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
-
   const [fromDateInput, setFromDateInput] = useState("");
   const [toDateInput, setToDateInput] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-
   const [quickDate, setQuickDate] = useState("");
-
-  const [pageSize] = useState(500);
+  const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
+  const [loadError, setLoadError] = useState("");
+  const [allLoaded, setAllLoaded] = useState(false);
+  const loadPromise = useRef(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [returnFilter, setReturnFilter] = useState("all");
-
   const getReturnStatus = (order = {}) => {
     const deliveredAt =
       order?.fulfillmentDates?.deliveredAt ||
       order?.shipment?.deliveredAt ||
       order?.trackingDetails?.deliveredAt ||
       order?.deliveredAt;
-
     if (!deliveredAt) return "unknown";
-
     const time = new Date(deliveredAt).getTime();
     if (Number.isNaN(time)) return "unknown";
-
     return Date.now() - time < 7 * 24 * 60 * 60 * 1000
       ? "open"
       : "closed";
   };
-
   const applyFilters = useCallback(() => {
     setSearch(normalizeSearchTerm(searchInput));
     setSelectedMonth(monthInput);
     setFromDate(fromDateInput);
     setToDate(toDateInput);
   }, [searchInput, monthInput, fromDateInput, toDateInput]);
-
   const clearFilters = useCallback(() => {
     setSearchInput("");
     setSearch("");
@@ -213,7 +177,6 @@ export default function DeliveredOrdersPage() {
     setReturnFilter("all");
     setQuickDate("");
   }, []);
-
   useEffect(() => {
     if (quickDate === "today") {
       const t = todayYMD_IST();
@@ -225,7 +188,6 @@ export default function DeliveredOrdersPage() {
       setToDate(t);
       return;
     }
-
     if (quickDate === "yesterday") {
       const y = yesterdayYMD_IST();
       setMonthInput("");
@@ -236,7 +198,6 @@ export default function DeliveredOrdersPage() {
       setToDate(y);
       return;
     }
-
     if (quickDate === "this_month") {
       const start = monthStartYMD_IST();
       const end = todayYMD_IST();
@@ -248,53 +209,54 @@ export default function DeliveredOrdersPage() {
       setToDate(end);
       return;
     }
-
     if (!quickDate) return;
   }, [quickDate]);
-
-  const backendFilters = useMemo(() => {
-    const f = {
-      fulfillmentStatus: "delivered",
-      page: 1,
-      limit: pageSize,
+  // Fetch every backend page. Search/date/return filters run on the complete
+  // delivered dataset, because these filters are currently implemented locally.
+  const backendFilters = useMemo(() => ({
+    fulfillmentStatus: "delivered", page: 1, limit: 200,
+  }), []);
+  const loadOrders = useCallback(() => {
+    if (loadPromise.current) return loadPromise.current;
+    const task = async () => {
+      setLoadingMore(true);
+      setAllLoaded(false);
+      setLoadError("");
+      try {
+        const result = await fetchAllOrdersAllPages(backendFilters);
+        if (!Array.isArray(result)) throw new Error("Invalid orders response. Please refresh.");
+        const state = useOrderStore.getState();
+        if (state.error) throw new Error(String(state.error));
+        const meta = state.ordersMeta;
+        const uniqueIds = new Set(result.map(o => String(o?._id || o?.id || o?.orderNumber)));
+        if (uniqueIds.size !== result.length) {
+          throw new Error("Duplicate orders received across pages. Please check backend pagination.");
+        }
+        if (meta?.hasMore === true ||
+          (meta?.totalCount != null && result.length !== Number(meta.totalCount))) {
+          throw new Error("Some orders are missing. Please refresh before downloading.");
+        }
+        setAllLoaded(true);
+        setPage(1);
+      } catch (error) {
+        setLoadError(error?.message || "Could not load all delivered orders. Please refresh.");
+      } finally {
+        setLoadingMore(false);
+        loadPromise.current = null;
+      }
     };
-
-    if (search) f.customerName = search;
-
-    if (fromDate) {
-      f.startDate = fromDate;
-      f.startAt = istStartISO(fromDate);
-      f.tz = IST_TZ;
-    }
-
-    if (toDate) {
-      f.endDate = toDate;
-      f.endAt = istEndISO(toDate);
-      f.tz = IST_TZ;
-    }
-
-    return f;
-  }, [search, fromDate, toDate, pageSize]);
-
-  const loadOrders = useCallback(async () => {
-    try {
-      await fetchAllOrders(backendFilters);
-    } catch (e) {
-      console.log("Delivered Orders Fetch Error:", e);
-    }
-  }, [fetchAllOrders, backendFilters]);
-
+    loadPromise.current = task();
+    return loadPromise.current;
+  }, [fetchAllOrdersAllPages, backendFilters]);
+  useEffect(() => { loadOrders(); }, [loadOrders]);
   useEffect(() => {
-    loadOrders();
-  }, [loadOrders]);
-
+    setPage(1);
+  }, [search, selectedMonth, fromDate, toDate, returnFilter, pageSize]);
   const filteredOrders = useMemo(() => {
     let data = Array.isArray(orders) ? [...orders] : [];
-
     data = data.filter(
       (o) => String(o?.fulfillmentStatus || "").toLowerCase() === "delivered"
     );
-
     const q = String(search || "").trim().toLowerCase();
     if (q) {
       data = data.filter((o) => {
@@ -302,19 +264,15 @@ export default function DeliveredOrdersPage() {
         const normalizedOrderNumber = normalizeOrderNumber(
           o?.orderNumber || ""
         ).toLowerCase();
-
         const name = String(
           o?.customerId?.name || o?.shippingAddressSnapshot?.fullName || ""
         ).toLowerCase();
-
         const email = String(
           o?.customerId?.email || o?.shippingAddressSnapshot?.email || ""
         ).toLowerCase();
-
         const phone = String(
           o?.customerId?.phone || o?.shippingAddressSnapshot?.phone || ""
         ).toLowerCase();
-
         return (
           orderNumber.includes(q) ||
           normalizedOrderNumber.includes(q) ||
@@ -324,26 +282,20 @@ export default function DeliveredOrdersPage() {
         );
       });
     }
-
     if (selectedMonth) {
       data = data.filter((o) => {
         const dt = getOrderDate(o);
         if (!dt) return false;
-        const year = dt.getFullYear();
-        const month = String(dt.getMonth() + 1).padStart(2, "0");
-        return `${year}-${month}` === selectedMonth;
+        return ymdInTZ(dt).slice(0, 7) === selectedMonth;
       });
     }
-
     const from = normalizeDateStart(fromDate);
     const to = normalizeDateEnd(toDate);
-
     if (returnFilter !== "all") {
       data = data.filter(
         (order) => getReturnStatus(order) === returnFilter
       );
     }
-
     if (from || to) {
       data = data.filter((o) => {
         const dt = getOrderDate(o);
@@ -353,7 +305,6 @@ export default function DeliveredOrdersPage() {
         return true;
       });
     }
-
     return data;
   }, [
     orders,
@@ -366,55 +317,51 @@ export default function DeliveredOrdersPage() {
   const sortedOrders = useMemo(() => {
     return [...filteredOrders].sort((a, b) => {
       const getNum = (o) => {
-        const m = String(o?.orderNumber || "").match(/(\d+)$/);
+        const m = String(o?.orderNumber || "").match(/(\d+)/);
         return m ? Number(m[1]) : 0;
       };
-
       const an = getNum(a);
       const bn = getNum(b);
       if (bn !== an) return bn - an;
-
       const ad = getOrderDate(a)?.getTime() || 0;
       const bd = getOrderDate(b)?.getTime() || 0;
       return bd - ad;
     });
   }, [filteredOrders]);
-
+  const totalPages = Math.max(1, Math.ceil(sortedOrders.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedOrders = sortedOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const totalRevenue = useMemo(() => {
     return sortedOrders.reduce((sum, order) => sum + getOrderRevenue(order), 0);
   }, [sortedOrders]);
-
   const confirmedCount = useMemo(() => {
     return sortedOrders.filter((o) => o?.isConfirmed === true).length;
   }, [sortedOrders]);
-
   const prepaidCount = useMemo(() => {
     return sortedOrders.filter(
       (o) => String(o?.paymentMethod || "").toLowerCase() === "razorpay"
     ).length;
   }, [sortedOrders]);
-
   const needsReviewCount = useMemo(() => {
     return sortedOrders.filter(
       (order) =>
         getDeliveryHealth(order).issueCount > 0
     ).length;
   }, [sortedOrders]);
-
   const cleanDeliveredCount = useMemo(() => {
     return sortedOrders.filter(
       (order) =>
         getDeliveryHealth(order).isClean
     ).length;
   }, [sortedOrders]);
-
   const buildCsvRows = (ordersArr) => {
     const rows = [];
-
     for (const order of ordersArr || []) {
       const orderId = safe(order?._id || order?.id);
       const orderNumber = safe(order?.orderNumber);
       const orderDate = formatDateISO(
+        order?.fulfillmentDates?.deliveredAt ||
+        order?.trackingDetails?.deliveredAt ||
         order?.deliveredAt ||
         order?.shipment?.deliveredAt ||
         order?.statusTimestamps?.deliveredAt ||
@@ -422,7 +369,6 @@ export default function DeliveredOrdersPage() {
         order?.createdAt ||
         order?.orderDate
       );
-
       const customerName = safe(
         order?.customerId?.name || order?.shippingAddressSnapshot?.fullName
       );
@@ -432,22 +378,17 @@ export default function DeliveredOrdersPage() {
       const customerPhone = safe(
         order?.customerId?.phone || order?.shippingAddressSnapshot?.phone
       );
-
       const subtotal = money(order?.subtotal);
       const discount = money(order?.discount);
       const shippingFee = money(order?.shippingFee);
       const tax = money(order?.tax);
       const totalAmount = money(order?.totalAmount);
       const finalPayable = money(order?.finalPayable);
-
       const fulfillmentStatus = safe(order?.fulfillmentStatus);
       const isConfirmed = order?.isConfirmed === true ? "YES" : "NO";
-
       const payMethod = safe(order?.paymentMethod);
       const payStatus = safe(order?.paymentStatus);
-
       const items = Array.isArray(order?.items) ? order.items : [];
-
       if (!items.length) {
         rows.push({
           orderId,
@@ -476,22 +417,18 @@ export default function DeliveredOrdersPage() {
         });
         continue;
       }
-
       items.forEach((item, idx) => {
         const snap = item?.productSnapshot || {};
         const itemProductCode = safe(snap?.productCode || "");
         const attrs = Array.isArray(item?.variant?.attributes)
           ? item.variant.attributes
           : [];
-
         const attrSize =
           attrs.find((a) => String(a?.key || "").toLowerCase() === "size")?.value ||
           attrs.find((a) => String(a?.key || "").toLowerCase() === "sizes")?.value ||
           "";
-
         const itemSku = safe(item?.variant?.sku || snap?.sku || "");
         const itemSize = safe(item?.selectedSize || attrSize || "");
-
         rows.push({
           orderId,
           orderNumber,
@@ -519,18 +456,15 @@ export default function DeliveredOrdersPage() {
         });
       });
     }
-
     return rows;
   };
-
   const exportToCSV = () => {
+    if (!allLoaded || loadingMore || loading) return;
     if (!sortedOrders.length) {
       alert("No delivered orders to export.");
       return;
     }
-
     const rows = buildCsvRows(sortedOrders);
-
     const headers = [
       "Order DB Id",
       "Order #",
@@ -556,7 +490,6 @@ export default function DeliveredOrdersPage() {
       "Item Quantity",
       "Item Price",
     ];
-
     const csvLines = [
       headers.map(escapeCSV).join(","),
       ...rows.map((r) =>
@@ -589,15 +522,12 @@ export default function DeliveredOrdersPage() {
           .join(",")
       ),
     ];
-
-    const blob = new Blob([csvLines.join("\r\n")], {
+    const blob = new Blob(["\uFEFF", csvLines.join("\r\n")], {
       type: "text/csv;charset=utf-8;",
     });
-
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-
     link.href = url;
     link.setAttribute("download", `delivered-orders-${ts}.csv`);
     document.body.appendChild(link);
@@ -605,27 +535,12 @@ export default function DeliveredOrdersPage() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
-
-  const hasMore = !!ordersMeta?.hasMore;
-
-  const loadMore = async () => {
-    try {
-      setLoadingMore(true);
-      await fetchNextOrdersPage({ ...backendFilters, page: undefined });
-    } catch (e) {
-      console.log("Load more error:", e);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
   const quickDateChips = [
     { key: "", label: "Custom" },
     { key: "today", label: "Today" },
     { key: "yesterday", label: "Yesterday" },
     { key: "this_month", label: "This Month" },
   ];
-
   return (
     <section className="min-h-screen bg-[#f6f7fb] px-4 sm:px-6 lg:px-10 py-8">
       <div className="mx-auto space-y-6">
@@ -638,100 +553,85 @@ export default function DeliveredOrdersPage() {
               Search and manage only <b>delivered</b> orders.
             </p>
           </div>
-
           <button
             onClick={exportToCSV}
+            disabled={!allLoaded || loadingMore || loading}
             className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-black text-white text-sm font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition"
           >
             <Download size={18} />
-            Export CSV
+            {loadingMore ? "Loading all orders..." : "Download All Matching (CSV)"}
           </button>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
           <Card className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
                 <CheckCircle2 size={20} />
               </div>
-
               <div>
                 <p className="text-xs text-gray-500">
                   Delivered
                 </p>
-
                 <p className="text-xl font-bold text-gray-900">
                   {sortedOrders.length}
                 </p>
               </div>
             </div>
           </Card>
-
           <Card className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
                 <IndianRupee size={20} />
               </div>
-
               <div>
                 <p className="text-xs text-gray-500">
                   Revenue
                 </p>
-
                 <p className="text-xl font-bold text-gray-900">
                   {formatINR(totalRevenue)}
                 </p>
               </div>
             </div>
           </Card>
-
           <Card className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
                 <Truck size={20} />
               </div>
-
               <div>
                 <p className="text-xs text-gray-500">
                   Prepaid
                 </p>
-
                 <p className="text-xl font-bold text-gray-900">
                   {prepaidCount}
                 </p>
               </div>
             </div>
           </Card>
-
           <Card className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
                 <CheckCircle2 size={20} />
               </div>
-
               <div>
                 <p className="text-xs text-gray-500">
                   Clean Delivery
                 </p>
-
                 <p className="text-xl font-bold text-emerald-700">
                   {cleanDeliveredCount}
                 </p>
               </div>
             </div>
           </Card>
-
           <Card className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
                 <AlertTriangle size={20} />
               </div>
-
               <div>
                 <p className="text-xs text-gray-500">
                   Needs Review
                 </p>
-
                 <p className="text-xl font-bold text-red-600">
                   {needsReviewCount}
                 </p>
@@ -739,7 +639,6 @@ export default function DeliveredOrdersPage() {
             </div>
           </Card>
         </div>
-
         <Card>
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div className="md:col-span-2 flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-gray-100">
@@ -753,7 +652,6 @@ export default function DeliveredOrdersPage() {
                 onKeyDown={(e) => e.key === "Enter" && applyFilters()}
               />
             </div>
-
             <select
               value={returnFilter}
               onChange={(e) => setReturnFilter(e.target.value)}
@@ -763,7 +661,6 @@ export default function DeliveredOrdersPage() {
               <option value="open">Return Period Open</option>
               <option value="closed">Return Period Closed</option>
             </select>
-
             <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-gray-100">
               <CalendarDays size={18} className="text-gray-400 shrink-0" />
               <input
@@ -776,7 +673,6 @@ export default function DeliveredOrdersPage() {
                 }}
               />
             </div>
-
             <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 border border-gray-100">
               <span className="text-xs font-semibold text-gray-500 shrink-0">From</span>
               <input
@@ -790,7 +686,6 @@ export default function DeliveredOrdersPage() {
                 }}
               />
             </div>
-
             <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 border border-gray-100">
               <span className="text-xs font-semibold text-gray-500 shrink-0">To</span>
               <input
@@ -804,7 +699,6 @@ export default function DeliveredOrdersPage() {
                 }}
               />
             </div>
-
             <div className="flex gap-2">
               <button
                 onClick={applyFilters}
@@ -813,7 +707,6 @@ export default function DeliveredOrdersPage() {
                 <Search size={18} />
                 Apply
               </button>
-
               <button
                 onClick={clearFilters}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200 active:scale-[0.98] transition"
@@ -822,18 +715,16 @@ export default function DeliveredOrdersPage() {
               </button>
             </div>
           </div>
-
           <div className="mt-4 flex flex-wrap gap-2">
             {quickDateChips.map((chip) => {
               const active = quickDate === chip.key;
-
               return (
                 <button
                   key={chip.key || "custom"}
                   onClick={() => setQuickDate(chip.key)}
                   className={`px-4 py-2 rounded-xl text-sm font-medium transition ${active
-                      ? "bg-black text-white shadow-sm"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-black text-white shadow-sm"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                 >
                   {chip.label}
@@ -842,36 +733,30 @@ export default function DeliveredOrdersPage() {
             })}
           </div>
         </Card>
-
         {(search || selectedMonth || fromDate || toDate) && (
           <Card>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="font-semibold text-gray-700">Active Filters:</span>
-
               {search ? (
                 <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">
                   Search: {search}
                 </span>
               ) : null}
-
               {returnFilter !== "all" && (
                 <span className="rounded-full bg-violet-50 px-3 py-1 text-sm font-medium text-violet-700">
                   Return: {returnFilter === "open" ? "Open" : "Closed"}
                 </span>
               )}
-
               {selectedMonth ? (
                 <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-medium">
                   Month: {selectedMonth}
                 </span>
               ) : null}
-
               {fromDate ? (
                 <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-medium">
                   From: {fromDate}
                 </span>
               ) : null}
-
               {toDate ? (
                 <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-medium">
                   To: {toDate}
@@ -880,46 +765,22 @@ export default function DeliveredOrdersPage() {
             </div>
           </Card>
         )}
-
+        {loadError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{loadError} Export stays disabled until every page loads successfully.</div>}
         <Card className="p-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs text-gray-500">
-              {ordersMeta?.page
-                ? `Page ${ordersMeta.page} • Loaded ${orders.length} orders • Visible ${sortedOrders.length} rows`
-                : `Loaded ${orders.length} orders • Visible ${sortedOrders.length} rows`}
+              {loadingMore ? `Loading all delivered orders...` : `Page ${currentPage} of ${totalPages} • ${sortedOrders.length} matching orders`}
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadOrders}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98] transition"
-              >
-                Refresh
-              </button>
-
-              <button
-                disabled={!ordersMeta?.hasMore || loadingMore}
-                onClick={loadMore}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${!ordersMeta?.hasMore || loadingMore
-                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                    : "bg-black text-white hover:opacity-90 active:scale-[0.98]"
-                  }`}
-              >
-                {loadingMore ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin" />
-                    Loading...
-                  </span>
-                ) : ordersMeta?.hasMore ? (
-                  "Load More"
-                ) : (
-                  "No More"
-                )}
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <select aria-label="Rows per page" value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="rounded-xl border px-3 py-2 text-sm">
+                {[25, 50, 100, 200].map(n => <option key={n} value={n}>{n} / page</option>)}
+              </select>
+              <button disabled={loadingMore || loading} onClick={loadOrders} className="rounded-xl border px-4 py-2 text-sm disabled:opacity-40">Refresh</button>
+              <button disabled={currentPage === 1 || loadingMore || loading} onClick={() => setPage(currentPage - 1)} className="rounded-xl border px-4 py-2 text-sm disabled:opacity-40">Previous</button>
+              <button disabled={currentPage === totalPages || loadingMore || loading} onClick={() => setPage(currentPage + 1)} className="rounded-xl bg-black px-4 py-2 text-sm text-white disabled:opacity-40">Next</button>
             </div>
           </div>
         </Card>
-
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <div className="overflow-x-auto">
@@ -929,36 +790,29 @@ export default function DeliveredOrdersPage() {
                     <th className="px-5 py-4 text-left font-semibold">
                       Order
                     </th>
-
                     <th className="px-5 py-4 text-left font-semibold">
                       Customer
                     </th>
-
                     <th className="px-5 py-4 text-left font-semibold">
                       Delivery
                     </th>
-
                     <th className="px-5 py-4 text-left font-semibold">
                       Courier / AWB
                     </th>
-
                     <th className="px-5 py-4 text-left font-semibold">
                       Payment
                     </th>
-
                     <th className="px-5 py-4 text-left font-semibold">
                       Health
                     </th>
-
                     <th className="px-5 py-4 text-right font-semibold">
                       Action
                     </th>
                   </tr>
                 </thead>
-
                 <tbody className="divide-y divide-gray-100">
                   {sortedOrders.length ? (
-                    sortedOrders.map((order, index) => (
+                    paginatedOrders.map((order, index) => (
                       <DeliveredOrderRow
                         key={
                           order?._id ||
@@ -986,7 +840,6 @@ export default function DeliveredOrdersPage() {
             </div>
           </div>
         </div>
-
         {sortedOrders.length > 0 && (
           <div className="text-xs text-gray-500 px-1">
             Latest visible delivered date:{" "}
@@ -996,7 +849,6 @@ export default function DeliveredOrdersPage() {
           </div>
         )}
       </div>
-
       {loading ? (
         <div className="fixed inset-0 bg-black/10 backdrop-blur-[1px] flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 px-5 py-4 flex items-center gap-3">
@@ -1008,4 +860,3 @@ export default function DeliveredOrdersPage() {
     </section>
   );
 }
-
